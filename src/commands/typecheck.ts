@@ -5,6 +5,7 @@ import { join, relative, resolve } from 'node:path';
 import ora from '../lib/spinner.js';
 import { DEPLOY_CHECK_TYPESCRIPT_VERSION, runDeployCheck, type DeployCheckResult } from '../lib/deploy-check.js';
 import { IGNORE } from '../lib/files.js';
+import { AGENT_HOSTS, isAgentHost, runAgentHook } from '../lib/agent-hooks.js';
 import { bold, dim, error, info, printJson, red, success, teal, warn } from '../lib/output.js';
 import { ensureDeclaredTypePackages, runTypecheck, type TypecheckResult } from '../lib/typecheck.js';
 
@@ -24,9 +25,28 @@ export function registerTypecheck(program: Command) {
     )
     .option('--json', 'Print the raw typecheck result as JSON')
     .option('--deploy', "Run the deploy's reference check: the undefined-name and type findings a deploy reports. Fetches TypeScript " + DEPLOY_CHECK_TYPESCRIPT_VERSION + " through npx unless the project has exactly that version")
+    .option('--hook <host>', `With --deploy: run as an agent after-edit hook (${AGENT_HOSTS.join(', ')}), reading the host's event on stdin. Installed by \`somewhere hooks install\``)
     .option('--watch', 'Keep running and re-check after each save while this command is open. It is not installed into your editor or agent; start it yourself. Never deploys or touches live data')
     .action(async (dirArg: string | undefined, opts) => {
       const dir = resolve(process.cwd(), dirArg ?? '.');
+
+      if (opts.hook !== undefined) {
+        if (!opts.deploy || !isAgentHost(opts.hook)) {
+          error(`--hook needs --deploy and one of: ${AGENT_HOSTS.join(', ')}.`);
+          process.exit(1);
+        }
+        const stdin = await new Promise<string>((done) => {
+          let text = '';
+          process.stdin.setEncoding('utf8');
+          process.stdin.on('data', (chunk) => (text += chunk));
+          process.stdin.on('end', () => done(text));
+          process.stdin.on('error', () => done(text));
+        });
+        const outcome = await runAgentHook(opts.hook, stdin, { check: runDeployCheck });
+        if (outcome.stdout) process.stdout.write(outcome.stdout);
+        if (outcome.stderr) process.stderr.write(outcome.stderr);
+        process.exit(outcome.exitCode);
+      }
 
       if (opts.deploy) {
         const check = async () => {

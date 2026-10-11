@@ -18,8 +18,9 @@ export function registerTypecheck(program: Command) {
       'Check a source project with `tsc --noEmit`. ' +
         'Reports TypeScript errors with file:line before deploy. ' +
         'Requires a local tsconfig.json; add one for a new app, or run `somewhere pull` for an existing deployed app. ' +
-        'With --deploy, runs the reference check a deploy runs instead (same files, generated types, options and TypeScript ' +
-        `${DEPLOY_CHECK_TYPESCRIPT_VERSION}); no tsconfig.json needed.`,
+        'With --deploy, runs the deploy\'s advisory reference check instead (the files a deploy uploads, its generated types, ' +
+        `options and TypeScript ${DEPLOY_CHECK_TYPESCRIPT_VERSION}) against the packages installed here; no tsconfig.json needed. ` +
+        'It reports a narrower set than the default project check, which stays the stricter of the two.',
     )
     .option('--json', 'Print the raw typecheck result as JSON')
     .option('--deploy', "Run the deploy's reference check: the undefined-name and type findings a deploy reports. Fetches TypeScript " + DEPLOY_CHECK_TYPESCRIPT_VERSION + " through npx unless the project has exactly that version")
@@ -161,7 +162,15 @@ function watchAndRun(dir: string, check: () => Promise<unknown>): void {
   const run = async () => {
     if (running) { again = true; return; }
     running = true;
-    try { await check(); } finally { running = false; }
+    try {
+      await check();
+    } catch (failure) {
+      // One failed check (a save mid-rename, an unreadable file) is reported;
+      // the watcher keeps going and the next save checks again.
+      error(`Check failed: ${failure instanceof Error ? failure.message : String(failure)}`);
+    } finally {
+      running = false;
+    }
     if (again) { again = false; void run(); }
   };
   chokidar.watch(dir, {

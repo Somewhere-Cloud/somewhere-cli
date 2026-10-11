@@ -112,29 +112,52 @@ export function projectCompilerOptions(tsconfigText: string | undefined): unknow
 }
 
 const DIAGNOSTIC = /^(.+?)\((\d+),(\d+)\): error (TS\d+): (.+)$/;
+const GLOBAL_ERROR = /^error (TS\d+): (.+)$/;
 
-/** tsc --pretty false output → the findings the deploy reports. */
-export function deployFindings(
+export interface DeployCheckOutput {
+  findings: DeployCheckFinding[];
+  /** Errors that are not about the checked source: a config or global error
+   *  (unknown option, missing type library). tsc may stop before checking
+   *  source when one occurs, so any of these means the check did not run. */
+  problems: string[];
+}
+
+/** tsc --pretty false output → the findings the deploy reports, and any
+ *  error that means the check itself did not run. */
+export function parseDeployOutput(
   output: string,
   projectDir: string,
   functions: Record<string, string>,
-): DeployCheckFinding[] {
+): DeployCheckOutput {
   const root = realpathSync(projectDir);
   const findings: DeployCheckFinding[] = [];
-  for (const line of output.split(/\r?\n/)) {
-    const match = DIAGNOSTIC.exec(line.trim());
+  const problems: string[] = [];
+  for (const raw of output.split(/\r?\n/)) {
+    const line = raw.trim();
+    const global = GLOBAL_ERROR.exec(line);
+    if (global) {
+      if (!contract.isIgnoredDiagnostic(global[1])) problems.push(line);
+      continue;
+    }
+    const match = DIAGNOSTIC.exec(line);
     if (!match) continue;
     const [, rawFile, lineText, columnText, code, message] = match;
+    const absolute = isAbsolute(rawFile) ? rawFile : resolve(root, rawFile);
+    const file = relative(root, existsSync(absolute) ? realpathSync(absolute) : absolute).split('\\').join('/');
+    // A located error in something other than checked source (the generated
+    // config) is a configuration failure, not a finding.
+    if (!contract.isReferenceSource(file.split('/').pop() ?? file)) {
+      problems.push(line);
+      continue;
+    }
     if (contract.isIgnoredDiagnostic(code)) continue;
     const kind = contract.classifyDiagnostic(code);
     if (!kind) continue;
-    const absolute = isAbsolute(rawFile) ? rawFile : resolve(root, rawFile);
-    const file = relative(root, existsSync(absolute) ? realpathSync(absolute) : absolute).split('\\').join('/');
     const finding = { kind, code, file, line: Number(lineText), column: Number(columnText), message };
     if (vendor.isRuntimeEndpointGlobal(finding, functions)) continue;
     findings.push(finding);
   }
-  return findings;
+  return { findings, problems };
 }
 
 /** Temporary files of checks still running, removed if the process exits first. */
@@ -145,6 +168,19 @@ process.once('exit', () => { for (const cleanup of pendingCleanups) cleanup(); }
  *  uniquely named dot-prefixed config and directory in the project root
  *  (outside the deploy's file set), removed when the check ends. */
 export function runDeployCheck(projectDir: string): Promise<DeployCheckResult> {
+  try {
+    return startDeployCheck(projectDir);
+  } catch (error) {
+    // Reading the project or writing the temporary files failed (a file
+    // renamed mid-walk, an unreadable tsconfig): the check did not run.
+    return Promise.resolve({
+      ok: false, findings: [], typescript: DEPLOY_CHECK_TYPESCRIPT_VERSION, checkedFiles: 0,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
+function startDeployCheck(projectDir: string): Promise<DeployCheckResult> {
   const typescript = DEPLOY_CHECK_TYPESCRIPT_VERSION;
   const collected = collectFiles(projectDir);
   const graph: Record<string, string> = {};
@@ -169,15 +205,20 @@ export function runDeployCheck(projectDir: string): Promise<DeployCheckResult> {
     pendingCleanups.delete(cleanup);
   };
   pendingCleanups.add(cleanup);
-  mkdirSync(declarationsDir);
-  const declarations = Object.entries(vendor.referenceCheckDeclarations(graph)).map(([name, text]) => {
-    writeFileSync(join(declarationsDir, name), text);
-    return relative(projectDir, join(declarationsDir, name));
-  });
-  writeFileSync(config, JSON.stringify({
-    compilerOptions: contract.localCheckCompilerOptions(own),
-    files: [...checked, ...declarations],
-  }));
+  try {
+    mkdirSync(declarationsDir);
+    const declarations = Object.entries(vendor.referenceCheckDeclarations(graph)).map(([name, text]) => {
+      writeFileSync(join(declarationsDir, name), text);
+      return relative(projectDir, join(declarationsDir, name));
+    });
+    writeFileSync(config, JSON.stringify({
+      compilerOptions: contract.localCheckCompilerOptions(own),
+      files: [...checked, ...declarations],
+    }));
+  } catch (error) {
+    cleanup();
+    throw error;
+  }
 
   const { command, args } = deployCheckTsc(projectDir);
   return new Promise((resolveResult) => {
@@ -202,9 +243,13 @@ export function runDeployCheck(projectDir: string): Promise<DeployCheckResult> {
     });
     child.on('close', (code: number | null) => {
       cleanup();
-      const findings = deployFindings(out, projectDir, collected.functions);
-      // tsc exits non-zero on any diagnostic. Non-zero with no parseable
-      // diagnostic at all is a failure to run, never a clean verdict.
+      const { findings, problems } = parseDeployOutput(out, projectDir, collected.functions);
+      // A config/global error, or a non-zero exit with no located diagnostic
+      // at all, is a failure to run, never a verdict, even beside findings.
+      if (problems.length > 0) {
+        resolveResult({ ok: false, findings, typescript, checkedFiles: checked.length, error: problems.join('\n') });
+        return;
+      }
       if (code !== 0 && !out.split(/\r?\n/).some((line) => DIAGNOSTIC.test(line.trim()))) {
         resolveResult({ ok: false, findings, typescript, checkedFiles: checked.length, error: out.trim() || `tsc exited ${code}` });
         return;

@@ -1,13 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, readdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { spawn } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 
 const deployCheckModule = process.env.SOMEWHERE_TEST_SOURCE
   ? '../src/lib/deploy-check.ts'
   : '../dist/lib/deploy-check.js';
-const { DEPLOY_CHECK_TYPESCRIPT_VERSION, deployCheckTsc, projectCompilerOptions, runDeployCheck } = await import(deployCheckModule);
+const { DEPLOY_CHECK_TYPESCRIPT_VERSION, deployCheckTsc, parseDeployOutput, projectCompilerOptions, runDeployCheck } = await import(deployCheckModule);
 
 function project(files) {
   const dir = mkdtempSync(join(tmpdir(), 'sw-deploy-check-'));
@@ -118,4 +120,64 @@ test('sw.endpoint is defined only in function modules; other bare sw stays repor
   const result = await runDeployCheck(dir);
   assert.deepEqual(findings(result), ['reference:TS2304@api/bare.ts:1', 'reference:TS2304@src/main.ts:1']);
   assert.deepEqual(readdirSync(dir).filter((name) => name.startsWith('.__somewhere')), [], 'temporary config and declarations are removed');
+});
+
+test('a config or global error beside located findings means the check did not run', () => {
+  const dir = project({ 'src/a.ts': 'export const a = documnt;\n' });
+  const parsed = parseDeployOutput([
+    "src/a.ts(1,18): error TS2552: Cannot find name 'documnt'. Did you mean 'document'?",
+    ".__somewhere_deploy_check_x.json(1,44): error TS5023: Unknown compiler option 'bogusOption'.",
+    "error TS2688: Cannot find type definition file for 'missingpkg'.",
+    '  The file is in the program because:',
+    "error TS6053: File 'gone.ts' not found.",
+  ].join('\n'), dir, {});
+  assert.deepEqual(parsed.findings.map((f) => f.code), ['TS2552']);
+  assert.deepEqual(parsed.problems, [
+    ".__somewhere_deploy_check_x.json(1,44): error TS5023: Unknown compiler option 'bogusOption'.",
+    "error TS2688: Cannot find type definition file for 'missingpkg'.",
+  ], 'ignored codes stay ignored; config and global errors are problems');
+});
+
+test('a missing type library is reported as a failed check, never as a verdict', async () => {
+  const result = await runDeployCheck(project({
+    'src/a.ts': 'export const a = documnt;\n',
+    'tsconfig.json': JSON.stringify({ compilerOptions: { types: ['missingpkg'] } }),
+  }));
+  assert.equal(result.ok, false);
+  assert.match(result.error ?? '', /TS2688/);
+});
+
+test('a project that cannot be read returns a failed check instead of throwing', async () => {
+  const dir = project({ 'src/a.ts': 'export const a = 1;\n' });
+  mkdirSync(join(dir, 'tsconfig.json'));
+  const result = await runDeployCheck(dir);
+  assert.equal(result.ok, false);
+  assert.match(result.error ?? '', /EISDIR/);
+  assert.deepEqual(readdirSync(dir).filter((name) => name.startsWith('.__somewhere')), []);
+});
+
+test('--watch reports a failed check and recovers on the next save', { timeout: 120_000 }, async () => {
+  const dir = project({ 'src/a.ts': 'export const a = document.title;\n' });
+  mkdirSync(join(dir, 'tsconfig.json'));
+  const bin = fileURLToPath(new URL('../bin/somewhere.js', import.meta.url));
+  const child = spawn(process.execPath, [bin, 'typecheck', '--deploy', '--watch', dir], { env: { ...process.env, NO_COLOR: '1' } });
+  let out = '';
+  child.stdout.on('data', (d) => (out += d));
+  child.stderr.on('data', (d) => (out += d));
+  const until = async (pattern) => {
+    const deadline = Date.now() + 60_000;
+    while (!pattern.test(out)) {
+      if (Date.now() > deadline || child.exitCode !== null) throw new Error(`watch output never matched ${pattern}:\n${out}`);
+      await new Promise((r) => setTimeout(r, 100));
+    }
+  };
+  try {
+    await until(/Could not run the deploy check/);
+    rmSync(join(dir, 'tsconfig.json'), { recursive: true });
+    writeFileSync(join(dir, 'src/a.ts'), 'export const a = document.title; // saved\n');
+    await until(/Deploy check clean/);
+    assert.equal(child.exitCode, null, 'the watcher is still running');
+  } finally {
+    child.kill('SIGINT');
+  }
 });

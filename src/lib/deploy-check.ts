@@ -1,19 +1,22 @@
 /**
- * The deploy's reference check, run locally. Same source files (what a deploy
- * uploads), same generated declarations, same compiler options, same
- * TypeScript version, same filtering and classification: all of it vendored
- * from the platform (runtime/declared-data.cjs), none of it restated here.
+ * The deploy's reference check, run locally: the files a deploy uploads, the
+ * declarations the compiler generates for them, its compiler options and
+ * TypeScript version, and its filtering and classification. All of that is
+ * vendored from the platform (runtime/declared-data.cjs), not restated here.
  *
- * One input differs by nature: the deploy installs dependencies from the
- * project's lockfile (or only declared @types without one), while a local run
- * reads whatever node_modules holds. Installed from the same lockfile, the
- * results match.
+ * Where it can still differ from a deploy:
+ * - Installed packages. The deploy installs from the project's lockfile (only
+ *   declared @types without one); a local run reads whatever node_modules holds.
+ * - Image type packages. The deploy's compiler also loads type packages from
+ *   its own image (pfb_70d0a195e9d9); a local run does not, so a global those
+ *   packages declare is visible on deploy only.
+ * Measured on four real apps against the deploy's own check roots, findings
+ * were identical; that is evidence for those apps, not a guarantee for all.
  */
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { tmpdir } from 'node:os';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 import { collectFiles } from './files.js';
 
@@ -134,8 +137,13 @@ export function deployFindings(
   return findings;
 }
 
-/** Run the deploy's reference check over `projectDir`. Writes nothing in the
- *  project except a uniquely named config it removes afterwards. */
+/** Temporary files of checks still running, removed if the process exits first. */
+const pendingCleanups = new Set<() => void>();
+process.once('exit', () => { for (const cleanup of pendingCleanups) cleanup(); });
+
+/** Run the deploy's reference check over `projectDir`. Writes only a
+ *  uniquely named dot-prefixed config and directory in the project root
+ *  (outside the deploy's file set), removed when the check ends. */
 export function runDeployCheck(projectDir: string): Promise<DeployCheckResult> {
   const typescript = DEPLOY_CHECK_TYPESCRIPT_VERSION;
   const collected = collectFiles(projectDir);
@@ -148,23 +156,28 @@ export function runDeployCheck(projectDir: string): Promise<DeployCheckResult> {
 
   const tsconfigPath = join(projectDir, 'tsconfig.json');
   const own = projectCompilerOptions(existsSync(tsconfigPath) ? readFileSync(tsconfigPath, 'utf8') : undefined);
-  const declarationsDir = mkdtempSync(join(tmpdir(), 'somewhere-deploy-check-'));
+  // The config sits in the project root so `paths`/`baseUrl` resolve from
+  // where the deploy's do, and the generated declarations sit under it so any
+  // resolution from them walks the same node_modules ancestry as the deploy's
+  // check root. Dot-prefixed: never uploaded, never watched.
+  const id = randomUUID();
+  const config = join(projectDir, `.__somewhere_deploy_check_${id}.json`);
+  const declarationsDir = join(projectDir, `.__somewhere_deploy_check_${id}`);
+  const cleanup = () => {
+    rmSync(config, { force: true });
+    rmSync(declarationsDir, { recursive: true, force: true });
+    pendingCleanups.delete(cleanup);
+  };
+  pendingCleanups.add(cleanup);
+  mkdirSync(declarationsDir);
   const declarations = Object.entries(vendor.referenceCheckDeclarations(graph)).map(([name, text]) => {
-    const path = join(declarationsDir, name);
-    writeFileSync(path, text);
-    return path;
+    writeFileSync(join(declarationsDir, name), text);
+    return relative(projectDir, join(declarationsDir, name));
   });
-  // The config sits in the project root so `paths` and module resolution
-  // start where the deploy's do.
-  const config = join(projectDir, `.__somewhere_deploy_check_${randomUUID()}.json`);
   writeFileSync(config, JSON.stringify({
     compilerOptions: contract.localCheckCompilerOptions(own),
     files: [...checked, ...declarations],
   }));
-  const cleanup = () => {
-    rmSync(config, { force: true });
-    rmSync(declarationsDir, { recursive: true, force: true });
-  };
 
   const { command, args } = deployCheckTsc(projectDir);
   return new Promise((resolveResult) => {

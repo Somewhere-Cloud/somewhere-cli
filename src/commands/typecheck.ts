@@ -22,8 +22,8 @@ export function registerTypecheck(program: Command) {
         `${DEPLOY_CHECK_TYPESCRIPT_VERSION}); no tsconfig.json needed.`,
     )
     .option('--json', 'Print the raw typecheck result as JSON')
-    .option('--deploy', "Run the deploy's reference check: the undefined-name and type findings a deploy reports")
-    .option('--watch', 'Re-run after every saved edit; never deploys or writes project data')
+    .option('--deploy', "Run the deploy's reference check: the undefined-name and type findings a deploy reports. Fetches TypeScript " + DEPLOY_CHECK_TYPESCRIPT_VERSION + " through npx unless the project has exactly that version")
+    .option('--watch', 'Keep running and re-check after each save while this command is open. It is not installed into your editor or agent; start it yourself. Never deploys or touches live data')
     .action(async (dirArg: string | undefined, opts) => {
       const dir = resolve(process.cwd(), dirArg ?? '.');
 
@@ -169,12 +169,16 @@ function watchAndRun(dir: string, check: () => Promise<unknown>): void {
     ignored: (path: string) => {
       const rel = relative(dir, path);
       if (!rel || rel.startsWith('..')) return false;
-      return rel.split(/[\\/]/).some((seg) => IGNORE.has(seg) || seg.startsWith('.'));
+      // Dot paths hold the checks' own temporary files; __somewhere_* are the
+      // editor declarations plain typecheck regenerates. Neither is an edit.
+      return rel.split(/[\\/]/).some((seg) => IGNORE.has(seg) || seg.startsWith('.') || seg.startsWith('__somewhere_'));
     },
   }).on('all', () => {
     if (timer) clearTimeout(timer);
     timer = setTimeout(() => void run(), WATCH_DEBOUNCE_MS);
   });
-  info(dim(`Watching ${dir} — checks re-run after each save. Ctrl-C to stop.`));
+  // Ctrl-C exits through process.exit so a check in flight removes its files.
+  process.once('SIGINT', () => process.exit(130));
+  info(dim(`Watching ${dir} — checks re-run after each save while this command runs. Ctrl-C to stop.`));
   void run();
 }

@@ -1,7 +1,10 @@
 import { Command } from 'commander';
+import chokidar from 'chokidar';
 import { existsSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { join, relative, resolve } from 'node:path';
 import ora from '../lib/spinner.js';
+import { DEPLOY_CHECK_TYPESCRIPT_VERSION, runDeployCheck, type DeployCheckResult } from '../lib/deploy-check.js';
+import { IGNORE } from '../lib/files.js';
 import { bold, dim, error, info, printJson, red, success, teal, warn } from '../lib/output.js';
 import { ensureDeclaredTypePackages, runTypecheck, type TypecheckResult } from '../lib/typecheck.js';
 
@@ -14,11 +17,27 @@ export function registerTypecheck(program: Command) {
     .description(
       'Check a source project with `tsc --noEmit`. ' +
         'Reports TypeScript errors with file:line before deploy. ' +
-        'Requires a local tsconfig.json; add one for a new app, or run `somewhere pull` for an existing deployed app.',
+        'Requires a local tsconfig.json; add one for a new app, or run `somewhere pull` for an existing deployed app. ' +
+        'With --deploy, runs the reference check a deploy runs instead (same files, generated types, options and TypeScript ' +
+        `${DEPLOY_CHECK_TYPESCRIPT_VERSION}); no tsconfig.json needed.`,
     )
     .option('--json', 'Print the raw typecheck result as JSON')
+    .option('--deploy', "Run the deploy's reference check: the undefined-name and type findings a deploy reports")
+    .option('--watch', 'Re-run after every saved edit; never deploys or writes project data')
     .action(async (dirArg: string | undefined, opts) => {
       const dir = resolve(process.cwd(), dirArg ?? '.');
+
+      if (opts.deploy) {
+        const check = async () => {
+          const result = await runDeployCheck(dir);
+          if (opts.json) printJson(result);
+          else reportDeployCheck(result);
+          return result;
+        };
+        if (opts.watch) return watchAndRun(dir, check);
+        const result = await check();
+        process.exit(result.ok ? 0 : 1);
+      }
 
       if (!existsSync(join(dir, 'tsconfig.json'))) {
         if (opts.json) {
@@ -33,6 +52,15 @@ export function registerTypecheck(program: Command) {
         }
         error(MISSING_TSCONFIG_GUIDANCE);
         process.exit(1);
+      }
+
+      if (opts.watch) {
+        return watchAndRun(dir, async () => {
+          const result = await runTypecheck(dir);
+          if (opts.json) printJson(result);
+          else reportTypecheck(result);
+          return result;
+        });
       }
 
       const spinner = opts.json ? null : ora('Typechecking (tsc --noEmit)...').start();
@@ -94,4 +122,59 @@ export function reportTypecheck(result: TypecheckResult): void {
     console.log(`  ${loc} ${tag} ${e.message}`);
   }
   console.log('');
+}
+
+/** Print the deploy reference check's verdict. */
+export function reportDeployCheck(result: DeployCheckResult): void {
+  if (result.error) {
+    error(`Could not run the deploy check (TypeScript ${result.typescript}): ${result.error}`);
+    return;
+  }
+  if (result.ok) {
+    success(`Deploy check clean ${dim(`(${result.checkedFiles} file${result.checkedFiles === 1 ? '' : 's'}, TypeScript ${result.typescript})`)}.`);
+    return;
+  }
+  const references = result.findings.filter((f) => f.kind === 'reference').length;
+  const n = result.findings.length;
+  error(
+    `${bold(String(n))} deploy finding${n === 1 ? '' : 's'} ${dim(`(TypeScript ${result.typescript})`)} — ` +
+      `a deploy reports these as warnings${references ? `; ${references} undefined name${references === 1 ? '' : 's'} will fail at runtime` : ''}.`,
+  );
+  console.log('');
+  for (const f of result.findings) {
+    const tag = f.kind === 'reference' ? red(f.code) : dim(f.code);
+    console.log(`  ${teal(f.file)}:${f.line}:${f.column} ${tag} ${f.message}`);
+  }
+  console.log('');
+}
+
+const WATCH_DEBOUNCE_MS = 300;
+
+/**
+ * Run `check` now and again after each burst of saved edits. One run at a
+ * time: edits during a run trigger exactly one more run afterwards.
+ */
+function watchAndRun(dir: string, check: () => Promise<unknown>): void {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  let running = false;
+  let again = false;
+  const run = async () => {
+    if (running) { again = true; return; }
+    running = true;
+    try { await check(); } finally { running = false; }
+    if (again) { again = false; void run(); }
+  };
+  chokidar.watch(dir, {
+    ignoreInitial: true,
+    ignored: (path: string) => {
+      const rel = relative(dir, path);
+      if (!rel || rel.startsWith('..')) return false;
+      return rel.split(/[\\/]/).some((seg) => IGNORE.has(seg) || seg.startsWith('.'));
+    },
+  }).on('all', () => {
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(() => void run(), WATCH_DEBOUNCE_MS);
+  });
+  info(dim(`Watching ${dir} — checks re-run after each save. Ctrl-C to stop.`));
+  void run();
 }

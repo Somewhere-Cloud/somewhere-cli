@@ -28,6 +28,8 @@ import { describeFilesClient } from './worker/containers/compile/typed-files.cjs
 export { SCHEMA_DECLARATION } from './worker/containers/compile/schema-types.cjs';
 export { ENDPOINT_DECLARATION, RUNTIME_CONTEXT_DECLARATION } from './worker/containers/compile/runtime-types.cjs';
 export { CLIENT_FILE as FILES_DECLARATION_FILE } from './worker/containers/compile/typed-files.cjs';
+export * as checkerContract from './worker/containers/compile/checker-contract.cjs';
+export { referenceCheckDeclarations, isRuntimeEndpointGlobal } from './worker/src/utils/reference-check-inputs.ts';
 export function generateFromFiles(files) {
   const authority = clientAuthorityFromSource(files);
   return authority ? generateDataClient(authority) : undefined;

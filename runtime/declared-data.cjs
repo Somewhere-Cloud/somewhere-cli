@@ -3465,6 +3465,7 @@ interface SomewhereTask {
   attachments: string[];
   status_note: string | null;
   health: SomewhereTaskHealth | null;
+  waiting_on: 'human' | 'product_decision' | 'external' | null;
   status_note_updated_at: number | null;
   created_at: number;
   updated_at: number;
@@ -3487,11 +3488,17 @@ interface SomewhereTaskComment {
 // Full view: the task plus comments, activity, relationships and closure guidance.
 interface SomewhereTaskDetail extends SomewhereTask {
   project_id: string;
-  comments: SomewhereTaskComment[];
-  activity: SomewhereJsonObject[];
+  comments?: SomewhereTaskComment[];
+  activity?: SomewhereJsonObject[];
   [key: string]: unknown;
 }
+interface SomewhereTaskFullDetail extends SomewhereTaskDetail {
+  comments: SomewhereTaskComment[];
+  activity: SomewhereJsonObject[];
+}
 interface SomewhereTaskCreateOptions {
+  status_note?: string | null;
+  waiting_on?: 'human' | 'product_decision' | 'external' | null;
   title: string;
   description?: string;
   status?: SomewhereTaskStatus;
@@ -3522,6 +3529,7 @@ interface SomewhereTaskUpdateOptions {
   shipped_in?: string | null;
   status_note?: string | null;
   health?: SomewhereTaskHealth | null;
+  waiting_on?: 'human' | 'product_decision' | 'external' | null;
   attachments?: string | readonly string[] | null;
   append_attachments?: string | readonly string[];
   // Positive deploy version number; mutually exclusive with shipped_in.
@@ -3530,6 +3538,15 @@ interface SomewhereTaskUpdateOptions {
   // Persisted as a comment; include it when closing a task.
   resolution_note?: string;
   comment?: string;
+  guidance_review?: { content_revision: string; note?: string };
+  guidance_context?: readonly {
+    guidance_id: string;
+    action?: 'use' | 'exception' | 'clear_exception';
+    revision_id?: string;
+    content_revision?: string;
+    reason?: string;
+    source_task_id?: string;
+  }[];
 }
 interface SomewhereTaskSettings {
   project_id: string;
@@ -3537,12 +3554,100 @@ interface SomewhereTaskSettings {
   webhook_url: string | null;
   webhook_configured: boolean;
 }
+interface SomewhereTaskListOptions {
+  status?: SomewhereTaskStatus;
+  assignee?: string;
+  area?: string;
+  parent_id?: string | null;
+  q?: string;
+  type?: string;
+  include_archived?: boolean;
+  include_superseded?: boolean;
+  review_for_closure?: boolean;
+  active?: boolean;
+  stale?: boolean;
+  stale_days?: number;
+  sort?: 'priority' | 'updated' | 'created';
+  detail?: 'full';
+  view?: 'current' | 'full' | 'board';
+  waiting_on?: 'human' | 'product_decision' | 'external' | 'none';
+  limit?: number;
+  offset?: number;
+  cursor?: string;
+}
+interface SomewhereTaskBoardItem {
+  type: string | null;
+  shipped_in?: string;
+  closure_review?: boolean;
+  id: string;
+  title: string;
+  status: SomewhereTaskStatus;
+  health: SomewhereTaskHealth | null;
+  waiting_on: 'human' | 'product_decision' | 'external' | null;
+  status_note: string | null;
+  status_note_updated_at: number | null;
+  truncated_fields?: string[];
+}
+interface SomewhereTaskPage {
+  total: number;
+  count: number;
+  has_more: boolean;
+  next_cursor: string | null;
+  order: string;
+  consistency: string;
+  bounded: boolean;
+  [key: string]: unknown;
+}
+interface SomewhereTaskReadOptions {
+  view?: 'current' | 'full' | 'history' | 'field' | 'relationships';
+  kind?: 'comments' | 'activity' | 'revisions' | 'reviews';
+  field?: string;
+  event_id?: string;
+  cursor?: string;
+  limit?: number;
+  offset?: number;
+}
+interface SomewhereTaskHistory {
+  task_id: string;
+  kind: string;
+  data: SomewhereJsonObject[];
+  page: SomewhereTaskPage;
+}
+interface SomewhereTaskRelationships {
+  task_id: string;
+  data: SomewhereJsonObject[];
+  page: SomewhereTaskPage;
+  links_available: boolean;
+  interpretation: string;
+}
+interface SomewhereTaskField {
+  field: string;
+  content: string;
+  encoding: 'json-text';
+  page: { has_more: boolean; next_cursor: string | null; [key: string]: unknown };
+}
+interface SomewhereTaskOverview {
+  project_id: string;
+  area: string | null;
+  sections: Array<{ key: string; title: string; selection: string; data: SomewhereJsonObject[]; page: SomewhereTaskPage }>;
+  read_at: number;
+  guidance: string;
+  continuation: string;
+}
 interface SomewhereRuntimeTasks {
+  overview(options?: { area?: string; section?: 'direction' | 'practice' | 'priorities' | 'active' | 'blocked' | 'shipped'; cursor?: string }): Promise<SomewhereTaskOverview>;
   // The created task, or only its id when the read-back was unavailable.
   create(task: SomewhereTaskCreateOptions): Promise<SomewhereTask | { id: string }>;
   // parent_id: 'null' lists only top-level tasks.
-  list(options?: { status?: SomewhereTaskStatus; assignee?: string; area?: string; parent_id?: string | null; limit?: number } | null): Promise<SomewhereTaskListItem[]>;
-  get(id: string): Promise<SomewhereTaskDetail>;
+  list(options: SomewhereTaskListOptions & { view: 'board' }): Promise<SomewhereTaskBoardItem[]>;
+  list(options?: SomewhereTaskListOptions | null): Promise<SomewhereTaskListItem[]>;
+  listPage(options: SomewhereTaskListOptions & { view: 'board' }): Promise<{ data: SomewhereTaskBoardItem[]; page: SomewhereTaskPage }>;
+  listPage(options?: SomewhereTaskListOptions | null): Promise<{ data: SomewhereTaskListItem[]; page: SomewhereTaskPage }>;
+  get(id: string, options?: SomewhereTaskReadOptions & { view?: 'full' }): Promise<SomewhereTaskFullDetail>;
+  get(id: string, options: SomewhereTaskReadOptions & { view: 'relationships' }): Promise<SomewhereTaskRelationships>;
+  get(id: string, options: SomewhereTaskReadOptions & { view: 'history' }): Promise<SomewhereTaskHistory>;
+  get(id: string, options: SomewhereTaskReadOptions & { view: 'field' }): Promise<SomewhereTaskField>;
+  get(id: string, options: SomewhereTaskReadOptions & { view: 'current' }): Promise<SomewhereTaskDetail>;
   update(id: string, changes: SomewhereTaskUpdateOptions): Promise<SomewhereTask>;
   delete(id: string): Promise<{ id: string; deleted: true }>;
   comment(id: string, body: string, author?: string): Promise<{ id: string; task_id: string; author: string; actor: string; body: string; created_at: number; edited_at: null }>;
@@ -3584,11 +3689,11 @@ interface Response { readonly webSocket: WebSocket | null }
 interface WebSocket { accept(): void }
 `;
     var { groupsTypeDeclarations } = require_groups_types();
-    function runtimeContextDeclaration2(roles) {
+    function runtimeContextDeclaration3(roles) {
       return BASE_RUNTIME_CONTEXT_DECLARATION + groupsTypeDeclarations(roles);
     }
-    var RUNTIME_CONTEXT_DECLARATION2 = runtimeContextDeclaration2({});
-    var ENDPOINT_DECLARATION2 = `
+    var RUNTIME_CONTEXT_DECLARATION2 = runtimeContextDeclaration3({});
+    var ENDPOINT_DECLARATION3 = `
 interface SomewhereEndpointUser {
   id: string;
   email?: string | null;
@@ -3635,7 +3740,7 @@ interface SomewhereEndpointConfig<Auth extends SomewhereEndpointAuth, Schema ext
       const find = (policy) => !policy ? null : policy.k === "o" ? policy.c : policy.k === "a" ? find(policy.p[0]) || find(policy.p[1]) : null;
       return find(table.policy);
     }
-    function declaredTablesDeclaration2(authority) {
+    function declaredTablesDeclaration3(authority) {
       const schema = authority && authority.schema || {};
       const scopes = authority && authority.scopes || {};
       const names = Object.keys(schema).sort();
@@ -3661,7 +3766,7 @@ interface SomewhereEndpointConfig<Auth extends SomewhereEndpointAuth, Schema ext
       });
       return "interface SomewhereDeclaredTables {\n" + entries.join("") + "}\n";
     }
-    module2.exports = { RUNTIME_CONTEXT_DECLARATION: RUNTIME_CONTEXT_DECLARATION2, ENDPOINT_DECLARATION: ENDPOINT_DECLARATION2, declaredTablesDeclaration: declaredTablesDeclaration2, runtimeContextDeclaration: runtimeContextDeclaration2 };
+    module2.exports = { RUNTIME_CONTEXT_DECLARATION: RUNTIME_CONTEXT_DECLARATION2, ENDPOINT_DECLARATION: ENDPOINT_DECLARATION3, declaredTablesDeclaration: declaredTablesDeclaration3, runtimeContextDeclaration: runtimeContextDeclaration3 };
   }
 });
 
@@ -3911,24 +4016,100 @@ function parent(options: { via: string; table?: string }): SomewhereSchemaDeclar
 function group(options?: { column?: string; roles?: Partial<Record<'read' | 'create' | 'update' | 'delete', string[]>> }): SomewhereSchemaDeclaration.GroupScope;
 function appRole(options: { roles: Partial<Record<'read' | 'create' | 'update' | 'delete', string[]>> }): SomewhereSchemaDeclaration.AppRoleScope;
 `;
-    var SCHEMA_DECLARATION2 = types + signatures.replace(/^function /gm, "declare function ") + `declare module 'somewhere/db' {
+    var SCHEMA_DECLARATION3 = types + signatures.replace(/^function /gm, "declare function ") + `declare module 'somewhere/db' {
 ${(signatures + policySignatures).replace(/^function /gm, "  export function ")}}
 `;
-    module2.exports = { SCHEMA_DECLARATION: SCHEMA_DECLARATION2 };
+    module2.exports = { SCHEMA_DECLARATION: SCHEMA_DECLARATION3 };
+  }
+});
+
+// worker/containers/compile/checker-contract.cjs
+var require_checker_contract = __commonJS({
+  "worker/containers/compile/checker-contract.cjs"(exports2, module2) {
+    "use strict";
+    var TYPESCRIPT_VERSION = "5.6.3";
+    var REFERENCE_SOURCE = /\.(?:tsx?|jsx?|mjs|cjs)$/;
+    var IGNORED_CODES = Object.freeze([2307, 7016, 2792, 6053]);
+    var REFERENCE_CODES = Object.freeze([2304, 2552, 2448, 2454, 18004]);
+    var TYPE_SHAPE_CODES = Object.freeze([2339, 2551, 2345, 2322, 2554]);
+    var ignored = new Set(IGNORED_CODES);
+    var reference = new Set(REFERENCE_CODES);
+    var typeShape = new Set(TYPE_SHAPE_CODES);
+    function isReferenceSource(relativePath) {
+      const segments = String(relativePath).split(/[\\/]/);
+      if (segments.some((segment) => segment === "node_modules" || segment.startsWith("."))) return false;
+      return REFERENCE_SOURCE.test(segments[segments.length - 1]);
+    }
+    function referenceCheckCompilerOptions(projectCompilerOptions) {
+      const own = projectCompilerOptions && typeof projectCompilerOptions === "object" && !Array.isArray(projectCompilerOptions) ? projectCompilerOptions : {};
+      return {
+        jsx: "react-jsx",
+        target: "es2022",
+        module: "esnext",
+        moduleResolution: "bundler",
+        esModuleInterop: true,
+        skipLibCheck: true,
+        strict: false,
+        noImplicitAny: false,
+        lib: ["es2022", "dom", "dom.iterable"],
+        ...own,
+        allowJs: true,
+        checkJs: true,
+        noEmit: true
+      };
+    }
+    function projectTsconfigCompilerOptions(compilerOptions) {
+      if (!compilerOptions || typeof compilerOptions !== "object" || Array.isArray(compilerOptions)) return compilerOptions;
+      return compilerOptions.paths && compilerOptions.baseUrl === void 0 ? { ...compilerOptions, baseUrl: "." } : compilerOptions;
+    }
+    function localCheckCompilerOptions(projectCompilerOptions) {
+      const options = referenceCheckCompilerOptions(projectTsconfigCompilerOptions(projectCompilerOptions));
+      return options.types === void 0 ? { ...options, types: [] } : options;
+    }
+    function diagnosticNumber(code) {
+      if (typeof code === "number") return code;
+      const parsed = Number(String(code).replace(/^TS/i, ""));
+      return Number.isFinite(parsed) ? parsed : NaN;
+    }
+    function isIgnoredDiagnostic(code) {
+      return ignored.has(diagnosticNumber(code));
+    }
+    function classifyDiagnostic(code) {
+      const number = diagnosticNumber(code);
+      if (reference.has(number)) return "reference";
+      if (typeShape.has(number)) return "type";
+      return null;
+    }
+    module2.exports = {
+      TYPESCRIPT_VERSION,
+      REFERENCE_SOURCE,
+      IGNORED_CODES,
+      REFERENCE_CODES,
+      TYPE_SHAPE_CODES,
+      isReferenceSource,
+      referenceCheckCompilerOptions,
+      projectTsconfigCompilerOptions,
+      localCheckCompilerOptions,
+      isIgnoredDiagnostic,
+      classifyDiagnostic
+    };
   }
 });
 
 // declared-data-vendor-entry.js
 var declared_data_vendor_entry_exports = {};
 __export(declared_data_vendor_entry_exports, {
-  ENDPOINT_DECLARATION: () => import_runtime_types2.ENDPOINT_DECLARATION,
+  ENDPOINT_DECLARATION: () => import_runtime_types3.ENDPOINT_DECLARATION,
   FILES_DECLARATION_FILE: () => import_typed_files2.CLIENT_FILE,
-  RUNTIME_CONTEXT_DECLARATION: () => import_runtime_types2.RUNTIME_CONTEXT_DECLARATION,
-  SCHEMA_DECLARATION: () => import_schema_types.SCHEMA_DECLARATION,
+  RUNTIME_CONTEXT_DECLARATION: () => import_runtime_types3.RUNTIME_CONTEXT_DECLARATION,
+  SCHEMA_DECLARATION: () => import_schema_types2.SCHEMA_DECLARATION,
+  checkerContract: () => checkerContract,
   declaredTablesFromFiles: () => declaredTablesFromFiles,
   filesDeclarationFromFiles: () => filesDeclarationFromFiles,
   generateFromFiles: () => generateFromFiles,
+  isRuntimeEndpointGlobal: () => isRuntimeEndpointGlobal,
   localDeclarationFromFiles: () => localDeclarationFromFiles,
+  referenceCheckDeclarations: () => referenceCheckDeclarations,
   runtimeDeclarationFromFiles: () => runtimeDeclarationFromFiles
 });
 module.exports = __toCommonJS(declared_data_vendor_entry_exports);
@@ -7053,12 +7234,41 @@ function declaredRolesFromSource(files) {
 // declared-data-vendor-entry.js
 var import_declared_data_contract2 = __toESM(require_declared_data_contract());
 var import_typed_data = __toESM(require_typed_data());
-var import_runtime_types = __toESM(require_runtime_types());
+var import_runtime_types2 = __toESM(require_runtime_types());
 var import_groups_types = __toESM(require_groups_types());
 var import_typed_files = __toESM(require_typed_files());
-var import_schema_types = __toESM(require_schema_types());
-var import_runtime_types2 = __toESM(require_runtime_types());
+var import_schema_types2 = __toESM(require_schema_types());
+var import_runtime_types3 = __toESM(require_runtime_types());
 var import_typed_files2 = __toESM(require_typed_files());
+var checkerContract = __toESM(require_checker_contract());
+
+// worker/src/utils/reference-check-inputs.ts
+var import_runtime_types = __toESM(require_runtime_types());
+var import_schema_types = __toESM(require_schema_types());
+var REFERENCE_CHECK_AMBIENT_FILE = "__somewhere_typed_functions.d.ts";
+var REFERENCE_CHECK_SCHEMA_FILE = "__somewhere_schema.d.ts";
+function referenceCheckDeclaredTables(graphFiles) {
+  const authority = schemaAuthorityFromSource(graphFiles);
+  return authority ? (0, import_runtime_types.declaredTablesDeclaration)(authority) : void 0;
+}
+function referenceCheckDeclarations(graphFiles) {
+  const declarations = {
+    [REFERENCE_CHECK_AMBIENT_FILE]: (0, import_runtime_types.runtimeContextDeclaration)({}) + import_runtime_types.ENDPOINT_DECLARATION + (referenceCheckDeclaredTables(graphFiles) ?? "")
+  };
+  if (graphFiles["db/schema.ts"] !== void 0) declarations[REFERENCE_CHECK_SCHEMA_FILE] = import_schema_types.SCHEMA_DECLARATION;
+  return declarations;
+}
+var RUNTIME_ENDPOINT_ACCESS = /^sw(?:\s|\/\*[\s\S]*?\*\/|\/\/[^\n]*\n)*\??\.(?:\s|\/\*[\s\S]*?\*\/|\/\/[^\n]*\n)*endpoint(?![\w$])/;
+function isRuntimeEndpointGlobal(diag, functions) {
+  if (!/^Cannot find name 'sw'\./.test(diag.message)) return false;
+  const source = diag.file ? functions?.[diag.file] : void 0;
+  if (typeof source !== "string" || diag.line === void 0 || diag.column === void 0) return false;
+  const lines2 = source.split("\n");
+  if (lines2[diag.line - 1] === void 0) return false;
+  return RUNTIME_ENDPOINT_ACCESS.test(lines2.slice(diag.line - 1).join("\n").slice(diag.column - 1));
+}
+
+// declared-data-vendor-entry.js
 function generateFromFiles(files) {
   const authority = clientAuthorityFromSource(files);
   return authority ? (0, import_typed_data.generateDataClient)(authority) : void 0;
@@ -7068,10 +7278,10 @@ function localDeclarationFromFiles(files) {
   return authority ? (0, import_declared_data_contract2.describeDataClientLocalDeclaration)(authority) : void 0;
 }
 function runtimeDeclarationFromFiles(files) {
-  return (0, import_runtime_types.runtimeContextDeclaration)((0, import_groups_types.declaredRoles)(declaredRolesFromSource(files)));
+  return (0, import_runtime_types2.runtimeContextDeclaration)((0, import_groups_types.declaredRoles)(declaredRolesFromSource(files)));
 }
 function declaredTablesFromFiles(files) {
-  return (0, import_runtime_types.declaredTablesDeclaration)(schemaAuthorityFromSource(files));
+  return (0, import_runtime_types2.declaredTablesDeclaration)(schemaAuthorityFromSource(files));
 }
 function filesDeclarationFromFiles(files) {
   const canonical = declaredFilesFromSource(files);
@@ -7083,9 +7293,12 @@ function filesDeclarationFromFiles(files) {
   FILES_DECLARATION_FILE,
   RUNTIME_CONTEXT_DECLARATION,
   SCHEMA_DECLARATION,
+  checkerContract,
   declaredTablesFromFiles,
   filesDeclarationFromFiles,
   generateFromFiles,
+  isRuntimeEndpointGlobal,
   localDeclarationFromFiles,
+  referenceCheckDeclarations,
   runtimeDeclarationFromFiles
 });

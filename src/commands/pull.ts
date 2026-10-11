@@ -7,6 +7,7 @@ import {
   getToken,
   loadProjectConfigEntry,
   saveProjectDeployState,
+  saveSourceBase,
   type ProjectConfigEntry,
 } from '../lib/config.js';
 import { IGNORE } from '../lib/files.js';
@@ -123,6 +124,15 @@ export function registerPull(program: Command) {
         body.version >= 1
       ) {
         saveProjectDeployState(deployStateEntry.dir, body.project_id, body.version, body.active_release_id);
+      } else if (
+        skipped.length === 0 &&
+        removed.skipped.length === 0 &&
+        deployStateEntry?.config.project_id === body.project_id &&
+        !body.active_release_id &&
+        body.counts.static_files + body.counts.binary_files + body.counts.functions === 0
+      ) {
+        // An empty project with no published version: this folder starts from genesis.
+        saveSourceBase(deployStateEntry.dir, body.project_id, null);
       }
 
       const total = body.counts.static_files + body.counts.binary_files + body.counts.functions;

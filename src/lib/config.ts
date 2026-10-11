@@ -17,7 +17,7 @@ import {
 import { randomUUID } from 'node:crypto';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
-import type { CliConfig, ProjectConfig, ProjectDeployState } from '../types.js';
+import type { CliConfig, ProjectConfig, ProjectDeployState, SourceBaseState } from '../types.js';
 import { error } from './output.js';
 
 // SOMEWHERE_CONFIG_DIR points the CLI at a separate config root (login,
@@ -355,6 +355,32 @@ export function projectConfigMatchesRef(config: ProjectConfig, ref: string): boo
   return ref === config.project_id;
 }
 
+/** The base this folder's source was prepared from, or null when unknown.
+ *  Falls back to the release recorded by an older CLI's last deploy. */
+export function readSourceBase(
+  config: ProjectConfig | null | undefined,
+  projectId: string,
+): { releaseId: string | null } | null {
+  const base = config?.source_base;
+  if (base && base.project_id === projectId
+      && (base.release_id === null || (typeof base.release_id === 'string' && base.release_id.trim()))) {
+    return { releaseId: base.release_id };
+  }
+  const deployed = config ? readProjectDeployState(config, projectId) : null;
+  return deployed?.release_id ? { releaseId: deployed.release_id } : null;
+}
+
+export function sourceBaseState(projectId: string, releaseId: string | null, at = new Date().toISOString()): SourceBaseState {
+  return { project_id: projectId, release_id: releaseId, at };
+}
+
+/** Record the published version this folder now matches. */
+export function saveSourceBase(dir: string, projectId: string, releaseId: string | null): void {
+  const config = loadProjectConfig(dir);
+  if (!config || config.project_id !== projectId) return;
+  saveProjectConfig(dir, { ...config, source_base: sourceBaseState(projectId, releaseId) });
+}
+
 export function saveProjectDeployState(
   dir: string,
   projectId: string,
@@ -376,7 +402,11 @@ export function saveProjectDeployState(
   if (typeof releaseId === 'string' && releaseId.trim()) {
     last_deploy.release_id = releaseId.trim();
   }
-  const next: ProjectConfig = { ...config, last_deploy };
+  const next: ProjectConfig = {
+    ...config,
+    last_deploy,
+    ...(last_deploy.release_id ? { source_base: sourceBaseState(projectId, last_deploy.release_id, at) } : {}),
+  };
   saveProjectConfig(dir, next);
   return next;
 }

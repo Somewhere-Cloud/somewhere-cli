@@ -47,8 +47,18 @@ export interface ProjectConfig {
   name: string;
   subdomain: string;
   last_deploy?: ProjectDeployState;
+  /** The published version this folder's source came from: null for a project
+   *  created empty here (genesis), else the release that was pulled or last
+   *  deployed. Deploy sends it as base_release_id; the CLI never fetches one. */
+  source_base?: SourceBaseState;
   /** Set once the deploy output has explained the publish surface (tsk_c166924f). */
   publish_notice_seen?: boolean;
+}
+
+export interface SourceBaseState {
+  project_id: string;
+  release_id: string | null;
+  at: string;
 }
 
 export interface ProjectDeployState {

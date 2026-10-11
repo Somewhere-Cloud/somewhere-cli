@@ -12,6 +12,9 @@ import {
   loadProjectConfigEntry,
   projectConfigMatchesRef,
   readProjectDeployState,
+  readSourceBase,
+  saveSourceBase,
+  sourceBaseState,
   saveConfig,
   saveProjectConfig,
   markPublishNoticeSeen,
@@ -302,19 +305,34 @@ export function formatStaleBaseExplanation(
   ].filter((line): line is string => line !== null).join('\n');
 }
 
-// The release-native staleness guard. Unlike STALE_BASE, the server's
-// STALE_RELEASE_BASE envelope carries only the declared vs. production release ids —
-// no file/version diff — so instead of inventing a change summary we point the
-// user at the tools that show the actual diff. This is the guard that fires on
-// the live path when a dashboard/MCP/agent edit landed after the last CLI
-// deploy (tsk_5e729c8): base_version alone does not protect it.
-export function formatStaleReleaseBaseExplanation(): string {
+// The release-native staleness guard: another production update landed after
+// the version this folder came from (dashboard, MCP agent, GitHub or another
+// machine). The server names the changed files when it can still read both
+// versions; otherwise it says the history is unavailable.
+export function formatStaleReleaseBaseExplanation(changedFiles: string[] = [], historyUnavailable = false): string {
+  const list = changedFiles.slice(0, 10).join(', ');
+  const more = changedFiles.length > 10 ? `, and ${changedFiles.length - 10} more` : '';
   return [
-    'This project changed since your last deploy from this machine — another production update landed first (via the dashboard, an MCP agent, or another machine). Your deploy was NOT applied.',
+    'This project changed since the version this folder came from — another update landed first (via the dashboard, an MCP agent, GitHub, or another machine). Your deploy was NOT applied.',
+    changedFiles.length > 0 ? `Changed since then: ${list}${more}.` : historyUnavailable ? 'The earlier version is no longer available to compare, so the changed files cannot be listed.' : null,
     '',
     'Next steps:',
-    '  Run `somewhere deploy --dry-run` to see exactly what differs, or `somewhere pull` to bring the latest deployed source into this directory, then deploy again.',
-    '  Run `somewhere deploy --force` to overwrite those remote changes intentionally.',
+    '  Run `somewhere pull` to bring the current source into this directory, re-apply your changes, then deploy again.',
+    '  Run `somewhere deploy --force` to replace those changes intentionally.',
+  ].filter((line): line is string => line !== null).join('\n');
+}
+
+// No record of which published version this folder's source came from (a
+// folder linked to an existing project, or state from an older CLI). The CLI
+// never fills the gap with the current version: that would publish stale files
+// as if they were based on it.
+export function formatBaseRequiredExplanation(): string {
+  return [
+    'This folder has no record of which published version its files came from, so the deploy was NOT applied.',
+    '',
+    'Next steps:',
+    '  Run `somewhere pull` to start from the current version, re-apply your changes, then deploy again.',
+    '  Run `somewhere deploy --force` to replace the current version with this folder intentionally.',
   ].join('\n');
 }
 
@@ -600,6 +618,7 @@ export function registerDeploy(program: Command) {
               project_id: created.id,
               name: created.name,
               subdomain: created.subdomain ?? name,
+              source_base: sourceBaseState(created.id, null),
             };
             if (besideRealLogin && sideCar) {
               // Remembered with the temporary credential, NOT in the
@@ -774,16 +793,29 @@ export function registerDeploy(program: Command) {
         if (deployState) {
           body.base_version = deployState.last_deployed_version;
           body.source = 'cli';
-          // The release-native path enforces staleness via base_release_id
-          // (STALE_RELEASE_BASE), not base_version — so anchor on the release we
-          // last put live. Omitted under --force: the server also refuses a
-          // stale base_release_id when force is set, so the only way to
-          // intentionally overwrite is to NOT declare a base (the server then
-          // auto-adopts the current active release).
-          if (!opts.force && typeof deployState.release_id === 'string' && deployState.release_id) {
-            body.base_release_id = deployState.release_id;
-          }
         }
+        // The published version this folder's source came from (null for a
+        // project created empty here). Never fetched from the server: a folder
+        // with no record must pull, or overwrite deliberately with --force.
+        const sourceBase = readSourceBase(targetProjectConfig, projectId);
+        if (!opts.force && sourceBase) body.base_release_id = sourceBase.releaseId;
+        // After a publish, this folder matches the new release: record it where
+        // this project's link lives (directory config or the temporary side-car).
+        const rememberDeployedBase = (releaseId: string | undefined) => {
+          if (!releaseId || !projectId || opts.dryRun) return;
+          const deployedProject = projectId;
+          if (besideRealLogin && sideCar && tempProjectFor(sideCar, projectRoot)?.project_id === deployedProject) {
+            const owner = sideCar.token;
+            sideCar = updateTempSession((current) => {
+              const linked = tempProjectFor(current, projectRoot);
+              return current?.token === owner && linked?.project_id === deployedProject
+                ? withTempProject(current, projectRoot, { ...linked, source_base: sourceBaseState(deployedProject, releaseId) })
+                : current;
+            });
+            return;
+          }
+          saveSourceBase(deployStateEntry?.dir ?? targetDir, deployedProject, releaseId);
+        };
         if (opts.force) {
           body.force = true;
           if (!tempSession) body.source = 'cli';
@@ -859,6 +891,7 @@ export function registerDeploy(program: Command) {
               result.active_release_id ?? result.release_id,
             );
           }
+          rememberDeployedBase(result.active_release_id ?? result.release_id);
           return;
         }
 
@@ -1013,17 +1046,20 @@ export function registerDeploy(program: Command) {
             result.active_release_id ?? result.release_id,
           );
         }
+        rememberDeployedBase(result.active_release_id ?? result.release_id);
         if (verification?.passed === false) process.exit(1);
       } catch (err) {
         if (
           err instanceof CliApiError &&
-          (err.code === 'STALE_BASE' || err.code === 'STALE_RELEASE_BASE')
+          (err.code === 'STALE_BASE' || err.code === 'STALE_RELEASE_BASE' || err.code === 'BASE_REQUIRED')
         ) {
           spinner?.stop();
           const message =
-            err.code === 'STALE_RELEASE_BASE'
-              ? formatStaleReleaseBaseExplanation()
-              : formatStaleBaseExplanation(readStaleBaseDetails(err.data));
+            err.code === 'BASE_REQUIRED'
+              ? formatBaseRequiredExplanation()
+              : err.code === 'STALE_RELEASE_BASE'
+                ? formatStaleReleaseBaseExplanation(readStringList(err.data?.changed_files), err.data?.history_unavailable === true)
+                : formatStaleBaseExplanation(readStaleBaseDetails(err.data));
           if (opts.json) {
             printJson({ ok: false, error: err.code, message, ...(err.data ?? {}) });
           } else {

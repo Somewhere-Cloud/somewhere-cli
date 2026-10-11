@@ -10,6 +10,7 @@ import {
   saveGlobalMcpConfig,
   saveMcpConfig,
   saveProjectConfig,
+  sourceBaseState,
 } from '../lib/config.js';
 import { installInitDependencies } from '../lib/init-install.js';
 import { basename, join } from 'node:path';
@@ -275,6 +276,7 @@ export function registerInit(program: Command) {
             project_id: project.id,
             name: project.name,
             subdomain: project.subdomain ?? subdomain,
+            source_base: sourceBaseState(project.id, null),
           });
           saveMcpConfig(dir);
           if (!hasGlobalMcpConfig()) saveGlobalMcpConfig();
@@ -297,6 +299,7 @@ export function registerInit(program: Command) {
           project_id: project.id,
           name: project.name,
           subdomain: project.subdomain ?? subdomain,
+          source_base: sourceBaseState(project.id, null),
         });
         success('.somewhere.json written');
 

@@ -6,7 +6,7 @@ import { existsSync, mkdtempSync, mkdirSync, writeFileSync, readFileSync } from 
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { formatStaleBaseExplanation, formatStaleReleaseBaseExplanation } from '../dist/commands/deploy.js';
+import { formatBaseRequiredExplanation, formatStaleBaseExplanation, formatStaleReleaseBaseExplanation } from '../dist/commands/deploy.js';
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 const distIndex = join(repoRoot, 'dist', 'index.js');
@@ -856,17 +856,16 @@ test('promote writes the returned version to the linked project state', async ()
 // release-native deploy via base_release_id, returning 409 STALE_RELEASE_BASE.
 // The CLI must anchor the release it last deployed and refuse when it moved.
 
-test('stale-release-base refusal copy names the remote change and the pull/--force next steps', () => {
-  const rendered = formatStaleReleaseBaseExplanation({
-    base_release_id: 'rel_old',
-    active_release_id: 'rel_new',
-  });
-  assert.match(rendered, /This project changed since your last deploy from this machine/);
-  assert.match(rendered, /another production update landed first/);
+test('stale-release-base refusal copy names the changed files and the pull/--force next steps', () => {
+  const rendered = formatStaleReleaseBaseExplanation(['index.html', 'src/App.tsx']);
+  assert.match(rendered, /This project changed since the version this folder came from/);
+  assert.match(rendered, /another update landed first/);
   assert.match(rendered, /Your deploy was NOT applied\./);
-  assert.match(rendered, /somewhere deploy --dry-run/);
+  assert.match(rendered, /Changed since then: index\.html, src\/App\.tsx\./);
   assert.match(rendered, /somewhere pull/);
   assert.match(rendered, /somewhere deploy --force/);
+  assert.match(formatStaleReleaseBaseExplanation([], true), /no longer available to compare/);
+  assert.match(formatBaseRequiredExplanation(), /no record of which published version its files came from/);
 });
 
 test('release-native mixed surface: deploy anchors base_release_id and a STALE_RELEASE_BASE is refused, never silently applied', async () => {
@@ -922,7 +921,7 @@ test('release-native mixed surface: deploy anchors base_release_id and a STALE_R
     const second = await run(['deploy'], { cwd: fixtureDir, env });
     assert.equal(second.status, 1, `stdout:\n${second.stdout}\nstderr:\n${second.stderr}`);
     assert.equal(bodies[1].base_release_id, 'rel_first', 'second deploy must anchor on the last deployed release');
-    assert.match(second.stderr, /This project changed since your last deploy from this machine/);
+    assert.match(second.stderr, /This project changed since the version this folder came from/);
     assert.match(second.stderr, /somewhere deploy --force/);
     assert.doesNotMatch(second.stderr, /\[STALE_RELEASE_BASE/);
     // A refused deploy must not advance the saved state.
@@ -1097,5 +1096,67 @@ test('pull persists active_release_id so the next deploy anchors base_release_id
     const deploy = await run(['deploy', '--json'], { cwd: fixtureDir, env });
     assert.equal(deploy.status, 0, `stdout:\n${deploy.stdout}\nstderr:\n${deploy.stderr}`);
     assert.equal(deployBody.base_release_id, 'rel_pulled');
+  });
+});
+
+// tsk_07232dc7: the folder's recorded source base is what deploy sends —
+// null (genesis) for a project created empty here — and a folder with no
+// record is never given one from the server.
+test('a project created empty here deploys from genesis and records the published release', async () => {
+  const HOME = mkdtempSync(join(tmpdir(), 'sw-genesis-home-'));
+  const fixtureDir = mkdtempSync(join(tmpdir(), 'sw-genesis-fixture-'));
+  writeLogin(HOME);
+  writeProject(fixtureDir, { source_base: { project_id: 'proj_stale_base', release_id: null, at: '2026-10-11T00:00:00.000Z' } });
+  writeFixture(fixtureDir);
+  const bodies = [];
+  await withServer((req, res) => {
+    let body = '';
+    req.on('data', (c) => (body += c));
+    req.on('end', () => {
+      if (req.method === 'POST' && req.url === '/v1/deploy') {
+        bodies.push(JSON.parse(body));
+        sendJson(res, 200, { ok: true, data: { version: 1, active_release_id: 'rel_genesis_published', files: 1, url: 'https://stale-base.somewhere.tech', has_functions: false } });
+        return;
+      }
+      sendJson(res, 404, { ok: false, error: 'NOT_FOUND', message: req.url });
+    });
+  }, async (apiUrl) => {
+    const env = { HOME, USERPROFILE: HOME, SOMEWHERE_API_URL: apiUrl };
+    const first = await run(['deploy', '--json'], { cwd: fixtureDir, env });
+    assert.equal(first.status, 0, `stdout:\n${first.stdout}\nstderr:\n${first.stderr}`);
+    assert.equal(bodies[0].base_release_id, null, 'genesis is sent explicitly as null');
+    assert.equal(readProject(fixtureDir).source_base.release_id, 'rel_genesis_published');
+    const second = await run(['deploy', '--json'], { cwd: fixtureDir, env });
+    assert.equal(second.status, 0, `stdout:\n${second.stdout}\nstderr:\n${second.stderr}`);
+    assert.equal(bodies[1].base_release_id, 'rel_genesis_published');
+  });
+});
+
+test('a folder with no recorded base gets BASE_REQUIRED explained and nothing is fetched or retried', async () => {
+  const HOME = mkdtempSync(join(tmpdir(), 'sw-nobase-home-'));
+  const fixtureDir = mkdtempSync(join(tmpdir(), 'sw-nobase-fixture-'));
+  writeLogin(HOME);
+  writeProject(fixtureDir);
+  writeFixture(fixtureDir);
+  const requests = [];
+  await withServer((req, res) => {
+    let body = '';
+    req.on('data', (c) => (body += c));
+    req.on('end', () => {
+      requests.push(`${req.method} ${req.url}`);
+      if (req.method === 'POST' && req.url === '/v1/deploy') {
+        sendJson(res, 400, { ok: false, error: 'BASE_REQUIRED', message: 'A live deploy must say which source it was prepared from.', data: {} });
+        return;
+      }
+      sendJson(res, 404, { ok: false, error: 'NOT_FOUND', message: req.url });
+    });
+  }, async (apiUrl) => {
+    const env = { HOME, USERPROFILE: HOME, SOMEWHERE_API_URL: apiUrl };
+    const result = await run(['deploy'], { cwd: fixtureDir, env });
+    assert.equal(result.status, 1, `stdout:\n${result.stdout}\nstderr:\n${result.stderr}`);
+    assert.match(result.stderr, /no record of which published version its files came from/);
+    assert.match(result.stderr, /somewhere pull/);
+    assert.deepEqual(requests.filter((r) => !r.startsWith('GET /v1/projects')), ['POST /v1/deploy'], 'one deploy request; no source/status read to manufacture a base');
+    assert.equal(readProject(fixtureDir).source_base, undefined);
   });
 });

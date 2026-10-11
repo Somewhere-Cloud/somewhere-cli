@@ -212,11 +212,14 @@ export function registerPromote(program: Command) {
         });
         spinner?.stop();
         if (deployStateEntry) {
+          // The promoted preview may hold changes this folder does not have
+          // (another session, the dashboard, an agent), so the folder's source
+          // base stays where it was: the next deploy from here is compared with
+          // the promoted version and asks for a pull if they differ.
           saveProjectDeployState(
             deployStateEntry.dir,
             deployStateEntry.config.project_id,
             r.version,
-            r.active_release_id ?? r.release_id,
           );
         }
         if (opts.json) {
@@ -276,7 +279,6 @@ export function registerPromote(program: Command) {
               deployStateEntry.dir,
               deployStateEntry.config.project_id,
               pointerAfter.version,
-              verdict.activeReleaseId,
             );
           }
           if (opts.json) {

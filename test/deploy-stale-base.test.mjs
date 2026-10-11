@@ -1160,3 +1160,40 @@ test('a folder with no recorded base gets BASE_REQUIRED explained and nothing is
     assert.equal(readProject(fixtureDir).source_base, undefined);
   });
 });
+
+test('promote does not advance the folder source base; the next deploy still names the version the folder came from', async () => {
+  const HOME = mkdtempSync(join(tmpdir(), 'sw-promote-base-home-'));
+  const fixtureDir = mkdtempSync(join(tmpdir(), 'sw-promote-base-fixture-'));
+  writeLogin(HOME);
+  writeProject(fixtureDir, { source_base: { project_id: 'proj_stale_base', release_id: 'rel_folder', at: '2026-10-11T00:00:00.000Z' } });
+  writeFixture(fixtureDir);
+  const deployBodies = [];
+  await withServer((req, res) => {
+    let body = '';
+    req.on('data', (c) => (body += c));
+    req.on('end', () => {
+      if (req.method === 'POST' && req.url === '/v1/promote') {
+        sendJson(res, 200, { ok: true, data: { version: 7, active_release_id: 'rel_promoted' } });
+        return;
+      }
+      if (req.method === 'POST' && req.url === '/v1/deploy') {
+        deployBodies.push(JSON.parse(body));
+        sendJson(res, 409, { ok: false, error: 'STALE_RELEASE_BASE', message: 'moved', data: { changed_files: ['src/App.tsx'] } });
+        return;
+      }
+      sendJson(res, 404, { ok: false, error: 'NOT_FOUND', message: req.url });
+    });
+  }, async (apiUrl) => {
+    const env = { HOME, USERPROFILE: HOME, SOMEWHERE_API_URL: apiUrl };
+    const promoted = await run(['promote', 'draft_dashboard', 'rel_preview', '--yes', '--json'], { cwd: fixtureDir, env });
+    assert.equal(promoted.status, 0, `stdout:\n${promoted.stdout}\nstderr:\n${promoted.stderr}`);
+    const after = readProject(fixtureDir);
+    assert.equal(after.source_base.release_id, 'rel_folder', 'promote leaves the folder base alone');
+    assert.equal(after.last_deploy.last_deployed_version, 7);
+    assert.equal(after.last_deploy.release_id, undefined);
+    const deployed = await run(['deploy'], { cwd: fixtureDir, env });
+    assert.equal(deployed.status, 1);
+    assert.equal(deployBodies[0].base_release_id, 'rel_folder');
+    assert.match(deployed.stderr, /Changed since then: src\/App\.tsx\./);
+  });
+});

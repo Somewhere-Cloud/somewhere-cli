@@ -13,6 +13,7 @@ import {
   sourceBaseState,
 } from '../lib/config.js';
 import { installInitDependencies } from '../lib/init-install.js';
+import { formatAgentHookInstall, installAgentHooks, type AgentHookInstallResult } from '../lib/agent-hooks.js';
 import { basename, join } from 'node:path';
 import { existsSync } from 'node:fs';
 import {
@@ -184,9 +185,10 @@ export function registerInit(program: Command) {
         try {
           const scaffold = writeInitScaffold(dir, scaffoldFiles(localName));
           const skills = writeInitSkills(dir);
+          const hooks = writeInitHooks(dir, Boolean(opts.json));
           const next = ['somewhere deploy', 'somewhere docs start'];
           if (opts.json) {
-            printJson({ local: true, linked: false, name: localName, files: scaffold.created, dependencies_installed: false, skills,
+            printJson({ local: true, linked: false, name: localName, files: scaffold.created, dependencies_installed: false, skills, hooks,
               ...(plan ? { selection: plan.selection, extension_points: extensionPoints(plan.selection) } : {}), next });
           } else {
             success(`Local starter written (${scaffold.created.length} files); no account or project was created.`);
@@ -280,17 +282,21 @@ export function registerInit(program: Command) {
           });
           saveMcpConfig(dir);
           if (!hasGlobalMcpConfig()) saveGlobalMcpConfig();
+          let hooks: InitHooksResult | undefined;
           if (shouldScaffold) {
             writeInitScaffold(dir, scaffoldFiles(project.name));
             writeInitSkills(dir);
+            hooks = writeInitHooks(dir, true);
             await installInitDependencies({ cwd: dir, quiet: true });
           } else if (opts.bare) {
             writeBareGuide(dir);
             writeInitSkills(dir);
+            hooks = writeInitHooks(dir, true);
           }
-          printJson(plan
-            ? { ...project, selection: plan.selection, extension_points: extensionPoints(plan.selection) }
-            : project);
+          printJson({ ...project,
+            ...(plan ? { selection: plan.selection, extension_points: extensionPoints(plan.selection) } : {}),
+            ...(hooks ? { hooks } : {}),
+          });
           return;
         }
         success(`Project created: ${teal(project.name)}`);
@@ -309,6 +315,7 @@ export function registerInit(program: Command) {
           const scaffold = writeInitScaffold(dir, scaffoldFiles(project.name));
           success(`Full-stack starter written (${scaffold.created.length} files)`);
           reportSkills(writeInitSkills(dir));
+          writeInitHooks(dir);
           if (template !== 'minimal' || plan) {
             const selection = plan?.selection ?? DEFAULT_AUTH_SELECTION;
             info(`Modules: ${describeSelection(selection)}`);
@@ -321,6 +328,7 @@ export function registerInit(program: Command) {
           info('Bare project: no starter source or dependencies were added.');
           const guide = writeBareGuide(dir);
           reportSkills(writeInitSkills(dir));
+          writeInitHooks(dir);
           if (guide.created.length) success(`Agent workflow guide written (${guide.created.join(', ')})`);
           if (guide.kept.length) info(`Existing ${guide.kept.join(', ')} kept unchanged.`);
         } else {
@@ -502,6 +510,37 @@ export function writeInitSkills(dir: string): { version: string } | { kept: stri
     existsSync(join(dir, SKILLS_DIR, name)) || existsSync(join(dir, CLAUDE_SKILLS_DIR, name)));
   if (taken.length) return { kept: `Project skills ${taken.join(', ')} already exist` };
   return installSkills(dir, BUNDLED_SKILLS_PACK, { cli: CLI_VERSION, source: 'bundled' });
+}
+
+const INIT_AGENT_HOSTS = ['claude-code', 'codex'] as const;
+const INIT_HOOK_NOTES = [
+  'Cursor can reuse the Claude Code hook in a trusted workspace when Include Third-Party Plugins, Skills, and Other Configs is enabled in Settings → Agents → Third-Party Imports. No separate Cursor hook was added.',
+  'These hooks check agent file-edit tools. For shell writes or edits outside the agent, run somewhere typecheck --deploy --watch.',
+];
+
+interface InitHooksResult {
+  results: AgentHookInstallResult[];
+  notes: string[];
+  error?: string;
+}
+
+/** Optional host setup cannot turn a completed project creation into a failure. */
+function writeInitHooks(dir: string, json = false): InitHooksResult {
+  try {
+    const results = installAgentHooks({ projectDir: dir, hosts: INIT_AGENT_HOSTS });
+    if (!json) {
+      for (const [index, line] of formatAgentHookInstall(results, dir).entries()) {
+        if (results[index].status === 'refused') warn(line);
+        else info(line);
+      }
+    }
+    if (!json) for (const note of INIT_HOOK_NOTES) info(note);
+    return { results, notes: INIT_HOOK_NOTES };
+  } catch (failure) {
+    const message = failure instanceof Error ? failure.message : String(failure);
+    if (!json) warn(`Agent hook setup did not complete: ${message}. Project files were kept. Run somewhere hooks install --host claude-code codex to retry.`);
+    return { results: [], notes: INIT_HOOK_NOTES, error: message };
+  }
 }
 
 function reportSkills(result: ReturnType<typeof writeInitSkills>): void {

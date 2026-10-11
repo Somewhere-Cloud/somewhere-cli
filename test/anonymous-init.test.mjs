@@ -28,6 +28,11 @@ async function run(args, { token, prepare } = {}) {
   if (token) writeFileSync(join(config, 'config.json'), JSON.stringify({ token }));
   // Only a sentinel, never npm: authenticated init's existing install call is observed locally.
   writeFileSync(join(bin, 'npm'), '#!/bin/sh\nprintf fixture > "$PWD/install-called"\n', { mode: 0o700 });
+  // Existing user-wide hook settings must remain untouched by setup.
+  for (const [host, file] of [['.claude', 'settings.json'], ['.codex', 'hooks.json'], ['.cursor', 'hooks.json']]) {
+    mkdirSync(join(base, host));
+    writeFileSync(join(base, host, file), '{"fixture":"user-wide-kept"}');
+  }
   prepare?.(cwd);
   const output = await new Promise(resolve => {
     const child = spawn(process.execPath, [cli, 'init', ...args], { cwd, stdio: ['ignore', 'pipe', 'pipe'], env: {
@@ -39,6 +44,9 @@ async function run(args, { token, prepare } = {}) {
     child.stdout.on('data', v => stdout += v); child.stderr.on('data', v => stderr += v);
     child.on('close', status => resolve({ status, stdout, stderr }));
   });
+  for (const [host, file] of [['.claude', 'settings.json'], ['.codex', 'hooks.json'], ['.cursor', 'hooks.json']]) {
+    assert.equal(readFileSync(join(base, host, file), 'utf8'), '{"fixture":"user-wide-kept"}');
+  }
   return { ...output, cwd, config, base };
 }
 for (const selection of [[], ['--template', 'minimal'], ['--features', 'private-data', '--ui', 'headless']]) {
@@ -51,7 +59,9 @@ for (const selection of [[], ['--template', 'minimal'], ['--features', 'private-
     assert.deepEqual(requests, []); assert.deepEqual(readdirSync(result.config).filter(name => name !== 'last-run.json'), []);
     for (const path of ['.somewhere.json', '.mcp.json', 'node_modules', 'install-called', 'dist', 'build']) assert.equal(existsSync(join(result.cwd, path)), false, path);
     assert.equal(existsSync(join(result.base, '.claude.json')), false);
+    assertInitHooks(result, body.hooks);
     const collected = collectFiles(result.cwd);
+    assert.ok(Object.keys(collected.files).every(path => !/^\.(claude|codex|cursor)\//.test(path)), 'hook configs are never deployed');
     assert.ok(collected.files['index.html']); assert.ok(Object.keys(collected.files).some(p => p.endsWith('.tsx')));
     for (const [path, content] of Object.entries(collected.files)) {
       if (!/\.tsx?$/.test(path)) continue;
@@ -65,6 +75,7 @@ test('anonymous human result directs to existing temporary deploy and full quick
   const result = await run(['--name', 'starter']);
   assert.equal(result.status, 0); assert.match(result.stdout, /somewhere deploy/); assert.match(result.stdout, /somewhere docs start/);
   assert.deepEqual(requests, []);
+  assertInitHooks(result);
 });
 test('anonymous link/bare/project flags never bypass account authority', async () => {
   for (const args of [['--link', '--project', 'fixture'], ['--bare', '--name', 'fixture'], ['--project', 'fixture', '--name', 'fixture']]) {
@@ -85,15 +96,121 @@ test('authenticated create retains remote creation, linking and install behavior
   assert.deepEqual(requests, ['POST /projects']);
   assert.equal(JSON.parse(readFileSync(join(result.cwd, '.somewhere.json'))).project_id, project.id);
   assert.ok(existsSync(join(result.cwd, 'install-called'))); assert.ok(existsSync(join(result.cwd, 'index.html')));
+  assertInitHooks(result, JSON.parse(result.stdout).hooks);
 });
 test('authenticated link uses only owned project lookup; server denial writes nothing', async () => {
   const linked = await run(['--link', '--project', 'fixture', '--json'], { token: 'smt_fixture' });
   assert.equal(linked.status, 0, linked.stderr); assert.deepEqual(requests, ['GET /projects']);
   assert.equal(existsSync(join(linked.cwd, 'index.html')), false);
+  assertNoInitHooks(linked.cwd);
+  assert.equal(JSON.parse(linked.stdout).hooks, undefined);
   refuse = true;
   try {
     const rejected = await run(['--name', 'fixture', '--json'], { token: 'smt_fixture' });
     assert.notEqual(rejected.status, 0); assert.deepEqual(readdirSync(rejected.cwd), []);
     assert.deepEqual(requests, ['POST /projects']);
   } finally { refuse = false; }
+});
+
+function assertNoInitHooks(dir) {
+  for (const path of ['.claude/settings.json', '.codex/hooks.json', '.cursor/hooks.json']) {
+    assert.equal(existsSync(join(dir, path)), false, path);
+  }
+}
+
+function assertInitHooks(result, hooks) {
+  const claude = JSON.parse(readFileSync(join(result.cwd, '.claude/settings.json'), 'utf8'));
+  const codex = JSON.parse(readFileSync(join(result.cwd, '.codex/hooks.json'), 'utf8'));
+  assert.equal(claude.hooks.PostToolUse.length, 1);
+  assert.equal(codex.hooks.PostToolUse.length, 1);
+  assert.match(claude.hooks.PostToolUse[0].hooks[0].command, /typecheck --deploy --hook claude-code$/);
+  assert.match(codex.hooks.PostToolUse[0].hooks[0].command, /typecheck --deploy --hook codex$/);
+  assert.equal(existsSync(join(result.cwd, '.cursor/hooks.json')), false, 'Cursor reuses the Claude config without a duplicate adapter');
+  if (hooks) {
+    assert.deepEqual(hooks.results.map(r => [r.host, r.status]), [['claude-code', 'added'], ['codex', 'added']]);
+    assert.match(hooks.results[0].activation, /trusted/);
+    assert.match(hooks.results[1].activation, /review.*trust.*\/hooks/);
+    assert.match(hooks.notes.join(' '), /Cursor.*trusted workspace.*Third-Party Imports/);
+    assert.match(hooks.notes.join(' '), /shell writes.*--watch/);
+  } else {
+    assert.match(result.stdout, /Claude Code.*trusted/);
+    assert.match(result.stdout, /Codex.*review.*trust.*\/hooks/);
+    assert.match(result.stdout, /Cursor.*trusted workspace.*Third-Party Imports/);
+    assert.match(result.stdout, /shell writes.*--watch/);
+  }
+}
+
+test('authenticated text setup reports project-local hook activation', async () => {
+  const result = await run(['--name', 'fixture'], { token: 'smt_fixture' });
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, /Project created/);
+  assert.deepEqual(requests, ['POST /projects']);
+  assertInitHooks(result);
+});
+
+for (const json of [false, true]) {
+  test(`authenticated bare setup installs project hooks (${json ? 'JSON' : 'text'})`, async () => {
+    const result = await run(['--name', 'fixture', '--bare', ...(json ? ['--json'] : [])], { token: 'smt_fixture' });
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.deepEqual(requests, ['POST /projects']);
+    assert.equal(existsSync(join(result.cwd, 'index.html')), false);
+    assert.equal(existsSync(join(result.cwd, 'install-called')), false);
+    assert.ok(existsSync(join(result.cwd, 'AGENTS.md')));
+    assertInitHooks(result, json ? JSON.parse(result.stdout).hooks : undefined);
+  });
+}
+
+for (const args of [['--catalog'], ['--features', 'auth', '--name', 'fixture', '--dry-run']]) {
+  test(`${args.join(' ')} does not install hooks`, async () => {
+    const result = await run([...args, '--json'], { token: 'smt_fixture' });
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.deepEqual(requests, []);
+    assert.deepEqual(readdirSync(result.cwd), []);
+    assertNoInitHooks(result.cwd);
+    assert.equal(JSON.parse(result.stdout).hooks, undefined);
+  });
+}
+
+test('creating a project around existing source leaves hook setup untouched', async () => {
+  const result = await run(['--name', 'fixture', '--json'], {
+    token: 'smt_fixture', prepare: dir => writeFileSync(join(dir, 'keep.ts'), 'export const keep = true;'),
+  });
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.equal(readFileSync(join(result.cwd, 'keep.ts'), 'utf8'), 'export const keep = true;');
+  assertNoInitHooks(result.cwd);
+  assert.equal(JSON.parse(result.stdout).hooks, undefined);
+});
+
+for (const json of [false, true]) {
+  test(`a thrown hook install stays visible after successful bare project creation (${json ? 'JSON' : 'text'})`, async () => {
+    const result = await run(['--name', 'fixture', '--bare', ...(json ? ['--json'] : [])], {
+      token: 'smt_fixture', prepare: dir => writeFileSync(join(dir, '.codex'), 'not a directory'),
+    });
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.equal(JSON.parse(readFileSync(join(result.cwd, '.somewhere.json'))).project_id, project.id);
+    assert.ok(existsSync(join(result.cwd, 'AGENTS.md')));
+    assert.equal(readFileSync(join(result.cwd, '.codex'), 'utf8'), 'not a directory');
+    if (json) {
+      const body = JSON.parse(result.stdout);
+      assert.equal(body.id, project.id);
+      assert.match(body.hooks.error, /EEXIST|ENOTDIR/);
+    } else {
+      assert.match(result.stdout + result.stderr, /Agent hook setup did not complete/);
+      assert.doesNotMatch(result.stdout + result.stderr, /Failed to create project/);
+    }
+  });
+}
+
+test('refused existing project hook settings survive bare init and are reported', async () => {
+  const result = await run(['--name', 'fixture', '--bare', '--json'], {
+    token: 'smt_fixture', prepare: dir => {
+      mkdirSync(join(dir, '.claude'));
+      writeFileSync(join(dir, '.claude/settings.json'), '{broken');
+    },
+  });
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.equal(readFileSync(join(result.cwd, '.claude/settings.json'), 'utf8'), '{broken');
+  const body = JSON.parse(result.stdout);
+  assert.deepEqual(body.hooks.results.map(r => [r.host, r.status]), [['claude-code', 'refused'], ['codex', 'added']]);
+  assert.ok(body.hooks.results[0].reason);
 });

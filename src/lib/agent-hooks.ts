@@ -20,7 +20,7 @@
  * Shell) rather than its file-edit tools, and edits made outside the agent.
  * `somewhere typecheck --deploy --watch` covers those while it runs.
  */
-import { existsSync, mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { delimiter, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { CLI_VERSION } from './version.js';
@@ -129,6 +129,36 @@ function readConfig(path: string): Json | Error {
   }
 }
 
+/**
+ * Why writing `path` would leave the project, or null when it would not:
+ * every existing component from the project root down to `path` must resolve,
+ * through any symlink, inside the project's real root. Components that do not
+ * exist yet are created as plain directories under a contained parent.
+ */
+function escapesProject(projectDir: string, path: string): string | null {
+  let current = projectDir;
+  for (const part of relative(projectDir, path).split(sep)) {
+    current = join(current, part);
+    try { lstatSync(current); } catch { return null; }
+    let real: string;
+    try { real = realpathSync(current); } catch { return `${relative(projectDir, current)} is a broken link`; }
+    if (real !== projectDir && !real.startsWith(projectDir + sep)) {
+      return `${relative(projectDir, current)} resolves outside the project (${real})`;
+    }
+  }
+  return null;
+}
+
+/** Why an existing config cannot take the check without being rewritten, or null. */
+function incompatibleShape(host: AgentHost, config: Json, event: string): string | null {
+  if (host === 'cursor' && config.version !== undefined && config.version !== 1) return `has version ${JSON.stringify(config.version)}, not 1`;
+  if (config.hooks === undefined) return null;
+  if (!config.hooks || typeof config.hooks !== 'object' || Array.isArray(config.hooks)) return 'has "hooks" that is not an object';
+  const entries = (config.hooks as Json)[event];
+  if (entries !== undefined && !Array.isArray(entries)) return `has "hooks.${event}" that is not a list`;
+  return null;
+}
+
 /** The check's existing handler for `host` under `entries`, if installed. */
 function findHandler(entries: unknown[], host: AgentHost, nested: boolean): Json | undefined {
   for (const entry of entries) {
@@ -147,8 +177,9 @@ function findHandler(entries: unknown[], host: AgentHost, nested: boolean): Json
 /**
  * Add the after-edit check to the PROJECT's own configuration for each host,
  * merged into what is there: other hooks and settings are never replaced, and
- * an existing check entry is updated in place. Refuses any directory whose
- * host config would be a user-wide file (the home directory).
+ * an existing check entry is updated in place. Refuses the home directory,
+ * any host config path that resolves (through symlinks) outside the project,
+ * and existing settings whose shape would have to be rewritten to merge.
  *
  * Call-site contract (setup): call once with the project root `init` just
  * created, after its files are written; print `formatAgentHookInstall(...)`.
@@ -166,10 +197,14 @@ export function installAgentHooks(options: {
   return options.hosts.map((host) => {
     const spec = HOSTS[host];
     const path = join(projectDir, spec.configPath);
+    const refuse = (why: string): AgentHookInstallResult =>
+      ({ host, path, status: 'refused', reason: `${spec.configPath} ${why}; left unchanged`, activation: spec.activation });
+    const escape = escapesProject(projectDir, path);
+    if (escape) return refuse(`is not inside the project: ${escape}`);
     const config = readConfig(path);
-    if (config instanceof Error) {
-      return { host, path, status: 'refused', reason: `${spec.configPath} ${config.message}; left unchanged`, activation: spec.activation };
-    }
+    if (config instanceof Error) return refuse(config.message);
+    const shape = incompatibleShape(host, config, spec.event);
+    if (shape) return refuse(shape);
     const handler: Json = host === 'cursor'
       ? { command: command(host), matcher: spec.matcher, timeout: HOOK_TIMEOUT_SECONDS }
       : { type: 'command', command: command(host), timeout: HOOK_TIMEOUT_SECONDS };
@@ -288,6 +323,21 @@ function contextEnvelope(host: AgentHost, text: string): HookOutcome {
  * project data, never calls a model.
  */
 export async function runAgentHook(
+  host: AgentHost,
+  stdinText: string,
+  deps: { check: (dir: string) => Promise<DeployCheckResult>; env?: NodeJS.ProcessEnv; cwd?: string },
+): Promise<HookOutcome> {
+  try {
+    return await handleAgentHook(host, stdinText, deps);
+  } catch (failure) {
+    // An unexpected failure (unreadable settings, a check that threw) is
+    // shown to the agent, never lost or mistaken for a clean check.
+    const detail = failure instanceof Error ? failure.message : String(failure);
+    return contextEnvelope(host, `Somewhere deploy check could not run: ${detail.split('\n')[0]}. Run \`somewhere typecheck --deploy\` to see more.`);
+  }
+}
+
+async function handleAgentHook(
   host: AgentHost,
   stdinText: string,
   deps: { check: (dir: string) => Promise<DeployCheckResult>; env?: NodeJS.ProcessEnv; cwd?: string },

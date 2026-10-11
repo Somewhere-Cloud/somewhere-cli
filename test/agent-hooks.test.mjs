@@ -113,6 +113,84 @@ test('cursor: postToolUse definition in .cursor/hooks.json with version 1, keepi
   assert.match(result.activation, /trusted workspace/);
 });
 
+// ── never outside the project, never rewriting what it cannot merge ─────
+
+function outsideSettings() {
+  const outside = mkdtempSync(join(tmpdir(), 'sw-user-wide-'));
+  writeFileSync(join(outside, 'settings.json'), '{"theme":"dark"}\n');
+  writeFileSync(join(outside, 'hooks.json'), '{"version":1,"hooks":{}}\n');
+  return outside;
+}
+
+for (const [host, dirName, file] of [['claude-code', '.claude', 'settings.json'], ['codex', '.codex', 'hooks.json'], ['cursor', '.cursor', 'hooks.json']]) {
+  test(`${host}: a ${dirName} directory linked outside the project is refused and the outside file is untouched`, () => {
+    const outside = outsideSettings();
+    const before = readFileSync(join(outside, file), 'utf8');
+    const dir = project();
+    symlinkSync(outside, join(dir, dirName));
+    const [result] = installAgentHooks({ projectDir: dir, hosts: [host], command: CMD });
+    assert.equal(result.status, 'refused');
+    assert.match(result.reason, /outside the project/);
+    assert.equal(readFileSync(join(outside, file), 'utf8'), before);
+  });
+}
+
+test('a settings file linked to a user-wide file is refused and that file is untouched', () => {
+  const outside = outsideSettings();
+  const dir = project();
+  mkdirSync(join(dir, '.claude'));
+  symlinkSync(join(outside, 'settings.json'), join(dir, '.claude', 'settings.json'));
+  const [result] = installAgentHooks({ projectDir: dir, hosts: ['claude-code'], command: CMD });
+  assert.equal(result.status, 'refused');
+  assert.equal(readFileSync(join(outside, 'settings.json'), 'utf8'), '{"theme":"dark"}\n');
+});
+
+test('a broken settings link is refused', () => {
+  const dir = project();
+  mkdirSync(join(dir, '.claude'));
+  symlinkSync(join(dir, 'missing', 'settings.json'), join(dir, '.claude', 'settings.json'));
+  assert.match(installAgentHooks({ projectDir: dir, hosts: ['claude-code'], command: CMD })[0].reason, /broken link/);
+});
+
+test('settings linked to another place inside the project are merged there', () => {
+  const dir = project({ 'config/claude/settings.json': '{"theme":"dark"}' });
+  symlinkSync(join(dir, 'config', 'claude'), join(dir, '.claude'));
+  const [result] = installAgentHooks({ projectDir: dir, hosts: ['claude-code'], command: CMD });
+  assert.equal(result.status, 'added');
+  const merged = read(dir, 'config/claude/settings.json');
+  assert.equal(merged.theme, 'dark');
+  assert.equal(merged.hooks.PostToolUse[0].hooks[0].command, CMD('claude-code'));
+});
+
+for (const [name, host, path, text] of [
+  ['hooks that is not an object', 'claude-code', '.claude/settings.json', '{"hooks":[],"model":"x"}'],
+  ['an event that is not a list', 'claude-code', '.claude/settings.json', '{"hooks":{"PostToolUse":{"matcher":"Edit"}}}'],
+  ['codex hooks that is not an object', 'codex', '.codex/hooks.json', '{"hooks":"off"}'],
+  ['a cursor event that is not a list', 'cursor', '.cursor/hooks.json', '{"version":1,"hooks":{"postToolUse":{}}}'],
+  ['an unsupported cursor version', 'cursor', '.cursor/hooks.json', '{"version":2,"hooks":{}}'],
+]) {
+  test(`existing settings with ${name} are refused and left byte-for-byte unchanged`, () => {
+    const dir = project({ [path]: text });
+    const [result] = installAgentHooks({ projectDir: dir, hosts: [host], command: CMD });
+    assert.equal(result.status, 'refused');
+    assert.equal(readFileSync(join(dir, path), 'utf8'), text);
+  });
+}
+
+test('unknown settings and unknown entries survive a merge and a reinstall', () => {
+  const text = JSON.stringify({ model: 'x', env: { A: '1' }, hooks: { PostToolUse: ['not-an-entry', { matcher: 'Edit', hooks: 'odd' }], Notification: [] } });
+  const dir = project({ '.claude/settings.json': text });
+  assert.equal(installAgentHooks({ projectDir: dir, hosts: ['claude-code'], command: CMD })[0].status, 'added');
+  assert.equal(installAgentHooks({ projectDir: dir, hosts: ['claude-code'], command: CMD })[0].status, 'unchanged');
+  const merged = read(dir, '.claude/settings.json');
+  const original = JSON.parse(text);
+  assert.equal(merged.model, 'x');
+  assert.deepEqual(merged.env, original.env);
+  assert.deepEqual(merged.hooks.Notification, []);
+  assert.deepEqual(merged.hooks.PostToolUse.slice(0, 2), original.hooks.PostToolUse);
+  assert.equal(merged.hooks.PostToolUse.length, 3);
+});
+
 // ── which edits trigger a check ───────────────────────────────────────────
 
 test('source, schema, tsconfig, manifest and lockfile edits trigger a check; other files do not', () => {
@@ -209,6 +287,20 @@ test('a hook outside any project with the check installed says so instead of loo
   const dir = project();
   const outcome = await runAgentHook('claude-code', JSON.stringify(claudeEdit(dir)), { check: async () => CLEAN, env: {}, cwd: dir });
   assert.match(JSON.parse(outcome.stdout).hookSpecificOutput.additionalContext, /could not run/);
+});
+
+test('a check that throws, or unreadable hook settings, become visible could-not-run context', async () => {
+  const dir = project();
+  installAgentHooks({ projectDir: dir, hosts: ['claude-code'], command: CMD });
+  const thrown = await runAgentHook('claude-code', JSON.stringify(claudeEdit(dir)), {
+    check: async () => { throw new Error('EACCES: permission denied, scandir src'); }, env: {}, cwd: dir,
+  });
+  assert.equal(thrown.exitCode, 0);
+  assert.match(JSON.parse(thrown.stdout).hookSpecificOutput.additionalContext, /could not run: EACCES/);
+  const broken = project();
+  mkdirSync(join(broken, '.cursor', 'hooks.json'), { recursive: true });
+  const unreadable = await runAgentHook('cursor', JSON.stringify(cursorEdit(broken)), { check: async () => CLEAN, env: {}, cwd: broken });
+  assert.match(JSON.parse(unreadable.stdout).additional_context, /could not run: EISDIR/);
 });
 
 // ── the real command, end to end ──────────────────────────────────────────

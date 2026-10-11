@@ -125,7 +125,7 @@ test('wrong-account preview emits only a typed refusal and never the caller proj
   );
 });
 
-async function runTypedPreviewRefusal({ projectData, statusData, expected }) {
+async function runTypedPreviewRefusal({ projectData, statusData, expected, sourceBase }) {
   const home = mkdtempSync(join(tmpdir(), 'sw-preview-typed-home-'));
   const source = mkdtempSync(join(tmpdir(), 'sw-preview-typed-source-'));
   mkdirSync(join(home, '.somewhere'), { recursive: true });
@@ -134,6 +134,12 @@ async function runTypedPreviewRefusal({ projectData, statusData, expected }) {
     user: { email: 'preview@example.com', username: 'preview' },
   }) + '\n');
   writeFileSync(join(source, 'index.html'), '<h1>must not upload</h1>\n');
+  if (sourceBase !== undefined) {
+    writeFileSync(join(source, '.somewhere.json'), JSON.stringify({
+      project_id: 'preview-project',
+      source_base: { project_id: 'preview-project', release_id: sourceBase },
+    }) + '\n');
+  }
 
   const requests = [];
   const server = createServer((req, res) => {
@@ -215,6 +221,7 @@ test('preview --json preserves the typed plan refusal', async () => {
 
 test('preview --json preserves the typed publish-consent refusal', async () => {
   await runTypedPreviewRefusal({
+    sourceBase: null,
     projectData: { cloud_dev_allowed: true },
     statusData: { published: false, active_release_id: null },
     expected: {

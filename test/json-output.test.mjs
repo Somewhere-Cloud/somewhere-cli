@@ -682,7 +682,12 @@ test('init creates the green starter, --bare keeps only the workflow guide, and 
       env,
     });
     assert.equal(created.status, 0, `stdout:\n${created.stdout}\nstderr:\n${created.stderr}`);
-    assert.deepEqual(JSON.parse(created.stdout), project);
+    const { hooks: createdHooks, ...createdProject } = JSON.parse(created.stdout);
+    assert.deepEqual(createdProject, project);
+    assert.deepEqual(createdHooks.results.map(({ host, status }) => ({ host, status })), [
+      { host: 'claude-code', status: 'added' },
+      { host: 'codex', status: 'added' },
+    ]);
     assert.match(readFileSync(join(empty, 'src/auth/hooks.ts'), 'utf8'), /useAuthState as useSdkAuthState/);
     assert.match(readFileSync(join(empty, 'src/config.ts'), 'utf8'), /APP_NAME = "Scaffold App"/);
     assert.throws(() => readFileSync(join(empty, 'db/schema.ts')), /ENOENT/, 'private data is opt-in');
@@ -722,7 +727,12 @@ test('init creates the green starter, --bare keeps only the workflow guide, and 
       env,
     });
     assert.equal(bareResult.status, 0, `stdout:\n${bareResult.stdout}\nstderr:\n${bareResult.stderr}`);
-    assert.deepEqual(JSON.parse(bareResult.stdout), project);
+    const { hooks: bareHooks, ...bareProject } = JSON.parse(bareResult.stdout);
+    assert.deepEqual(bareProject, project);
+    assert.deepEqual(bareHooks.results.map(({ host, status }) => ({ host, status })), [
+      { host: 'claude-code', status: 'added' },
+      { host: 'codex', status: 'added' },
+    ]);
     assert.throws(() => readFileSync(join(bare, 'package.json')), /ENOENT/);
     assert.throws(() => readFileSync(join(bare, 'src/App.tsx')), /ENOENT/);
     assert.match(readFileSync(join(bare, 'AGENTS.md'), 'utf8'), /somewhere verify --flow flow\.json/);

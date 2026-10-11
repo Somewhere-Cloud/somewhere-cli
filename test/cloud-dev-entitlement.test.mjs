@@ -19,6 +19,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   BaseReleaseUnknownError,
+  SourceBaseRequiredError,
+  FirstPublishReleaseUnknownError,
   CloudDevUnavailableError,
   PublishConsentRequiredError,
   readBaseReleaseState,
@@ -33,6 +35,7 @@ function publishSpy() {
     calls,
     publish: async () => {
       calls.push('published');
+      return 'rel_first';
     },
   };
 }
@@ -40,10 +43,11 @@ function publishSpy() {
 /** Everything resolveBaseRelease needs, with the safe answer to every question. */
 function args(overrides = {}) {
   return {
+    sourceBase: { releaseId: null },
     cloudDevAllowed: async () => true,
     readBaseReleaseState: async () => ({ known: true, activeReleaseId: null }),
     confirmPublish: async () => 'granted',
-    publish: async () => {},
+    publish: async () => 'rel_first',
     ...overrides,
   };
 }
@@ -131,6 +135,7 @@ test('a project that already has a live version publishes nothing', async () => 
   let asked = false;
 
   const resolved = await resolveBaseRelease(args({
+    sourceBase: { releaseId: 'rel_folder' },
     readBaseReleaseState: async () => ({ known: true, activeReleaseId: 'rel_live' }),
     publish: spy.publish,
     confirmPublish: async () => {
@@ -140,8 +145,8 @@ test('a project that already has a live version publishes nothing', async () => 
     announce: (m) => announced.push(m),
   }));
 
-  assert.deepEqual(resolved, { baseReleaseId: 'rel_live', published: false });
-  assert.deepEqual(spy.calls, [], 'the live version is built on, never replaced');
+  assert.deepEqual(resolved, { baseReleaseId: 'rel_folder', published: false });
+  assert.deepEqual(spy.calls, [], 'the recorded folder version is retained');
   assert.deepEqual(announced, [], 'and nothing about publishing is said');
   assert.equal(asked, false, 'nobody is asked to consent to a publish that is not happening');
 });
@@ -152,10 +157,11 @@ test('an unknown entitlement on an already-published project does not block the 
   const spy = publishSpy();
   const resolved = await resolveBaseRelease(args({
     cloudDevAllowed: async () => null,
+    sourceBase: { releaseId: 'rel_folder' },
     readBaseReleaseState: async () => ({ known: true, activeReleaseId: 'rel_live' }),
     publish: spy.publish,
   }));
-  assert.equal(resolved.baseReleaseId, 'rel_live');
+  assert.equal(resolved.baseReleaseId, 'rel_folder');
   assert.deepEqual(spy.calls, []);
 });
 
@@ -172,7 +178,7 @@ test('a never-published project publishes once, announced, after consent', async
       reads.push('read');
       return reads.length === 1
         ? { known: true, activeReleaseId: null }
-        : { known: true, activeReleaseId: 'rel_first' };
+        : { known: true, activeReleaseId: 'rel_racing_newer' };
     },
     confirmPublish: async () => 'granted',
     publish: spy.publish,
@@ -181,6 +187,7 @@ test('a never-published project publishes once, announced, after consent', async
 
   assert.deepEqual(resolved, { baseReleaseId: 'rel_first', published: true });
   assert.deepEqual(spy.calls, ['published'], 'exactly one publish');
+  assert.equal(reads.length, 1, 'the returned own release is used without a racing status read');
   assert.equal(announced.length, 2, 'the publish is announced, never silent');
   assert.match(announced.join(' '), /never been published/);
   assert.match(announced.join(' '), /in front of your users/);
@@ -211,7 +218,7 @@ test('a shell that cannot be asked publishes nothing', async () => {
   assert.deepEqual(spy.calls, []);
 });
 
-test('a publish whose result cannot be read back is reported, not guessed at', async () => {
+test('a publish without its own release is reported, never inferred from live status', async () => {
   const spy = publishSpy();
   const reads = [];
   await assert.rejects(
@@ -222,15 +229,16 @@ test('a publish whose result cannot be read back is reported, not guessed at', a
           ? { known: true, activeReleaseId: null }
           : { known: false, reason: 'network down' };
       },
-      publish: spy.publish,
+      publish: async () => { await spy.publish(); return undefined; },
     })),
     (err) => {
-      assert.ok(err instanceof BaseReleaseUnknownError);
-      assert.match(err.message, /published, but the live version could not be read back/);
+      assert.ok(err instanceof FirstPublishReleaseUnknownError);
+      assert.match(err.message, /publish completed but did not return its release/);
       return true;
     },
   );
   assert.deepEqual(spy.calls, ['published'], 'the publish that did happen is not denied');
+  assert.equal(reads.length, 1, 'live status cannot identify our completed publish');
 });
 
 /* ─── Reading the live version: every answer, in both directions ─────────── */
@@ -381,4 +389,35 @@ test('the preview refusal names the plans the public plan table marks as includi
   assert.equal(await readPreviewPlanNames({ async call() { throw new Error('offline'); } }), null);
   assert.equal(await readPreviewPlanNames({ async call() { return { tiers: [] }; } }), null);
   assert.equal(cloudDevUnavailableMessage(null), CLOUD_DEV_UNAVAILABLE_MESSAGE);
+});
+
+for (const live of [null, 'rel_newer']) {
+  test(`a folder without a source base refuses when live is ${live}`, async () => {
+    const spy = publishSpy();
+    await assert.rejects(resolveBaseRelease(args({
+      sourceBase: null,
+      readBaseReleaseState: async () => ({ known: true, activeReleaseId: live }),
+      publish: spy.publish,
+    })), (err) => err instanceof SourceBaseRequiredError && /pull.*reapply/.test(err.message));
+    assert.deepEqual(spy.calls, []);
+  });
+}
+
+test('genesis files are never attached to a racing published release', async () => {
+  const spy = publishSpy();
+  await assert.rejects(resolveBaseRelease(args({
+    sourceBase: { releaseId: null },
+    readBaseReleaseState: async () => ({ known: true, activeReleaseId: 'rel_racing' }),
+    publish: spy.publish,
+  })), SourceBaseRequiredError);
+  assert.deepEqual(spy.calls, []);
+});
+
+test('a recorded release remains stale even if live is now empty', async () => {
+  const spy = publishSpy();
+  assert.deepEqual(await resolveBaseRelease(args({
+    sourceBase: { releaseId: 'rel_old' },
+    publish: spy.publish,
+  })), { baseReleaseId: 'rel_old', published: false });
+  assert.deepEqual(spy.calls, []);
 });

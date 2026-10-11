@@ -9,7 +9,7 @@ import open from '../lib/open.js';
 import ora from '../lib/spinner.js';
 import { ApiClient, CliApiError, LONG_CALL_TIMEOUT_MS } from '../lib/client.js';
 import { buildErrorSummary, isBuildError, renderBuildError } from '../lib/build-errors.js';
-import { getToken, loadProjectConfig } from '../lib/config.js';
+import { getToken, loadProjectConfig, readSourceBase, saveSourceBase } from '../lib/config.js';
 import { IGNORE, classifyKey, collectFiles } from '../lib/files.js';
 import { bold, dim, error, green, info, printJson, printJsonError, red, success, teal, warn, yellow } from '../lib/output.js';
 import { showProjectNotices } from '../lib/project-notices.js';
@@ -64,6 +64,8 @@ function typedErrorCode(err: unknown): string | undefined {
 }
 
 interface DeployResult {
+  release_id?: string;
+  active_release_id?: string;
   files?: string[] | number;
   files_deployed?: number;
   preview_url?: string;
@@ -557,49 +559,42 @@ export class PublishConsentRequiredError extends Error {
 
 export type PublishConsent = 'granted' | 'declined' | 'not-asked';
 
-/**
- * Find the live version a private preview will build on — and, on a project
- * that has none, publish one ONLY after the person running the command says so.
- *
- * THE ORDER IS THE CONTRACT (tsk_cf48f4ab, tsk_5504e045). Every step below is
- * placed so that the customer's live site cannot change as a side effect of
- * asking for a preview:
- *
- *   1. The plan entitlement is read FIRST, before any write and before any
- *      question. An account without private previews is refused having created
- *      nothing, rather than handed a production release and then told the
- *      command is unavailable.
- *   2. The live version is read, and an unreadable answer STOPS the command.
- *      This is the reversal: `null` used to mean both "nothing is live" and
- *      "I could not tell", and the second one published over live projects.
- *   3. A project that already has a live version returns it and publishes
- *      NOTHING. This is the overwhelmingly common path.
- *   4. Only a positively-confirmed "never published" reaches the publish, and
- *      only after explicit consent — a confirmation, or `--publish-first`.
- *
- * Why an unknown ENTITLEMENT does not refuse here, when an unknown RELEASE
- * does: the entitlement question is only ever asked on the path that already
- * requires the customer's explicit consent to publish, and consent settles it.
- * A working account is never blocked by a read that failed; it is only ever
- * asked. Only a stated `false` refuses, so nobody is told to upgrade on the
- * strength of a read that did not answer.
- *
- * `publish` and `confirmPublish` are injected so a fixture can prove `publish`
- * was never called on each refusal path — the ordering is the behaviour under
- * test, not the call shape.
- */
+/** Missing folder provenance cannot be repaired by observing the live release. */
+export class SourceBaseRequiredError extends Error {
+  readonly code = 'BASE_RELEASE_REQUIRED';
+  constructor() {
+    super('This folder has no usable source base. Save your edits, run `somewhere pull`, then reapply them before starting a preview. Nothing was published.');
+    this.name = 'SourceBaseRequiredError';
+  }
+}
+
+export class FirstPublishReleaseUnknownError extends Error {
+  readonly code = 'PUBLISHED_RELEASE_UNKNOWN';
+  constructor() {
+    super('The first publish completed but did not return its release. Save your edits, run `somewhere pull`, then reapply them before starting a preview.');
+    this.name = 'FirstPublishReleaseUnknownError';
+  }
+}
+
+/** Keep the folder's observed base. Live status only establishes availability;
+ *  an empty project can be published once after explicit consent. */
 export async function resolveBaseRelease(args: {
+  sourceBase: { releaseId: string | null } | null;
   cloudDevAllowed: () => Promise<boolean | null>;
   readBaseReleaseState: () => Promise<BaseReleaseState>;
   confirmPublish: () => Promise<PublishConsent>;
-  publish: () => Promise<void>;
+  publish: () => Promise<string | undefined>;
   announce?: (message: string) => void;
 }): Promise<{ baseReleaseId: string; published: boolean }> {
   if ((await args.cloudDevAllowed()) === false) throw new CloudDevUnavailableError();
 
   const state = await args.readBaseReleaseState();
   if (!state.known) throw new BaseReleaseUnknownError(state.reason, state.code);
-  if (state.activeReleaseId) return { baseReleaseId: state.activeReleaseId, published: false };
+  if (!args.sourceBase) throw new SourceBaseRequiredError();
+  if (args.sourceBase.releaseId) {
+    return { baseReleaseId: args.sourceBase.releaseId, published: false };
+  }
+  if (state.activeReleaseId) throw new SourceBaseRequiredError();
 
   args.announce?.(
     'This project has never been published, so there is no live version for a private preview to build on.',
@@ -611,15 +606,9 @@ export async function resolveBaseRelease(args: {
   const consent = await args.confirmPublish();
   if (consent !== 'granted') throw new PublishConsentRequiredError(consent);
 
-  await args.publish();
-  const after = await args.readBaseReleaseState();
-  if (!after.known || !after.activeReleaseId) {
-    throw new BaseReleaseUnknownError(
-      'the first version was published, but the live version could not be read back. '
-      + 'Run `somewhere preview` again.',
-    );
-  }
-  return { baseReleaseId: after.activeReleaseId, published: true };
+  const publishedReleaseId = await args.publish();
+  if (!publishedReleaseId?.trim()) throw new FirstPublishReleaseUnknownError();
+  return { baseReleaseId: publishedReleaseId, published: true };
 }
 
 /**
@@ -667,31 +656,27 @@ async function runHotDeploy(opts: { project?: string; publishFirst?: boolean; js
   const draftId = `draft_${randomUUID()}`;
   const firstOperationId = `previewop_${randomUUID()}`;
   const showPublishProgress = opts.publishFirst === true && opts.json !== true;
-  let baseReleaseReads = 0;
   const phase = <T>(label: string, operation: () => Promise<T>): Promise<T> =>
     showPublishProgress ? runPreviewPhase(label, operation) : operation();
 
   // The first preview snapshot must name the production release it was read
   // from (base_release_id) — the platform binds the preview to that exact
-  // production release. Everything about how that id is obtained, including
+  // source release. Everything about how that id is obtained, including
   // the refusal to invent one, lives in resolveBaseRelease.
   let baseReleaseId: string;
   try {
     const resolved = await resolveBaseRelease({
+      sourceBase: readSourceBase(loadProjectConfig(cwd), projectId),
       cloudDevAllowed: () => phase('Checking preview access', () => readCloudDevAllowed(projectId)),
-      readBaseReleaseState: () => {
-        const label = baseReleaseReads++ === 0
-          ? 'Reading the production release'
-          : 'Confirming the production release';
-        return phase(label, () => readBaseReleaseState(projectId));
-      },
+      readBaseReleaseState: () => phase('Checking the production release', () => readBaseReleaseState(projectId)),
       confirmPublish: () => readPublishConsent(opts.publishFirst === true),
       announce: opts.json ? () => {} : info,
       publish: async () => {
-        await phase('Publishing the first production version', () =>
+        const result = await phase('Publishing the first production version', () =>
           callDraftCandidate<DeployResult>(client, '/deploy', {
             project_id: projectId,
             scope: 'all',
+            base_release_id: null,
             files,
             binary_files: binaryFiles,
             functions,
@@ -699,14 +684,21 @@ async function runHotDeploy(opts: { project?: string; publishFirst?: boolean; js
           }, (retryError) => {
             info(`Publish attempt ended with ${previewPlatformState(retryError)}; retrying the same operation once.`);
           }));
+        const releaseId = result.active_release_id ?? result.release_id;
+        if (releaseId?.trim()) saveSourceBase(cwd, projectId, releaseId);
+        return releaseId;
       },
     });
     baseReleaseId = resolved.baseReleaseId;
     if (resolved.published) success('Published — this project now has a live version.');
   } catch (err) {
-    // Every branch here says the same thing in different words: your live site
-    // is exactly as you left it. Nothing below may claim anything about whether
-    // this project is published — that is precisely the read that failed.
+    // A completed publish with an unnamed release needs truthful recovery copy;
+    // refusal paths below must not claim that anything was published.
+    if (err instanceof SourceBaseRequiredError || err instanceof FirstPublishReleaseUnknownError) {
+      if (opts.json) printJsonError(err.code, err.message);
+      else error(err.message);
+      process.exit(1);
+    }
     if (err instanceof CloudDevUnavailableError) {
       const message = cloudDevUnavailableMessage(await readPreviewPlanNames(client));
       if (opts.json) {

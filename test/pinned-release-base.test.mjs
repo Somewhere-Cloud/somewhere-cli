@@ -14,19 +14,16 @@ test('CLI never substitutes the current release into an unanchored request', () 
 
   assert.doesNotMatch(deploySource, /pinnedReleaseRetryBody|BASE_RELEASE_REQUIRED/);
   assert.match(deploySource, /client\.call<T>\('POST', '\/deploy', body/);
-  assert.doesNotMatch(devSource, /callWithPinnedReleaseRetry|BASE_RELEASE_REQUIRED/);
+  assert.doesNotMatch(devSource, /callWithPinnedReleaseRetry/);
   assert.match(devSource, /callDraftCandidate<DeployResult>\(client, '\/deploy', body(?:,|\))/);
   assert.match(devSource, /callDraftCandidate<PatchResult>\(client, '\/deploy\/patch', body\)/);
   assert.match(devSource, /preview_operation_id: firstOperationId/);
   assert.match(devSource, /expected_preview_id: null/);
   assert.match(devSource, /expected_preview_id: expectedCandidateReleaseId/);
-  // The first preview MUST anchor to its base release (backend contract
-  // DRAFT_SOURCE_SNAPSHOT_REQUIRED): dev reads the current active release up
-  // front from deploy_status and sends it once as base_release_id — the safe,
-  // explicit anchor (matches the proven preview flow). What stays banned
-  // is the HIDDEN retry that substituted the CURRENT release into an unanchored
-  // request on error (the removed pinned-release-retry helper + BASE_RELEASE_REQUIRED
-  // handling, both asserted absent above).
+  // The preview retains the folder's recorded base even if live has moved.
+  assert.match(devSource, /sourceBase: readSourceBase\(loadProjectConfig\(cwd\), projectId\)/);
+  assert.match(devSource, /saveSourceBase\(cwd, projectId, releaseId\)/);
+  assert.match(devSource, /base_release_id: null/);
   assert.match(devSource, /base_release_id: baseReleaseId/);
   assert.doesNotMatch(devSource, /current_release/);
   assert.match(devSource, /initialAutoOpenUrl = \(await mintPreviewHandoff\([\s\S]*initialHandoff = await mintPreviewHandoff/);

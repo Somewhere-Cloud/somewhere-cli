@@ -4032,6 +4032,7 @@ var require_checker_contract = __commonJS({
     var IGNORED_CODES = Object.freeze([2307, 7016, 2792, 6053]);
     var REFERENCE_CODES = Object.freeze([2304, 2552, 2448, 2454, 18004]);
     var TYPE_SHAPE_CODES = Object.freeze([2339, 2551, 2345, 2322, 2554]);
+    var PROJECT_TYPE_ROOTS = Object.freeze(["./node_modules/@types"]);
     var ignored = new Set(IGNORED_CODES);
     var reference = new Set(REFERENCE_CODES);
     var typeShape = new Set(TYPE_SHAPE_CODES);
@@ -4052,6 +4053,7 @@ var require_checker_contract = __commonJS({
         strict: false,
         noImplicitAny: false,
         lib: ["es2022", "dom", "dom.iterable"],
+        typeRoots: [...PROJECT_TYPE_ROOTS],
         ...own,
         allowJs: true,
         checkJs: true,
@@ -4063,8 +4065,7 @@ var require_checker_contract = __commonJS({
       return compilerOptions.paths && compilerOptions.baseUrl === void 0 ? { ...compilerOptions, baseUrl: "." } : compilerOptions;
     }
     function localCheckCompilerOptions(projectCompilerOptions) {
-      const options = referenceCheckCompilerOptions(projectTsconfigCompilerOptions(projectCompilerOptions));
-      return options.types === void 0 ? { ...options, types: [] } : options;
+      return referenceCheckCompilerOptions(projectTsconfigCompilerOptions(projectCompilerOptions));
     }
     function diagnosticNumber(code) {
       if (typeof code === "number") return code;
@@ -4086,6 +4087,7 @@ var require_checker_contract = __commonJS({
       IGNORED_CODES,
       REFERENCE_CODES,
       TYPE_SHAPE_CODES,
+      PROJECT_TYPE_ROOTS,
       isReferenceSource,
       referenceCheckCompilerOptions,
       projectTsconfigCompilerOptions,

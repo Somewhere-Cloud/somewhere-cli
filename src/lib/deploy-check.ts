@@ -5,11 +5,11 @@
  * vendored from the platform (runtime/declared-data.cjs), not restated here.
  *
  * Where it can still differ from a deploy:
- * - Installed packages. The deploy installs from the project's lockfile (only
- *   declared @types without one); a local run reads whatever node_modules holds.
- * - Image type packages. The deploy's compiler also loads type packages from
- *   its own image (pfb_70d0a195e9d9); a local run does not, so a global those
- *   packages declare is visible on deploy only.
+ * - Installed packages. Both read automatic @types only from the project's
+ *   own node_modules/@types (or the tsconfig's own types/typeRoots). The deploy
+ *   installs from the project's lockfile, or only the declared @types/* without
+ *   one; a local run reads whatever node_modules holds, so a type package that
+ *   is installed locally but not declared can apply here and not on deploy.
  * Measured on four real apps against the deploy's own check roots, findings
  * were identical; that is evidence for those apps, not a guarantee for all.
  */

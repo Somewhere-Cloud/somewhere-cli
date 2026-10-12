@@ -98,8 +98,41 @@ const APP_GLOBALS = {
   'src/main.ts': 'export const version = APP_VERSION;\n',
 };
 
-test("installed @types are not discovered automatically, as on deploy", async () => {
+test("the project's installed @types apply automatically, as on deploy", async () => {
   const result = await runDeployCheck(project(APP_GLOBALS));
+  assert.deepEqual(findings(result), []);
+});
+
+test('type packages above the project never apply, as on deploy', async () => {
+  // A parent directory's node_modules/@types (a monorepo root, a home
+  // directory) is not part of what a deploy checks.
+  const parent = mkdtempSync(join(tmpdir(), 'sw-deploy-check-parent-'));
+  try {
+    for (const [path, text] of Object.entries(APP_GLOBALS)) {
+      if (!path.startsWith('node_modules/')) continue;
+      mkdirSync(dirname(join(parent, path)), { recursive: true });
+      writeFileSync(join(parent, path), text);
+    }
+    const dir = join(parent, 'app');
+    mkdirSync(join(dir, 'src'), { recursive: true });
+    writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'fixture', private: true }));
+    writeFileSync(join(dir, 'src/main.ts'), APP_GLOBALS['src/main.ts']);
+    const result = await runDeployCheck(dir);
+    assert.deepEqual(findings(result), ['reference:TS2304@src/main.ts:1']);
+  } finally {
+    rmSync(parent, { recursive: true, force: true });
+  }
+});
+
+test('custom relative typeRoots replace the project default, as on deploy', async () => {
+  const result = await runDeployCheck(project({
+    ...APP_GLOBALS,
+    // Under node_modules so it is not also a checked source file: it can only
+    // apply through typeRoots.
+    'node_modules/custom-types/custom/index.d.ts': 'declare const CUSTOM_FLAG: boolean;\n',
+    'src/main.ts': 'export const version = APP_VERSION;\nexport const flag = CUSTOM_FLAG;\n',
+    'tsconfig.json': JSON.stringify({ compilerOptions: { typeRoots: ['./node_modules/custom-types'] } }),
+  }));
   assert.deepEqual(findings(result), ['reference:TS2304@src/main.ts:1']);
 });
 

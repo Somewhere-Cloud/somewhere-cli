@@ -1,7 +1,7 @@
 {
   "esbuild": "0.24.0",
   "source_files": {
-    "worker/containers/compile/checker-contract.cjs": "7ea2e2bd772b5f21eb26e65e79113d89d7067bb9c6f45396d966322203a51578",
+    "worker/containers/compile/checker-contract.cjs": "8b9ad4e91f8afa8e9770c71b8a07729de2b67da594003eb25d4a2843398a5d43",
     "worker/containers/compile/declared-data-contract.cjs": "3c243824d169c69a16fc1408a98deabeb8d36dce28835b9f7d8215428b216d01",
     "worker/containers/compile/groups-types.cjs": "f0f38ca6f160561f997b20af44763bd07232deb2668a536cd52c1974fcfed2c8",
     "worker/containers/compile/runtime-types.cjs": "7b723e32f1def0a42af00860c10c25d7cd8ddf14a216c01924efd95546b77edc",
@@ -31,5 +31,5 @@
     "worker/src/utils/managed-groups/policy.ts": "2259a883645c8bfd607ead7c37387f3ffd42ac9dfb86722c72b224adb498511e",
     "worker/src/utils/reference-check-inputs.ts": "6bd16b1ecbe0c17d5b83b40f38d74e99e6f7cd2073bed1d54d62d83415d7e92c"
   },
-  "sha256": "92e39857fb76bf2ce2f443c44372ef864ca77a3516063e3e5fb6a3e839725557"
+  "sha256": "df5304d39b0638b894ccb86b6f58668f39a0322e6b70985a36de335c6df10eae"
 }

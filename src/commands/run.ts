@@ -53,7 +53,7 @@ export function registerRun(program: Command) {
   program
     .command('run <script>')
     .description(
-      "Run a one-off script once against your project's live dev bindings " +
+      "Run a one-off script once against your project's production bindings and production data " +
         '(sw.db / sw.fs / sw.ai / sw.search …) without deploying, and print its ' +
         'return value + console logs. The script is an ES module: ' +
         'export default async function (sw) { ...; return value }. ' +

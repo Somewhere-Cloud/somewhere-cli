@@ -1,5 +1,6 @@
 import { writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { registerDbRows } from './db-rows.js';
 import { Command } from 'commander';
 import ora from '../lib/spinner.js';
 import { ApiClient } from '../lib/client.js';
@@ -15,7 +16,8 @@ interface QueryResult {
 }
 
 export function registerDb(program: Command) {
-  const db = program.command('db').description('Run SQL against your project\'s database');
+  const db = program.command('db').description('Inspect managed production rows or run SQL against your raw database');
+  registerDbRows(db);
 
   db
     .command('query <sql>')

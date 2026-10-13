@@ -1,0 +1,28 @@
+name: CLI pull request checks
+
+on:
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cli-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  cli-checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci
+      # The normal CLI test command also builds the exact candidate first.
+      # No registry publication, credentials or platform release runs on PRs.
+      - run: npm test

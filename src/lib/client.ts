@@ -72,13 +72,13 @@ export class ApiClient {
     path: string,
     body?: unknown,
     query?: Record<string, string | number | undefined>,
-    opts?: { timeoutMs?: number; baseUrl?: string },
+    opts?: { timeoutMs?: number; baseUrl?: string; signal?: AbortSignal },
   ): Promise<T> {
     try {
       return await this.request<T>(method, path, body, query, opts);
     } catch (err) {
       if (!(err instanceof CliApiError) || err.code !== 'API_KEY_EXPIRED') throw err;
-      const refreshed = await this.refreshAccessKey(opts?.timeoutMs);
+      const refreshed = await this.refreshAccessKey(opts?.timeoutMs, opts?.signal);
       // refreshAccessKey now THROWS a clear re-login error when it can't refresh
       // (no refresh token, or a dead one); a false return is only the rare
       // malformed-refresh-response case, where the original expired-key error is
@@ -187,7 +187,7 @@ export class ApiClient {
    *  the fix instead of seeing a bare expired-key 401. Returns false only for a
    *  malformed refresh response, where the caller surfaces the original
    *  API_KEY_EXPIRED. */
-  async refreshAccessKey(timeoutMs?: number): Promise<boolean> {
+  async refreshAccessKey(timeoutMs?: number, signal?: AbortSignal): Promise<boolean> {
     const config = loadConfig();
     const refreshToken = config?.refresh_token;
     if (!refreshToken) {
@@ -216,7 +216,7 @@ export class ApiClient {
         '/keys/cli-pair/refresh',
         { refresh_token: refreshToken },
         undefined,
-        timeoutMs === undefined ? undefined : { timeoutMs },
+        { timeoutMs, signal },
       );
     } catch (err) {
       if (err instanceof CliApiError && err.code === 'INVALID_REFRESH_TOKEN') {
@@ -243,7 +243,7 @@ export class ApiClient {
     path: string,
     body?: unknown,
     query?: Record<string, string | number | undefined>,
-    opts?: { timeoutMs?: number; baseUrl?: string },
+    opts?: { timeoutMs?: number; baseUrl?: string; signal?: AbortSignal },
   ): Promise<T> {
     let url = `${opts?.baseUrl ?? API_BASE_URL}${path}`;
     if (query) {
@@ -275,7 +275,7 @@ export class ApiClient {
         method,
         headers,
         body: reqBody,
-        signal: AbortSignal.timeout(timeoutMs),
+        signal: opts?.signal ? AbortSignal.any([opts.signal, AbortSignal.timeout(timeoutMs)]) : AbortSignal.timeout(timeoutMs),
       }, timeoutMs);
     } catch (err) {
       // AbortSignal.timeout fired — no bytes back within the budget. Name it

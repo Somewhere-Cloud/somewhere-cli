@@ -51,6 +51,8 @@ interface CronRunOptions extends ProjectOptions {
 
 interface CronRunsOptions extends ProjectOptions {
   limit?: string;
+  waitNext?: boolean;
+  timeout?: string;
 }
 
 interface CronRunResult extends Record<string, unknown> {
@@ -184,6 +186,112 @@ async function waitForJob(jobId: string, timeoutSeconds: number): Promise<{ job:
   }
 }
 
+interface ScheduledObservation {
+  cronId: string | null;
+  nextRunAt: string | null;
+  job: JobView | null;
+}
+
+function observedCronConfig(cron: CronRow & { cron_id: string }): string {
+  if (typeof cron.schedule !== 'string' || typeof cron.handler !== 'string' || typeof cron.enabled !== 'boolean') {
+    throw new Error('CRON_NOT_FOUND: The schedule could not be read; no scheduled run can be observed.');
+  }
+  if (!cron.enabled) throw new Error('CRON_DISABLED: The schedule is disabled; waiting stopped.');
+  // next_run_at and last-run fields advance during normal dispatch, not configuration changes.
+  return JSON.stringify([cron.cron_id, cron.project_id ?? null, cron.name ?? null,
+    cron.schedule, cron.timezone ?? 'UTC', cron.handler, cron.payload ?? null]);
+}
+
+async function waitForNextScheduledJob(
+  initial: CronRow & { cron_id: string },
+  project: string | undefined,
+  startedAt: number,
+  signal: AbortSignal,
+  limit: number,
+  observation: ScheduledObservation,
+): Promise<JobView> {
+  const config = observedCronConfig(initial);
+  let cron = initial;
+  for (;;) {
+    signal.throwIfAborted();
+    if (observedCronConfig(cron) !== config) {
+      throw new Error('CRON_CONFIG_CHANGED: The schedule settings changed while waiting; observation stopped.');
+    }
+    if (!observation.job) {
+      const rows = jobRows(await callPlatformTool('job_get', {
+        cron_id: initial.cron_id, ...(project ? { project_id: project } : {}), limit,
+      }, { allTools: true, signal }));
+      const next = rows.filter((row) => row.trigger === 'scheduled'
+        && row.cron_id === initial.cron_id
+        && typeof row.cron_scheduled_at === 'string'
+        && Date.parse(row.cron_scheduled_at) > startedAt)
+        .sort((a, b) => Date.parse(a.cron_scheduled_at as string) - Date.parse(b.cron_scheduled_at as string))[0];
+      if (next) observation.job = jobView(next);
+    }
+    if (observation.job) {
+      const pinned = observation.job;
+      const job = jobView(await callPlatformTool('job_get', { job_id: pinned.job_id }, { allTools: true, signal }));
+      if (job.job_id !== pinned.job_id || job.cron_id !== initial.cron_id || job.trigger !== 'scheduled'
+          || job.cron_scheduled_at !== pinned.cron_scheduled_at) {
+        throw new Error('CRON_RUN_MISMATCH: The pinned scheduled occurrence could not be confirmed.');
+      }
+      observation.job = job;
+      if (isTerminalJobStatus(job.status)) return job;
+    }
+    await new Promise<void>((resolveDelay, reject) => {
+      const abort = () => { clearTimeout(timer); reject(signal.reason); };
+      const timer = setTimeout(() => { signal.removeEventListener('abort', abort); resolveDelay(); }, WAIT_POLL_INTERVAL_MS);
+      signal.addEventListener('abort', abort, { once: true });
+      if (signal.aborted) { signal.removeEventListener('abort', abort); abort(); }
+    });
+    cron = await findCronRow(initial.cron_id, project, signal);
+  }
+}
+
+async function observeNextScheduledRun(target: string, opts: CronRunsOptions, limit: number | undefined): Promise<void> {
+  const startedAt = Date.now();
+  const timeoutSeconds = parseWaitTimeout(opts.timeout);
+  // Node's timer limit: a larger number wraps instead of providing a longer observation window.
+  if (timeoutSeconds * 1000 > 2_147_483_647) throw new Error('USAGE_ERROR: --timeout exceeds the supported timer range.');
+  const deadline = startedAt + Math.ceil(timeoutSeconds * 1000);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), Math.ceil(timeoutSeconds * 1000));
+  const observation: ScheduledObservation = { cronId: null, nextRunAt: null, job: null };
+  const details = () => ({ cron_id: observation.cronId, observed_after: new Date(startedAt).toISOString(),
+    deadline: new Date(deadline).toISOString(), next_run_at: observation.nextRunAt, job: observation.job });
+  try {
+    const cron = await findCronRow(target, opts.project, controller.signal);
+    observation.cronId = cron.cron_id;
+    observation.nextRunAt = typeof cron.next_run_at === 'string' ? cron.next_run_at : null;
+    observedCronConfig(cron);
+    console.error(dim(`Waiting for a natural scheduled run after ${new Date(startedAt).toISOString()}. `
+      + `Next slot (UTC): ${nextRunLabel(cron, startedAt)}. Deadline: ${new Date(deadline).toISOString()}.`));
+    const project = typeof cron.project_id === 'string' && cron.project_id ? cron.project_id : opts.project;
+    const job = await waitForNextScheduledJob(cron, project, startedAt, controller.signal, limit ?? 100, observation);
+    const succeeded = job.status === JOB_SUCCESS_STATUS;
+    if (!succeeded) process.exitCode = 1;
+    if (opts.json) {
+      if (succeeded) printJson({ ok: true, data: { ...details(), trigger: 'scheduled' } });
+      else printJsonError('CRON_SCHEDULED_JOB_FAILED', `Natural scheduled job ${job.job_id} ${job.status}.`, { data: details() });
+    } else {
+      console.log(dim(`Natural scheduled occurrence: ${isoSeconds(job.cron_scheduled_at)} (UTC); job ${job.job_id}.`));
+      printWaitedJob(job, false, timeoutSeconds);
+    }
+  } catch (err) {
+    if (controller.signal.aborted) {
+      const message = observation.job
+        ? `Natural scheduled job ${observation.job.job_id} was observed but did not finish within ${timeoutSeconds}s; it may still complete.`
+        : `No natural scheduled occurrence after command start was observed within ${timeoutSeconds}s. Recent history is bounded; this does not establish that the scheduler failed.`;
+      printTypedCronError('CRON_SCHEDULED_WAIT_TIMEOUT', message, opts.json, { data: details() });
+    } else {
+      const { code, message, extra } = platformErrorParts(err);
+      printTypedCronError(code, message, opts.json, { ...extra, data: details() });
+    }
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 function formatJobValue(value: unknown): string {
   return typeof value === 'string' ? value : JSON.stringify(value);
 }
@@ -245,11 +353,11 @@ function cronProjectScope(explicit: string | undefined): string | undefined {
   return explicit ?? loadProjectConfig()?.project_id;
 }
 
-async function findNamedCronRow(target: string, explicit: string | undefined): Promise<CronRow & { cron_id: string }> {
+async function findNamedCronRow(target: string, explicit: string | undefined, signal?: AbortSignal): Promise<CronRow & { cron_id: string }> {
   const project = cronProjectScope(explicit);
   const rows = cronRows(await callPlatformTool('cron_list', compactRecord([
     ['project_id', project],
-  ]), { allTools: true }));
+  ]), { allTools: true, signal }));
   const matches = rows.filter((row) => row.name === target);
   if (matches.length === 0) {
     throw new Error(`CRON_NOT_FOUND: No scheduled task named "${target}" was found${project ? ` in project "${project}"` : ''}.`);
@@ -270,11 +378,11 @@ async function resolveCronRunId(target: string, explicit: string | undefined): P
 /** The trigger row for `cron runs`, so its next run can be shown with the
  *  history. A cron ID is looked up in --project when given, otherwise across
  *  the account; a row that cannot be found leaves only the history. */
-async function findCronRow(target: string, explicit: string | undefined): Promise<CronRow & { cron_id: string }> {
-  if (!target.startsWith('cron_')) return findNamedCronRow(target, explicit);
+async function findCronRow(target: string, explicit: string | undefined, signal?: AbortSignal): Promise<CronRow & { cron_id: string }> {
+  if (!target.startsWith('cron_')) return findNamedCronRow(target, explicit, signal);
   const rows = cronRows(await callPlatformTool('cron_list', compactRecord([
     ['project_id', explicit],
-  ]), { allTools: true }));
+  ]), { allTools: true, signal }));
   const row = rows.find((candidate) => cronRowId(candidate) === target);
   return { ...(row ?? {}), cron_id: target };
 }
@@ -361,6 +469,7 @@ export function registerCron(program: Command): void {
         + '  somewhere cron create "0 9 * * *" /api/daily-digest --project my-app --timezone America/Los_Angeles\n'
         + '  somewhere cron run daily-digest --wait   # queue one run now and wait for its result\n'
         + '  somewhere cron runs daily-digest         # recent scheduled and manual runs, and the next run\n'
+        + '  somewhere cron runs daily-digest --wait-next --timeout 3600  # observe a natural future occurrence\n'
         + '\nA new schedule is read in UTC unless --timezone names an IANA zone. `cron list` shows the\n'
         + 'zone each trigger is stored in, and `cron update --schedule` keeps that zone unless --timezone changes it.\n',
     );
@@ -472,6 +581,8 @@ export function registerCron(program: Command): void {
     .description('Show recent runs of a scheduled task, scheduled and manual, with its next run')
     .option('-p, --project <project>', 'Project slug or ID used to resolve a task name; defaults to the linked project')
     .option('--limit <n>', 'How many recent runs to show, 1-100 (default 20)')
+    .option('--wait-next', 'Observe a natural scheduled occurrence after command start and wait for that job to finish')
+    .option('--timeout <seconds>', `With --wait-next, total observation time (default ${DEFAULT_WAIT_TIMEOUT_SECONDS}s)`)
     .option('--json', 'Print the trigger and its runs as JSON')
     .addHelpText(
       'after',
@@ -479,11 +590,20 @@ export function registerCron(program: Command): void {
         + 'served) and "manual" for `cron run`. Times are UTC. A scheduled run is recorded shortly after\n'
         + 'its scheduled time, not exactly on it; until the schedule advances, the next run shows as\n'
         + 'overdue, and this command says whether a run for that occurrence appears in the recent\n'
-        + 'history shown.\n',
+        + 'history shown.\n'
+        + '\n--wait-next is read-only: it ignores manual runs and older scheduled slots, pins one job,\n'
+        + 'and waits within --timeout. Changes to schedule settings or a disabled schedule stop the wait.\n'
+        + 'The observation uses at most --limit recent rows per read (default 100 while waiting).\n'
+        + 'A timeout reports what was not observed; it does not mean the timer never fired.\n',
     )
     .action(async (target: string, opts: CronRunsOptions) => {
       try {
         const limit = parseRunsLimit(opts.limit);
+        if (opts.timeout !== undefined && !opts.waitNext) throw new Error('USAGE_ERROR: --timeout only applies with --wait-next.');
+        if (opts.waitNext) {
+          await observeNextScheduledRun(target, opts, limit);
+          return;
+        }
         const cron = await findCronRow(target, opts.project);
         const projectId = typeof cron.project_id === 'string' && cron.project_id ? cron.project_id : opts.project;
         const jobs = jobRows(await callPlatformTool('job_get', compactRecord([

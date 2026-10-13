@@ -60,6 +60,7 @@ const PUBLIC_MANIFEST_PATH = '/docs-manifest.json';
 
 export interface PublicDocsSection {
   id: string;
+  alias_of?: string;
   heading: string;
   start: number;
   end: number;
@@ -142,7 +143,7 @@ function parseSections(value: unknown, bodyLength: number): PublicDocsSection[] 
       && (candidate.start as number) >= 0 && (candidate.start as number) < (candidate.end as number)
       && (candidate.end as number) <= bodyLength;
   });
-  return sections.map(({ id, heading, start, end }) => ({ id, heading, start, end }));
+  return sections.map(({ id, heading, start, end, alias_of }) => ({ id, heading, start, end, ...(typeof alias_of === 'string' ? { alias_of } : {}) }));
 }
 
 /** Render indexed public views without expanding a failed section request. */
@@ -164,16 +165,20 @@ export function renderPublicDocsView(page: PublicDocsPage, view: DocsView): Rend
       hint: `Run: somewhere docs ${commandArg(page.id)} --full`,
     });
   }
-  const wanted = view.id.trim().replace(/^#+\s*/, '').toLowerCase();
-  const match = sections.find((section) => section.id.toLowerCase() === wanted)
-    ?? sections.find((section) => headingText(section).toLowerCase() === wanted);
+  const wanted = view.id.trim().toLowerCase();
+  const canonical = sections.filter((section) => !section.alias_of);
+  const exact = canonical.find((section) => section.id.toLowerCase() === wanted)
+    ?? sections.find((section) => section.id.toLowerCase() === wanted);
+  const normalized = normalizeSectionHeading(view.id);
+  const headings = normalized ? canonical.filter((section) => normalizeSectionHeading(section.heading) === normalized) : [];
+  const match = exact ?? (headings.length === 1 ? headings[0] : undefined);
   if (!match) {
-    const matches = closestMatches(wanted, sections.map(({ id }) => id));
+    const matches = canonical.map(({ id }) => id);
     return fail({
       error: 'DOCS_SECTION_NOT_FOUND',
-      message: `No section "${view.id}" in ${page.id}. Closest sections: ${matches.join(', ')}.`,
+      message: `No section "${view.id}" in ${page.id}. Valid sections: ${matches.join(', ')}. Use an exact ID; normalized headings must identify one section.`,
       matches,
-      hint: `Run: somewhere docs ${commandArg(page.id)} --section ${commandArg(matches[0])}`,
+      hint: `Run: somewhere docs ${commandArg(page.id)} --section <id>`,
     });
   }
   const text = page.body.slice(match.start, match.end);
@@ -203,6 +208,13 @@ export function parseDocsStatusLine(content: string): { view?: string; complete?
     ...(view ? { view } : {}),
     ...(complete ? { complete: complete === 'true' } : {}),
   };
+}
+
+function normalizeSectionHeading(value: string): string {
+  return value.trim().replace(/^#+\s*/, '')
+    .replace(/`([^`]*)`/g, '$1').replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/\*([^*]+)\*/g, '$1').replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .toLowerCase().replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-').replace(/-+/g, '-').slice(0, 80);
 }
 
 /** Manifest headings are the raw markdown line (`## Reads`). */

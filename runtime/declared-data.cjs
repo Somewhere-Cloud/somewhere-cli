@@ -456,7 +456,7 @@ async function intake(table, reference, values, extra) {
   return send();
 }
 `;
-    var CREATOR_CLIENT_RUNTIME = 'const creatorError=(status,payload)=>{const e=new DataError(status,payload);if(payload&&["committed","unknown","read_failed","not_committed"].includes(payload.outcome))e.outcome=payload.outcome;if(payload&&payload.write_committed===true)e.write_committed=true;e.retry=false;e.retryable=false;return e};const creatorDoor=async(path,init,write)=>{const lost=(status,code)=>creatorError(status,{error:code,message:write?"The creator operation could not be confirmed. Do not repeat it automatically.":"The creator operation result could not be read.",outcome:write?"unknown":"read_failed"});let response;try{response=await fetch(path,{credentials:"same-origin",cache:"no-store",...init})}catch(_){throw lost(503,"CREATOR_OUTCOME_UNKNOWN")}let payload;try{payload=await response.json()}catch(_){throw lost(response.status,"INVALID_DATA_RESPONSE")}if(!response.ok){if(!payload||typeof payload!=="object"||typeof payload.error!=="string")throw lost(response.status,"INVALID_DATA_RESPONSE");throw creatorError(response.status,payload)}if(!payload||typeof payload!=="object"||payload.ok!==true||!("data" in payload)||payload.data===undefined)throw lost(502,"INVALID_DATA_RESPONSE");return payload.data};const creatorPost=(body,write)=>creatorDoor("/__sw/creator",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...body,contract})},write);const claimOutcomes=new Map();const creatorsOpened=()=>{try{const list=JSON.parse(sessionStorage.getItem("__sw_creators_opened")||"[]");return Array.isArray(list)?list:[]}catch(_){return[]}};const creators=Object.freeze({opened:creatorsOpened,sessions:async()=>({data:await creatorDoor("/__sw/creator/sessions",{method:"GET"})}),forget:async creatorId=>{await creatorDoor("/__sw/creator/forget",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(creatorId===undefined?{}:{creator_id:creatorId})},true)}});const creatorView=spec=>creatorId=>{if(typeof creatorId!=="string"||!/^crt_[0-9a-f]{32}$/.test(creatorId))throw new DataError(400,{error:"DATA_INPUT_INVALID",message:"creator() needs a creator id"});const view={};for(const[table,canUpdate,children]of spec){const call=(action,fields,write)=>creatorPost({action,creator_id:creatorId,table,...fields},write);const root={get:id=>call("get",{id}).then(r=>({data:r.data})),links:id=>call("link_list",{id}),revokeLink:(id,linkId)=>call("link_revoke",{id,link_id:linkId},true),createLink:async(id,options={})=>{const result=await call("link_create",{id,access:options.access,...(options.expiresInDays===undefined?{}:{expires_in_days:options.expiresInDays})},true);const route=typeof options.returnTo==="string"?options.returnTo:location.pathname+location.search+location.hash;return{link_id:result.link_id,url:location.origin+"/__sw/link#"+result.secret+"."+b64url(route),expires_at:result.expires_at}},claim:async(id,options={})=>{const key=creatorId+"|"+table+"|"+String(id);let result;try{result=await call("claim",{id,keep_shares:options.keepShares===true},true)}catch(e){const known=claimOutcomes.get(key);if(e.outcome==="committed"||e.write_committed===true)claimOutcomes.set(key,"committed");else if(e.outcome==="unknown")claimOutcomes.set(key,"unknown");else if(known){e.outcome=known==="committed"?"committed":"unknown";if(known==="committed")e.write_committed=true;e.message+=" An earlier attempt of this claim may already have applied; check claimStatus() or your account."}throw e}claimOutcomes.set(key,"committed");try{sessionStorage.setItem("__sw_creators_opened",JSON.stringify(creatorsOpened().filter(e=>e&&e.creator_id!==creatorId)))}catch(_){}return result},claimStatus:id=>call("claim_status",{id})};if(canUpdate)root.update=(id,values)=>call("update",{id,values},true);const relations={};for(const[relation,child,canCreate,canUpdateChild]of children){relations[relation]=Object.freeze({list:(parentId,options={})=>call("relation_list",{relation,parent_id:parentId,...(options.after===undefined?{}:{after:options.after}),...(options.limit===undefined?{}:{limit:options.limit})})});const childOps={};if(canCreate)childOps.create=values=>call("child_create",{child,values},true);if(canUpdateChild)childOps.update=(id,values)=>call("child_update",{child,id,values},true);if(canCreate||canUpdateChild)view[child]=Object.freeze(childOps)}if(children.length)root.relations=Object.freeze(relations);view[table]=Object.freeze(root)}return Object.freeze(view)};\n';
+    var CREATOR_CLIENT_RUNTIME = 'const creatorError=(status,payload)=>{const e=new DataError(status,payload);if(payload&&["committed","unknown","read_failed","not_committed"].includes(payload.outcome))e.outcome=payload.outcome;if(payload&&payload.write_committed===true)e.write_committed=true;e.retry=false;e.retryable=false;return e};const creatorDoor=async(path,init,write)=>{const lost=(status,code)=>creatorError(status,{error:code,message:write?"The creator operation could not be confirmed. Do not repeat it automatically.":"The creator operation result could not be read.",outcome:write?"unknown":"read_failed"});let response;try{response=await fetch(path,{credentials:"same-origin",cache:"no-store",...init})}catch(_){throw lost(503,"CREATOR_OUTCOME_UNKNOWN")}let payload;try{payload=await response.json()}catch(_){throw lost(response.status,"INVALID_DATA_RESPONSE")}if(!response.ok){if(!payload||typeof payload!=="object"||typeof payload.error!=="string")throw lost(response.status,"INVALID_DATA_RESPONSE");throw creatorError(response.status,payload)}if(!payload||typeof payload!=="object"||payload.ok!==true||!("data" in payload)||payload.data===undefined)throw lost(502,"INVALID_DATA_RESPONSE");return payload.data};const creatorPost=(body,write)=>creatorDoor("/__sw/creator",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...body,contract})},write);const claimOutcomes=new Map();const creatorsOpened=()=>{try{const list=JSON.parse(sessionStorage.getItem("__sw_creators_opened")||"[]");return Array.isArray(list)?list:[]}catch(_){return[]}};const creators=Object.freeze({opened:creatorsOpened,sessions:async()=>({data:await creatorDoor("/__sw/creator/sessions",{method:"GET"})}),forget:async creatorId=>{await creatorDoor("/__sw/creator/forget",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(creatorId===undefined?{}:{creator_id:creatorId})},true)}});const creatorView=spec=>creatorId=>{if(typeof creatorId!=="string"||!/^crt_[0-9a-f]{32}$/.test(creatorId))throw new DataError(400,{error:"DATA_INPUT_INVALID",message:"creator() needs a creator id"});const view={};for(const[table,canUpdate,children]of spec){const call=async(action,fields,write)=>{if(action==="relation_list")validateListLimit(fields);return creatorPost({action,creator_id:creatorId,table,...fields},write)};const root={get:id=>call("get",{id}).then(r=>({data:r.data})),links:id=>call("link_list",{id}),revokeLink:(id,linkId)=>call("link_revoke",{id,link_id:linkId},true),createLink:async(id,options={})=>{const result=await call("link_create",{id,access:options.access,...(options.expiresInDays===undefined?{}:{expires_in_days:options.expiresInDays})},true);const route=typeof options.returnTo==="string"?options.returnTo:location.pathname+location.search+location.hash;return{link_id:result.link_id,url:location.origin+"/__sw/link#"+result.secret+"."+b64url(route),expires_at:result.expires_at}},claim:async(id,options={})=>{const key=creatorId+"|"+table+"|"+String(id);let result;try{result=await call("claim",{id,keep_shares:options.keepShares===true},true)}catch(e){const known=claimOutcomes.get(key);if(e.outcome==="committed"||e.write_committed===true)claimOutcomes.set(key,"committed");else if(e.outcome==="unknown")claimOutcomes.set(key,"unknown");else if(known){e.outcome=known==="committed"?"committed":"unknown";if(known==="committed")e.write_committed=true;e.message+=" An earlier attempt of this claim may already have applied; check claimStatus() or your account."}throw e}claimOutcomes.set(key,"committed");try{sessionStorage.setItem("__sw_creators_opened",JSON.stringify(creatorsOpened().filter(e=>e&&e.creator_id!==creatorId)))}catch(_){}return result},claimStatus:id=>call("claim_status",{id})};if(canUpdate)root.update=(id,values)=>call("update",{id,values},true);const relations={};for(const[relation,child,canCreate,canUpdateChild]of children){relations[relation]=Object.freeze({list:(parentId,options={})=>call("relation_list",{relation,parent_id:parentId,...(options.after===undefined?{}:{after:options.after}),...(options.limit===undefined?{}:{limit:options.limit})})});const childOps={};if(canCreate)childOps.create=values=>call("child_create",{child,values},true);if(canUpdateChild)childOps.update=(id,values)=>call("child_update",{child,id,values},true);if(canCreate||canUpdateChild)view[child]=Object.freeze(childOps)}if(children.length)root.relations=Object.freeze(relations);view[table]=Object.freeze(root)}return Object.freeze(view)};\n';
     var ANONYMOUS_CLIENT_DECLARATIONS = `
   /** The private creator capability of a row created with createAnonymous. Keep it, and its url, private: anyone opening the url can read, edit, share and claim the row until it is claimed. */
   export interface CreatorCapability { readonly grant: string; readonly secret: string; readonly url: string; }
@@ -492,7 +492,7 @@ async function intake(table, reference, values, extra) {
         const methods = [];
         if (client.read !== false) {
           const equality = readable.filter((field) => !["json", "blob"].includes(columns.find((column) => column.n === field).t));
-          operations.push(`list(options?: { limit?: number; after?: ${id}; where?: ${shape(columns, equality, "update")} }): Promise<{ data: ${row}[]; next: ${id} | null; has_more: boolean }>`);
+          operations.push(`list<const L extends number = number>(options?: { limit?: L & (number extends L ? unknown : [L] extends [PageSize] ? unknown : never); after?: ${id}; where?: ${shape(columns, equality, "update")} }): Promise<{ data: ${row}[]; next: ${id} | null; has_more: boolean }>`);
           operations.push(`get(id: ${id}): Promise<{ data: ${row} | null }>`);
           methods.push("list", "get");
           const numeric = equality.filter((field) => ["integer", "number"].includes(columns.find((column) => column.n === field).t));
@@ -539,7 +539,7 @@ async function intake(table, reference, values, extra) {
               const childReadable = child.client.read === true ? child.columns.filter((column) => column.n !== child.author).map((column) => column.n) : child.client.read;
               const childRow = shape(child.columns, childReadable, "read");
               const childId = columnType(child.columns.find((column) => column.n === child.primaryKey));
-              childRelations.push(`${JSON.stringify(relationName)}: { list(parentId: ${id}, options?: { limit?: number; after?: ${childId} }): Promise<{ data: ${childRow}[]; next: ${childId} | null; has_more: boolean }> }`);
+              childRelations.push(`${JSON.stringify(relationName)}: { list<const L extends number = number>(parentId: ${id}, options?: { limit?: L & (number extends L ? unknown : [L] extends [PageSize] ? unknown : never); after?: ${childId} }): Promise<{ data: ${childRow}[]; next: ${childId} | null; has_more: boolean }> }`);
               const childUpdate = child.client.update ? child.client.update.filter((field) => field !== relation.fk) : [];
               const childOps = [];
               if (child.client.create !== null) childOps.push(`create(values: ${shape(child.columns, child.client.create, "create", /* @__PURE__ */ new Set([relation.fk]))}): Promise<{ data: ${childRow} | null; count: number; changes: number }>`);
@@ -576,7 +576,7 @@ async function intake(table, reference, values, extra) {
           const childId = columnType(child.columns.find((column) => column.n === child.primaryKey));
           const parentId = columnType(columns.find((column) => column.n === primaryKey));
           const equality = childReadable.filter((field) => !["json", "blob"].includes(child.columns.find((column) => column.n === field).t));
-          relationDeclarations.push(`${JSON.stringify(relation.name)}: { list(parentId: ${parentId}, options?: { limit?: number; after?: ${childId}; where?: ${shape(child.columns, equality, "update")} }): Promise<{ data: ${childRow}[]; next: ${childId} | null; has_more: boolean }> }`);
+          relationDeclarations.push(`${JSON.stringify(relation.name)}: { list<const L extends number = number>(parentId: ${parentId}, options?: { limit?: L & (number extends L ? unknown : [L] extends [PageSize] ? unknown : never); after?: ${childId}; where?: ${shape(child.columns, equality, "update")} }): Promise<{ data: ${childRow}[]; next: ${childId} | null; has_more: boolean }> }`);
           relationNames.push(relation.name);
         }
         if (relationDeclarations.length) operations.push(`relations: { ${relationDeclarations.join("; ")} }`);
@@ -597,7 +597,7 @@ async function intake(table, reference, values, extra) {
             const childReadable = child.client.read === true ? child.columns.filter((column) => column.n !== child.author).map((column) => column.n) : child.client.read;
             const childRow = shape(child.columns, childReadable, "read");
             const childId = columnType(child.columns.find((column) => column.n === child.primaryKey));
-            childRelations.push(`${JSON.stringify(relationName)}: { list(parentId: ${id}, options?: { limit?: number; after?: ${childId} }): Promise<{ data: ${childRow}[]; next: ${childId} | null; has_more: boolean }> }`);
+            childRelations.push(`${JSON.stringify(relationName)}: { list<const L extends number = number>(parentId: ${id}, options?: { limit?: L & (number extends L ? unknown : [L] extends [PageSize] ? unknown : never); after?: ${childId} }): Promise<{ data: ${childRow}[]; next: ${childId} | null; has_more: boolean }> }`);
             const childOps = [];
             const canCreate = links.edit.length > 0 && child.client.create !== null;
             const childUpdate = child.client.update ? child.client.update.filter((field) => field !== relation.fk) : [];
@@ -623,6 +623,7 @@ async function intake(table, reference, values, extra) {
         declarations.push(`linked(linkId: string): { ${linkedDeclarations.join("; ")} }`);
       }
       const declaration = `declare module ${JSON.stringify("somewhere:data")} {
+  type PageSize = ${Array.from({ length: 100 }, (_, i) => i + 1).join(" | ")};
   export type Json = string | number | boolean | null | Json[] | { [key: string]: Json };
 ${receiptCapable ? localTypes ? INSERT_CLIENT_DECLARATIONS.replace("readonly idempotency:", "readonly idempotency?:").replace("readonly request:", "readonly request?:") : INSERT_CLIENT_DECLARATIONS : ""}${anonymousTables.length ? ANONYMOUS_CLIENT_DECLARATIONS : ""}${intakeTables.length ? INTAKE_CLIENT_DECLARATIONS : ""}  export class DataError extends Error { readonly status: number; readonly code: string | null;${receiptCapable ? " readonly request?: InsertRequest<unknown>; readonly outcome?: string; readonly write_committed?: boolean; readonly retry?: false; readonly retryable?: false; readonly idempotency?: InsertReceipt;" : ""} constructor(status: number, payload: unknown); }
   export const data: { ${declarations.join(";\n    ")} };
@@ -630,7 +631,8 @@ ${receiptCapable ? localTypes ? INSERT_CLIENT_DECLARATIONS.replace("readonly ide
 `;
       const runtime = `const contract=${JSON.stringify(contract_digest)};
 class DataError extends Error{constructor(status,payload){super(payload&&typeof payload.message==="string"?payload.message:payload&&typeof payload.error==="string"?payload.error:"Data operation failed");this.name="DataError";this.status=status;this.code=payload&&typeof payload.error==="string"?payload.error:null}}
-const invoke=async(table,operation,input)=>{const response=await fetch("/__sw/data",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify({...input,contract,table,operation})});const payload=await response.json().catch(()=>{throw new DataError(response.status,{error:"INVALID_DATA_RESPONSE",message:"Data operation returned an invalid response"})});if(!response.ok)throw new DataError(response.status,payload);return payload};
+const validateListLimit=input=>{if(input.limit!==undefined&&(!Number.isInteger(input.limit)||input.limit<1||input.limit>100))throw new DataError(400,{error:"DATA_INPUT_INVALID",message:"limit must be an integer from 1 to 100"})};
+const invoke=async(table,operation,input)=>{if(operation==="list"||operation==="relation_list")validateListLimit(input);const response=await fetch("/__sw/data",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify({...input,contract,table,operation})});const payload=await response.json().catch(()=>{throw new DataError(response.status,{error:"INVALID_DATA_RESPONSE",message:"Data operation returned an invalid response"})});if(!response.ok)throw new DataError(response.status,payload);return payload};
 ${receiptCapable ? INSERT_CLIENT_RUNTIME + "const receiptTables=" + JSON.stringify(receiptTables) + ";\n" : ""}${anonymousTables.length ? ANONYMOUS_CLIENT_RUNTIME + CREATOR_CLIENT_RUNTIME : ""}${intakeTables.length ? INTAKE_CLIENT_RUNTIME : ""}${linkedSpec.length ? LINK_CLIENT_RUNTIME : ""}const data=Object.freeze(Object.fromEntries(${JSON.stringify(runtimeTables)}.map(([table,operations,relations])=>{const entries=operations.map(operation=>[operation,operation==="list"||operation==="aggregate"?(options={})=>invoke(table,operation,options):operation==="create"?${receiptCapable ? "(values,...extra)=>createWithReceipt(table,values,extra,receiptTables.includes(table))" : "values=>invoke(table,operation,{values})"}:${anonymousTables.length ? 'operation==="createAnonymous"?(values,...extra)=>createAnonymous(table,values,extra):' : ""}${intakeTables.length ? 'operation==="intake"?(reference,values,...extra)=>intake(table,reference,values,extra):' : ""}operation==="update"?(id,values)=>invoke(table,operation,{id,values}):operation==="createLink"?(id,options)=>createLink(table,id,options):operation==="links"?id=>invoke(table,"link_list",{id}):operation==="revokeLink"?(id,link_id)=>invoke(table,"link_revoke",{id,link_id}):id=>invoke(table,operation,{id})]);if(relations.length)entries.push(["relations",Object.freeze(Object.fromEntries(relations.map(relation=>[relation,Object.freeze({list:(parent_id,options={})=>invoke(table,"relation_list",{...options,relation,parent_id})})])))]);return[table,Object.freeze(Object.fromEntries(entries))];}).concat(${linkedSpec.length ? `[["links",links],["linked",linkedView(${JSON.stringify(linkedSpec)})]]` : "[]"})${creatorSpec.length ? `.concat([["creators",creators],["creator",creatorView(${JSON.stringify(creatorSpec)})]])` : ""}));
 export{data,DataError};
 `;
@@ -1683,12 +1685,16 @@ interface SomewherePaymentsTransactionsResult {
   next_cursor: string | null;
   stripe_mode: SomewherePaymentsStripeMode;
 }
-type SomewherePaymentsPortalOptions = {
-  return_url?: string;
-  returnUrl?: string;
-  env?: SomewherePaymentsEnv;
-} & ({ customer_id: string; customerId?: string } | { customer_id?: string; customerId: string });
-interface SomewherePaymentsPortalForUserOptions { return_url?: string; returnUrl?: string; env?: SomewherePaymentsEnv }
+// Where the billing portal sends the customer back. Required: the platform
+// refuses a portal request without one (400), and checks it against the
+// project's allowed origins. Either spelling works; return_url wins if both are given.
+type SomewherePaymentsPortalReturnUrl =
+  | { return_url: string; returnUrl?: string }
+  | { return_url?: string; returnUrl: string };
+type SomewherePaymentsPortalOptions = { env?: SomewherePaymentsEnv }
+  & SomewherePaymentsPortalReturnUrl
+  & ({ customer_id: string; customerId?: string } | { customer_id?: string; customerId: string });
+type SomewherePaymentsPortalForUserOptions = { env?: SomewherePaymentsEnv } & SomewherePaymentsPortalReturnUrl;
 interface SomewherePaymentsPortalResult { url: string; stripe_mode: SomewherePaymentsStripeMode }
 // The signed-in user's own plan subscription; no user, customer or subscription argument.
 interface SomewherePaymentsSubscriptionForUserOptions { env?: SomewherePaymentsEnv }
@@ -3689,11 +3695,11 @@ interface Response { readonly webSocket: WebSocket | null }
 interface WebSocket { accept(): void }
 `;
     var { groupsTypeDeclarations } = require_groups_types();
-    function runtimeContextDeclaration3(roles) {
+    function runtimeContextDeclaration2(roles) {
       return BASE_RUNTIME_CONTEXT_DECLARATION + groupsTypeDeclarations(roles);
     }
-    var RUNTIME_CONTEXT_DECLARATION2 = runtimeContextDeclaration3({});
-    var ENDPOINT_DECLARATION3 = `
+    var RUNTIME_CONTEXT_DECLARATION2 = runtimeContextDeclaration2({});
+    var ENDPOINT_DECLARATION2 = `
 interface SomewhereEndpointUser {
   id: string;
   email?: string | null;
@@ -3766,7 +3772,7 @@ interface SomewhereEndpointConfig<Auth extends SomewhereEndpointAuth, Schema ext
       });
       return "interface SomewhereDeclaredTables {\n" + entries.join("") + "}\n";
     }
-    module2.exports = { RUNTIME_CONTEXT_DECLARATION: RUNTIME_CONTEXT_DECLARATION2, ENDPOINT_DECLARATION: ENDPOINT_DECLARATION3, declaredTablesDeclaration: declaredTablesDeclaration3, runtimeContextDeclaration: runtimeContextDeclaration3 };
+    module2.exports = { RUNTIME_CONTEXT_DECLARATION: RUNTIME_CONTEXT_DECLARATION2, ENDPOINT_DECLARATION: ENDPOINT_DECLARATION2, declaredTablesDeclaration: declaredTablesDeclaration3, runtimeContextDeclaration: runtimeContextDeclaration2 };
   }
 });
 
@@ -4016,10 +4022,10 @@ function parent(options: { via: string; table?: string }): SomewhereSchemaDeclar
 function group(options?: { column?: string; roles?: Partial<Record<'read' | 'create' | 'update' | 'delete', string[]>> }): SomewhereSchemaDeclaration.GroupScope;
 function appRole(options: { roles: Partial<Record<'read' | 'create' | 'update' | 'delete', string[]>> }): SomewhereSchemaDeclaration.AppRoleScope;
 `;
-    var SCHEMA_DECLARATION3 = types + signatures.replace(/^function /gm, "declare function ") + `declare module 'somewhere/db' {
+    var SCHEMA_DECLARATION2 = types + signatures.replace(/^function /gm, "declare function ") + `declare module 'somewhere/db' {
 ${(signatures + policySignatures).replace(/^function /gm, "  export function ")}}
 `;
-    module2.exports = { SCHEMA_DECLARATION: SCHEMA_DECLARATION3 };
+    module2.exports = { SCHEMA_DECLARATION: SCHEMA_DECLARATION2 };
   }
 });
 
@@ -4098,13 +4104,89 @@ var require_checker_contract = __commonJS({
   }
 });
 
+// worker/containers/compile/generated-declarations.cjs
+var require_generated_declarations = __commonJS({
+  "worker/containers/compile/generated-declarations.cjs"(exports2, module2) {
+    "use strict";
+    var GENERATED_DECLARATIONS_VERSION = 1;
+    var AMBIENT_FILE2 = "__somewhere_typed_functions.d.ts";
+    var SCHEMA_FILE2 = "__somewhere_schema.d.ts";
+    var MAX_GENERATED_DECLARATION_BYTES = 2 * 1024 * 1024;
+    function expectedDeclarationFiles(hasSchema) {
+      return hasSchema ? [AMBIENT_FILE2, SCHEMA_FILE2] : [AMBIENT_FILE2];
+    }
+    function canonicalDeclarationsText(version, files) {
+      return JSON.stringify({ version, files: Object.keys(files).sort().map((name) => [name, files[name]]) });
+    }
+    function generatedDeclarationsProblem(envelope, hasSchema) {
+      if (!envelope || typeof envelope !== "object" || Array.isArray(envelope)) return "generated declarations are required";
+      if (envelope.version !== GENERATED_DECLARATIONS_VERSION) return "unsupported generated declarations version";
+      if (typeof envelope.sha256 !== "string" || !/^[0-9a-f]{64}$/.test(envelope.sha256)) return "generated declarations digest is missing";
+      const files = envelope.files;
+      if (!files || typeof files !== "object" || Array.isArray(files)) return "generated declaration files are missing";
+      const names = Object.keys(files).sort();
+      const expected = expectedDeclarationFiles(hasSchema).sort();
+      if (names.length !== expected.length || names.some((name, i) => name !== expected[i])) return "unexpected generated declaration file set";
+      let bytes = 0;
+      const encoder = new TextEncoder();
+      for (const name of names) {
+        if (typeof files[name] !== "string") return "generated declarations must be text";
+        bytes += encoder.encode(files[name]).length;
+      }
+      if (bytes > MAX_GENERATED_DECLARATION_BYTES) return "generated declarations are too large";
+      return null;
+    }
+    module2.exports = {
+      GENERATED_DECLARATIONS_VERSION,
+      AMBIENT_FILE: AMBIENT_FILE2,
+      SCHEMA_FILE: SCHEMA_FILE2,
+      MAX_GENERATED_DECLARATION_BYTES,
+      expectedDeclarationFiles,
+      canonicalDeclarationsText,
+      generatedDeclarationsProblem
+    };
+  }
+});
+
+// worker/containers/compile/generated-declarations-render.cjs
+var require_generated_declarations_render = __commonJS({
+  "worker/containers/compile/generated-declarations-render.cjs"(exports2, module2) {
+    "use strict";
+    var { runtimeContextDeclaration: runtimeContextDeclaration2, ENDPOINT_DECLARATION: ENDPOINT_DECLARATION2 } = require_runtime_types();
+    var { SCHEMA_DECLARATION: SCHEMA_DECLARATION2 } = require_schema_types();
+    var { declaredRoles: declaredRoles2 } = require_groups_types();
+    var { AMBIENT_FILE: AMBIENT_FILE2, SCHEMA_FILE: SCHEMA_FILE2 } = require_generated_declarations();
+    function ambientDeclaration(declaredRolesText, declaredTables) {
+      return runtimeContextDeclaration2(declaredRoles2(declaredRolesText)) + ENDPOINT_DECLARATION2 + (declaredTables ?? "");
+    }
+    function renderGeneratedDeclarationFiles2({ declaredRoles: rolesText, declaredTables, hasSchema }) {
+      return {
+        [AMBIENT_FILE2]: ambientDeclaration(rolesText, declaredTables),
+        ...hasSchema ? { [SCHEMA_FILE2]: SCHEMA_DECLARATION2 } : {}
+      };
+    }
+    function declarationInputsOf(payload) {
+      return {
+        declaredRoles: payload.declared_roles,
+        declaredTables: payload.declared_tables,
+        hasSchema: !!payload.files && payload.files["db/schema.ts"] !== void 0
+      };
+    }
+    module2.exports = {
+      ambientDeclaration,
+      renderGeneratedDeclarationFiles: renderGeneratedDeclarationFiles2,
+      declarationInputsOf
+    };
+  }
+});
+
 // declared-data-vendor-entry.js
 var declared_data_vendor_entry_exports = {};
 __export(declared_data_vendor_entry_exports, {
   ENDPOINT_DECLARATION: () => import_runtime_types3.ENDPOINT_DECLARATION,
   FILES_DECLARATION_FILE: () => import_typed_files2.CLIENT_FILE,
   RUNTIME_CONTEXT_DECLARATION: () => import_runtime_types3.RUNTIME_CONTEXT_DECLARATION,
-  SCHEMA_DECLARATION: () => import_schema_types2.SCHEMA_DECLARATION,
+  SCHEMA_DECLARATION: () => import_schema_types.SCHEMA_DECLARATION,
   checkerContract: () => checkerContract,
   declaredTablesFromFiles: () => declaredTablesFromFiles,
   filesDeclarationFromFiles: () => filesDeclarationFromFiles,
@@ -7239,26 +7321,25 @@ var import_typed_data = __toESM(require_typed_data());
 var import_runtime_types2 = __toESM(require_runtime_types());
 var import_groups_types = __toESM(require_groups_types());
 var import_typed_files = __toESM(require_typed_files());
-var import_schema_types2 = __toESM(require_schema_types());
+var import_schema_types = __toESM(require_schema_types());
 var import_runtime_types3 = __toESM(require_runtime_types());
 var import_typed_files2 = __toESM(require_typed_files());
 var checkerContract = __toESM(require_checker_contract());
 
 // worker/src/utils/reference-check-inputs.ts
 var import_runtime_types = __toESM(require_runtime_types());
-var import_schema_types = __toESM(require_schema_types());
-var REFERENCE_CHECK_AMBIENT_FILE = "__somewhere_typed_functions.d.ts";
-var REFERENCE_CHECK_SCHEMA_FILE = "__somewhere_schema.d.ts";
+var import_generated_declarations = __toESM(require_generated_declarations());
+var import_generated_declarations_render = __toESM(require_generated_declarations_render());
 function referenceCheckDeclaredTables(graphFiles) {
   const authority = schemaAuthorityFromSource(graphFiles);
   return authority ? (0, import_runtime_types.declaredTablesDeclaration)(authority) : void 0;
 }
 function referenceCheckDeclarations(graphFiles) {
-  const declarations = {
-    [REFERENCE_CHECK_AMBIENT_FILE]: (0, import_runtime_types.runtimeContextDeclaration)({}) + import_runtime_types.ENDPOINT_DECLARATION + (referenceCheckDeclaredTables(graphFiles) ?? "")
-  };
-  if (graphFiles["db/schema.ts"] !== void 0) declarations[REFERENCE_CHECK_SCHEMA_FILE] = import_schema_types.SCHEMA_DECLARATION;
-  return declarations;
+  return (0, import_generated_declarations_render.renderGeneratedDeclarationFiles)({
+    declaredRoles: void 0,
+    declaredTables: referenceCheckDeclaredTables(graphFiles),
+    hasSchema: graphFiles["db/schema.ts"] !== void 0
+  });
 }
 var RUNTIME_ENDPOINT_ACCESS = /^sw(?:\s|\/\*[\s\S]*?\*\/|\/\/[^\n]*\n)*\??\.(?:\s|\/\*[\s\S]*?\*\/|\/\/[^\n]*\n)*endpoint(?![\w$])/;
 function isRuntimeEndpointGlobal(diag, functions) {

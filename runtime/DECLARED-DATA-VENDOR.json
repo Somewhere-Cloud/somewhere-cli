@@ -2,9 +2,11 @@
   "esbuild": "0.24.0",
   "source_files": {
     "worker/containers/compile/checker-contract.cjs": "8b9ad4e91f8afa8e9770c71b8a07729de2b67da594003eb25d4a2843398a5d43",
-    "worker/containers/compile/declared-data-contract.cjs": "3c243824d169c69a16fc1408a98deabeb8d36dce28835b9f7d8215428b216d01",
+    "worker/containers/compile/declared-data-contract.cjs": "8b52ff8bca7a57e3156bbc0bcb3685871079e756b8945060ef2bb237961ff03e",
+    "worker/containers/compile/generated-declarations-render.cjs": "7ffdb34645cc9eccac6eba39dc86b646a41c4de8a1a038d2b5b46f42df9f1157",
+    "worker/containers/compile/generated-declarations.cjs": "6e9902e054c5c784fd9b3c3fafc1869e79954100a45014e1132247cd82833ec4",
     "worker/containers/compile/groups-types.cjs": "f0f38ca6f160561f997b20af44763bd07232deb2668a536cd52c1974fcfed2c8",
-    "worker/containers/compile/runtime-types.cjs": "7b723e32f1def0a42af00860c10c25d7cd8ddf14a216c01924efd95546b77edc",
+    "worker/containers/compile/runtime-types.cjs": "e47abe1f7cfd1bf1fe9df10059cb68c8ef591efb3c8e244c649604aa8b13be54",
     "worker/containers/compile/schema-types.cjs": "768e88adfc09233b097386b03ee2bf896e4970572c4e9d118b13fa89c0ff9644",
     "worker/containers/compile/typed-data.cjs": "1c8bec853fbee4ffd34c651076a4e1f4d8b18c0c2be5e99e31df7c9283207627",
     "worker/containers/compile/typed-files.cjs": "a0b1818afbc7673f84583c76436a3b3ca1d1fdf63d8d8db138b36646103f0708",
@@ -29,7 +31,7 @@
     "worker/src/utils/db-schema-deploy/schema-ownership.ts": "e6c811a87bc657707be3518dfe547c6d97718ac073108b126eb7f791c9c08202",
     "worker/src/utils/managed-groups/errors.ts": "4830b1ad7357a79760b0bcc68884e562cfbc07d12a37cc73651a6fcb256d682f",
     "worker/src/utils/managed-groups/policy.ts": "2259a883645c8bfd607ead7c37387f3ffd42ac9dfb86722c72b224adb498511e",
-    "worker/src/utils/reference-check-inputs.ts": "6bd16b1ecbe0c17d5b83b40f38d74e99e6f7cd2073bed1d54d62d83415d7e92c"
+    "worker/src/utils/reference-check-inputs.ts": "c909cdc79cb722eb2c5d16dad75a835c03f2288f5a536f75cfae7291f7bcff86"
   },
-  "sha256": "df5304d39b0638b894ccb86b6f58668f39a0322e6b70985a36de335c6df10eae"
+  "sha256": "c52e681b19914e25c3e972536a5acd192f0a4206be830c1987a5e76a993b15b5"
 }

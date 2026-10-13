@@ -462,7 +462,7 @@ test('plain and JSON recovery are bounded, deterministic and executable without 
     const env = { HOME: home, SOMEWHERE_DOCS_BASE: base, SOMEWHERE_NO_NOTIFICATIONS: '1', NO_COLOR: '1', CI: '1' };
     for (const json of [false, true]) {
       for (const [args, code, hint] of [
-        [['sw.data', '--section', 'readz'], 'DOCS_SECTION_NOT_FOUND', 'somewhere docs sw.data --section reads'],
+        [['sw.data', '--section', 'readz'], 'DOCS_SECTION_NOT_FOUND', 'somewhere docs sw.data --section <id>'],
         [['sw.data', '--section', ''], 'DOCS_SECTION_NOT_FOUND', 'somewhere docs sw.data --section'],
         [['sw.db', '--section', 'reads'], 'DOCS_SECTION_INDEX_UNAVAILABLE', 'somewhere docs sw.db --full'],
         [['declared-dat'], 'DOCS_TOPIC_NOT_FOUND', 'somewhere docs declared-data'],
@@ -571,4 +571,23 @@ test('public command bounds large parents in JSON/plain while exact leaves and f
       }
     }
   }, { pages: [page] });
+});
+
+ test('section recovery preserves exact and legacy IDs and refuses ambiguous headings without bodies', () => {
+  const page = largePage();
+  const canonical = page.sections[0];
+  page.sections.push({ ...canonical, id: 'old-parent', alias_of: canonical.id });
+  for (const id of [canonical.id, 'old-parent', 'DATABASE-ROWS-AND-APP-RESPONSES', '## DATABASE rows and app responses!!!']) {
+    const result = renderPublicDocsView(page, { kind: 'section', id });
+    assert.equal(result.failure, undefined);
+    assert.match(result.content, /Parent lead/);
+  }
+  for (const id of ['### QUERY ROWS!!!', '', '   ', '!!!', 'missing']) {
+    const result = renderPublicDocsView(page, { kind: 'section', id });
+    assert.equal(result.failure.error, 'DOCS_SECTION_NOT_FOUND');
+    assert.deepEqual(result.failure.matches, page.sections.filter(s => !s.alias_of).map(s => s.id));
+    assert.equal(result.content, '');
+    assert.doesNotMatch(result.failure.message, /Parent lead|Second child|await data/);
+  }
+  assert.match(renderPublicDocsView(page, { kind: 'section', id: 'query-rows-2' }).content, /Second child/);
 });

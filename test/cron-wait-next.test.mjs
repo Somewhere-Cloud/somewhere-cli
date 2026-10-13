@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
-import { mkdirSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -42,7 +42,20 @@ function run(args, env) {
 async function withTransport(t, handler, fn, options = {}) {
   const calls = [];
   const home = homeFor(t);
+  if (options.expiringCredentials) writeFileSync(join(home, '.somewhere', 'config.json'), JSON.stringify({
+    token: 'smt_local_mock', refresh_token: 'mock_old_refresh', access_expires_at: new Date(0).toISOString(),
+    user: { email: 'cron@example.com', username: 'cron' },
+  }));
   const server = createServer((req, res) => {
+    if (req.url === '/v1/keys/cli-pair/refresh') {
+      options.onRefresh?.();
+      setTimeout(() => {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true, data: { key: 'smt_rotated_mock', refresh_token: 'mock_new_refresh',
+          expires_at: new Date(Date.now() + 86400000).toISOString() } }));
+      }, 700);
+      return;
+    }
     if (req.url === '/v1/auth/whoami') {
       options.onWhoami?.();
       if (options.stallWhoami) return;
@@ -164,19 +177,30 @@ test('wait-next preserves typed read authorization failures and does not invoke 
   });
 });
 
-test('wait-next bounds stalled history and credential-renewal reads with the same deadline', async t => {
-  for (const auth of [false, true]) {
-    let whoami = 0;
-    await withTransport(t, p => p.name === 'cron_list' ? success({ crons: [{ ...baseCron, next_run_at: new Date().toISOString() }] }) : null,
-      async env => {
-        const began = Date.now();
-        const out = await run(['--wait-next', '--timeout', '0.5', '--json'], env);
-        assert.equal(out.status, 1);
-        assert.equal(JSON.parse(out.stdout).error, 'CRON_SCHEDULED_WAIT_TIMEOUT');
-        assert.ok(Date.now() - began < 4000, 'stalled HTTP read cannot keep the process alive beyond its budget');
-        if (auth) assert.equal(whoami, 1, 'canonical credential-renewal read was reached');
-      }, { rejectMcp: auth, stallWhoami: auth, onWhoami: () => { whoami++; } });
-  }
+test('wait-next cancels a stalled read promptly on the observation deadline', async t => {
+  await withTransport(t, p => p.name === 'cron_list' ? success({ crons: [{ ...baseCron, next_run_at: new Date().toISOString() }] }) : null,
+    async env => {
+      const began = Date.now();
+      const out = await run(['--wait-next', '--timeout', '0.5', '--json'], env);
+      assert.equal(out.status, 1);
+      assert.equal(JSON.parse(out.stdout).error, 'CRON_SCHEDULED_WAIT_TIMEOUT');
+      assert.ok(Date.now() - began < 4000, 'stalled read cannot keep the process alive beyond the observation budget');
+    });
+});
+
+test('wait-next lets admitted credential rotation persist after deadline and never polls or replays afterward', async t => {
+  let rotations = 0;
+  await withTransport(t, () => { throw new Error('No tool read may start after renewal crossed the deadline'); },
+    async (env, calls) => {
+      const out = await run(['--wait-next', '--timeout', '0.3', '--json'], env);
+      assert.equal(out.status, 1);
+      assert.equal(JSON.parse(out.stdout).error, 'CRON_SCHEDULED_WAIT_TIMEOUT');
+      const saved = JSON.parse(readFileSync(join(env.HOME, '.somewhere', 'config.json'), 'utf8'));
+      assert.equal(saved.token, 'smt_rotated_mock');
+      assert.equal(saved.refresh_token, 'mock_new_refresh');
+      assert.equal(rotations, 1);
+      assert.deepEqual(calls, []);
+    }, { expiringCredentials: true, onRefresh: () => { rotations++; } });
 });
 
 test('wait-next refuses missing/disabled initial cron and usage errors before read transport', async t => {

@@ -280,8 +280,8 @@ async function observeNextScheduledRun(target: string, opts: CronRunsOptions, li
   } catch (err) {
     if (controller.signal.aborted) {
       const message = observation.job
-        ? `Natural scheduled job ${observation.job.job_id} was observed but did not finish within ${timeoutSeconds}s; it may still complete.`
-        : `No natural scheduled occurrence after command start was observed within ${timeoutSeconds}s. Recent history is bounded; this does not establish that the scheduler failed.`;
+        ? `Natural scheduled job ${observation.job.job_id} was observed but did not finish during the ${timeoutSeconds}s observation window; it may still complete.`
+        : `No natural scheduled occurrence after command start was observed during the ${timeoutSeconds}s observation window. Recent history is bounded; this does not establish that the scheduler failed.`;
       printTypedCronError('CRON_SCHEDULED_WAIT_TIMEOUT', message, opts.json, { data: details() });
     } else {
       const { code, message, extra } = platformErrorParts(err);
@@ -594,7 +594,9 @@ export function registerCron(program: Command): void {
         + '\n--wait-next is read-only: it ignores manual runs and older scheduled slots, pins one job,\n'
         + 'and waits within --timeout. Changes to schedule settings or a disabled schedule stop the wait.\n'
         + 'The observation uses at most --limit recent rows per read (default 100 while waiting).\n'
-        + 'A timeout reports what was not observed; it does not mean the timer never fired.\n',
+        + 'A timeout reports what was not observed; it does not mean the timer never fired.\n'
+        + 'An already-started login renewal finishes with its existing 10-second request budgets before\n'
+        + 'the command exits, so credential persistence can add grace beyond the observation deadline.\n',
     )
     .action(async (target: string, opts: CronRunsOptions) => {
       try {

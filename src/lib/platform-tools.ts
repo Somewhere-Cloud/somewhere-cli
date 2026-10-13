@@ -48,16 +48,16 @@ export function mcpAccessExpiresSoon(): boolean {
 }
 
 /** Reuse ApiClient's canonical cli-pair rotation and persistence path. */
-export async function refreshMcpAccessToken(preemptive: boolean, signal?: AbortSignal): Promise<string> {
+export async function refreshMcpAccessToken(preemptive: boolean): Promise<string> {
   const token = getToken();
   const client = new ApiClient(token);
   if (preemptive) {
-    const refreshed = await client.refreshAccessKey(10_000, signal);
+    const refreshed = await client.refreshAccessKey(10_000);
     if (!refreshed) {
       throw new Error('Session renewal returned an incomplete credential pair.');
     }
   } else {
-    await client.call('GET', '/auth/whoami', undefined, undefined, { timeoutMs: 10_000, signal });
+    await client.call('GET', '/auth/whoami', undefined, undefined, { timeoutMs: 10_000 });
   }
   return getToken();
 }
@@ -128,8 +128,15 @@ async function withPlatformClient<T>(
   options: PlatformToolCallOptions,
   operation: (client: Client) => Promise<T>,
 ): Promise<T> {
+  options.signal?.throwIfAborted();
   let token = getToken();
-  if (mcpAccessExpiresSoon()) token = await refreshMcpAccessToken(true, options.signal);
+  if (mcpAccessExpiresSoon()) {
+    // Renewal rotates credentials: finish its existing bounded request and persist
+    // the new pair before honoring an observation deadline. Never abort rotation.
+    options.signal?.throwIfAborted();
+    token = await refreshMcpAccessToken(true);
+    options.signal?.throwIfAborted();
+  }
 
   const attempt = async (accessToken: string): Promise<T> => {
     const connection = await connectClient(accessToken, options);
@@ -146,7 +153,9 @@ async function withPlatformClient<T>(
     if (!isMcpAuthRejection(err)) throw err;
   }
 
-  token = await refreshMcpAccessToken(false, options.signal);
+  options.signal?.throwIfAborted();
+  token = await refreshMcpAccessToken(false);
+  options.signal?.throwIfAborted();
   return attempt(token);
 }
 

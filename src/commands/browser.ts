@@ -190,6 +190,21 @@ export interface BrowserOptions {
 const looksLikeUrl = (s?: string): boolean => !!s && /^https?:\/\//i.test(s);
 
 /**
+ * The request body for `--close`. Hosted sessions belong to the project they
+ * were opened for, so the close names the same project a run would use:
+ * --project, else the linked project. With neither, it closes the session
+ * opened without a project (session_id alone).
+ */
+export function buildBrowserCloseBody(
+  session: string,
+  project?: string,
+  linkedProject?: string,
+): { session_id: string; project_id?: string; close?: true } {
+  const projectId = project ?? linkedProject;
+  return projectId ? { project_id: projectId, session_id: session, close: true } : { session_id: session };
+}
+
+/**
  * Build the POST /v1/browser request body from the positional `target` + flags.
  *
  * Target precedence: an explicit --url (or a positional that looks like a URL)
@@ -690,24 +705,25 @@ export function registerBrowser(program: Command) {
       '--session <id>',
       'Hosted/deployed pages only: keep one live browser page (cookies, storage, sign-in) across calls under this handle, including after a failed step. Localhost is excluded because the local browser is intentionally bounded to one CLI process; omit --session and pass the local URL again for a fresh local call. Hosted sessions end after 5 min idle or 10 min in total; a call that finds its session ended says it started a fresh signed-out browser. --url only sets where a NEW session starts; a live session stays on its page, so move it with --path or a goto action.',
     )
-    .option('--close <session>', 'Close a hosted session by its handle and free its slot (live sessions count against your plan\'s limit).')
+    .option('--close <session>', 'Close a hosted session by its handle and free its slot (live sessions count against your plan\'s limit). Sessions belong to the project they were opened for: this closes the one in --project, else the linked project; with neither, the one opened without a project.')
     .option('--auth-user <email|user_id>', "Start signed in as one of your app's users. An email is looked up in the project (--project or the linked one) and must match exactly one user.")
     .option('--json', 'Print the raw browser response envelope as JSON.')
     .action(async (target: string | undefined, opts: BrowserOptions) => {
       opts.actionSequence = [...actionSequence];
       opts.expectedRequests = [...expectedRequests];
       if (opts.close !== undefined) {
-        if (target || opts.session || opts.actionSequence.length || opts.path || opts.wait || opts.eval || opts.url || opts.project) {
-          error('--close takes only the session handle, e.g. somewhere browser --close bob');
+        if (target || opts.session || opts.actionSequence.length || opts.path || opts.wait || opts.eval || opts.url) {
+          error('--close takes only the session handle (and optionally --project), e.g. somewhere browser --close bob');
           process.exit(1);
         }
         try {
-          const closed = await new ApiClient(getToken()).call<{ session_id?: string; closed?: boolean }>(
-            'POST', '/browser/test', { session_id: opts.close },
+          const closeBody = buildBrowserCloseBody(opts.close, opts.project, loadProjectConfig()?.project_id);
+          const closed = await new ApiClient(getToken()).call<{ session_id?: string; project_id?: string; closed?: boolean; note?: string }>(
+            'POST', '/browser/test', closeBody,
           );
           if (opts.json) console.log(JSON.stringify(closed, null, 2));
-          else if (closed?.closed) success(`Closed browser session ${opts.close}.`);
-          else console.log(`No live browser session named ${opts.close}.`);
+          else if (closed?.closed) success(`Closed browser session ${opts.close}${closeBody.project_id ? ` in project ${closeBody.project_id}` : ''}.`);
+          else console.log(closed?.note ?? `No live browser session named ${opts.close}.`);
         } catch (err) {
           error(err instanceof Error ? err.message : String(err), err);
           process.exit(1);

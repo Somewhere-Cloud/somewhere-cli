@@ -15,6 +15,7 @@ let isSdkAuthError: (err: unknown) => boolean = () => false;
 
 export interface PlatformToolCallOptions {
   allTools?: boolean;
+  signal?: AbortSignal;
 }
 
 export class PlatformToolError extends Error {
@@ -83,9 +84,13 @@ export async function createPlatformMcpTransport(
   return new StreamableHTTPClientTransport(mcpUrl(options.allTools === true), {
     // The SDK uses web Fetch types; bundled undici implements the same API.
     // Preserve the SDK's cancellation signal and allow long tool responses.
-    fetch: ((url, init) => fetchWithProxy(
-      url, init as Parameters<typeof fetchWithProxy>[1], 600_000,
-    )) as FetchLike,
+    fetch: ((url, init) => {
+      const request = init as Parameters<typeof fetchWithProxy>[1];
+      const signal = options.signal && request?.signal
+        ? AbortSignal.any([options.signal, request.signal])
+        : options.signal ?? request?.signal;
+      return fetchWithProxy(url, { ...request, signal }, 600_000);
+    }) as FetchLike,
     requestInit: {
       headers: {
         Authorization: `Bearer ${token}`,
@@ -105,7 +110,12 @@ async function connectClient(
     ...options,
     userAgent: 'somewhere-cli',
   });
-  await client.connect(transport);
+  try {
+    await client.connect(transport, options.signal ? { signal: options.signal } : undefined);
+  } catch (err) {
+    await client.close().catch(() => {});
+    throw err;
+  }
   return {
     client,
     close: async () => {
@@ -118,8 +128,15 @@ async function withPlatformClient<T>(
   options: PlatformToolCallOptions,
   operation: (client: Client) => Promise<T>,
 ): Promise<T> {
+  options.signal?.throwIfAborted();
   let token = getToken();
-  if (mcpAccessExpiresSoon()) token = await refreshMcpAccessToken(true);
+  if (mcpAccessExpiresSoon()) {
+    // Renewal rotates credentials: finish its existing bounded request and persist
+    // the new pair before honoring an observation deadline. Never abort rotation.
+    options.signal?.throwIfAborted();
+    token = await refreshMcpAccessToken(true);
+    options.signal?.throwIfAborted();
+  }
 
   const attempt = async (accessToken: string): Promise<T> => {
     const connection = await connectClient(accessToken, options);
@@ -136,7 +153,9 @@ async function withPlatformClient<T>(
     if (!isMcpAuthRejection(err)) throw err;
   }
 
+  options.signal?.throwIfAborted();
   token = await refreshMcpAccessToken(false);
+  options.signal?.throwIfAborted();
   return attempt(token);
 }
 
@@ -217,7 +236,8 @@ export async function callPlatformToolRaw(
     ? { ...args, idempotency_key: crypto.randomUUID() }
     : args;
   const result = await withPlatformClient(options, (client) =>
-    client.callTool({ name, arguments: invocationArgs }));
+    client.callTool({ name, arguments: invocationArgs }, undefined,
+      options.signal ? { signal: options.signal } : undefined));
   const typed = result as CallToolResult;
   if (typed.isError) {
     throw platformToolErrorFromText(name, textFromResult(typed));

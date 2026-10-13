@@ -1,0 +1,11 @@
+# Root reviews CLI authority, shared transport, release tooling and unclassified code.
+* @uzihaq
+
+# Ordinary prose may merge once its required checks pass.
+/README.md
+/docs/
+
+# Keep instructions and ownership rules under root review.
+**/AGENTS.md @uzihaq
+**/CLAUDE.md @uzihaq
+/.github/ @uzihaq

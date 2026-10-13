@@ -272,7 +272,7 @@ test('private-data schema compiles through the platform parser to an owner() tab
   const client = declaredData.generateFromFiles({ 'db/schema.ts': schema });
   assert.ok(client, 'the schema declares client permissions');
   assert.match(client.declaration, /declare module "somewhere:data"/);
-  assert.match(client.declaration, /"notes": \{ list\(/);
+  assert.match(client.declaration, /"notes": \{ list<const L extends number = number>\(/);
   // Browser writes are limited to title/body; the platform owns the owner column.
   assert.match(client.declaration, /create\(values: \{ "body"\?: string; "title": string \}\)/);
   // An id() key is an integer, so the candidate generator types it as number (not number | string).

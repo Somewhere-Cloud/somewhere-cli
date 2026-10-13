@@ -15,13 +15,13 @@ const schema = `export default schema({
  requests: table({id:id(),message:text(),reply_email:text(),status:text({default:'new'})},
   {scope:owner(),client:{intake:{target:{table:'consultants',field:'slug'},fields:['message','reply_email'],where:{accepting:true}}}}),
 });`;
-test('canonical creator and intake local types preserve ordinary output', async t => {
+test('canonical creator and intake local types retain the ordinary contract with bounded lists', async t => {
  const root=mkdtempSync(join(tmpdir(),'cli-creator-intake-types-'));t.after(()=>rmSync(root,{recursive:true,force:true}));
  mkdirSync(join(root,'db'));mkdirSync(join(root,'src'));
  writeFileSync(join(root,'db/schema.ts'),ordinary);
  const baseline=prepareDeclaredData(root).client;
- assert.equal(sha256(baseline.runtime),'501b9a919262adcec45da0a0b96c321f3b8f31cebff33f4d14a73927141b3b25');
- assert.equal(sha256(JSON.stringify(baseline.manifest)),'c9cad492ee635ff6ccd77bc0a4405f5511d7ebeca8395b869274e48613d16025');
+ assert.equal(sha256(baseline.runtime),'28c9adad61e7e605b886d3416ecf1c22cc80bc319da963c1b1b1aa9fcfe56d93');
+ assert.equal(sha256(JSON.stringify(baseline.manifest)),'321e416643cc714c5370f4145d53f479ddfa1dc74a46da9ad677213299e421e6');
  assert.equal(baseline.contract_digest,'f94004dfa2945b48b99475ea839686f362682d04251cfcf24d7436a4310c6dc7');
  writeFileSync(join(root,'db/schema.ts'),schema);
  writeFileSync(join(root,'tsconfig.json'),JSON.stringify({compilerOptions:{strict:true,skipLibCheck:false,target:'ES2022',module:'ESNext',moduleResolution:'Bundler'},include:['src']}));

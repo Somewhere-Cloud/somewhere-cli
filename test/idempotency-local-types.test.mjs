@@ -7,8 +7,8 @@ import { tmpdir } from 'node:os';
 import { prepareDeclaredData } from '../dist/lib/declared-data.js';
 import { runTypecheck } from '../dist/lib/typecheck.js';
 const sha256 = value => createHash('sha256').update(value).digest('hex');
-// Fixed-schema output from the published 0.37.20 generator (543e47ea); no Git history is needed in CI.
-const legacy = { runtime: '501b9a919262adcec45da0a0b96c321f3b8f31cebff33f4d14a73927141b3b25', manifest: 'c9cad492ee635ff6ccd77bc0a4405f5511d7ebeca8395b869274e48613d16025', digest: 'f94004dfa2945b48b99475ea839686f362682d04251cfcf24d7436a4310c6dc7' };
+// Fixed-schema receipt-free output with canonical list bounds; no Git history is needed in CI.
+const legacy = { runtime: '28c9adad61e7e605b886d3416ecf1c22cc80bc319da963c1b1b1aa9fcfe56d93', manifest: '321e416643cc714c5370f4145d53f479ddfa1dc74a46da9ad677213299e421e6', digest: 'f94004dfa2945b48b99475ea839686f362682d04251cfcf24d7436a4310c6dc7' };
 const schema = `export default schema({notes:table({id:id(),title:text()},{scope:owner(),client:{read:['id','title'],create:['title']}})});`;
 test('local optional receipt handles do not advertise capable runtime or manifest', async t => {
  const root=mkdtempSync(join(tmpdir(),'cli-idem-types-'));t.after(()=>rmSync(root,{recursive:true,force:true}));

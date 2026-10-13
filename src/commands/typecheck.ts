@@ -172,8 +172,8 @@ export function reportDeployCheck(result: DeployCheckResult): void {
 const WATCH_DEBOUNCE_MS = 300;
 
 /**
- * Run `check` now and again after each burst of saved edits. One run at a
- * time: edits during a run trigger exactly one more run afterwards.
+ * Run `check` once file watching is ready, then after each burst of saved edits.
+ * One run at a time: edits during a run trigger exactly one more run afterwards.
  */
 function watchAndRun(dir: string, check: () => Promise<unknown>): void {
   let timer: ReturnType<typeof setTimeout> | null = null;
@@ -205,9 +205,8 @@ function watchAndRun(dir: string, check: () => Promise<unknown>): void {
   }).on('all', () => {
     if (timer) clearTimeout(timer);
     timer = setTimeout(() => void run(), WATCH_DEBOUNCE_MS);
-  });
+  }).on('ready', () => void run());
   // Ctrl-C exits through process.exit so a check in flight removes its files.
   process.once('SIGINT', () => process.exit(130));
   info(dim(`Watching ${dir} — checks re-run after each save while this command runs. Ctrl-C to stop.`));
-  void run();
 }

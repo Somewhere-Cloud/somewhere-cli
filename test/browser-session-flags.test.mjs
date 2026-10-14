@@ -4,7 +4,7 @@
 // what they found.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildBrowserBody, resolveAuthUser } from '../dist/commands/browser.js';
+import { buildBrowserBody, buildBrowserCloseBody, resolveAuthUser } from '../dist/commands/browser.js';
 import { cronPolicyLine } from '../dist/commands/cron.js';
 import { choosePreviewCandidate } from '../dist/commands/dev.js';
 
@@ -93,4 +93,16 @@ test('preview link picks the only open preview, a named one, or explains', () =>
   assert.deepEqual(choosePreviewCandidate({ ok: true, data: { preview_candidates: [status.preview_candidates[0]] } }), { draftId: 'draft_a', candidateReleaseId: 'rel_a' });
   assert.throws(() => choosePreviewCandidate({ preview_candidates: [] }), /No open preview .*somewhere preview --once/);
   assert.throws(() => choosePreviewCandidate(status, 'draft_z'), /No open preview has preview_session_id draft_z/);
+});
+
+// tsk_7f43965c: hosted sessions belong to the project they were opened for, so
+// --close names the same project a run would use.
+test('--close with --project closes that project\'s session', () => {
+  assert.deepEqual(buildBrowserCloseBody('bob', 'crew', 'linked-app'), { project_id: 'crew', session_id: 'bob', close: true });
+});
+test('--close in a linked directory closes the linked project\'s session', () => {
+  assert.deepEqual(buildBrowserCloseBody('bob', undefined, 'linked-app'), { project_id: 'linked-app', session_id: 'bob', close: true });
+});
+test('--close with no project closes the session opened without a project (session_id alone)', () => {
+  assert.deepEqual(buildBrowserCloseBody('bob'), { session_id: 'bob' });
 });

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import vm from 'node:vm';
 
 import {
   normalizeBrowserActions,
@@ -31,7 +32,7 @@ function fakeSession(mode = 'success') {
           return { exceptionDetails: { text: 'upload target must be an <input type="file">' } };
         }
         if (expression.includes('querySelectorAll')) {
-          return { result: { value: { count: 0, text: '', visible: false } } };
+          return { result: { value: { count: 0, text: '', textMatched: false, visible: false } } };
         }
         if (expression === 'document.title') {
           return { exceptionDetails: { text: 'ReferenceError: missing value' } };
@@ -41,7 +42,7 @@ function fakeSession(mode = 'success') {
         }
       }
       if (expression.includes('querySelectorAll')) {
-        return { result: { value: { count: 1, text: 'Saved', visible: true } } };
+        return { result: { value: { count: 1, text: 'Saved', textMatched: true, visible: true } } };
       }
       if (expression.includes('new File')) {
         return { result: { value: { name: 'shot.png', type: 'image/png', size: 7 } } };
@@ -70,6 +71,38 @@ test('shared JSON action contract accepts every step type in order', () => {
   ]);
   assert.equal(result.ok, true);
   assert.equal(result.actions.length, 9);
+});
+
+test('local text expect checks every matching DOM node without CSS-transformed casing', async () => {
+  const nodes = [
+    { innerText: 'FREEZE THE LAUNCH', textContent: 'Freeze the launch Hidden child', value: '', closest: () => null, getBoundingClientRect: () => ({ width: 10, height: 10 }) },
+    { innerText: 'RECORD DEMO VIDEO', textContent: 'Record demo video', value: '', closest: () => null, getBoundingClientRect: () => ({ width: 10, height: 10 }) },
+    { innerText: 'HIDDEN ONLY', textContent: 'Hidden only', value: '', closest: () => ({}), getBoundingClientRect: () => ({ width: 0, height: 0 }) },
+  ];
+  const session = {
+    async send(_method, params) {
+      return { result: { value: vm.runInNewContext(params.expression, {
+        document: { querySelectorAll: () => nodes },
+        getComputedStyle: () => ({ display: 'block', visibility: 'visible' }),
+      }) } };
+    },
+  };
+  for (const text of ['Freeze the launch', 'Record demo video']) {
+    const result = await executeLocalAction(session, { expect: { selector: '.card', text, count: 3 } }, Date.now() + 1000);
+    assert.equal(result.ok, true, result.error);
+  }
+  const missing = await executeLocalAction(session, { expect: { selector: '.card', text: 'Not present' } }, Date.now() + 1000);
+  assert.equal(missing.ok, false);
+  assert.match(missing.error, /text did not contain "Not present"/);
+  const hidden = await executeLocalAction(session, { expect: { selector: '.card', text: 'Hidden only' } }, Date.now() + 1000);
+  assert.equal(hidden.ok, false);
+  assert.match(hidden.error, /text did not contain "Hidden only"/);
+  const hiddenChild = await executeLocalAction(session, { expect: { selector: '.card', text: 'Hidden child' } }, Date.now() + 1000);
+  assert.equal(hiddenChild.ok, false);
+  nodes[0].textContent = 'undefined';
+  nodes[0].innerText = 'undefined';
+  const countOnly = await executeLocalAction(session, { expect: { selector: '.card', count: 3 } }, Date.now() + 1000);
+  assert.equal(countOnly.ok, true, countOnly.error);
 });
 
 test('shared JSON action contract rejects missing selectors and invalid eval', () => {

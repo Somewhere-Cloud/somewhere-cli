@@ -296,24 +296,36 @@ export async function executeLocalAction(
       const state = await evaluate(session, `(() => {
         const nodes = Array.from(document.querySelectorAll(${JSON.stringify(action.expect.selector)}));
         const el = nodes[0];
-        if (!el) return { count: nodes.length, text: '', value: '', visible: false };
-        const style = getComputedStyle(el);
-        const rect = el.getBoundingClientRect();
+        if (!el) return { count: nodes.length, text: '', textMatched: false, value: '', visible: false };
+        const visibleOf = (node) => {
+          const style = getComputedStyle(node);
+          const rect = node.getBoundingClientRect();
+          return !node.closest('[hidden]') && !node.closest('[aria-hidden="true"]')
+            && style.display !== 'none' && style.visibility !== 'hidden'
+            && !(rect.width === 0 && rect.height === 0);
+        };
+        const matchesText = (node) => {
+          if (!visibleOf(node)) return false;
+          const expected = ${JSON.stringify(action.expect.text)};
+          if (expected === undefined) return false;
+          const raw = String(node.textContent || node.value || '');
+          const rendered = String(node.innerText || node.value || '');
+          return raw.includes(expected) && rendered.toLocaleLowerCase().includes(expected.toLocaleLowerCase());
+        };
         return {
           count: nodes.length,
-          text: String(el.innerText || el.value || el.textContent || ''),
+          text: String(el.textContent || el.value || ''),
+          textMatched: nodes.some(matchesText),
           value: 'value' in el ? String(el.value ?? '') : '',
-          visible: !el.closest('[hidden]') && !el.closest('[aria-hidden="true"]')
-            && style.display !== 'none' && style.visibility !== 'hidden'
-            && !(rect.width === 0 && rect.height === 0),
+          visible: visibleOf(el),
         };
-      })()`) as { count: number; text: string; value: string; visible: boolean };
+      })()`) as { count: number; text: string; textMatched: boolean; value: string; visible: boolean };
       if (action.expect.count !== undefined && state.count !== action.expect.count) {
         throw new Error(`expect failed at "${action.expect.selector}": expected count ${action.expect.count}, got ${state.count}.`);
       }
       if (action.expect.text !== undefined) {
         if (state.count === 0) throw new Error(`expect failed at "${action.expect.selector}": selector did not match any element.`);
-        if (!state.text.includes(action.expect.text)) {
+        if (!state.textMatched) {
           throw new Error(`expect failed at "${action.expect.selector}": text did not contain "${action.expect.text}". Got: "${state.text.trim().slice(0, 120)}".`);
         }
       }

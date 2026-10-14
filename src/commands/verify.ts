@@ -971,7 +971,9 @@ export function createVerifyJourneyRun(
     const remaining = budgetEnd - now();
     if (remaining <= 0) return { error: 'cleanup budget spent' };
     try {
-      const result = await client.call<{ closed?: boolean }>('POST', '/browser/test', { session_id: sessions[actor] }, undefined, { timeoutMs: remaining });
+      const result = await client.call<{ closed?: boolean }>('POST', '/browser/test', {
+        project_id: target.project_id, session_id: sessions[actor], close: true,
+      }, undefined, { timeoutMs: remaining });
       return { closed: result?.closed === true };
     } catch (cause) {
       return { error: cause instanceof CliApiError ? cause.code : cause instanceof Error ? cause.message : String(cause) };
@@ -1159,7 +1161,7 @@ export function createVerifyJourneyRun(
               ...(report.session_expires_at ? { session_expires_at: report.session_expires_at } : {}),
               ...(report.idle_expires_at ? { idle_expires_at: report.idle_expires_at } : {}),
               ...(report.absolute_expires_at ? { absolute_expires_at: report.absolute_expires_at } : {}),
-              close: `somewhere call browser '${JSON.stringify({ session_id: sessionId })}'`,
+              close: `somewhere call browser '${JSON.stringify({ project_id: target.project_id, session_id: sessionId, close: true })}'`,
             });
           }
           segments.push({ ...base, ran: true, passed: false, incomplete: capped, ...(report.session_closed === true ? { session_closed: true as const } : {}), ...(report.final_url ? { final_url: report.final_url } : {}) });

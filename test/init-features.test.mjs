@@ -179,7 +179,8 @@ test('views take props only, and both UI modes share pages, hooks and view signa
   }
   const { dir, result } = styled;
   const uiFiles = [...result.created.filter((path) => path.startsWith('src/ui/'))];
-  assert.equal(uiFiles.length, 7);
+  assert.equal(uiFiles.length, 8);
+  assert.ok(uiFiles.includes('src/ui/MfaStep.tsx'));
   for (const [root, path] of [...uiFiles.map((p) => [dir, p]), ...uiFiles.map((p) => [plain.dir, p])]) {
     const content = readFileSync(join(root, path), 'utf8');
     const imports = [...content.matchAll(/from '([^']+)'/g)].map((m) => m[1]);
@@ -514,4 +515,44 @@ test('--name is the display name and --subdomain the address of the new project'
   assert.equal(linked.status, 1);
   assert.match(linked.stderr + linked.stdout, /--subdomain names a new project/);
   assert.deepEqual(requests, []);
+});
+
+test('MFA continuation is shared by password, magic-link and invitation landings without ticket state', async () => {
+  const ts = (await import('typescript')).default;
+  for (const [features, ui] of [['auth','styled'],['magic-link','headless']]) {
+    const starter = generate(features, ui);
+    assert.match(starter.read('src/pages/SignInPage.tsx'), /form\.mfa\.required/);
+    assert.match(starter.read('src/pages/MagicLinkPage.tsx'), /landing\.status === 'mfa'/);
+    assert.match(starter.read('src/auth/magic-link.ts'), /if \(!mfa\.capture\(reason\)\)/);
+    assert.match(starter.read('src/auth/magic-link.ts'), /window\.location\.replace\(target\.current\)/);
+    assert.doesNotMatch(starter.read('src/auth/useMfaContinuation.ts') + starter.read('src/ui/MfaStep.tsx'), /mfa_token|localStorage|sessionStorage|fetch\(|console\./);
+    assert.match(starter.read('src/ui/MfaStep.tsx'), /autoComplete="one-time-code"/);
+    assert.equal(JSON.parse(starter.read('package.json')).dependencies['@somewhere-tech/sdk'], '0.12.0', 'release dependency remains held for coordination');
+  }
+  const starter = generate('auth','headless');
+  let state = [], cursor = 0, calls = [], done = 0;
+  class AuthError extends Error { constructor(code) { super(code); this.code = code; } }
+  const auth = { async completeMfa(input) { calls.push(input); if (input.code === 'wrong') throw new Error('Incorrect code.'); } };
+  globalThis.__mfaFixture = {
+    AuthError, useAuth: () => auth,
+    useState(initial) { const slot = cursor++; if (!(slot in state)) state[slot] = initial; return [state[slot], value => { state[slot] = value; }]; },
+    authErrorMessage: reason => reason.message,
+  };
+  try {
+    const emitted = ts.transpileModule(starter.read('src/auth/useMfaContinuation.ts'), { compilerOptions: { module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022 } }).outputText
+      .replace(/^import .*;$/gm, '') + '\n';
+    const fixturePath = join(starter.dir,'mfa-fixture.mjs');
+    writeFileSync(fixturePath, 'const { useState, AuthError, useAuth, authErrorMessage } = globalThis.__mfaFixture;\n' + emitted);
+    const { useMfaContinuation } = await import(fixturePath);
+    const render = () => { cursor=0; return useMfaContinuation(() => {done++;}); };
+    let form = render();
+    assert.equal(form.capture(new Error('ordinary failure')), false);
+    assert.equal(form.capture(new AuthError('MFA_REQUIRED')), true);
+    form = render(); assert.equal(form.required,true);
+    form.setCode('wrong'); form=render(); await form.submit();
+    form=render(); assert.equal(form.error,'Incorrect code.'); assert.equal(form.required,true); assert.equal(form.code,''); assert.equal(done,0);
+    form.setCode(' backup-code '); form=render(); await form.submit();
+    form=render(); assert.equal(form.required,false); assert.equal(form.code,''); assert.equal(done,1);
+    assert.deepEqual(calls,[{code:'wrong'},{code:'backup-code'}]);
+  } finally { delete globalThis.__mfaFixture; }
 });

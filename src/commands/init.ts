@@ -6,14 +6,13 @@ import {
   getToken,
   loadConfig,
   hasGlobalMcpConfig,
-  loadProjectConfig,
   saveGlobalMcpConfig,
   saveMcpConfig,
+  loadProjectConfig,
   saveProjectConfig,
   sourceBaseState,
 } from '../lib/config.js';
 import { installInitDependencies } from '../lib/init-install.js';
-import { formatAgentHookInstall, installAgentHooks, type AgentHookInstallResult } from '../lib/agent-hooks.js';
 import { basename, join } from 'node:path';
 import { existsSync } from 'node:fs';
 import {
@@ -185,10 +184,9 @@ export function registerInit(program: Command) {
         try {
           const scaffold = writeInitScaffold(dir, scaffoldFiles(localName));
           const skills = writeInitSkills(dir);
-          const hooks = writeInitHooks(dir, Boolean(opts.json));
           const next = ['somewhere deploy', 'somewhere docs start'];
           if (opts.json) {
-            printJson({ local: true, linked: false, name: localName, files: scaffold.created, dependencies_installed: false, skills, hooks,
+            printJson({ local: true, linked: false, name: localName, files: scaffold.created, dependencies_installed: false, skills,
               ...(plan ? { selection: plan.selection, extension_points: extensionPoints(plan.selection) } : {}), next });
           } else {
             success(`Local starter written (${scaffold.created.length} files); no account or project was created.`);
@@ -225,7 +223,7 @@ export function registerInit(program: Command) {
 
       if (opts.link) {
         try {
-          await linkExisting(client, dir, opts.project, Boolean(opts.json));
+          await linkExisting(client, dir, opts.project, Boolean(opts.json), false);
         } catch (err) {
           error(err instanceof Error ? err.message : String(err), err);
           process.exit(1);
@@ -280,22 +278,16 @@ export function registerInit(program: Command) {
             subdomain: project.subdomain ?? subdomain,
             source_base: sourceBaseState(project.id, null),
           });
-          saveMcpConfig(dir);
-          if (!hasGlobalMcpConfig()) saveGlobalMcpConfig();
-          let hooks: InitHooksResult | undefined;
           if (shouldScaffold) {
             writeInitScaffold(dir, scaffoldFiles(project.name));
             writeInitSkills(dir);
-            hooks = writeInitHooks(dir, true);
             await installInitDependencies({ cwd: dir, quiet: true });
           } else if (opts.bare) {
             writeBareGuide(dir);
             writeInitSkills(dir);
-            hooks = writeInitHooks(dir, true);
           }
           printJson({ ...project,
             ...(plan ? { selection: plan.selection, extension_points: extensionPoints(plan.selection) } : {}),
-            ...(hooks ? { hooks } : {}),
           });
           return;
         }
@@ -309,13 +301,10 @@ export function registerInit(program: Command) {
         });
         success('.somewhere.json written');
 
-        saveMcpConfig(dir);
-
         if (shouldScaffold) {
           const scaffold = writeInitScaffold(dir, scaffoldFiles(project.name));
           success(`Full-stack starter written (${scaffold.created.length} files)`);
           reportSkills(writeInitSkills(dir));
-          writeInitHooks(dir);
           if (template !== 'minimal' || plan) {
             const selection = plan?.selection ?? DEFAULT_AUTH_SELECTION;
             info(`Modules: ${describeSelection(selection)}`);
@@ -328,16 +317,10 @@ export function registerInit(program: Command) {
           info('Bare project: no starter source or dependencies were added.');
           const guide = writeBareGuide(dir);
           reportSkills(writeInitSkills(dir));
-          writeInitHooks(dir);
           if (guide.created.length) success(`Agent workflow guide written (${guide.created.join(', ')})`);
           if (guide.kept.length) info(`Existing ${guide.kept.join(', ')} kept unchanged.`);
         } else {
           info('Existing source preserved; starter files were not added.');
-        }
-
-        if (!hasGlobalMcpConfig()) {
-          saveGlobalMcpConfig();
-          success('~/.claude.json updated — Claude Code MCP connected');
         }
 
         console.log('');
@@ -438,6 +421,7 @@ export async function linkExisting(
   dir: string,
   projectRef?: string,
   json = false,
+  configureMcp = true,
 ) {
   const spinner = json ? null : ora('Fetching projects...').start();
   const result = await client.call<{
@@ -487,11 +471,13 @@ export async function linkExisting(
   });
   if (!json) success(`.somewhere.json linked to ${teal(project.name)}`);
 
-  saveMcpConfig(dir);
-
-  if (!hasGlobalMcpConfig()) {
-    saveGlobalMcpConfig();
-    if (!json) success('~/.claude.json updated — Claude Code MCP connected');
+  // Standalone link keeps its explicit setup behavior; init never installs agent config.
+  if (configureMcp) {
+    saveMcpConfig(dir);
+    if (!hasGlobalMcpConfig()) {
+      saveGlobalMcpConfig();
+      if (!json) success('~/.claude.json updated — Claude Code MCP connected');
+    }
   }
 
   if (json) {
@@ -510,37 +496,6 @@ export function writeInitSkills(dir: string): { version: string } | { kept: stri
     existsSync(join(dir, SKILLS_DIR, name)) || existsSync(join(dir, CLAUDE_SKILLS_DIR, name)));
   if (taken.length) return { kept: `Project skills ${taken.join(', ')} already exist` };
   return installSkills(dir, BUNDLED_SKILLS_PACK, { cli: CLI_VERSION, source: 'bundled' });
-}
-
-const INIT_AGENT_HOSTS = ['claude-code', 'codex'] as const;
-const INIT_HOOK_NOTES = [
-  'Cursor can reuse the Claude Code hook in a trusted workspace when Include Third-Party Plugins, Skills, and Other Configs is enabled in Settings → Agents → Third-Party Imports. No separate Cursor hook was added.',
-  'These hooks check agent file-edit tools. For shell writes or edits outside the agent, run somewhere typecheck --deploy --watch.',
-];
-
-interface InitHooksResult {
-  results: AgentHookInstallResult[];
-  notes: string[];
-  error?: string;
-}
-
-/** Optional host setup cannot turn a completed project creation into a failure. */
-function writeInitHooks(dir: string, json = false): InitHooksResult {
-  try {
-    const results = installAgentHooks({ projectDir: dir, hosts: INIT_AGENT_HOSTS });
-    if (!json) {
-      for (const [index, line] of formatAgentHookInstall(results, dir).entries()) {
-        if (results[index].status === 'refused') warn(line);
-        else info(line);
-      }
-    }
-    if (!json) for (const note of INIT_HOOK_NOTES) info(note);
-    return { results, notes: INIT_HOOK_NOTES };
-  } catch (failure) {
-    const message = failure instanceof Error ? failure.message : String(failure);
-    if (!json) warn(`Agent hook setup did not complete: ${message}. Project files were kept. Run somewhere hooks install --host claude-code codex to retry.`);
-    return { results: [], notes: INIT_HOOK_NOTES, error: message };
-  }
 }
 
 function reportSkills(result: ReturnType<typeof writeInitSkills>): void {

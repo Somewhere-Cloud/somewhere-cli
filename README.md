@@ -22,14 +22,14 @@ name works too: `npx @somewhere-tech/cli deploy`.
 
 ```bash
 somewhere login          # OAuth in browser, stores API key
-somewhere init           # Create project, write .somewhere.json + .mcp.json
+somewhere init           # Create project, write .somewhere.json
 somewhere dev            # Serve your app on localhost, compiled by the platform
 somewhere deploy         # Deploy current directory
 somewhere logs           # Stream logs
 somewhere open           # Open in browser
 ```
 
-The CLI needs no MCP setup: every command works from the shell, and `somewhere run <script>` executes code against your live project. `somewhere init` also writes a `.mcp.json` so supporting hosts can additionally connect the same tools in context — optional, not required. Just start coding.
+The CLI needs no MCP setup: every command works from the shell, and `somewhere run <script>` executes code against your live project. `somewhere init` keeps AGENTS.md and useful skills, but does not install agent hooks or command-running MCP configuration. Existing agent settings stay unchanged. Run `somewhere typecheck`, `somewhere typecheck --deploy`, or `somewhere typecheck --deploy --watch` explicitly when you want local checks. Use `somewhere mcp install <host>` when you explicitly want MCP tools connected to an agent host.
 
 ## Commands
 
@@ -39,7 +39,7 @@ The CLI needs no MCP setup: every command works from the shell, and `somewhere r
 | `somewhere auth login` | Alias of `somewhere login` |
 | `somewhere logout` | Clear stored credentials |
 | `somewhere whoami` | Show current user, plan, project count |
-| `somewhere init` | Create project + write `.somewhere.json` + `.mcp.json` |
+| `somewhere init` | Create project + write `.somewhere.json` |
 | `somewhere init --link` | Link to an existing project |
 | `somewhere projects` | List all projects with status |
 | `somewhere project create <name>` | Create a new project |

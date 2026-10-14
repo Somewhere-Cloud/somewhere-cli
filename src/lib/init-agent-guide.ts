@@ -10,16 +10,16 @@ Sign-in is included except in minimal/bare. See README for the file map. \`init 
 \`npx @somewhere-tech/cli deploy\` publishes a temporary app and prints its live
 URL, claim URL and expiry. Login is needed for account-owned operations,
 the email test inbox and cron. On a hosted VM, \`somewhere login\` uses browser approval and keeps you signed in.
-For a reference, use \`somewhere docs <topic> --section <id>\` (MCP: \`docs({ topic })\`, \`catalog\`).
+Start auth/data/cron with \`somewhere docs recipe-signed-in-app --full\`; or read one docs topic/section.
 
-After edits, run \`somewhere typecheck\`. When ready to publish:
+After edits: \`somewhere typecheck\` and focused local/browser tests. Publish:
 1. \`somewhere deploy\` (do not build first). Deploy
    checks compilation, schema and secrets, refusing a blank page
    before going live; \`somewhere deploy-check\` runs them without publishing
    (diagnosis, review, \`--run /api/x\`).
-2. \`somewhere verify\` — desktop and phone screenshots, console and network
-   health; \`somewhere verify --flow flow.json\` fills and clicks. Several users:
-   \`actors\` + \`journey\` (\`somewhere docs browser\`).
+2. Run \`somewhere verify\` once on the final deployed journey (or
+   \`--flow flow.json\`); rerun after relevant fixes. Several users: \`actors\` +
+   \`journey\` (\`somewhere docs browser\`).
 3. \`somewhere browser\` inspects a page; \`somewhere logs --tail 10\`, then
    \`somewhere errors\`: read the failure first.
 4. Email: sign up as \`<name>@<subdomain>.test.somewhere.site\`, then

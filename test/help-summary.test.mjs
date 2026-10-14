@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { Command } from 'commander';
 import { helpSummary } from '../dist/lib/help-summary.js';
@@ -46,7 +47,7 @@ test('every registered command, alias, argument and full command help survives r
 test('actual root help remains successful with JSON mode and no credentials', () => {
   const home = mkdtempSync(join(tmpdir(), 'sw-help-summary-'));
   const env = { ...process.env, HOME: home, SOMEWHERE_CONFIG_DIR: join(home, '.somewhere'), CI: '1', SOMEWHERE_NO_NOTIFICATIONS: '1' };
-  const run = (args) => spawnSync(process.execPath, [new URL('../dist/index.js', import.meta.url).pathname, ...args], { encoding: 'utf8', env });
+  const run = (args) => spawnSync(process.execPath, [fileURLToPath(new URL('../dist/index.js', import.meta.url)), ...args], { encoding: 'utf8', env });
   const plain = run(['--help']);
   const json = run(['--help', '--json']);
   assert.equal(plain.status, 0, plain.stderr);

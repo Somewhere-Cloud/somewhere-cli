@@ -21,7 +21,7 @@ const PACKAGE_JSON = `{
     "typecheck": "somewhere typecheck"
   },
   "dependencies": {
-    "@somewhere-tech/sdk": "0.12.0",
+    "@somewhere-tech/sdk": "0.12.1",
     "react": "19.2.7",
     "react-dom": "19.2.7"
   },
@@ -93,7 +93,18 @@ export type AuthState =
 
 export type CredentialsMode = 'sign-in' | 'sign-up';
 
+export interface MfaContinuation {
+  required: boolean;
+  code: string;
+  pending: boolean;
+  error: string | null;
+  setCode(value: string): void;
+  submit(): Promise<void>;
+  capture(reason: unknown): boolean;
+}
+
 export interface CredentialsForm {
+  mfa: MfaContinuation;
   mode: CredentialsMode;
   email: string;
   password: string;
@@ -159,6 +170,7 @@ const AUTH_HOOKS = `import { useRef, useState } from 'react';
 import { useAuth, useAuthState as useSdkAuthState } from '@somewhere-tech/sdk/react';
 import type { AuthState, CredentialsForm, CredentialsMode, SignOutAction, UnconfirmedSignOut, User } from '../../types/auth';
 import { authErrorMessage, PASSWORD_MIN_LENGTH } from '../services/auth';
+import { useMfaContinuation } from './useMfaContinuation';
 
 // State and actions over the SDK's session status; no session store here.
 // Only an account the server confirmed is signed in: a cached user waits for
@@ -202,6 +214,7 @@ export function useCredentialsForm(initialMode: CredentialsMode = 'sign-in'): Cr
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const mfa = useMfaContinuation();
   const passwordReady = mode === 'sign-up' ? password.length >= PASSWORD_MIN_LENGTH : password.length > 0;
   const canSubmit = !pending && email.trim() !== '' && passwordReady;
 
@@ -214,12 +227,14 @@ export function useCredentialsForm(initialMode: CredentialsMode = 'sign-in'): Cr
       await (mode === 'sign-in' ? auth.signIn(credentials) : auth.signUp(credentials));
       // The provider now has the user; App replaces the sign-in page.
     } catch (reason: unknown) {
-      setError(authErrorMessage(reason));
+      if (!mfa.capture(reason)) setError(authErrorMessage(reason));
+      setPassword('');
       setPending(false);
     }
   }
 
   return {
+    mfa,
     mode,
     email,
     password,
@@ -1557,14 +1572,75 @@ export function AssistantPanel({ assistant }: { assistant: AssistantController }
 // ---------------------------------------------------------------------- pages
 // One set of pages for both UI modes: hooks in, typed values and callbacks out.
 
+const MFA_HOOK = `import { useState } from 'react';
+import { AuthError } from '@somewhere-tech/sdk/auth';
+import { useAuth } from '@somewhere-tech/sdk/react';
+import type { MfaContinuation } from '../../types/auth';
+import { authErrorMessage } from '../services/auth';
+
+export function useMfaContinuation(onDone?: () => void): MfaContinuation {
+  const auth = useAuth();
+  const [required, setRequired] = useState(false);
+  const [code, setCode] = useState('');
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  return {
+    required, code, pending, error, setCode,
+    capture(reason) {
+      if (!(reason instanceof AuthError) || reason.code !== 'MFA_REQUIRED') return false;
+      setRequired(true);
+      setCode('');
+      setError(null);
+      return true;
+    },
+    async submit() {
+      if (pending || !code.trim()) return;
+      setPending(true);
+      setError(null);
+      try {
+        await auth.completeMfa({ code: code.trim() });
+        setRequired(false);
+        onDone?.();
+      } catch (reason: unknown) {
+        setError(authErrorMessage(reason));
+      } finally {
+        setCode('');
+        setPending(false);
+      }
+    },
+  };
+}
+`;
+
+const MFA_VIEW = `import type { MfaContinuation } from '../../types/auth';
+
+export function MfaStep({ continuation }: { continuation: MfaContinuation }) {
+  return (
+    <form className="auth-card" onSubmit={(event) => { event.preventDefault(); void continuation.submit(); }}>
+      <h1>Finish signing in</h1>
+      <label className="auth-field">Authenticator or backup code
+        <input autoComplete="one-time-code" autoFocus value={continuation.code}
+          disabled={continuation.pending} onChange={(event) => continuation.setCode(event.target.value)} />
+      </label>
+      {continuation.error ? <p role="alert">{continuation.error}</p> : null}
+      <button type="submit" disabled={continuation.pending || !continuation.code.trim()}>
+        {continuation.pending ? 'Signing in…' : 'Finish signing in'}
+      </button>
+    </form>
+  );
+}
+`;
+
 const SIGN_IN_PAGE = `import { useCredentialsForm, useUnconfirmedSignOut } from '../auth/hooks';
 import { APP_NAME } from '../config';
 import { AuthCard } from '../ui/AuthCard';
+import { MfaStep } from '../ui/MfaStep';
 import { SignOutUnconfirmed } from '../ui/feedback';
 
 export function SignInPage() {
   const form = useCredentialsForm();
   const unconfirmed = useUnconfirmedSignOut();
+  if (form.mfa.required) return <MfaStep continuation={form.mfa} />;
   return (
     <>
       {unconfirmed ? <SignOutUnconfirmed pending={unconfirmed.pending} onRetry={unconfirmed.retry} /> : null}
@@ -2297,7 +2373,9 @@ const ASSISTANT_CSS = `/* Assistant example: delete with src/ui/AssistantPanel.t
 
 // ----------------------------------------------------------------- magic-link
 
-const MAGIC_LINK_TYPES = `/** The "email me a sign-in link" form on the sign-in page. */
+const MAGIC_LINK_TYPES = `import type { MfaContinuation } from './auth';
+
+/** The "email me a sign-in link" form on the sign-in page. */
 export interface MagicLinkRequest {
   email: string;
   pending: boolean;
@@ -2312,10 +2390,12 @@ export interface MagicLinkRequest {
 /**
  * The /auth/magic page the emailed link opens. verifying: the one-time token
  * is being exchanged for the session. failed: it was missing, already used,
- * expired or revoked. On success the page leaves, so there is no third state.
+ * expired or revoked. mfa: waiting for an authenticator or backup code.
+ * On success the page leaves.
  */
 export type MagicLinkLanding =
   | { status: 'verifying' }
+  | { status: 'mfa'; continuation: MfaContinuation }
   | { status: 'failed'; error: string };
 `;
 
@@ -2323,6 +2403,7 @@ const MAGIC_LINK_HOOKS = `import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '@somewhere-tech/sdk/react';
 import type { MagicLinkLanding, MagicLinkRequest } from '../../types/magic-link';
 import { authErrorMessage } from '../services/auth';
+import { useMfaContinuation } from './useMfaContinuation';
 
 // Sign-in links. The packaged route api/auth/[...path].ts sends the email
 // (POST /api/auth/magic-link) and redeems it (/api/auth/magic-link/verify).
@@ -2385,12 +2466,14 @@ export function useMagicLinkLanding(): MagicLinkLanding {
   const auth = useAuth();
   const [error, setError] = useState<string | null>(null);
   const started = useRef(false);
+  const target = useRef('/');
+  const mfa = useMfaContinuation(() => window.location.replace(target.current));
 
   useEffect(() => {
     if (started.current) return; // the token works once; never verify it twice
     started.current = true;
     const token = new URLSearchParams(window.location.search).get('token');
-    const target = landingTarget(window.location.search, window.location.origin);
+    target.current = landingTarget(window.location.search, window.location.origin);
     if (!token) {
       setError('This sign-in link is incomplete. Request a new one.');
       return;
@@ -2399,20 +2482,25 @@ export function useMagicLinkLanding(): MagicLinkLanding {
     window.history.replaceState(null, '', window.location.pathname);
     auth.verifyMagicLink({ token })
       // A full load: the app starts again with the new session.
-      .then(() => window.location.replace(target))
-      .catch((reason: unknown) => setError(authErrorMessage(reason)));
+      .then(() => window.location.replace(target.current))
+      .catch((reason: unknown) => {
+        if (!mfa.capture(reason)) setError(authErrorMessage(reason));
+      });
   }, [auth]);
 
+  if (mfa.required) return { status: 'mfa', continuation: mfa };
   return error === null ? { status: 'verifying' } : { status: 'failed', error };
 }
 `;
 
 const MAGIC_LINK_PAGE = `import { useMagicLinkLanding } from '../auth/magic-link';
+import { MfaStep } from '../ui/MfaStep';
 import { MagicLinkStatus } from '../ui/MagicLink';
 
 // /auth/magic: the page the emailed sign-in or invitation link opens.
 export function MagicLinkPage() {
   const landing = useMagicLinkLanding();
+  if (landing.status === 'mfa') return <MfaStep continuation={landing.continuation} />;
   return <MagicLinkStatus landing={landing} />;
 }
 `;
@@ -2421,6 +2509,7 @@ const MAGIC_SIGN_IN_PAGE = `import { useCredentialsForm, useUnconfirmedSignOut }
 import { useMagicLinkRequest } from '../auth/magic-link';
 import { APP_NAME } from '../config';
 import { AuthCard } from '../ui/AuthCard';
+import { MfaStep } from '../ui/MfaStep';
 import { SignOutUnconfirmed } from '../ui/feedback';
 import { MagicLinkForm } from '../ui/MagicLink';
 
@@ -2428,6 +2517,7 @@ export function SignInPage() {
   const form = useCredentialsForm();
   const magicLink = useMagicLinkRequest();
   const unconfirmed = useUnconfirmedSignOut();
+  if (form.mfa.required) return <MfaStep continuation={form.mfa} />;
   return (
     <>
       {unconfirmed ? <SignOutUnconfirmed pending={unconfirmed.pending} onRetry={unconfirmed.retry} /> : null}
@@ -2463,7 +2553,7 @@ export function MagicLinkForm({ request }: { request: MagicLinkRequest }) {
   );
 }
 
-export function MagicLinkStatus({ landing }: { landing: MagicLinkLanding }) {
+export function MagicLinkStatus({ landing }: { landing: Exclude<MagicLinkLanding, { status: 'mfa' }> }) {
   if (landing.status === 'verifying') {
     return (
       <main className="loading" aria-busy="true">
@@ -2505,7 +2595,7 @@ export function MagicLinkForm({ request }: { request: MagicLinkRequest }) {
   );
 }
 
-export function MagicLinkStatus({ landing }: { landing: MagicLinkLanding }) {
+export function MagicLinkStatus({ landing }: { landing: Exclude<MagicLinkLanding, { status: 'mfa' }> }) {
   if (landing.status === 'verifying') return <main aria-busy="true"><p role="status">Signing you in…</p></main>;
   return (
     <main>
@@ -2917,6 +3007,8 @@ export function createFeatureTemplate(
     { path: 'src/routes.ts', content: ROUTES },
     { path: 'src/services/auth.ts', content: AUTH_SERVICE },
     { path: 'src/auth/hooks.ts', content: AUTH_HOOKS },
+    { path: 'src/auth/useMfaContinuation.ts', content: MFA_HOOK },
+    { path: 'src/ui/MfaStep.tsx', content: MFA_VIEW },
     { path: 'src/pages/SignInPage.tsx', content: magicLink ? MAGIC_SIGN_IN_PAGE : SIGN_IN_PAGE },
     { path: 'src/pages/SignedInLayout.tsx', content: signedInLayout() },
     { path: 'src/auth/useEmailVerification.ts', content: VERIFY_EMAIL_HOOK },

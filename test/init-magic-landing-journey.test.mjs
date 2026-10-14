@@ -112,11 +112,19 @@ async function prepareStarter(ui) {
   const service = transpile(readFileSync(join(dir, 'src/services/auth.ts'), 'utf8'))
     .replace("'@somewhere-tech/sdk/auth'", JSON.stringify(pathToFileURL(sdkAuth).href));
   writeFileSync(join(out, 'services-auth.mjs'), service);
+  const mfa = transpile(readFileSync(join(dir, 'src/auth/useMfaContinuation.ts'), 'utf8'))
+    .replace("from 'react'", "from './react.mjs'")
+    .replace("from '@somewhere-tech/sdk/react'", "from './sdk-react.mjs'")
+    .replace("'@somewhere-tech/sdk/auth'", JSON.stringify(pathToFileURL(sdkAuth).href))
+    .replace("from '../services/auth'", "from './services-auth.mjs'");
+  assert.doesNotMatch(mfa, /from '(react|@somewhere-tech\/sdk\/react|@somewhere-tech\/sdk\/auth|\.\.\/services\/auth)'/);
+  writeFileSync(join(out, 'useMfaContinuation.mjs'), mfa);
   const landing = transpile(readFileSync(join(dir, 'src/auth/magic-link.ts'), 'utf8'))
     .replace("from 'react'", "from './react.mjs'")
     .replace("from '@somewhere-tech/sdk/react'", "from './sdk-react.mjs'")
-    .replace("from '../services/auth'", "from './services-auth.mjs'");
-  assert.doesNotMatch(landing, /from '(react|@somewhere-tech\/sdk\/react|\.\.\/services\/auth)'/);
+    .replace("from '../services/auth'", "from './services-auth.mjs'")
+    .replace("from './useMfaContinuation'", "from './useMfaContinuation.mjs'");
+  assert.doesNotMatch(landing, /from '(react|@somewhere-tech\/sdk\/react|\.\.\/services\/auth|\.\/useMfaContinuation)'/);
   writeFileSync(join(out, 'magic-link.mjs'), landing);
   return { dir, out };
 }

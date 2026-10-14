@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { spawn } from 'node:child_process';
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -684,10 +684,8 @@ test('init creates the green starter, --bare keeps only the workflow guide, and 
     assert.equal(created.status, 0, `stdout:\n${created.stdout}\nstderr:\n${created.stderr}`);
     const { hooks: createdHooks, ...createdProject } = JSON.parse(created.stdout);
     assert.deepEqual(createdProject, project);
-    assert.deepEqual(createdHooks.results.map(({ host, status }) => ({ host, status })), [
-      { host: 'claude-code', status: 'added' },
-      { host: 'codex', status: 'added' },
-    ]);
+    assert.equal(createdHooks, undefined);
+    for (const file of ['.claude/settings.json', '.codex/hooks.json', '.mcp.json']) assert.equal(existsSync(join(empty, file)), false);
     assert.match(readFileSync(join(empty, 'src/auth/hooks.ts'), 'utf8'), /useAuthState as useSdkAuthState/);
     assert.match(readFileSync(join(empty, 'src/config.ts'), 'utf8'), /APP_NAME = "Scaffold App"/);
     assert.throws(() => readFileSync(join(empty, 'db/schema.ts')), /ENOENT/, 'private data is opt-in');
@@ -729,10 +727,8 @@ test('init creates the green starter, --bare keeps only the workflow guide, and 
     assert.equal(bareResult.status, 0, `stdout:\n${bareResult.stdout}\nstderr:\n${bareResult.stderr}`);
     const { hooks: bareHooks, ...bareProject } = JSON.parse(bareResult.stdout);
     assert.deepEqual(bareProject, project);
-    assert.deepEqual(bareHooks.results.map(({ host, status }) => ({ host, status })), [
-      { host: 'claude-code', status: 'added' },
-      { host: 'codex', status: 'added' },
-    ]);
+    assert.equal(bareHooks, undefined);
+    for (const file of ['.claude/settings.json', '.codex/hooks.json', '.mcp.json']) assert.equal(existsSync(join(bare, file)), false);
     assert.throws(() => readFileSync(join(bare, 'package.json')), /ENOENT/);
     assert.throws(() => readFileSync(join(bare, 'src/App.tsx')), /ENOENT/);
     assert.match(readFileSync(join(bare, 'AGENTS.md'), 'utf8'), /somewhere verify --flow flow\.json/);

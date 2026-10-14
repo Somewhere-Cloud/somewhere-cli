@@ -181,8 +181,8 @@ function findHandler(entries: unknown[], host: AgentHost, nested: boolean): Json
  * any host config path that resolves (through symlinks) outside the project,
  * and existing settings whose shape would have to be rewritten to merge.
  *
- * Call-site contract (setup): call once with the project root `init` just
- * created, after its files are written; print `formatAgentHookInstall(...)`.
+ * Explicit installation only: call with the requested project root and hosts;
+ * print `formatAgentHookInstall(...)`. Project initialization does not call it.
  */
 export function installAgentHooks(options: {
   projectDir: string;

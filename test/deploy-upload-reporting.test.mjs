@@ -8,7 +8,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { spawn } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -166,5 +166,33 @@ test('deploy-check sends the same upload, names held-back root files truthfully,
     const json = await run(['deploy-check', '--json'], { cwd: dir, env });
     assert.equal(json.status, 0, json.all);
     assert.deepEqual(JSON.parse(json.stdout).warnings, [SERVER_WARNING]);
+  });
+});
+
+
+test('non-TTY deploy prints collection once across all preflight warnings and keeps JSON quiet', async () => {
+  const { HOME, dir } = project();
+  writeFileSync(join(dir, 'server.js'), 'const app = {}; app.listen(3000);\n');
+  symlinkSync(join(dir, 'index.html'), join(dir, 'linked.html'));
+  await withPlatform([SERVER_WARNING], async (apiUrl, requests, deployData) => {
+    const env = { HOME, USERPROFILE: HOME, SOMEWHERE_API_URL: apiUrl };
+    const human = await run(['deploy'], { cwd: dir, env });
+    assert.equal(human.status, 0, human.all);
+    assert.equal(human.stderr.split('Collecting files...').length - 1, 1, human.all);
+    assert.match(human.all, /Not published \(1\): NOTES\.md/);
+    assert.match(human.all, /1 file\(s\) will NOT be uploaded/);
+    assert.match(human.all, /linked\.html — symlink \(not followed\)/);
+    assert.match(human.all, /This looks like a Node server app/);
+    assert.match(human.all, /server source will be publicly readable/);
+    assert.equal(human.all.split(SERVER_WARNING).length - 1, 1);
+    const deploy = requests.find((r) => r.url === '/v1/deploy');
+    assert.ok(!('NOTES.md' in deploy.body.files));
+    assert.ok(!('linked.html' in deploy.body.files));
+    assert.ok('server.js' in deploy.body.files);
+
+    const json = await run(['deploy', '--json'], { cwd: dir, env });
+    assert.equal(json.status, 0, json.all);
+    assert.deepEqual(JSON.parse(json.stdout), deployData);
+    assert.equal(json.stderr, '', 'JSON deploy must not emit progress or preflight warnings');
   });
 });

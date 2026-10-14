@@ -706,7 +706,7 @@ export function registerDeploy(program: Command) {
       if (excluded.length && !opts.json) {
         spinner?.stop();
         printExcludedFiles(excluded, targetDir);
-        spinner?.start();
+        if (process.stderr.isTTY) spinner?.start();
       }
 
       // A deploy replaces the whole project, so a file we skip is DELETED from
@@ -718,7 +718,7 @@ export function registerDeploy(program: Command) {
             `replacement, so any already deployed will be REMOVED from production:`,
         );
         for (const s of skipped) warn(`  ${dim('•')} ${s.path} — ${s.reason}`);
-        spinner?.start();
+        if (process.stderr.isTTY) spinner?.start();
       }
 
       // Node-server pre-flight (tsk_8e8c6bc8) — see detectNodeServerShape.
@@ -735,7 +735,7 @@ export function registerDeploy(program: Command) {
           warn('(each default-exports async (req, sw) and becomes a route).');
           warn('Full quickstart: somewhere docs start');
         }
-        spinner?.start();
+        if (process.stderr.isTTY) spinner?.start();
       }
 
       const totalFiles =

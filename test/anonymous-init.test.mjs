@@ -21,7 +21,7 @@ const server = createServer((req, res) => {
 });
 await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
 test.after(() => { server.close(); rmSync(root, { recursive: true, force: true }); });
-async function run(args, { token, prepare, explicitLink = false } = {}) {
+async function run(args, { token, prepare, explicitLink = false, explicitHook = false } = {}) {
   requests = [];
   const base = mkdtempSync(join(root, 'case-')), cwd = join(base, 'app'), config = join(base, 'config'), bin = join(base, 'bin');
   for (const dir of [cwd, config, bin]) mkdirSync(dir);
@@ -35,7 +35,7 @@ async function run(args, { token, prepare, explicitLink = false } = {}) {
   }
   prepare?.(cwd);
   const output = await new Promise(resolve => {
-    const entry = explicitLink ? ['--input-type=module', '-e', `const { linkExisting } = await import(${JSON.stringify(new URL('../dist/commands/init.js', import.meta.url).href)}); await linkExisting({ call: async () => ({ projects: ${JSON.stringify([project])} }) }, process.cwd(), 'fixture', true);`] : [cli, 'init', ...args];
+    const entry = explicitLink ? ['--input-type=module', '-e', `const { linkExisting } = await import(${JSON.stringify(new URL('../dist/commands/init.js', import.meta.url).href)}); await linkExisting({ call: async () => ({ projects: ${JSON.stringify([project])} }) }, process.cwd(), 'fixture', true);`] : explicitHook ? [cli, 'hooks', 'install', '--host', 'codex', '--json'] : [cli, 'init', ...args];
     const child = spawn(process.execPath, entry, { cwd, stdio: ['ignore', 'pipe', 'pipe'], env: {
       ...process.env, HOME: base, USERPROFILE: base, SOMEWHERE_CONFIG_DIR: config,
       SOMEWHERE_API_URL: `http://127.0.0.1:${server.address().port}`, PATH: `${bin}:${process.env.PATH}`,
@@ -220,4 +220,18 @@ test('init existing-project linking in human output installs no agent config', a
   assertNoInitHooks(result.cwd);
   assert.equal(existsSync(join(result.base, '.claude.json')), false);
   assert.deepEqual(requests, ['GET /projects']);
+});
+
+test('explicit opt-in installs only the selected host typecheck hook, without MCP or global setup', async () => {
+  const result = await run([], { explicitHook: true });
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.deepEqual(readdirSync(result.cwd), ['.codex']);
+  const hooks = JSON.parse(readFileSync(join(result.cwd, '.codex/hooks.json'), 'utf8')).hooks;
+  assert.deepEqual(Object.keys(hooks), ['PostToolUse']);
+  assert.equal(hooks.PostToolUse.length, 1);
+  assert.equal(hooks.PostToolUse[0].matcher, 'Edit|Write');
+  assert.equal(hooks.PostToolUse[0].hooks.length, 1);
+  assert.match(hooks.PostToolUse[0].hooks[0].command, /somewhere typecheck --deploy --hook codex$/);
+  assert.equal(existsSync(join(result.cwd, '.mcp.json')), false);
+  assert.equal(existsSync(join(result.base, '.claude.json')), false);
 });

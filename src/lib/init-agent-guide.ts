@@ -12,9 +12,9 @@ URL, claim URL and expiry. Login is needed for account-owned operations,
 the email test inbox and cron. On a hosted VM, \`somewhere login\` uses browser approval and keeps you signed in.
 For a reference, use \`somewhere docs <topic> --section <id>\` (MCP: \`docs({ topic })\`, \`catalog\`).
 
-After every change:
-1. \`somewhere typecheck\`, then \`somewhere deploy\` (do not build first). Deploy
-   runs the platform compile, schema and secret checks and refuses a blank page
+After edits, run \`somewhere typecheck\`. When ready to publish:
+1. \`somewhere deploy\` (do not build first). Deploy
+   checks compilation, schema and secrets, refusing a blank page
    before going live; \`somewhere deploy-check\` runs them without publishing
    (diagnosis, review, \`--run /api/x\`).
 2. \`somewhere verify\` — desktop and phone screenshots, console and network

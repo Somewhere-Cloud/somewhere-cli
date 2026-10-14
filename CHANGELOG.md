@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.37.32
+
+### Changed
+
+- `somewhere init` keeps AGENTS.md and useful skills without installing command-running agent hooks or MCP registration. Existing local and global agent configuration stays unchanged.
+- The generated project guide asks agents to run `somewhere typecheck` after edits. Optional post-edit deploy-reference hooks remain available through explicit `somewhere hooks install --host <host>`; MCP setup remains explicit through `somewhere mcp install <host>`.
+
+
 ## 0.37.9
 
 ### Added

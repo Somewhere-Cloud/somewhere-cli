@@ -31,6 +31,8 @@ somewhere open           # Open in browser
 
 The CLI needs no MCP setup: every command works from the shell, and `somewhere run <script>` executes code against your live project. `somewhere init` keeps AGENTS.md and useful skills, but does not install agent hooks or command-running MCP configuration. Existing agent settings stay unchanged. Run `somewhere typecheck`, `somewhere typecheck --deploy`, or `somewhere typecheck --deploy --watch` explicitly when you want local checks. Use `somewhere mcp install <host>` when you explicitly want MCP tools connected to an agent host.
 
+For optional after-edit checking, explicitly run `somewhere hooks install --host claude-code` (or `--host codex` / `--host cursor`). It installs only the requested project-local deploy-reference typecheck hook, not MCP registration. Follow the reported host trust step. Shell writes do not trigger the hook; run `somewhere typecheck` after edits, or start `somewhere typecheck --deploy --watch`.
+
 ## Commands
 
 | Command | What it does |

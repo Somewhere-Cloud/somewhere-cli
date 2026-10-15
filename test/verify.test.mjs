@@ -571,8 +571,8 @@ test('verify --path selects an app path and rejects URL escapes without changing
   const env = { ...process.env, SOMEWHERE_CONFIG_DIR: configDir,
     SOMEWHERE_API_URL: `http://127.0.0.1:${server.address().port}/v1`, CI: '1', SOMEWHERE_NO_NOTIFICATIONS: '1' };
   const cli = join(process.cwd(), 'dist/index.js');
-  const run = args => new Promise(resolvePromise => {
-    const child = spawn(process.execPath, [cli, 'verify', ...args, '--json'], { cwd: app, env });
+  const run = (args, json = true) => new Promise(resolvePromise => {
+    const child = spawn(process.execPath, [cli, 'verify', ...args, ...(json ? ['--json'] : [])], { cwd: app, env });
     let stdout = '', stderr = '';
     child.stdout.on('data', chunk => { stdout += chunk; });
     child.stderr.on('data', chunk => { stderr += chunk; });
@@ -631,6 +631,12 @@ test('verify --path selects an app path and rejects URL escapes without changing
     const existing = await run(['--out', reportPath]);
     assert.equal(existing.status, 1, 'an existing report is never overwritten');
     assert.equal(JSON.parse(readFileSync(reportPath, 'utf8')).passed, true);
+    const unusualPath = join(configDir, 'private\nreport.json');
+    const human = await run(['--out', unusualPath], false);
+    assert.equal(human.status, 0, human.stdout + human.stderr);
+    assert.match(human.stdout, /full report saved to --out destination/);
+    assert.doesNotMatch(human.stdout, /private|report\.json/);
+    assert.equal(JSON.parse(readFileSync(unusualPath, 'utf8')).passed, true);
     requests.length = 0;
     const explicit = await run(['--project', 'chosen', '--url', 'https://app.somewhere.site/existing?x=1']);
     assert.equal(explicit.status, 0, explicit.stdout + explicit.stderr);

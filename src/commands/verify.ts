@@ -1587,7 +1587,7 @@ projects: a login approved for "Only these projects" cannot open named browsers
           if (opts.out !== undefined) {
             writeVerifyReportTo(opts.out, report);
             const summary = summarizeVerifyReport(report);
-            console.log(opts.json ? JSON.stringify(summary, null, 2) : `Verify ${summary.passed ? 'PASS' : 'FAIL'}: ${summary.failed_steps} failed steps, ${summary.refusals} refusals, ${summary.step_duration_ms} ms in steps; full report: ${opts.out}`);
+            console.log(opts.json ? JSON.stringify(summary, null, 2) : `Verify ${summary.passed ? 'PASS' : 'FAIL'}: ${summary.failed_steps} failed steps, ${summary.refusals} refusals, ${summary.step_duration_ms} ms in steps; full report saved to --out destination`);
           } else if (opts.json) console.log(JSON.stringify(report, null, 2));
           else for (const line of formatVerifyOutput(report)) console.log(line);
           process.exit(report.passed ? 0 : 1);
@@ -1607,7 +1607,7 @@ projects: a login approved for "Only these projects" cannot open named browsers
         if (opts.out !== undefined) {
           writeVerifyReportTo(opts.out, report);
           const summary = summarizeVerifyReport(report);
-          console.log(opts.json ? JSON.stringify(summary, null, 2) : `Verify ${summary.passed ? 'PASS' : 'FAIL'}: ${summary.failed_steps} failed steps, ${summary.refusals} refusals, ${summary.step_duration_ms} ms in steps; full report: ${opts.out}`);
+          console.log(opts.json ? JSON.stringify(summary, null, 2) : `Verify ${summary.passed ? 'PASS' : 'FAIL'}: ${summary.failed_steps} failed steps, ${summary.refusals} refusals, ${summary.step_duration_ms} ms in steps; full report saved to --out destination`);
         } else if (opts.json) console.log(JSON.stringify(report, null, 2));
         else for (const line of formatVerifyOutput(report)) console.log(line);
         process.exit(report.passed ? 0 : 1);

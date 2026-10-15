@@ -50,10 +50,16 @@ test('partial successful HTTP body becomes unknown only in verify', async () => 
   }
 });
 
-test('complete refusals, partial refusal bodies, and complete invalid JSON remain errors', async () => {
+test('complete refusals, partial refusal bodies, and complete invalid JSON remain failed outcomes', async () => {
   for (const [nextMode, nextStatus, code] of [['complete', 403, 'FORBIDDEN'], ['partial', 401, 'RESPONSE_BODY_TIMEOUT'], ['invalid', 200, 'INVALID_RESPONSE']]) {
     mode = nextMode; status = nextStatus; const before = calls;
-    await assert.rejects(runVerification({ project_id: 'fixture' }, flow, shortClient), (error) => error.code === code && error.statusCode === nextStatus);
+    const report = await runVerification({ project_id: 'fixture' }, flow, shortClient);
+    assert.equal(report.passed, false);
+    assert.equal(report.refusals?.length, 1);
+    assert.equal(report.refusals[0].viewport, 'desktop');
+    assert.equal(report.refusals[0].detail.code, code);
+    assert.equal(report.refusals[0].detail.status, nextStatus);
+    assert.equal(report.viewports[0].passed, false);
     assert.equal(calls - before, 1);
   }
 });

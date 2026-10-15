@@ -95,7 +95,7 @@ const VALUE_ACTIONS = new Set(['eval', 'snapshot']);
  *  agent-native browser returns these signals whether or not `steps` ran). */
 export interface BrowserResult {
   passed?: boolean;
-  dialogs?: Array<{ step?: number; type: 'alert' | 'confirm' | 'prompt' | 'beforeunload'; message: string; handled: 'accepted' | 'dismissed' | 'failed'; by: 'default' | 'dialog_action'; note?: string }>;
+  dialogs?: Array<{ step?: number; type: string; message: string; answer: 'accept' | 'dismiss'; handled: 'accepted' | 'dismissed' | 'failed' | 'unconfirmed'; by: 'default' | 'dialog_action'; note?: string }>;
   dialogs_truncated?: true;
   dialog_actions_unused?: Array<{ step: number; answer: 'accept' | 'dismiss' }>;
   lifecycle?: BrowserLifecycle;

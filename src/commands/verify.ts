@@ -1358,7 +1358,7 @@ export function formatVerifyReport(report: VerifyReport, evidencePath?: string):
       ? ' To drive an app you own, rerun with --project <your-project-id>.' : '';
     lines.push(`refused: [${item.viewport}] ${item.detail.message} [${item.detail.code}${item.detail.status ? `, HTTP ${item.detail.status}` : ''}]${tip}`);
   }
-  for (const item of report.dialogs ?? []) lines.push(`dialog: [${item.viewport}] ${item.detail.type} ${item.detail.handled} by ${item.detail.by}: ${item.detail.message}`);
+  for (const item of report.dialogs ?? []) lines.push(`dialog: [${item.viewport}] ${item.detail.type} ${item.detail.answer} ${item.detail.handled} by ${item.detail.by}: ${item.detail.message}`);
   if (report.dialogs_truncated) lines.push('dialog: additional records were truncated');
   for (const item of report.dialog_actions_unused ?? []) lines.push(`dialog answer unused: [${item.viewport}] step ${item.detail.step + 1} (${item.detail.answer})`);
   for (const step of report.steps) {

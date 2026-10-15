@@ -150,7 +150,7 @@ test('dialog answers validate locally and pass through hosted requests without e
     { project_id: 'fixture' }, flow,
     fixtureClient([browserReport({
       steps: [{ step: 0, action: 'dialog', ok: true }, { step: 1, action: 'click', ok: true }, { step: 2, action: 'dialog', ok: true }],
-      dialogs: [{ step: 1, type: 'confirm', message: 'Delete task?', handled: 'accepted', by: 'dialog_action' }],
+      dialogs: [{ step: 1, type: 'confirm', message: 'Delete task?', answer: 'accept', handled: 'unconfirmed', by: 'dialog_action' }],
       dialogs_truncated: true,
       dialog_actions_unused: [{ step: 2, answer: 'dismiss' }],
     })], bodies),
@@ -158,10 +158,12 @@ test('dialog answers validate locally and pass through hosted requests without e
   assert.deepEqual(bodies[0].actions, flow.actions);
   assert.equal(report.passed, true);
   assert.equal(report.dialogs[0].viewport, 'desktop');
-  assert.equal(report.dialogs[0].detail.handled, 'accepted');
+  assert.equal(report.dialogs[0].detail.handled, 'unconfirmed');
+  assert.equal(report.dialogs[0].detail.answer, 'accept');
   assert.equal(report.dialogs_truncated, true);
   assert.deepEqual(report.dialog_actions_unused, [{ viewport: 'desktop', detail: { step: 2, answer: 'dismiss' } }]);
   assert.match(formatVerifyReport(report).join('\n'), /dialog answer unused: \[desktop\] step 3/);
+  assert.match(formatVerifyReport(report).join('\n'), /confirm accept unconfirmed by dialog_action/);
   assert.equal(JSON.stringify(report).includes('private prompt answer'), false);
   assert.match(report.steps[0].name, /dialog accept/);
 });

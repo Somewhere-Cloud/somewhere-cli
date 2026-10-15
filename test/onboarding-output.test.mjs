@@ -5,8 +5,8 @@ import { dirname, join } from 'node:path';
 import test from 'node:test';
 const root = mkdtempSync(join(tmpdir(), 'onboarding-output-'));
 process.env.SOMEWHERE_CONFIG_DIR = root;
-const { saveVerifyReport } = await import('../dist/lib/verify-report.js');
-const { formatVerifyOutput } = await import('../dist/commands/verify.js');
+const { saveVerifyReport, writeVerifyReportTo } = await import('../dist/lib/verify-report.js');
+const { formatVerifyOutput, summarizeVerifyReport } = await import('../dist/commands/verify.js');
 const { formatTempExpiry } = await import('../dist/commands/deploy.js');
 test.after(() => rmSync(root, { recursive: true, force: true }));
 const link = 'https://api.example.invalid/screenshot?signature=' + 'long'.repeat(100);
@@ -32,6 +32,20 @@ test('human output saves complete private evidence atomically without shortening
 test('report failure retains usable full links and every diagnostic', () => {
   const output = formatVerifyOutput(report, () => { throw new Error('fixture disk failure'); }).join('\n');
   assert.match(output, /Could not save/); assert.ok(output.includes(link)); assert.match(output, /HTTP 403 FORBIDDEN/);
+});
+test('explicit report stays private and summary omits report values and links', () => {
+  const sensitive = { ...report, verdict: 'private verdict',
+    steps: [{ ...report.steps[0], value: 'private eval', duration_ms: 12 }],
+    dialogs: [{ viewport: 'desktop', detail: { message: 'private dialog' } }] };
+  const path = join(root, 'chosen-report.json');
+  writeVerifyReportTo(path, sensitive);
+  assert.equal(statSync(path).mode & 0o777, 0o600);
+  assert.deepEqual(JSON.parse(readFileSync(path, 'utf8')), sensitive);
+  assert.throws(() => writeVerifyReportTo(path, sensitive), { code: 'EEXIST' });
+  const summary = JSON.stringify(summarizeVerifyReport(sensitive));
+  assert.match(summary, /"failed_steps":1/);
+  assert.match(summary, /"step_duration_ms":12/);
+  assert.doesNotMatch(summary, /private|signature=|https:\/\//);
 });
 test('screenshot capture error remains actionable after report persistence', () => {
   const output = formatVerifyOutput({ ...report, screenshots: [{ viewport: 'mobile', error: 'capture unavailable' }] }).join('\n');

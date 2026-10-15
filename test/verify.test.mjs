@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { spawn, spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -621,6 +621,16 @@ test('verify --path selects an app path and rejects URL escapes without changing
       assert.equal(row.body.url, undefined);
       assert.deepEqual(row.body.actions, []);
     }
+    const reportPath = join(configDir, 'explicit-report.json');
+    const summary = await run(['--out', reportPath]);
+    assert.equal(summary.status, 0, summary.stdout + summary.stderr);
+    assert.deepEqual(Object.keys(JSON.parse(summary.stdout)).slice(0, 2), ['passed', 'mode']);
+    assert.equal(JSON.parse(summary.stdout).passed, true);
+    assert.equal(JSON.parse(readFileSync(reportPath, 'utf8')).passed, true);
+    assert.equal(statSync(reportPath).mode & 0o777, 0o600);
+    const existing = await run(['--out', reportPath]);
+    assert.equal(existing.status, 1, 'an existing report is never overwritten');
+    assert.equal(JSON.parse(readFileSync(reportPath, 'utf8')).passed, true);
     requests.length = 0;
     const explicit = await run(['--project', 'chosen', '--url', 'https://app.somewhere.site/existing?x=1']);
     assert.equal(explicit.status, 0, explicit.stdout + explicit.stderr);

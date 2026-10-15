@@ -14,7 +14,7 @@ import {
 import { isLoopbackUrl, runLocalBrowser } from '../lib/browser-run.js';
 import { dim, error, green, red, teal } from '../lib/output.js';
 import { withVerifyProgress } from '../lib/verify-progress.js';
-import { saveVerifyReport } from '../lib/verify-report.js';
+import { saveVerifyReport, writeVerifyReportTo } from '../lib/verify-report.js';
 import { getProjectServingUrl } from '../lib/project-urls.js';
 import { readBrowserIncomplete, readBrowserLifecycle, formatStepDuration, stringifyResult, type BrowserLifecycle, type BrowserResult } from './browser.js';
 
@@ -1414,6 +1414,30 @@ export function formatVerifyOutput(
   }
 }
 
+/** Only local booleans, counts and durations belong in opt-in stdout. The
+ * full evidence, including eval values and screenshot links, stays in --out. */
+export function summarizeVerifyReport(report: VerifyReport | VerifyJourneyReport) {
+  const durations = report.steps.map((step) => step.duration_ms).filter((value): value is number =>
+    typeof value === 'number' && Number.isFinite(value) && value >= 0);
+  return {
+    passed: report.passed,
+    mode: 'segments' in report ? 'journey' : 'flow',
+    steps: report.steps.length,
+    failed_steps: report.steps.filter((step) => step.ran !== false && !step.passed).length,
+    not_run_steps: report.steps.filter((step) => step.ran === false).length,
+    step_duration_ms: Math.round(durations.reduce((sum, value) => sum + value, 0)),
+    refusals: report.refusals?.length ?? 0,
+    incomplete: report.incomplete?.length ?? 0,
+    outcome_unknown: !!report.lifecycle?.some((item) => item.detail.outcome_unknown)
+      || ('segments' in report && report.segments.some((segment) => segment.outcome_unknown === true)),
+    ...('segments' in report ? {
+      segments: report.segments.length,
+      browser_runs: report.browser_runs,
+      cleanup_confirmed: report.cleanup_confirmed,
+    } : {}),
+  };
+}
+
 export function formatJourneyCleanup(cleanup: VerifyJourneyCleanup[], cleanupMs: number): string[] {
   if (!cleanup.length) return ['browsers: none were opened'];
   const lines = [`browsers (cleanup ${Math.round(cleanupMs / 100) / 10}s of ${VERIFY_JOURNEY_LIMITS.cleanup_budget_ms / 1000}s budget): ${cleanup.map((item) => `${item.actor} ${item.status.replace('_', ' ')}`).join(', ')}`];
@@ -1442,6 +1466,7 @@ export function registerVerify(program: Command): void {
     .option('--session <session-id>', 'Existing app session value to seed as localStorage sw_auth in every viewport.')
     .option('--cookie <name=value>', 'Existing app cookie to seed in every viewport. Repeatable.', collectCookie)
     .option('--json', 'Print the structured verification report as JSON.')
+    .option('--out <file>', 'Write the full report to a new private file; print a bounded summary (JSON with --json).')
     .option('--schema', 'Print the JSON Schema for --flow files (one user, or several users) and exit.')
     .addHelpText('after', `
 Minimal --flow JSON:
@@ -1478,12 +1503,13 @@ Several users need a claimed account and a CLI login approved for all your
 projects: a login approved for "Only these projects" cannot open named browsers
 (SESSION_SCOPE_FORBIDDEN). Print the full flow schema with: somewhere verify --schema
 `)
-    .action(async (target: string | undefined, opts: { project?: string; url?: string; path?: string; flow?: string; session?: string; cookie?: string; json?: boolean; schema?: boolean }) => {
+    .action(async (target: string | undefined, opts: { project?: string; url?: string; path?: string; flow?: string; session?: string; cookie?: string; json?: boolean; out?: string; schema?: boolean }) => {
       if (opts.schema) {
         console.log(JSON.stringify(verifyFlowSchema(), null, 2));
         process.exit(0);
       }
       try {
+        if (opts.out !== undefined && !opts.out.trim()) throw new Error('--out requires a file path.');
         let url = opts.url ?? (target && /^https?:\/\//i.test(target) ? target : undefined);
         if (opts.path !== undefined) {
           if (url !== undefined) throw new Error('Pass --url or --path, not both (including a positional URL).');
@@ -1558,7 +1584,11 @@ projects: a login approved for "Only these projects" cannot open named browsers
             process.removeListener('SIGINT', onSignal);
             process.removeListener('SIGTERM', onSignal);
           }
-          if (opts.json) console.log(JSON.stringify(report, null, 2));
+          if (opts.out !== undefined) {
+            writeVerifyReportTo(opts.out, report);
+            const summary = summarizeVerifyReport(report);
+            console.log(opts.json ? JSON.stringify(summary, null, 2) : `Verify ${summary.passed ? 'PASS' : 'FAIL'}: ${summary.failed_steps} failed steps, ${summary.refusals} refusals, ${summary.step_duration_ms} ms in steps; full report: ${opts.out}`);
+          } else if (opts.json) console.log(JSON.stringify(report, null, 2));
           else for (const line of formatVerifyOutput(report)) console.log(line);
           process.exit(report.passed ? 0 : 1);
         }
@@ -1574,7 +1604,11 @@ projects: a login approved for "Only these projects" cannot open named browsers
           flow,
           client,
         ), !opts.json);
-        if (opts.json) console.log(JSON.stringify(report, null, 2));
+        if (opts.out !== undefined) {
+          writeVerifyReportTo(opts.out, report);
+          const summary = summarizeVerifyReport(report);
+          console.log(opts.json ? JSON.stringify(summary, null, 2) : `Verify ${summary.passed ? 'PASS' : 'FAIL'}: ${summary.failed_steps} failed steps, ${summary.refusals} refusals, ${summary.step_duration_ms} ms in steps; full report: ${opts.out}`);
+        } else if (opts.json) console.log(JSON.stringify(report, null, 2));
         else for (const line of formatVerifyOutput(report)) console.log(line);
         process.exit(report.passed ? 0 : 1);
       } catch (cause) {

@@ -14,7 +14,7 @@ function fake(answer, close = { closed: true }) {
   const calls = [];
   return { calls, async call(_method, _path, body, _query, opts) {
     calls.push({ body, opts });
-    return body.project_id ? answer(body) : close;
+    return body.close === true ? close : answer(body);
   } };
 }
 
@@ -72,11 +72,11 @@ test('unknown actor lifecycle never keeps the actor or starts a later segment', 
     incomplete: { reason: 'execution_cap', completed: 0, next_step: 0, budget_ms: 180000, elapsed_ms: 180000 },
   }));
   const result = await createVerifyJourneyRun({ project_id: 'fixture' }, journey, client, { runId: 'unknown', recloseAfterAbandonedMs: 1 }).run();
-  assert.equal(client.calls.filter((call) => call.body.project_id).length, 1);
+  assert.equal(client.calls.filter((call) => call.body.close !== true).length, 1);
   assert.deepEqual(result.kept_sessions, []);
   assert.equal(result.cleanup_confirmed, false, 'a close response cannot prove no late allocation survives');
   assert.equal(result.cleanup[0].status, 'unconfirmed');
-  assert.equal(client.calls.filter((call) => !call.body.project_id).length, 2);
+  assert.equal(client.calls.filter((call) => call.body.close === true).length, 2);
   assert.equal(result.segments[1].ran, false);
   assert.match(formatVerifyJourneyReport(result).join('\n'), /outcome unknown/);
   assert.doesNotMatch(result.verdict, /kept open|platform closed/);
@@ -85,7 +85,7 @@ test('unknown actor lifecycle never keeps the actor or starts a later segment', 
 test('healthy app with failed cleanup is INCOMPLETE, not PASS', async () => {
   const client = fake(() => healthy);
   const original = client.call;
-  client.call = (...args) => args[2].project_id ? original(...args) : Promise.reject(new CliApiError('AUTHORITY_UNAVAILABLE', 'Unavailable', 503));
+  client.call = (...args) => args[2].close !== true ? original(...args) : Promise.reject(new CliApiError('AUTHORITY_UNAVAILABLE', 'Unavailable', 503));
   const result = await createVerifyJourneyRun({ project_id: 'fixture' }, journey, client, { runId: 'cleanup' }).run();
   assert.equal(result.passed, false);
   assert.equal(result.cleanup_confirmed, false);

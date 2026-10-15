@@ -43,14 +43,14 @@ function fakeClient(answer = () => report()) {
   const calls = [];
   return {
     calls,
-    runs: () => calls.filter((call) => call.body.project_id),
-    closes: () => calls.filter((call) => !call.body.project_id),
+    runs: () => calls.filter((call) => call.body.close !== true),
+    closes: () => calls.filter((call) => call.body.close === true),
     async call(method, path, body, _query, opts) {
       assert.equal(method, 'POST');
       assert.equal(path, '/browser/test');
       calls.push({ body: structuredClone(body), opts });
-      if (!body.project_id) return { session_id: body.session_id, closed: true };
-      return answer(body, calls.filter((call) => call.body.project_id).length);
+      if (body.close === true) return { session_id: body.session_id, closed: true };
+      return answer(body, calls.filter((call) => call.body.close !== true).length);
     },
   };
 }
@@ -90,13 +90,36 @@ test('a legitimate two-user journey runs in order, each actor in its own continu
   assert.deepEqual(runs[3].expect_requests, [{ path: '/api/close', status: 403 }]);
 
   // Cleanup on success: exactly the two opened browsers are closed.
-  assert.deepEqual(client.closes().map((call) => call.body), [{ session_id: 'vf-r1-alice' }, { session_id: 'vf-r1-bob' }]);
+  assert.deepEqual(client.closes().map((call) => call.body), [{ project_id: 'club', session_id: 'vf-r1-alice', close: true }, { project_id: 'club', session_id: 'vf-r1-bob', close: true }]);
   assert.deepEqual(result.cleanup, [{ actor: 'alice', status: 'closed' }, { actor: 'bob', status: 'closed' }]);
   assert.equal(result.cleanup_confirmed, true);
   assert.equal(result.limits.cleanup_budget_ms, 20_000, 'the cleanup budget is reported separately from the journey budget');
   assert.ok(result.cleanup_ms >= 0);
   assert.equal(result.layout.length, 4, 'the overflow/tap-target line is reported for every segment');
   assert.match(result.layout[2].viewport, /alice #3 mobile/);
+});
+
+test('cleanup targets the actor project; an unscoped close cannot clear its live slot', async () => {
+  const live = new Map([
+    ['club', new Set(['vf-scope-alice'])],
+    ['other', new Set(['vf-scope-alice'])],
+  ]);
+  const calls = [];
+  const client = { async call(_method, _path, body) {
+    calls.push(structuredClone(body));
+    if (body.close === true || !body.project_id) {
+      if (body.project_id !== 'club' || body.close !== true) return { closed: false };
+      return { closed: live.get(body.project_id).delete(body.session_id) };
+    }
+    return report();
+  } };
+  const journey = normalizeVerifyJourney({ actors: { alice: {} }, journey: [{ as: 'alice', actions: [{ click: '#ready' }] }] });
+  const result = await createVerifyJourneyRun({ project_id: 'club' }, journey, client, { runId: 'scope' }).run();
+  assert.deepEqual(calls.at(-1), { project_id: 'club', session_id: 'vf-scope-alice', close: true });
+  assert.equal(live.get('club').size, 0, 'the project-scoped session slot was actually removed');
+  assert.equal(live.get('other').size, 1, 'a same-named session in another project remains untouched');
+  assert.deepEqual(result.cleanup, [{ actor: 'alice', status: 'closed' }]);
+  assert.equal(result.cleanup_confirmed, true);
 });
 
 test('identity isolation: seeds reach only their own actor, only on its first call, and never the report', async () => {
@@ -180,7 +203,7 @@ test('platform refusals stop the run with their code and still clean up', async 
 test('a transport failure still closes the browsers; a close failure is reported, not hidden', async () => {
   const client = fakeClient((_body, n) => { if (n === 2) throw new Error('socket hang up'); return report(); });
   client.call = ((original) => async (method, path, body, query, opts) => {
-    if (!body.project_id && body.session_id.endsWith('bob')) {
+    if (body.close === true && body.session_id.endsWith('bob')) {
       client.calls.push({ body: structuredClone(body), opts });
       throw new CliApiError('AUTHORITY_UNAVAILABLE', 'try again', 503);
     }
@@ -299,7 +322,7 @@ test('Ctrl-C during a journey closes every opened actor browser before exiting',
       const body = JSON.parse(raw || '{}');
       seen.push(body);
       res.setHeader('Content-Type', 'application/json');
-      if (!body.project_id) {
+      if (body.close === true) {
         res.end(JSON.stringify({ ok: true, data: { session_id: body.session_id, closed: true } }));
         // Closing bob's browser ends his run, as on the platform: his call answers.
         if (body.session_id.endsWith('-bob') && heldBob) { const answer = heldBob; heldBob = null; setTimeout(answer, 20); }
@@ -323,18 +346,18 @@ test('Ctrl-C during a journey closes every opened actor browser before exiting',
   });
   let stderr = '';
   child.stderr.on('data', (chunk) => { stderr += chunk; });
-  for (let i = 0; i < 100 && seen.filter((b) => b.project_id).length < 2; i++) await new Promise((r) => setTimeout(r, 50));
-  assert.equal(seen.filter((b) => b.project_id).length, 2, `the second segment started (${stderr})`);
+  for (let i = 0; i < 100 && seen.filter((b) => b.close !== true).length < 2; i++) await new Promise((r) => setTimeout(r, 50));
+  assert.equal(seen.filter((b) => b.close !== true).length, 2, `the second segment started (${stderr})`);
   child.kill('SIGINT');
   const code = await new Promise((resolve) => child.on('exit', (c) => resolve(c)));
   server.closeAllConnections?.();
   server.close();
   rmSync(dir, { recursive: true, force: true });
   assert.equal(code, 130);
-  const closes = seen.filter((b) => !b.project_id).map((b) => b.session_id).sort();
+  const closes = seen.filter((b) => b.close === true).map((b) => b.session_id).sort();
   assert.equal(closes.length, 3, 'both opened browsers were closed, bob again after his call ended');
   assert.ok(closes[0].endsWith('-alice') && closes[1].endsWith('-bob') && closes[2].endsWith('-bob'));
-  assert.equal(seen.filter((b) => b.project_id).length, 2, 'no segment started after Ctrl-C');
+  assert.equal(seen.filter((b) => b.close !== true).length, 2, 'no segment started after Ctrl-C');
   assert.match(stderr, /alice closed, bob (?:already )?closed/);
 });
 
@@ -350,7 +373,7 @@ function controllableClient({ closeDelayMs = 0, closeFails = () => false, segmen
     runs: () => events.filter((e) => e.type === 'segment'),
     closes: (actor) => events.filter((e) => e.type === 'close-start' && (!actor || e.session.endsWith(`-${actor}`))),
     async call(_method, _path, body, _query, opts) {
-      if (!body.project_id) {
+      if (body.close === true) {
         events.push({ type: 'close-start', session: body.session_id, at: Date.now() });
         await new Promise((r) => setTimeout(r, closeDelayMs));
         events.push({ type: 'close-end', session: body.session_id, at: Date.now() });
@@ -496,12 +519,12 @@ async function cliAgainst(handler) {
     req.on('end', () => {
       const body = JSON.parse(raw || '{}');
       const reply = (status, payload) => {
-        events.push({ type: body.project_id ? 'segment-end' : 'close-end', session: body.session_id, at: Date.now() });
+        events.push({ type: body.close === true ? 'close-end' : 'segment-end', session: body.session_id, at: Date.now() });
         res.statusCode = status;
         res.setHeader('Content-Type', 'application/json');
         res.end(JSON.stringify(payload));
       };
-      events.push({ type: body.project_id ? 'segment' : 'close', session: body.session_id, at: Date.now() });
+      events.push({ type: body.close === true ? 'close' : 'segment', session: body.session_id, at: Date.now() });
       handler(body, reply, events);
     });
   });
@@ -531,7 +554,7 @@ async function cliAgainst(handler) {
 
 test('SIGTERM mid-journey: no new segment starts, the in-flight actor is closed again after its call settles, exit 143', async () => {
   const run = await cliAgainst((body, reply, events) => {
-    if (!body.project_id) {
+    if (body.close === true) {
       reply(200, { ok: true, data: { session_id: body.session_id, closed: true } });
       // Bob's held call settles only after cleanup has started.
       if (body.session_id.endsWith('-bob') && events.release) { const release = events.release; events.release = null; setTimeout(release, 150); }
@@ -558,7 +581,7 @@ test('SIGTERM mid-journey: no new segment starts, the in-flight actor is closed 
 
 test('SIGTERM with a failed close reports that browser as unconfirmed and still exits 143', async () => {
   const run = await cliAgainst((body, reply, events) => {
-    if (!body.project_id) {
+    if (body.close === true) {
       if (body.session_id.endsWith('-bob')) {
         reply(503, { ok: false, error: 'AUTHORITY_UNAVAILABLE', message: 'try again' });
         if (events.release) { const release = events.release; events.release = null; setTimeout(release, 50); }

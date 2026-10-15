@@ -45,6 +45,7 @@ import { startupNotice } from './lib/startup-notice.js';
 import { error, info, printJsonError, setJsonOutputMode, stripAnsi } from './lib/output.js';
 import { recordLastRun } from './lib/last-run.js';
 import { recoverClaimHandoff } from './lib/claim-handoff.js';
+import { helpSummary } from './lib/help-summary.js';
 
 const pkg = JSON.parse(
   readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'package.json'), 'utf8'),
@@ -110,6 +111,12 @@ registerGit(program);
 registerCron(program);
 registerEmail(program);
 registerSkills(program);
+
+// Configure only the root after registration: command help keeps its full contract.
+program.configureHelp({
+  subcommandDescription: (command) => command.summary() || helpSummary(command.description()),
+});
+program.addHelpText('after', '\nRun somewhere <command> --help for full command details.');
 
 // User-notification pipeline (update-available, advisories, announcements…).
 // Centrally gated to interactive, non-CI, non-pass-through commands and emitted to

@@ -51,12 +51,12 @@ function fakeClient(answer) {
   const calls = [];
   return {
     calls,
-    runs: () => calls.filter((call) => call.body.project_id),
-    closes: () => calls.filter((call) => !call.body.project_id).map((call) => call.body.session_id),
+    runs: () => calls.filter((call) => call.body.close !== true),
+    closes: () => calls.filter((call) => call.body.close === true).map((call) => call.body.session_id),
     async call(method, path, body, _query, opts) {
       calls.push({ body: structuredClone(body), opts });
-      if (!body.project_id) return { session_id: body.session_id, closed: true };
-      return answer(body, calls.filter((call) => call.body.project_id).length);
+      if (body.close === true) return { session_id: body.session_id, closed: true };
+      return answer(body, calls.filter((call) => call.body.close !== true).length);
     },
   };
 }
@@ -93,7 +93,7 @@ test('an execution-cap stop is INCOMPLETE: mapped to the caller\'s actions, late
   assert.match(result.verdict, /^INCOMPLETE — segment 3 \(alice, desktop\) reached its 180s execution cap after 1 action; step 2 \(click #b\) and every later action did not run and have no verdict\. Nothing failed before the cap\./);
   assert.match(result.verdict, /Segment 4 did not run\./);
   assert.match(result.verdict, /kept open as session "vf-s2-alice"/);
-  assert.match(result.verdict, /somewhere call browser '\{"session_id":"vf-s2-alice"\}'/);
+  assert.match(result.verdict, /somewhere call browser '\{"project_id":"club","session_id":"vf-s2-alice","close":true\}'/);
   assert.match(result.verdict, /Nothing was continued automatically/);
   assert.match(result.verdict, /\[VERIFY_EXECUTION_CAP\]$/);
   assert.doesNotMatch(result.verdict, /^FAIL/);
@@ -111,7 +111,7 @@ test('an execution-cap stop is INCOMPLETE: mapped to the caller\'s actions, late
   assert.deepEqual(result.kept_sessions, [{
     actor: 'alice', session_id: 'vf-s2-alice',
     session_expires_at: '2026-09-27T12:04:10.000Z', idle_expires_at: '2026-09-27T12:05:30.000Z', absolute_expires_at: '2026-09-27T12:04:10.000Z',
-    close: `somewhere call browser '{"session_id":"vf-s2-alice"}'`,
+    close: `somewhere call browser '{"project_id":"club","session_id":"vf-s2-alice","close":true}'`,
   }], 'the kept session carries only the times the platform reported at release');
   assert.match(result.verdict, /the platform closes it at 2026-09-27T12:04:10\.000Z unless it is closed first/);
   assert.doesNotMatch(result.verdict, /idles out about|12:03:00/, 'no CLI-estimated expiry');

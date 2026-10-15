@@ -628,8 +628,10 @@ test('verify --path selects an app path and rejects URL escapes without changing
     assert.equal(JSON.parse(summary.stdout).passed, true);
     assert.equal(JSON.parse(readFileSync(reportPath, 'utf8')).passed, true);
     assert.equal(statSync(reportPath).mode & 0o777, 0o600);
+    requests.length = 0;
     const existing = await run(['--out', reportPath]);
     assert.equal(existing.status, 1, 'an existing report is never overwritten');
+    assert.deepEqual(requests, [], 'an existing output path refuses before a paid browser run');
     assert.equal(JSON.parse(readFileSync(reportPath, 'utf8')).passed, true);
     const unusualPath = join(configDir, 'private\nreport.json');
     const human = await run(['--out', unusualPath], false);

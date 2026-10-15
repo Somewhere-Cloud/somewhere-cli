@@ -1510,6 +1510,7 @@ projects: a login approved for "Only these projects" cannot open named browsers
       }
       try {
         if (opts.out !== undefined && !opts.out.trim()) throw new Error('--out requires a file path.');
+        if (opts.out !== undefined && existsSync(opts.out)) throw new Error('--out file already exists; choose a new path.');
         let url = opts.url ?? (target && /^https?:\/\//i.test(target) ? target : undefined);
         if (opts.path !== undefined) {
           if (url !== undefined) throw new Error('Pass --url or --path, not both (including a positional URL).');

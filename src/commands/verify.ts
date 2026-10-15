@@ -100,6 +100,9 @@ export interface VerifyReport {
   target: string;
   viewports: Array<{ label: string; width: number; height: number; passed: boolean; final_url: string; refusal?: string }>;
   refusals?: Array<VerifySignal<{ code: string; status: number; message: string }>>;
+  dialogs?: Array<VerifySignal<NonNullable<BrowserResult['dialogs']>[number]>>;
+  dialogs_truncated?: true;
+  dialog_actions_unused?: Array<VerifySignal<NonNullable<BrowserResult['dialog_actions_unused']>[number]>>;
   steps: VerifyStepReport[];
   health: {
     page: { passed: boolean; errors: Array<VerifySignal<unknown>> };
@@ -380,6 +383,7 @@ function actionName(action: BrowserSequenceAction | undefined, fallback: string)
   }
   if ('expect' in action) return `expect ${action.expect.selector}`;
   if ('screenshot' in action) return `screenshot ${action.screenshot}`;
+  if ('dialog' in action) return `dialog ${action.dialog}`;
   if ('goto' in action) return `goto ${action.goto}`;
   return `eval ${action.eval}`;
 }
@@ -485,6 +489,9 @@ function shapeVerificationReport(
   const cappedViewports = new Set<string>();
   const lifecycle: Array<VerifySignal<BrowserLifecycle>> = [];
   const transportErrors: NonNullable<VerifyReport['transport_errors']> = [];
+  const dialogs: NonNullable<VerifyReport['dialogs']> = [];
+  const dialogActionsUnused: NonNullable<VerifyReport['dialog_actions_unused']> = [];
+  let dialogsTruncated = false;
   const unknownViewports = new Set<string>();
 
   for (const { viewport, report, actions: runActions, offset } of runs) {
@@ -494,6 +501,9 @@ function shapeVerificationReport(
       unknownViewports.add(viewport.label);
     }
     if (report.transport_error) transportErrors.push({ viewport: viewport.label, detail: report.transport_error });
+    for (const detail of report.dialogs ?? []) dialogs.push({ viewport: viewport.label, detail });
+    for (const detail of report.dialog_actions_unused ?? []) dialogActionsUnused.push({ viewport: viewport.label, detail });
+    if (report.dialogs_truncated) dialogsTruncated = true;
     const actions = runActions ?? flow.actions;
     const capped = mapIncomplete(report, actions, offset ?? 0);
     if (capped) {
@@ -646,6 +656,9 @@ function shapeVerificationReport(
     incomplete,
     ...(lifecycle.length ? { lifecycle } : {}),
     ...(transportErrors.length ? { transport_errors: transportErrors } : {}),
+    ...(dialogs.length ? { dialogs } : {}),
+    ...(dialogsTruncated ? { dialogs_truncated: true as const } : {}),
+    ...(dialogActionsUnused.length ? { dialog_actions_unused: dialogActionsUnused } : {}),
     ...(refusals.length ? { refusals } : {}),
   };
 }
@@ -689,6 +702,9 @@ export async function runVerification(
   if (target.url && isLoopbackUrl(target.url)) {
     if (flow.auth) {
       throw new Error('auth user impersonation is not available against a local address; use local_storage, cookies, or headers for a session you already hold.');
+    }
+    if (flow.actions.some((action) => 'dialog' in action)) {
+      throw new Error('Native dialog answers require a hosted project browser; no local browser actions ran.');
     }
     const localUrl = target.url;
     const { runs, refusals } = await settleViewportRuns(resolved, async (viewport) => {
@@ -1278,6 +1294,8 @@ export function verifyFlowSchema(): Record<string, unknown> {
       { type: 'object', required: ['wait'], properties: { wait: { oneOf: [{ type: 'string' }, { type: 'number', minimum: 0 }, { type: 'object', required: ['selector'], properties: { selector: { type: 'string' } } }] } }, additionalProperties: false },
       { type: 'object', required: ['expect'], properties: { expect: { type: 'object', required: ['selector'], properties: { selector: { type: 'string' }, text: { type: 'string' }, value: { type: 'string' }, visible: { type: 'boolean' }, count: { type: 'integer', minimum: 0 } } } }, additionalProperties: false },
       { type: 'object', required: ['screenshot'], properties: { screenshot: { type: 'string', description: 'Label' } }, additionalProperties: false },
+      { type: 'object', required: ['dialog'], properties: { dialog: { const: 'accept' }, text: { type: 'string', maxLength: 1000, description: 'Next prompt answer; never shown in the report.' } }, additionalProperties: false },
+      { type: 'object', required: ['dialog'], properties: { dialog: { const: 'dismiss' } }, additionalProperties: false },
       { type: 'object', required: ['eval'], properties: { eval: { type: 'string', description: 'Page script on your own app; its value is reported and a throw fails the step. Use it for in-page API checks.' } }, additionalProperties: false },
       { type: 'object', required: ['goto'], properties: { goto: path }, additionalProperties: false },
     ],
@@ -1340,6 +1358,9 @@ export function formatVerifyReport(report: VerifyReport, evidencePath?: string):
       ? ' To drive an app you own, rerun with --project <your-project-id>.' : '';
     lines.push(`refused: [${item.viewport}] ${item.detail.message} [${item.detail.code}${item.detail.status ? `, HTTP ${item.detail.status}` : ''}]${tip}`);
   }
+  for (const item of report.dialogs ?? []) lines.push(`dialog: [${item.viewport}] ${item.detail.type} ${item.detail.handled} by ${item.detail.by}: ${item.detail.message}`);
+  if (report.dialogs_truncated) lines.push('dialog: additional records were truncated');
+  for (const item of report.dialog_actions_unused ?? []) lines.push(`dialog answer unused: [${item.viewport}] step ${item.detail.step + 1} (${item.detail.answer})`);
   for (const step of report.steps) {
     lines.push(`step ${step.step} ${step.ran === false ? dim('not run') : step.passed ? green('✓') : red('✗')} [${step.viewport}] ${step.name}${formatStepDuration(step.duration_ms, step.ran)}${step.error ? ` ${dim(`— ${step.error}`)}` : ''}`);
     // The eval value, as `somewhere browser` prints it; reading it used to

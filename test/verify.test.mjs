@@ -10,6 +10,7 @@ const {
   formatVerifyReport,
   normalizeVerifyFlow,
   runVerification,
+  verifyFlowSchema,
 } = await import('../dist/commands/verify.js');
 
 const actions = [
@@ -136,6 +137,47 @@ test('two viewport refusals retain both reasons and never report success', async
   ]);
   assert.deepEqual(report.viewports.map(({ passed }) => passed), [false, false]);
   assert.match(report.verdict, /refused at desktop, mobile/);
+});
+
+test('dialog answers validate locally and pass through hosted requests without echoing prompt text', async () => {
+  const flow = normalizeVerifyFlow({ actions: [
+    { dialog: 'accept', text: 'private prompt answer' },
+    { click: '#delete' },
+    { dialog: 'dismiss' },
+  ], viewports: ['desktop'] });
+  const bodies = [];
+  const report = await runVerification(
+    { project_id: 'fixture' }, flow,
+    fixtureClient([browserReport({
+      steps: [{ step: 0, action: 'dialog', ok: true }, { step: 1, action: 'click', ok: true }, { step: 2, action: 'dialog', ok: true }],
+      dialogs: [{ step: 1, type: 'confirm', message: 'Delete task?', handled: 'accepted', by: 'dialog_action' }],
+      dialogs_truncated: true,
+      dialog_actions_unused: [{ step: 2, answer: 'dismiss' }],
+    })], bodies),
+  );
+  assert.deepEqual(bodies[0].actions, flow.actions);
+  assert.equal(report.passed, true);
+  assert.equal(report.dialogs[0].viewport, 'desktop');
+  assert.equal(report.dialogs[0].detail.handled, 'accepted');
+  assert.equal(report.dialogs_truncated, true);
+  assert.deepEqual(report.dialog_actions_unused, [{ viewport: 'desktop', detail: { step: 2, answer: 'dismiss' } }]);
+  assert.match(formatVerifyReport(report).join('\n'), /dialog answer unused: \[desktop\] step 3/);
+  assert.equal(JSON.stringify(report).includes('private prompt answer'), false);
+  assert.match(report.steps[0].name, /dialog accept/);
+});
+
+test('dialog contract refuses invalid answers and documents both valid variants', async () => {
+  assert.throws(() => normalizeVerifyFlow({ actions: [{ dialog: 'yes' }] }), /dialog must be/);
+  assert.throws(() => normalizeVerifyFlow({ actions: [{ dialog: 'dismiss', text: 'x' }] }), /only with "accept"/);
+  assert.throws(() => normalizeVerifyFlow({ actions: [{ dialog: 'accept', text: 'x'.repeat(1001) }] }), /at most 1000/);
+  assert.deepEqual(normalizeVerifyFlow({ actions: [{ dialog: 'dismiss' }] }).actions, [{ dialog: 'dismiss' }]);
+  const actionVariants = verifyFlowSchema().oneOf[0].properties.actions.items.oneOf;
+  assert.ok(actionVariants.some((item) => item.properties.dialog?.const === 'accept' && item.properties.text?.maxLength === 1000));
+  assert.ok(actionVariants.some((item) => item.properties.dialog?.const === 'dismiss' && !item.properties.text));
+  await assert.rejects(
+    () => runVerification({ url: 'http://127.0.0.1:65534' }, normalizeVerifyFlow({ actions: [{ dialog: 'accept' }] })),
+    /require a hosted project browser; no local browser actions ran/,
+  );
 });
 
 test('authenticated flow fields reach every hosted viewport without changing anonymous requests', async () => {

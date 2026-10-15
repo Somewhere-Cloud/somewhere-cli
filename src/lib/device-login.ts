@@ -11,7 +11,7 @@
  *   - no port binding, no firewall holes
  *   - browser and terminal can be on different machines
  */
-import { randomInt } from 'node:crypto';
+import { createHash, randomBytes, randomInt } from 'node:crypto';
 import { arch, hostname, platform, release } from 'node:os';
 import type { CliConfig } from '../types.js';
 import { getDeviceKeyName } from './device.js';
@@ -138,23 +138,26 @@ export interface DeviceLoginResult {
 
 export async function deviceLogin(callbacks: DeviceLoginCallbacks): Promise<DeviceLoginResult> {
   const code = generateCode();
+  const verifier = randomBytes(32).toString('base64url');
+  const codeChallenge = createHash('sha256').update(verifier).digest('hex');
   const deviceName = getDeviceKeyName();
 
   const startRes = await fetch(`${API_BASE}/v1/auth/device-code`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ code, device_name: deviceName, client: describeThisDevice() }),
+    body: JSON.stringify({ code, code_challenge: codeChallenge, device_name: deviceName, client: describeThisDevice() }),
   });
 
   if (startRes.status === 404) {
-    // Endpoint not deployed yet → caller can fall back to legacy flow
+    // An unsupported server must not downgrade the credential exchange.
     throw new DeviceCodeUnsupported();
   }
   if (!startRes.ok) {
     const text = await startRes.text();
     throw new Error(`Failed to start login: HTTP ${startRes.status} ${text.slice(0, 200)}`);
   }
-  const start = (await startRes.json()) as StartResponse;
+  const start = (await startRes.json()) as StartResponse & { data: { verifier_bound?: boolean } };
+  if (start.data.verifier_bound !== true) throw new Error('This server does not support secure device redemption. Update the platform before login.');
   callbacks.onPrompt({ code, approvalUrl: start.data.approval_url });
   callbacks.onWaiting?.();
 
@@ -162,11 +165,11 @@ export async function deviceLogin(callbacks: DeviceLoginCallbacks): Promise<Devi
   while (Date.now() - startedAt < TIMEOUT_MS) {
     await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
     const pollRes = await fetch(
-      `${API_BASE}/v1/auth/device-code/status?code=${encodeURIComponent(code)}`
+      `${API_BASE}/v1/auth/device-code/status`,
+      { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code, verifier }) }
     );
     if (!pollRes.ok) {
-      // Transient errors are non-fatal — keep polling until timeout.
-      continue;
+      throw new Error(`Login delivery could not be confirmed (HTTP ${pollRes.status}). Restart login; this redemption will not be retried.`);
     }
     const status = (await pollRes.json()) as StatusResponse;
     if (status.data.status === 'expired') {

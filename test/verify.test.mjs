@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { spawn, spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -571,8 +571,8 @@ test('verify --path selects an app path and rejects URL escapes without changing
   const env = { ...process.env, SOMEWHERE_CONFIG_DIR: configDir,
     SOMEWHERE_API_URL: `http://127.0.0.1:${server.address().port}/v1`, CI: '1', SOMEWHERE_NO_NOTIFICATIONS: '1' };
   const cli = join(process.cwd(), 'dist/index.js');
-  const run = args => new Promise(resolvePromise => {
-    const child = spawn(process.execPath, [cli, 'verify', ...args, '--json'], { cwd: app, env });
+  const run = (args, json = true) => new Promise(resolvePromise => {
+    const child = spawn(process.execPath, [cli, 'verify', ...args, ...(json ? ['--json'] : [])], { cwd: app, env });
     let stdout = '', stderr = '';
     child.stdout.on('data', chunk => { stdout += chunk; });
     child.stderr.on('data', chunk => { stderr += chunk; });
@@ -621,6 +621,24 @@ test('verify --path selects an app path and rejects URL escapes without changing
       assert.equal(row.body.url, undefined);
       assert.deepEqual(row.body.actions, []);
     }
+    const reportPath = join(configDir, 'explicit-report.json');
+    const summary = await run(['--out', reportPath]);
+    assert.equal(summary.status, 0, summary.stdout + summary.stderr);
+    assert.deepEqual(Object.keys(JSON.parse(summary.stdout)).slice(0, 2), ['passed', 'mode']);
+    assert.equal(JSON.parse(summary.stdout).passed, true);
+    assert.equal(JSON.parse(readFileSync(reportPath, 'utf8')).passed, true);
+    assert.equal(statSync(reportPath).mode & 0o777, 0o600);
+    requests.length = 0;
+    const existing = await run(['--out', reportPath]);
+    assert.equal(existing.status, 1, 'an existing report is never overwritten');
+    assert.deepEqual(requests, [], 'an existing output path refuses before a paid browser run');
+    assert.equal(JSON.parse(readFileSync(reportPath, 'utf8')).passed, true);
+    const unusualPath = join(configDir, 'private\nreport.json');
+    const human = await run(['--out', unusualPath], false);
+    assert.equal(human.status, 0, human.stdout + human.stderr);
+    assert.match(human.stdout, /full report saved to --out destination/);
+    assert.doesNotMatch(human.stdout, /private|report\.json/);
+    assert.equal(JSON.parse(readFileSync(unusualPath, 'utf8')).passed, true);
     requests.length = 0;
     const explicit = await run(['--project', 'chosen', '--url', 'https://app.somewhere.site/existing?x=1']);
     assert.equal(explicit.status, 0, explicit.stdout + explicit.stderr);

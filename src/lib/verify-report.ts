@@ -15,3 +15,8 @@ export function saveVerifyReport(report: unknown): string {
   renameSync(pending, destination);
   return destination;
 }
+
+/** An explicit report destination never replaces an existing file. */
+export function writeVerifyReportTo(path: string, report: unknown): void {
+  writeFileSync(path, JSON.stringify(report, null, 2) + '\n', { mode: 0o600, flag: 'wx' });
+}

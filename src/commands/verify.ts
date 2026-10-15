@@ -98,7 +98,8 @@ export interface VerifyReport {
   passed: boolean;
   verdict: string;
   target: string;
-  viewports: Array<{ label: string; width: number; height: number; passed: boolean; final_url: string }>;
+  viewports: Array<{ label: string; width: number; height: number; passed: boolean; final_url: string; refusal?: string }>;
+  refusals?: Array<VerifySignal<{ code: string; status: number; message: string }>>;
   steps: VerifyStepReport[];
   health: {
     page: { passed: boolean; errors: Array<VerifySignal<unknown>> };
@@ -469,6 +470,8 @@ function shapeVerificationReport(
   target: string,
   flow: Pick<VerifyFlow, 'actions'>,
   runs: Array<{ viewport: ResolvedViewport; report: BrowserResult; actions?: BrowserSequenceAction[]; offset?: 0 | 1 }>,
+  refusals: NonNullable<VerifyReport['refusals']> = [],
+  requestedViewports: ResolvedViewport[] = runs.map(({ viewport }) => viewport),
 ): VerifyReport {
   const steps: VerifyStepReport[] = [];
   const pageErrors: Array<VerifySignal<unknown>> = [];
@@ -569,7 +572,7 @@ function shapeVerificationReport(
     if (typeof shot === 'string') return shot.length > 0;
     return !shot.error && !!(shot.path ?? shot.url ?? shot.fs_path ?? shot.scratch_url);
   }));
-  const passed = runs.every(({ report }) => reportPassed(report));
+  const passed = refusals.length === 0 && runs.every(({ report }) => reportPassed(report));
   let verdict: string;
   if (failingStep) {
     verdict = failingStep.ran === false
@@ -591,6 +594,8 @@ function shapeVerificationReport(
     verdict = `INCOMPLETE — ${unknownNote(lifecycle)}`;
   } else if (incomplete.length) {
     verdict = `INCOMPLETE — ${incomplete.map((item) => incompleteSentence(item.detail, `the run at ${item.viewport}`)).join(' ')} Split the flow into shorter runs to check the rest; nothing was continued automatically.`;
+  } else if (refusals.length) {
+    verdict = `FAIL — browser request refused at ${refusals.map((item) => item.viewport).join(', ')}; every admitted viewport was awaited.`;
   } else {
     verdict = flow.actions.length
       ? `PASS — ${flow.actions.length} step${flow.actions.length === 1 ? '' : 's'} passed at ${runs.map((run) => run.viewport.label).join(' and ')}; page, console, and network healthy.`
@@ -599,7 +604,9 @@ function shapeVerificationReport(
   // Never print a pass for a run the platform did not pass.
   if (!passed && verdict.startsWith('PASS')) {
     const failedRun = runs.find(({ report }) => !reportPassed(report));
-    verdict = `FAIL — the platform reported the run at ${failedRun?.viewport.label ?? 'one viewport'} as not passed.`;
+    verdict = refusals.length
+      ? `FAIL — browser request refused at ${refusals.map((item) => item.viewport).join(', ')}; every admitted viewport was awaited.`
+      : `FAIL — the platform reported the run at ${failedRun?.viewport.label ?? 'one viewport'} as not passed.`;
   }
   if (lifecycle.length && !verdict.startsWith('INCOMPLETE')) verdict += ` INCOMPLETE — ${unknownNote(lifecycle)}`;
   // A page wider than the viewport passed silently before: the layout line
@@ -612,19 +619,22 @@ function shapeVerificationReport(
     passed,
     verdict,
     target,
-    viewports: runs.map(({ viewport, report }) => ({
-      label: viewport.label,
-      width: viewport.width,
-      height: viewport.height,
-      passed: reportPassed(report),
-      final_url: report.final_url ?? target,
-    })),
+    viewports: requestedViewports.map((viewport) => {
+      const report = runs.find((item) => item.viewport.label === viewport.label)?.report;
+      const refusal = refusals.find((item) => item.viewport === viewport.label);
+      return {
+        label: viewport.label, width: viewport.width, height: viewport.height,
+        passed: report ? reportPassed(report) : false,
+        final_url: report?.final_url ?? target,
+        ...(refusal ? { refusal: refusal.detail.message } : {}),
+      };
+    }),
     steps,
     health: {
-      page: { passed: lifecycle.length === 0 && pageErrors.length === 0, errors: pageErrors },
-      console: { passed: lifecycle.length === 0 && consoleErrors.length === 0, errors: consoleErrors },
+      page: { passed: lifecycle.length === 0 && refusals.length === 0 && pageErrors.length === 0, errors: pageErrors },
+      console: { passed: lifecycle.length === 0 && refusals.length === 0 && consoleErrors.length === 0, errors: consoleErrors },
       network: {
-        passed: lifecycle.length === 0 && failedRequests.length === 0 && expectations.every((item) => item.detail.ok),
+        passed: lifecycle.length === 0 && refusals.length === 0 && failedRequests.length === 0 && expectations.every((item) => item.detail.ok),
         failed_requests: failedRequests,
         expectations,
       },
@@ -636,7 +646,30 @@ function shapeVerificationReport(
     incomplete,
     ...(lifecycle.length ? { lifecycle } : {}),
     ...(transportErrors.length ? { transport_errors: transportErrors } : {}),
+    ...(refusals.length ? { refusals } : {}),
   };
+}
+
+async function settleViewportRuns(
+  viewports: ResolvedViewport[],
+  run: (viewport: ResolvedViewport) => Promise<BrowserResult>,
+): Promise<{ runs: Array<{ viewport: ResolvedViewport; report: BrowserResult }>; refusals: NonNullable<VerifyReport['refusals']> }> {
+  const settled = await Promise.allSettled(viewports.map(run));
+  const runs: Array<{ viewport: ResolvedViewport; report: BrowserResult }> = [];
+  const refusals: NonNullable<VerifyReport['refusals']> = [];
+  settled.forEach((result, index) => {
+    const viewport = viewports[index];
+    if (result.status === 'fulfilled') runs.push({ viewport, report: result.value });
+    else {
+      const cause: unknown = result.reason;
+      refusals.push({ viewport: viewport.label, detail: {
+        code: cause instanceof CliApiError ? cause.code : 'BROWSER_REQUEST_FAILED',
+        status: cause instanceof CliApiError ? cause.statusCode : 0,
+        message: cause instanceof Error ? cause.message : String(cause),
+      } });
+    }
+  });
+  return { runs, refusals };
 }
 
 export async function runVerification(
@@ -658,7 +691,7 @@ export async function runVerification(
       throw new Error('auth user impersonation is not available against a local address; use local_storage, cookies, or headers for a session you already hold.');
     }
     const localUrl = target.url;
-    const runs = await Promise.all(resolved.map(async (viewport) => {
+    const { runs, refusals } = await settleViewportRuns(resolved, async (viewport) => {
       const report = await runLocalBrowser({
         url: localUrl,
         actions: flow.actions,
@@ -672,13 +705,13 @@ export async function runVerification(
         viewport: { width: viewport.width, height: viewport.height },
         timeoutMs: VERIFY_TIMEOUT_MS,
       });
-      return { viewport, report };
-    }));
-    return shapeVerificationReport(targetLabel, flow, runs);
+      return report;
+    });
+    return shapeVerificationReport(targetLabel, flow, runs, refusals, resolved);
   }
 
   if (!client) throw new Error('Hosted verification needs an authenticated API client.');
-  const runs = await Promise.all(resolved.map(async (viewport) => {
+  const { runs, refusals } = await settleViewportRuns(resolved, async (viewport) => {
     const report = await client.call<BrowserResult>('POST', '/browser/test', {
       ...target,
       actions: flow.actions,
@@ -698,9 +731,9 @@ export async function runVerification(
       if (unknown) return unknown;
       throw cause;
     });
-    return { viewport, report };
-  }));
-  return shapeVerificationReport(targetLabel, flow, runs);
+    return report;
+  });
+  return shapeVerificationReport(targetLabel, flow, runs, refusals, resolved);
 }
 
 // ── Multi-user journeys (tsk_f49ccbb75f994f1fb5179198087d24de) ──────────────
@@ -1302,6 +1335,11 @@ export function verifyFlowSchema(): Record<string, unknown> {
 
 export function formatVerifyReport(report: VerifyReport, evidencePath?: string): string[] {
   const lines = [report.passed ? green(report.verdict) : report.verdict.startsWith('INCOMPLETE') ? teal(report.verdict) : red(report.verdict)];
+  for (const item of report.refusals ?? []) {
+    const tip = item.detail.code === 'BROWSER_ORIGIN_NOT_AUTHORIZED'
+      ? ' To drive an app you own, rerun with --project <your-project-id>.' : '';
+    lines.push(`refused: [${item.viewport}] ${item.detail.message} [${item.detail.code}${item.detail.status ? `, HTTP ${item.detail.status}` : ''}]${tip}`);
+  }
   for (const step of report.steps) {
     lines.push(`step ${step.step} ${step.ran === false ? dim('not run') : step.passed ? green('✓') : red('✗')} [${step.viewport}] ${step.name}${formatStepDuration(step.duration_ms, step.ran)}${step.error ? ` ${dim(`— ${step.error}`)}` : ''}`);
     // The eval value, as `somewhere browser` prints it; reading it used to
@@ -1312,9 +1350,9 @@ export function formatVerifyReport(report: VerifyReport, evidencePath?: string):
       else lines.push('  result:', ...text.split('\n').map((line) => `    ${line}`));
     }
   }
-  lines.push(`page_health: ${report.health.page.errors?.length ? red('FAIL') : report.lifecycle?.length ? teal('UNKNOWN') : report.health.page.passed ? green('PASS') : red('FAIL')}`);
-  lines.push(`console_health: ${report.health.console.errors?.length ? red('FAIL') : report.lifecycle?.length ? teal('UNKNOWN') : report.health.console.passed ? green('PASS') : red('FAIL')}`);
-  lines.push(`network_health: ${report.health.network.failed_requests?.length ? red('FAIL') : report.lifecycle?.length ? teal('UNKNOWN') : report.health.network.passed ? green('PASS') : red('FAIL')}`);
+  lines.push(`page_health: ${report.health.page.errors?.length ? red('FAIL') : report.lifecycle?.length || report.refusals?.length ? teal('UNKNOWN') : report.health.page.passed ? green('PASS') : red('FAIL')}`);
+  lines.push(`console_health: ${report.health.console.errors?.length ? red('FAIL') : report.lifecycle?.length || report.refusals?.length ? teal('UNKNOWN') : report.health.console.passed ? green('PASS') : red('FAIL')}`);
+  lines.push(`network_health: ${report.health.network.failed_requests?.length ? red('FAIL') : report.lifecycle?.length || report.refusals?.length ? teal('UNKNOWN') : report.health.network.passed ? green('PASS') : red('FAIL')}`);
   for (const shot of report.screenshots) {
     const location = shot.url ?? shot.scratch_url ?? shot.fs_path ?? shot.path ?? shot.error ?? '(missing)';
     const savedLink = evidencePath && (shot.url || shot.scratch_url);

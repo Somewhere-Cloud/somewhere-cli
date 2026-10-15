@@ -200,6 +200,7 @@ export async function executeLocalAction(
   const label = actionLabel(action);
   const step: LocalStepResult = { action: label, ok: true };
   try {
+    if ('dialog' in action) throw new Error('Native dialog answers require a hosted project browser.');
     if ('click' in action) {
       step.selector = action.click;
       const errorText = await evaluate(session, `(() => {

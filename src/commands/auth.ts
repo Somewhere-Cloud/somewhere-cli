@@ -18,7 +18,6 @@ import {
   deviceLogin,
   DeviceLoginTimeout,
   DeviceLoginDenied,
-  DeviceCodeUnsupported,
   type DeviceSessionScope,
 } from '../lib/device-login.js';
 import { ApiClient, CliApiError } from '../lib/client.js';
@@ -511,11 +510,6 @@ async function runDeviceLogin(): Promise<void> {
     if (err instanceof DeviceLoginTimeout || err instanceof DeviceLoginDenied) {
       error(err.message);
       process.exit(1);
-    }
-    if (err instanceof DeviceCodeUnsupported) {
-      info(dim('Falling back to localhost-callback login…'));
-      await runLegacyLogin();
-      return;
     }
     error(err instanceof Error ? err.message : String(err), err);
     process.exit(1);

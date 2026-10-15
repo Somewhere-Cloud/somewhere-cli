@@ -9,6 +9,7 @@ export type BrowserSequenceAction =
   | { wait: string | number | { selector: string } }
   | { expect: { selector: string; text?: string; value?: string; visible?: boolean; count?: number } }
   | { screenshot: string }
+  | { dialog: 'accept' | 'dismiss'; text?: string }
   | { eval: string }
   | { goto: string };
 
@@ -22,7 +23,7 @@ export interface BrowserRequestExpectationResult extends ExpectedBrowserRequest 
   error?: string;
 }
 
-const ACTION_KEYS = ['click', 'fill', 'upload', 'select', 'wait', 'expect', 'screenshot', 'eval', 'goto'] as const;
+const ACTION_KEYS = ['click', 'fill', 'upload', 'select', 'wait', 'expect', 'screenshot', 'dialog', 'eval', 'goto'] as const;
 export const MAX_BROWSER_UPLOAD_BYTES = 10 * 1024 * 1024;
 
 const MIME_TYPES: Record<string, string> = {
@@ -179,6 +180,15 @@ export function normalizeBrowserActions(raw: unknown, baseDir = process.cwd()):
       actions.push({ screenshot: actionValue.trim() });
       continue;
     }
+    if (key === 'dialog') {
+      if (actionValue !== 'accept' && actionValue !== 'dismiss') return { ok: false, error: `${at}: dialog must be "accept" or "dismiss".` };
+      if (record.text !== undefined && (actionValue !== 'accept' || typeof record.text !== 'string' || record.text.length > 1000)) {
+        return { ok: false, error: `${at}: dialog.text must be a string of at most 1000 characters, only with "accept".` };
+      }
+      actions.push(actionValue === 'accept' && record.text !== undefined
+        ? { dialog: 'accept', text: record.text as string } : { dialog: actionValue });
+      continue;
+    }
     if (!actionValue || typeof actionValue !== 'object' || Array.isArray(actionValue)) {
       return { ok: false, error: `${at}: expect must be an object.` };
     }
@@ -308,6 +318,7 @@ export function actionLabel(action: BrowserSequenceAction): string {
   if ('wait' in action) return 'wait';
   if ('expect' in action) return 'expect';
   if ('screenshot' in action) return 'screenshot';
+  if ('dialog' in action) return 'dialog';
   if ('goto' in action) return 'goto';
   return 'eval';
 }

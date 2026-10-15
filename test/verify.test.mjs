@@ -10,6 +10,7 @@ const {
   formatVerifyReport,
   normalizeVerifyFlow,
   runVerification,
+  verifyFlowSchema,
 } = await import('../dist/commands/verify.js');
 
 const actions = [
@@ -99,6 +100,86 @@ test('passing flow returns one report with every step, expected 401 excluded, an
   assert.deepEqual(bodies.map((body) => body.viewport), ['desktop', 'mobile']);
   assert.ok(bodies.every((body) => body.capture_after === true && body.inline === false && body.visible_only === true));
   assert.ok(bodies.every((body) => !('session_id' in body)), 'verification never leaves a reconnectable browser session');
+  assert.equal('refusals' in report, false, 'all-success JSON remains unchanged');
+});
+
+test('one viewport refusal waits for its admitted delayed sibling and reports both outcomes', async () => {
+  let mobileFinished = false;
+  const report = await runVerification(
+    { project_id: 'fixture' },
+    normalizeVerifyFlow({ actions: [], viewports: ['desktop', 'mobile'] }),
+    { async call(_method, _path, body) {
+      if (body.viewport === 'desktop') throw new Error('capacity refused');
+      await new Promise((resolvePromise) => setTimeout(resolvePromise, 25));
+      mobileFinished = true;
+      return browserReport({ steps: [], final_url: 'https://fixture.somewhere.site/mobile' });
+    } },
+  );
+  assert.equal(mobileFinished, true, 'the admitted sibling must finish before verify returns');
+  assert.equal(report.passed, false);
+  assert.deepEqual(report.viewports.map(({ label, passed }) => [label, passed]), [['desktop', false], ['mobile', true]]);
+  assert.equal(report.viewports[1].final_url, 'https://fixture.somewhere.site/mobile');
+  assert.equal(report.refusals[0].viewport, 'desktop');
+  assert.match(report.refusals[0].detail.message, /capacity refused/);
+  assert.match(formatVerifyReport(report).join('\n'), /refused: \[desktop\] capacity refused/);
+  assert.match(formatVerifyReport(report).join('\n'), /page_health: UNKNOWN/);
+});
+
+test('two viewport refusals retain both reasons and never report success', async () => {
+  const report = await runVerification(
+    { project_id: 'fixture' },
+    normalizeVerifyFlow({ actions: [], viewports: ['desktop', 'mobile'] }),
+    { async call(_method, _path, body) { throw new Error(`${body.viewport} refused`); } },
+  );
+  assert.equal(report.passed, false);
+  assert.deepEqual(report.refusals.map(({ viewport, detail }) => [viewport, detail.message]), [
+    ['desktop', 'desktop refused'], ['mobile', 'mobile refused'],
+  ]);
+  assert.deepEqual(report.viewports.map(({ passed }) => passed), [false, false]);
+  assert.match(report.verdict, /refused at desktop, mobile/);
+});
+
+test('dialog answers validate locally and pass through hosted requests without echoing prompt text', async () => {
+  const flow = normalizeVerifyFlow({ actions: [
+    { dialog: 'accept', text: 'private prompt answer' },
+    { click: '#delete' },
+    { dialog: 'dismiss' },
+  ], viewports: ['desktop'] });
+  const bodies = [];
+  const report = await runVerification(
+    { project_id: 'fixture' }, flow,
+    fixtureClient([browserReport({
+      steps: [{ step: 0, action: 'dialog', ok: true }, { step: 1, action: 'click', ok: true }, { step: 2, action: 'dialog', ok: true }],
+      dialogs: [{ step: 1, type: 'confirm', message: 'Delete task?', answer: 'accept', handled: 'unconfirmed', by: 'dialog_action' }],
+      dialogs_truncated: true,
+      dialog_actions_unused: [{ step: 2, answer: 'dismiss' }],
+    })], bodies),
+  );
+  assert.deepEqual(bodies[0].actions, flow.actions);
+  assert.equal(report.passed, true);
+  assert.equal(report.dialogs[0].viewport, 'desktop');
+  assert.equal(report.dialogs[0].detail.handled, 'unconfirmed');
+  assert.equal(report.dialogs[0].detail.answer, 'accept');
+  assert.equal(report.dialogs_truncated, true);
+  assert.deepEqual(report.dialog_actions_unused, [{ viewport: 'desktop', detail: { step: 2, answer: 'dismiss' } }]);
+  assert.match(formatVerifyReport(report).join('\n'), /dialog answer unused: \[desktop\] step 3/);
+  assert.match(formatVerifyReport(report).join('\n'), /confirm accept unconfirmed by dialog_action/);
+  assert.equal(JSON.stringify(report).includes('private prompt answer'), false);
+  assert.match(report.steps[0].name, /dialog accept/);
+});
+
+test('dialog contract refuses invalid answers and documents both valid variants', async () => {
+  assert.throws(() => normalizeVerifyFlow({ actions: [{ dialog: 'yes' }] }), /dialog must be/);
+  assert.throws(() => normalizeVerifyFlow({ actions: [{ dialog: 'dismiss', text: 'x' }] }), /only with "accept"/);
+  assert.throws(() => normalizeVerifyFlow({ actions: [{ dialog: 'accept', text: 'x'.repeat(1001) }] }), /at most 1000/);
+  assert.deepEqual(normalizeVerifyFlow({ actions: [{ dialog: 'dismiss' }] }).actions, [{ dialog: 'dismiss' }]);
+  const actionVariants = verifyFlowSchema().oneOf[0].properties.actions.items.oneOf;
+  assert.ok(actionVariants.some((item) => item.properties.dialog?.const === 'accept' && item.properties.text?.maxLength === 1000));
+  assert.ok(actionVariants.some((item) => item.properties.dialog?.const === 'dismiss' && !item.properties.text));
+  await assert.rejects(
+    () => runVerification({ url: 'http://127.0.0.1:65534' }, normalizeVerifyFlow({ actions: [{ dialog: 'accept' }] })),
+    /require a hosted project browser; no local browser actions ran/,
+  );
 });
 
 test('authenticated flow fields reach every hosted viewport without changing anonymous requests', async () => {
@@ -413,7 +494,7 @@ test('verify URL keeps linked ownership only for authenticated matching origins'
     rmSync(join(app, '.somewhere.json'));
     result = await run(['--url', 'https://linked.somewhere.site', '--flow', 'flow.json']);
     assert.equal(result.status, 1);
-    assert.match(result.stderr, /BROWSER_ORIGIN_NOT_AUTHORIZED/);
+    assert.match(result.stdout, /BROWSER_ORIGIN_NOT_AUTHORIZED/);
     assert.equal(requests.at(-1).body.project_id, undefined);
     writeFileSync(join(app, '.somewhere.json'), JSON.stringify({ project_id: 'linked', name: 'linked', subdomain: 'linked' }));
 
@@ -424,8 +505,8 @@ test('verify URL keeps linked ownership only for authenticated matching origins'
     const beforeDenied = requests.length;
     result = await run(['--url', 'https://third-party.example', '--flow', 'flow.json']);
     assert.equal(result.status, 1);
-    assert.match(result.stderr, /BROWSER_ORIGIN_NOT_AUTHORIZED, HTTP 403/);
-    assert.match(result.stderr, /--project <your-project-id>/);
+    assert.match(result.stdout, /BROWSER_ORIGIN_NOT_AUTHORIZED, HTTP 403/);
+    assert.match(result.stdout, /--project <your-project-id>/);
     assert.equal(requests.length, beforeDenied + 2);
     assert.equal(requests.at(-1).body.project_id, undefined);
 
@@ -438,7 +519,7 @@ test('verify URL keeps linked ownership only for authenticated matching origins'
 
     result = await run(['--project', 'linked', '--url', 'https://other.somewhere.site', '--flow', 'flow.json']);
     assert.equal(result.status, 1);
-    assert.match(result.stderr, /not routed to this project/);
+    assert.match(result.stdout, /not routed to this project/);
     assert.equal(requests.at(-1).body.project_id, 'linked');
 
     result = await run(['--project', 'linked', '--url', 'https://linked.somewhere.site', '--flow', 'flow.json', '--json']);

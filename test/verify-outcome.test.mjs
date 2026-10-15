@@ -57,11 +57,15 @@ for (const code of ['TIMEOUT', 'NETWORK_ERROR', 'SERVER_SLOW']) {
   });
 }
 
-test('explicit HTTP authentication, validation and timeout refusals stay errors', async () => {
+test('explicit HTTP authentication, validation and timeout refusals retain their codes in the failed viewport', async () => {
   for (const [code, status] of [['UNAUTHORIZED', 401], ['VALIDATION_ERROR', 400], ['TIMEOUT', 504], ['NETWORK_ERROR', 503]]) {
     const cause = new CliApiError(code, 'Refused', status);
     const client = fake(() => { throw cause; });
-    await assert.rejects(runVerification({ project_id: 'fixture' }, flow, client), (error) => error === cause);
+    const report = await runVerification({ project_id: 'fixture' }, flow, client);
+    assert.equal(report.passed, false);
+    assert.deepEqual(report.refusals, [{ viewport: 'desktop', detail: { code, status, message: 'Refused' } }]);
+    assert.equal(report.viewports[0].passed, false);
+    assert.equal(report.viewports[0].refusal, 'Refused');
     assert.equal(client.calls.length, 1);
   }
 });

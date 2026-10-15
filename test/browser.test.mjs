@@ -178,7 +178,7 @@ test('--actions uses the shared shorthand and rejects the expanded step spelling
     { action: 'fill', selector: '#email', value: 'a@b.co' },
   ]);
   assert.equal(expanded.ok, false);
-  assert.match(expanded.error, /exactly one of click, fill, upload, select, wait, expect, screenshot, eval/);
+  assert.match(expanded.error, /exactly one of click, fill, upload, select, wait, expect, screenshot, dialog, eval/);
 });
 
 test('buildBrowserBody: --snapshot is not a step', () => {

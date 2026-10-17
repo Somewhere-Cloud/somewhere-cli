@@ -6,6 +6,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { dirname, relative, resolve } from 'node:path';
+import { isAppSurfaceRootFile } from './publish-surface.js';
 
 export interface InitScaffoldFile {
   path: string;
@@ -32,6 +33,25 @@ const INIT_METADATA = new Set([
 export function canWriteInitScaffold(dir: string): boolean {
   if (!existsSync(dir)) return true;
   return readdirSync(dir).every((name) => INIT_METADATA.has(name));
+}
+
+/**
+ * The non-metadata entries of `dir`, split into app source and everything
+ * else. Source is a non-dot folder or a root file the deploy publish surface
+ * already counts as app (publish-surface.ts); a stray file, notes, LICENSE or
+ * a tool folder such as .claude is not, so init does not treat it as an app
+ * to link.
+ */
+export function initSourceEntries(dir: string): { source: string[]; other: string[] } {
+  const source: string[] = [];
+  const other: string[] = [];
+  if (!existsSync(dir)) return { source, other };
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    if (INIT_METADATA.has(entry.name)) continue;
+    const isSource = entry.isDirectory() ? !entry.name.startsWith('.') : isAppSurfaceRootFile(entry.name);
+    (isSource ? source : other).push(entry.name);
+  }
+  return { source: source.sort(), other: other.sort() };
 }
 
 /**

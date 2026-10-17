@@ -178,7 +178,7 @@ const signupConflict = () => platformReport({
   steps: signupFlow.actions.map((action, step) => ({ step, action: Object.keys(action)[0], ok: true, duration_ms: 5 })),
 });
 
-test('a mutating request refused at one viewport only is explained as the flow running once per viewport', async () => {
+test('a 409 on a write at one viewport only names duplicate creation across viewports as a possible cause', async () => {
   const bodies = [];
   const report = await runVerification({ project_id: 'notes' }, normalizeVerifyFlow(signupFlow), client([signupOk(), signupConflict()], bodies));
   assert.deepEqual(bodies.map((b) => b.viewport), ['desktop', 'mobile'], 'both default viewports still run');
@@ -187,15 +187,18 @@ test('a mutating request refused at one viewport only is explained as the flow r
   assert.equal(report.health.console.passed, false);
   assert.equal(report.health.network.passed, false);
   assert.deepEqual(report.undeclared_statuses[0].not_failed_at, ['desktop']);
-  assert.match(report.verdict, /^FAIL — POST \/api\/auth\/signup answered 409 at mobile but not at desktop\./);
+  assert.match(report.verdict, /^FAIL — POST \/api\/auth\/signup answered 409 at mobile; desktop ran all its steps without reporting this refusal\./);
   assert.match(report.verdict, /Each viewport runs the whole flow as its own browser session against the same live app/);
+  assert.match(report.verdict, /possible cause/);
+  assert.match(report.verdict, /verify records failed requests only/);
   assert.match(report.verdict, /"viewports": \["desktop"\]/);
   assert.match(report.verdict, /"viewport": "mobile"/);
-  assert.doesNotMatch(report.verdict, /to expect_requests/);
+  assert.match(report.verdict, /Otherwise the 409 is an app failure to fix\./);
+  assert.doesNotMatch(report.verdict, /succeeds once|collides with itself/);
   const text = formatVerifyReport(report).join('\n');
   assert.match(text, /console_health: FAIL/);
   assert.match(text, /network_health: FAIL/);
-  assert.match(text, /undeclared: \[mobile\] POST \/api\/auth\/signup → 409 \(from the app\); not at desktop: the flow runs once per viewport/);
+  assert.match(text, /undeclared: \[mobile\] POST \/api\/auth\/signup → 409 \(from the app\); not reported at desktop: possibly the same record created once per viewport/);
   assert.doesNotMatch(text, /declare with \{"path":"\/api\/auth\/signup"/);
 });
 
@@ -212,4 +215,41 @@ test('the per-viewport explanation stays out when every viewport is refused, onl
   const readReport = await runVerification({ project_id: 'notes' }, normalizeVerifyFlow({ actions: [] }), client([platformReport(), read]));
   assert.equal(readReport.undeclared_statuses[0].not_failed_at, undefined);
   assert.doesNotMatch(readReport.verdict, /once per viewport/);
+});
+
+// Root review of 82898dc: a refusal missing from another viewport's failed
+// requests is not proof that the request ran or succeeded there. A real 401/403
+// and a viewport that never reached the request keep the ordinary diagnosis.
+const refusedAtMobile = (status, path = '/api/notes') => platformReport({
+  passed: false,
+  failed_requests: [{ url: `${ORIGIN}${path}`, status, method: 'POST', initiator: 'page' }],
+  steps: signupFlow.actions.map((action, step) => ({ step, action: Object.keys(action)[0], ok: true, duration_ms: 5 })),
+});
+
+test('a write refused 401 or 403 at one viewport only is not called duplicate creation', async () => {
+  for (const status of [401, 403]) {
+    const report = await runVerification({ project_id: 'notes' }, normalizeVerifyFlow(signupFlow), client([signupOk(), refusedAtMobile(status)]));
+    assert.equal(report.passed, false, `${status} still fails`);
+    assert.equal(report.undeclared_statuses[0].status, status);
+    assert.equal(report.undeclared_statuses[0].not_failed_at, undefined, `${status}`);
+    assert.match(report.verdict, new RegExp(`^FAIL — POST /api/notes answered ${status} at mobile, which the flow did not declare\\.`));
+    assert.match(report.verdict, /otherwise it is an app failure to fix/);
+    assert.doesNotMatch(report.verdict + formatVerifyReport(report).join('\n'), /once per viewport|possible cause|created once/);
+  }
+});
+
+test('a viewport that never reached the request is not evidence for duplicate creation', async () => {
+  const stoppedEarly = platformReport({
+    passed: false,
+    steps: [
+      { step: 0, action: 'fill', ok: true, duration_ms: 5 },
+      { step: 1, action: 'click', ok: false, error: 'No element matches #sign-up', duration_ms: 5 },
+    ],
+  });
+  const report = await runVerification({ project_id: 'notes' }, normalizeVerifyFlow(signupFlow), client([stoppedEarly, signupConflict()]));
+  assert.equal(report.passed, false);
+  assert.equal(report.undeclared_statuses[0].status, 409);
+  assert.equal(report.undeclared_statuses[0].not_failed_at, undefined);
+  assert.match(report.verdict, /^FAIL — step 2 \(.*\) failed at desktop/);
+  assert.doesNotMatch(report.verdict + formatVerifyReport(report).join('\n'), /once per viewport|possible cause|created once/);
 });

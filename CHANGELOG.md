@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.37.39
+
+### Fixed
+
+- `somewhere init` refuses a directory that holds only unrelated files, with no app source, before creating a remote project. It names those files and keeps them; `--bare` and `--link` still accept such a directory.
+- `somewhere verify` gives clearer guidance when a write gets a 409 in one viewport run but not another. Each viewport runs the flow separately, so creating the same record in each run is a possible cause. The run still fails and the 409 stays in the report.
+
 ## 0.37.32
 
 ### Changed

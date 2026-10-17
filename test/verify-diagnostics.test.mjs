@@ -161,3 +161,55 @@ test('undeclared-status summaries carry no query, fragment, or credential-shaped
   assert.deepEqual(report.undeclared_statuses[0].declare, { path: '/api/share/<redacted>/view', status: 403 });
   assert.doesNotMatch(report.verdict, /secret|frag|eyJ/);
 });
+
+// pfb_82e8752b7581: desktop and mobile each run the whole flow as their own
+// session against the same live app, so a sign-up step creates the account in
+// one viewport and is refused 409 in the other. The run still fails and the
+// 409 stays reported; the diagnosis says why and never says to declare it.
+const signupFlow = {
+  actions: [{ fill: '#email', value: 'alice@example.test' }, { click: '#sign-up' }, { expect: { selector: '#notes', visible: true } }],
+};
+const GENERIC_409 = 'Failed to load resource: the server responded with a status of 409 (Conflict)';
+const signupOk = () => platformReport({ steps: signupFlow.actions.map((action, step) => ({ step, action: Object.keys(action)[0], ok: true, duration_ms: 5 })) });
+const signupConflict = () => platformReport({
+  passed: false,
+  console_errors: [GENERIC_409],
+  failed_requests: [{ url: `${ORIGIN}/api/auth/signup`, status: 409, method: 'POST', initiator: 'page' }],
+  steps: signupFlow.actions.map((action, step) => ({ step, action: Object.keys(action)[0], ok: true, duration_ms: 5 })),
+});
+
+test('a mutating request refused at one viewport only is explained as the flow running once per viewport', async () => {
+  const bodies = [];
+  const report = await runVerification({ project_id: 'notes' }, normalizeVerifyFlow(signupFlow), client([signupOk(), signupConflict()], bodies));
+  assert.deepEqual(bodies.map((b) => b.viewport), ['desktop', 'mobile'], 'both default viewports still run');
+  assert.equal(bodies.length, 2, 'nothing is replayed');
+  assert.equal(report.passed, false, 'the 409 still fails the run');
+  assert.equal(report.health.console.passed, false);
+  assert.equal(report.health.network.passed, false);
+  assert.deepEqual(report.undeclared_statuses[0].not_failed_at, ['desktop']);
+  assert.match(report.verdict, /^FAIL — POST \/api\/auth\/signup answered 409 at mobile but not at desktop\./);
+  assert.match(report.verdict, /Each viewport runs the whole flow as its own browser session against the same live app/);
+  assert.match(report.verdict, /"viewports": \["desktop"\]/);
+  assert.match(report.verdict, /"viewport": "mobile"/);
+  assert.doesNotMatch(report.verdict, /to expect_requests/);
+  const text = formatVerifyReport(report).join('\n');
+  assert.match(text, /console_health: FAIL/);
+  assert.match(text, /network_health: FAIL/);
+  assert.match(text, /undeclared: \[mobile\] POST \/api\/auth\/signup → 409 \(from the app\); not at desktop: the flow runs once per viewport/);
+  assert.doesNotMatch(text, /declare with \{"path":"\/api\/auth\/signup"/);
+});
+
+test('the per-viewport explanation stays out when every viewport is refused, only one ran, or the request is a read', async () => {
+  const both = await runVerification({ project_id: 'notes' }, normalizeVerifyFlow(signupFlow), client([signupConflict(), signupConflict()]));
+  assert.equal(both.undeclared_statuses[0].not_failed_at, undefined);
+  assert.match(both.verdict, /add \{"path":"\/api\/auth\/signup","status":409\} to expect_requests/);
+
+  const single = await runVerification({ project_id: 'notes' }, normalizeVerifyFlow({ ...signupFlow, viewports: ['mobile'] }), client([signupConflict()]));
+  assert.equal(single.undeclared_statuses[0].not_failed_at, undefined);
+  assert.doesNotMatch(single.verdict, /once per viewport|but not at/);
+
+  const read = platformReport({ passed: false, failed_requests: [{ url: `${ORIGIN}/api/notes/9`, status: 404, method: 'GET', initiator: 'page' }] });
+  const readReport = await runVerification({ project_id: 'notes' }, normalizeVerifyFlow({ actions: [] }), client([platformReport(), read]));
+  assert.equal(readReport.undeclared_statuses[0].not_failed_at, undefined);
+  assert.doesNotMatch(readReport.verdict, /once per viewport/);
+});

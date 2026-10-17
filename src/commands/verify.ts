@@ -140,10 +140,11 @@ export interface VerifyUndeclaredStatus {
   /** 'eval' = your flow's eval step made it (a probe); 'page' = the app's own code. */
   initiator: 'eval' | 'page' | 'unknown';
   declare: { path: string; status: number };
-  /** Other viewports that ran the flow without this refusal. Set only for a
-   *  4xx on a writing method: each viewport runs every action as its own
-   *  session against the same live app, so a step that creates something
-   *  unique succeeds once and is refused in the other viewports. */
+  /** Other viewports whose steps all ran and passed without reporting this
+   *  refusal. Set only for an undeclared 409 on a writing method, where one
+   *  possible cause is the same unique record created in each viewport. verify
+   *  records failed requests only, so this does not prove the request ran or
+   *  succeeded there. */
   not_failed_at?: string[];
 }
 
@@ -182,12 +183,12 @@ function undeclaredStatusOf(viewport: string, detail: unknown): VerifyUndeclared
 function undeclaredStatusVerdict(first: VerifyUndeclaredStatus, all: VerifyUndeclaredStatus[]): string {
   if (first.not_failed_at?.length) {
     const others = first.not_failed_at.join(', ');
-    return `FAIL — ${first.method} ${first.path} answered ${first.status} at ${first.viewport} but not at ${others}. `
-      + 'Each viewport runs the whole flow as its own browser session against the same live app, at the same time, '
-      + 'so a step that creates something unique (an account, a slug, a one-time code) succeeds once and is refused in the other viewports. '
-      + `Declaring ${first.status} would not fit: ${others} does not see it. `
-      + 'Run the creating flow in one viewport ("viewports": ["desktop"]), then check the other screen size without creating it again: '
-      + 'a multi-user journey can sign up once and continue as the same actor with "viewport": "mobile" (somewhere verify --schema).';
+    return `FAIL — ${first.method} ${first.path} answered ${first.status} at ${first.viewport}; ${others} ran all its steps without reporting this refusal. `
+      + 'Each viewport runs the whole flow as its own browser session against the same live app, at the same time. '
+      + 'One possible cause is a step that creates something unique (an account, a slug) in each viewport, so it conflicts in all but one; '
+      + `verify records failed requests only, so this is not established. If that is the cause, declaring ${first.status} would not fit, because ${others} would not see it: `
+      + 'run the creating flow in one viewport ("viewports": ["desktop"]), then continue as the same actor with "viewport": "mobile" in a multi-user journey (somewhere verify --schema). '
+      + `Otherwise the ${first.status} is an app failure to fix.`;
   }
   const who = first.initiator === 'eval'
     ? 'Your eval step made this request (a probe)'
@@ -584,11 +585,14 @@ function shapeVerificationReport(
   const undeclared = failedRequests
     .map((item) => undeclaredStatusOf(item.viewport, item.detail))
     .filter((item): item is VerifyUndeclaredStatus => item !== null);
-  const ranViewports = runs.map(({ viewport }) => viewport.label)
-    .filter((label) => !cappedViewports.has(label) && !unknownViewports.has(label));
+  // Only a viewport that ran and passed every step can stand beside a refusal;
+  // one that stopped early may never have sent the request.
+  const completedViewports = runs.map(({ viewport }) => viewport.label)
+    .filter((label) => !cappedViewports.has(label) && !unknownViewports.has(label)
+      && !steps.some((step) => step.viewport === label && (!step.passed || step.ran === false)));
   for (const item of undeclared) {
-    if (item.status >= 500 || ['GET', 'HEAD', 'OPTIONS'].includes(item.method.toUpperCase())) continue;
-    const notFailedAt = ranViewports.filter((label) => label !== item.viewport
+    if (item.status !== 409 || ['GET', 'HEAD', 'OPTIONS'].includes(item.method.toUpperCase())) continue;
+    const notFailedAt = completedViewports.filter((label) => label !== item.viewport
       && !undeclared.some((other) => other.viewport === label && other.method === item.method && other.path === item.path));
     if (notFailedAt.length) item.not_failed_at = notFailedAt;
   }
@@ -1405,7 +1409,7 @@ export function formatVerifyReport(report: VerifyReport, evidencePath?: string):
   for (const item of report.layout ?? []) lines.push(`layout: [${item.viewport}] ${dim(item.detail)}`);
   for (const item of report.undeclared_statuses ?? []) {
     lines.push(`undeclared: [${item.viewport}] ${item.method} ${item.path} → ${item.status} (${item.initiator === 'eval' ? 'from your eval step' : item.initiator === 'page' ? 'from the app' : 'origin unknown'}); ${item.not_failed_at?.length
-      ? `not at ${item.not_failed_at.join(', ')}: the flow runs once per viewport, so creating the same record collides with itself`
+      ? `not reported at ${item.not_failed_at.join(', ')}: possibly the same record created once per viewport, otherwise an app failure to fix`
       : `declare with ${JSON.stringify(item.declare)} if intended`}`);
   }
   for (const item of report.navigation_retries ?? []) {
@@ -1505,8 +1509,8 @@ Minimal --flow JSON:
 
 Save that object as flow.json, then pass --flow flow.json.
 Each viewport runs every action as its own browser session, at the same time,
-against the same live app: a flow that signs up or creates a unique record runs
-once per viewport. Create it in one viewport, or use the journey below.
+against the same live app, so a step that signs up or creates a unique record
+runs once per viewport. Create it in one viewport, or use the journey below.
 For the complete flow and action schema, run: somewhere docs browser
 
 Several users in one run (--project required; each actor is its own browser):

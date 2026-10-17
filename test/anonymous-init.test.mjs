@@ -185,7 +185,9 @@ for (const json of [false, true]) {
 
 for (const args of [['--bare'], ['--link', '--project', 'fixture'], []]) {
   test(`existing command-running agent settings survive init byte for byte: ${args.join(' ') || 'existing source'}`, async () => {
-    const files = { '.claude/settings.json': '{broken', '.codex/hooks.json': '{"hooks":{"Stop":[{"command":"keep"}]}}', '.cursor/hooks.json': '{"version":1,"hooks":{}}', '.mcp.json': '{"mcpServers":{"keep":{"command":"keep"}}}' };
+    const files = { '.claude/settings.json': '{broken', '.codex/hooks.json': '{"hooks":{"Stop":[{"command":"keep"}]}}', '.cursor/hooks.json': '{"version":1,"hooks":{}}', '.mcp.json': '{"mcpServers":{"keep":{"command":"keep"}}}',
+      // Without --bare/--link, agent settings alone are not an app (init-admission.test.mjs); give it real source.
+      ...(args.length ? {} : { 'src/main.ts': 'export {};\n' }) };
     const global = '{"mcpServers":{"existing":{"command":"keep-global"}}}';
     const result = await run(['--name', 'fixture', ...args, '--json'], {
       token: 'smt_fixture', prepare: dir => {

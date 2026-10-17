@@ -17,6 +17,7 @@ import { basename, join } from 'node:path';
 import { existsSync } from 'node:fs';
 import {
   canWriteInitScaffold,
+  initSourceEntries,
   preflightInitScaffold,
   writeInitScaffold,
   writeMissingGuideFiles,
@@ -92,8 +93,10 @@ export function registerInit(program: Command) {
         + '/auth/magic, which the starter routes before the sign-in gate.\n'
         + '`--template minimal` writes an app without sign-in.\n'
         + 'New starters and --bare also install six agent skills in .agents/skills, pinned by skills-lock.json.\n'
-        + '\nA directory that already has files is linked and left untouched. Use --bare\n'
-        + 'only to bring your own layout; existing AGENTS.md/CLAUDE.md are never replaced.\n'
+        + '\nA directory that already holds an app (package.json, index.html, src/, …) is\n'
+        + 'linked and left untouched. A directory holding only other files (notes, a stray\n'
+        + 'file) is refused before anything is created. Use --bare only to bring your own\n'
+        + 'layout; existing AGENTS.md/CLAUDE.md are never replaced.\n'
         + '\nPick modules instead of a template (agents: no questions asked):\n'
         + '  somewhere init --catalog --json\n'
         + '  somewhere init --name my-app --features private-data --dry-run --json\n'
@@ -161,6 +164,16 @@ export function registerInit(program: Command) {
       }
 
       const shouldScaffold = !opts.bare && canWriteInitScaffold(dir);
+      // Decide starter vs existing source before any login, request or write:
+      // a folder holding only files that are not an app (a stray file, notes)
+      // would otherwise be linked to a new project with no starter and no app.
+      if (!shouldScaffold && !opts.bare && !opts.link) {
+        const entries = initSourceEntries(dir);
+        if (entries.source.length === 0) {
+          error(`This directory has no app source, only ${entries.other.join(', ')}. somewhere init writes its starter into an empty directory and links a directory that already holds an app, so nothing was created. Run it in a new empty directory, move these files out, or pass --bare to link this directory without a starter.`);
+          process.exit(2);
+        }
+      }
       const scaffoldFiles = (projectName: string): InitScaffoldFile[] =>
         template === 'minimal' && !plan
           ? createGreenTemplate()

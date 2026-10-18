@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.37.40
+
+### Changed
+
+- Local declared-data checks understand `allOf(gate, who)` permission policies, matching the platform admission that is now live. The vendored declared-data code is refreshed from platform core ed285f7b.
+
 ## 0.37.39
 
 ### Fixed

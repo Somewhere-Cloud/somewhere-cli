@@ -42,12 +42,12 @@ in with \`email_verified: false\`; unverified users can sign in and pass
 role, email_verified, … }\` or throws 401 \`AUTH_REQUIRED\`;
 \`sw.auth.fromRequest(req)\` returns it or \`null\`.
 
-Functions: a bare \`export default async function (req, sw)\` returning a
-\`Response\` is always valid. The optional wrapper \`sw.endpoint({ auth: 'none' |
-'optional' | 'required', body, rateLimit, handler: async ({ body, user, params
-}, sw) => value })\` answers 401/400 itself and sends \`value\` as JSON. Params:
-\`params.id\` there, \`sw.params.id\` bare. \`somewhere typecheck\` types bare
-handlers as \`(req: Request, sw: SomewhereRuntimeContext)\`.
+Functions: JSON endpoints use \`sw.endpoint({ auth, body, rateLimit, handler:
+async ({ body, user, params }, sw) => value })\`; always set \`auth\` to
+\`'required'\`, \`'optional'\` or \`'none'\` (public on purpose), or deploy refuses
+it. Webhooks, streams and custom responses use a bare \`export default async
+function (req, sw)\` returning a \`Response\`. Params: \`params.id\` there,
+\`sw.params.id\` bare; \`somewhere typecheck\` types bare handlers too.
 
 Data: declare tables in \`db/schema.ts\`; pages use \`somewhere:data\`
 (\`data.notes.list()\`, \`.create()\`, \`.update(id, …)\`) without API files.

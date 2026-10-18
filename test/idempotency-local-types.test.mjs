@@ -9,7 +9,7 @@ import { runTypecheck } from '../dist/lib/typecheck.js';
 const sha256 = value => createHash('sha256').update(value).digest('hex');
 // Fixed-schema receipt-free output with canonical list bounds; no Git history is needed in CI.
 const legacy = { runtime: '28c9adad61e7e605b886d3416ecf1c22cc80bc319da963c1b1b1aa9fcfe56d93', manifest: '321e416643cc714c5370f4145d53f479ddfa1dc74a46da9ad677213299e421e6', digest: 'f94004dfa2945b48b99475ea839686f362682d04251cfcf24d7436a4310c6dc7' };
-const schema = `export default schema({notes:table({id:id(),title:text()},{scope:owner(),client:{read:['id','title'],create:['title']}})});`;
+const schema = `export default schema({notes:table({id:id({ uuid: false }),title:text()},{scope:owner(),client:{read:['id','title'],create:['title']}})});`;
 test('local optional receipt handles do not advertise capable runtime or manifest', async t => {
  const root=mkdtempSync(join(tmpdir(),'cli-idem-types-'));t.after(()=>rmSync(root,{recursive:true,force:true}));
  mkdirSync(join(root,'db'));mkdirSync(join(root,'src'));

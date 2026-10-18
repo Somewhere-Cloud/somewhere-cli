@@ -11,11 +11,11 @@ import { runTypecheck } from '../dist/lib/typecheck.js';
 import { collectFiles } from '../dist/lib/files.js';
 
 const schema = `export default schema({
-  notes: table({ id: id(), title: text(), optional: text({ nullable: true }), enabled: boolean({ default: true }), secret: text({ default: 'hidden' }) }, {
+  notes: table({ id: id({ uuid: false }), title: text(), optional: text({ nullable: true }), enabled: boolean({ default: true }), secret: text({ default: 'hidden' }) }, {
     scope: owner(), client: { read: ['id', 'title', 'optional', 'enabled'], create: ['title', 'optional'], update: ['title'], delete: true },
   }),
-  inbox: table({ id: id(), message: text() }, { scope: shared(), client: { create: ['message'] } }),
-  internal: table({ id: id(), secret: text() }, { scope: serverOnly() }),
+  inbox: table({ id: id({ uuid: false }), message: text() }, { scope: shared(), client: { create: ['message'] } }),
+  internal: table({ id: id({ uuid: false }), secret: text() }, { scope: serverOnly() }),
 });`;
 const compilerOptions = { strict: true, skipLibCheck: false, target: 'ES2022', module: 'ESNext', moduleResolution: 'Bundler' };
 test('deploy carries schema source without generated editor declarations, preserving authored declarations', t => {
@@ -42,13 +42,13 @@ const check = root => runTypecheck(root, { installTypePackages: false });
 test('local typecheck resolves declared relation reads and parent-authorized moves', async t => {
   const relationalSchema = `import { anyOf, parent } from 'somewhere/db';
   export default schema({
-    projects: table({ id: id(), title: text() }, {
+    projects: table({ id: id({ uuid: false }), title: text() }, {
       scope: anyOf(owner(), member({ group: 'id', membership: 'project_members', member_user: 'user_id', member_group: 'project_id' })),
       relations: { tasks: hasMany('tasks', 'project_id') },
       client: { read: ['id', 'title'], create: ['title'] },
     }),
-    project_members: table({ id: id(), project_id: integer({ references: 'projects' }), user_id: text() }, { scope: serverOnly() }),
-    tasks: table({ id: id(), project_id: integer({ references: 'projects' }), title: text(), secret: text({ default: 'private' }) }, {
+    project_members: table({ id: id({ uuid: false }), project_id: integer({ references: 'projects' }), user_id: text() }, { scope: serverOnly() }),
+    tasks: table({ id: id({ uuid: false }), project_id: integer({ references: 'projects' }), title: text(), secret: text({ default: 'private' }) }, {
       scope: parent({ via: 'project_id' }),
       client: { read: ['id', 'title'], create: ['project_id', 'title'], update: ['project_id', 'title'] },
     }),
@@ -80,7 +80,7 @@ data.projects.create({ title: 'No owner assignment', user_id: 'another-user' });
 test('local typecheck accepts allOf(gate, who) and refuses owner assignment on it', async t => {
   const boardSchema = `import { allOf, anyOf, group } from 'somewhere/db';
   export default schema({
-    cards: table({ id: id(), group_id: text(), body: text() }, {
+    cards: table({ id: id({ uuid: false }), group_id: text(), body: text() }, {
       scope: allOf(
         group({ roles: { read: ['member', 'admin'], create: ['member', 'admin'], update: ['member', 'admin'], delete: ['member', 'admin'] } }),
         anyOf(owner(), group({ roles: { read: ['member', 'admin'], update: ['admin'], delete: ['admin'] } })),

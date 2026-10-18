@@ -3362,7 +3362,7 @@ interface SomewhereJobsCreateOptions {
   run_at?: string;
   agent?: { messages: readonly unknown[]; max_steps?: number; max_turns?: number; deployment_version?: string };
   // Row-bound job: acts for the signed-in user on ONE row of a job binding declared in db/schema.ts, with only that
-  // binding's operations, until its deadline. id is the row's id(): a whole number, or a string for uuid ids.
+  // binding's operations, until its deadline. id is the row's id(): a string for a random text key, or a whole number for id({ uuid: false }).
   // Created only from that user's own request (not from another job); not combined with agent.
   row?: { binding: string; id: number | string };
 }
@@ -4368,7 +4368,7 @@ function parseIntakePermissions(value, columns, scope, publicRead) {
   }
   if (scope.kind !== "owner" || scope.visitors === true) return "client.intake needs owner() without visitors: each accepted row belongs to the target row's owner.";
   const id = columns.find((column) => column.helper === "id");
-  if (!id || id.uuid === true) return "client.intake needs an integer id(), not id({ uuid: true }).";
+  if (!id || id.uuid === true) return "client.intake needs an integer key: declare id({ uuid: false }).";
   if (publicRead === true) return "client.intake cannot accept rows into a table whose rows are all public (client.publicRead: true).";
   const target = input.target;
   if (!target || typeof target !== "object" || Array.isArray(target) || Object.keys(target).sort().join() !== "field,table") {
@@ -4478,7 +4478,7 @@ function parseLinkPermissions(value, read, update, create, columns, scope) {
   if (input.anonymousCreate === true) {
     if (scope.kind !== "owner" || scope.visitors === true) return "client.links.anonymousCreate needs owner() without visitors.";
     if (!create || create.length === 0) return "client.links.anonymousCreate needs client.create: it creates rows with the fields the app data client creates.";
-    if (columns.find((column) => column.helper === "id")?.uuid === true) return "client.links.anonymousCreate needs an integer id(), not id({ uuid: true }).";
+    if (columns.find((column) => column.helper === "id")?.uuid === true) return "client.links.anonymousCreate needs an integer key: declare id({ uuid: false }).";
     if (columns.some((column) => column.helper === "blob")) return "client.links.anonymousCreate is not available on a table with a blob() column.";
   }
   return { read: linkRead, edit, children, maxDays, ...input.anonymousCreate === true ? { anonymousCreate: true } : {} };
@@ -6426,10 +6426,13 @@ function tokenize(source) {
   return tokens;
 }
 var Reader = class {
-  constructor(tokens) {
+  constructor(tokens, options = {}) {
     this.tokens = tokens;
+    this.bareIdIsText = !options.legacyIntegerIdDefault;
   }
   pos = 0;
+  /** What a bare id() declares: a random text key, or (legacy retained source) an integer. */
+  bareIdIsText;
   peek() {
     return this.tokens[this.pos];
   }
@@ -6596,7 +6599,7 @@ function readColumn(r, tableName, rawName, line) {
   const col = {
     name,
     helper,
-    uuid: false,
+    uuid: helper === "id" && r.bareIdIsText,
     nullable: false,
     hasDefault: false,
     default: null,
@@ -7246,7 +7249,7 @@ function readTable(r, rawName, nameLine) {
   }
   return { kind: "table", table: { name, scope, relations, columns, indexes, uniques, removedColumns: [...removedColumns].sort(), ...client ? { client } : {} } };
 }
-function extractSchemaTs(source) {
+function extractSchemaTs(source, options = {}) {
   if (typeof source !== "string" || source.trim().length === 0) {
     return { ok: false, errors: ["db/schema.ts is empty. Declare at least one table, or remove the file to leave the database unmanaged."] };
   }
@@ -7256,7 +7259,7 @@ function extractSchemaTs(source) {
   try {
     const r = new Reader(resolveSchemaConstants(tokenize(source), SCHEMA_CALLABLE, MAX_SOURCE_BYTES, (line, message) => {
       throw new SchemaTsError(`line ${line}: ${message}`);
-    }));
+    }), options);
     while (r.peek().kind === "ident" && r.peek().value === "import") skipImport(r);
     const exp = r.expectIdent("to start the declaration");
     if (exp.value !== "export") {
@@ -7322,6 +7325,16 @@ function extractSchemaTs(source) {
             marked ? `Column "${t.name}"."${c.name}" references "${c.references}", which this file marks ${removedTables.includes(c.references) ? "removedTable()" : "exported()"}. Remove the reference (mark the column removed(), or drop "references" from it) before the table can go.` : `Column "${t.name}"."${c.name}" references "${c.references}", which is not declared in db/schema.ts. Foreign keys can only target tables in the same declaration.`
           );
         }
+      }
+    }
+    const keyOf = new Map(tables.map((t) => [t.name, t.columns.find((c) => c.helper === "id")]));
+    for (const t of tables) {
+      for (const c of t.columns) {
+        const key = c.references ? keyOf.get(c.references) : void 0;
+        if (!key) continue;
+        const fits = key.uuid ? c.helper === "text" : c.helper === "integer" || c.helper === "number";
+        if (fits) continue;
+        errors.push(key.uuid ? `Column "${t.name}"."${c.name}" references "${c.references}", whose id() is a random text key, but is declared ${c.helper}(). Declare it text({ references: '${c.references}' }), or give "${c.references}" an integer key with id({ uuid: false }).` : `Column "${t.name}"."${c.name}" references "${c.references}", whose key is an integer (id({ uuid: false })), but is declared ${c.helper}(). Declare it integer({ references: '${c.references}' }), or give "${c.references}" a random text key with id().`);
       }
     }
     const tableByName = new Map(tables.map((t) => [t.name, t]));
@@ -7476,10 +7489,10 @@ function clientAuthorityFromSource(files) {
   const authority = schemaAuthorityFromSource(files);
   return Object.values(authority?.schema ?? {}).some((table) => table.client !== void 0) ? authority : void 0;
 }
-function schemaAuthorityFromSource(files) {
+function schemaAuthorityFromSource(files, options = {}) {
   const source = files["db/schema.ts"];
   if (source === void 0) return void 0;
-  const parsed = extractSchemaTs(source);
+  const parsed = extractSchemaTs(source, options);
   if (!parsed.ok) throw new Error(`Invalid db/schema.ts: ${parsed.errors.join(" ")}`);
   const schema = {};
   const intents = {};

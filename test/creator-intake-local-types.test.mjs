@@ -7,12 +7,12 @@ import { tmpdir } from 'node:os';
 import { prepareDeclaredData } from '../dist/lib/declared-data.js';
 import { runTypecheck } from '../dist/lib/typecheck.js';
 const sha256 = value => createHash('sha256').update(value).digest('hex');
-const ordinary = `export default schema({notes:table({id:id(),title:text()},{scope:owner(),client:{read:['id','title'],create:['title']}})});`;
+const ordinary = `export default schema({notes:table({id:id({ uuid: false }),title:text()},{scope:owner(),client:{read:['id','title'],create:['title']}})});`;
 const schema = `export default schema({
- notes: table({id:id(),title:text()},{scope:owner(),client:{read:['id','title'],create:['title'],links:{read:true,anonymousCreate:true}}}),
- consultants: table({id:id(),slug:text({unique:true}),name:text(),published:boolean({default:false}),accepting:boolean({default:false})},
+ notes: table({id:id({ uuid: false }),title:text()},{scope:owner(),client:{read:['id','title'],create:['title'],links:{read:true,anonymousCreate:true}}}),
+ consultants: table({id:id({ uuid: false }),slug:text({unique:true}),name:text(),published:boolean({default:false}),accepting:boolean({default:false})},
   {scope:owner(),client:{read:['id','slug','name'],publicRead:{where:{published:true}}}}),
- requests: table({id:id(),message:text(),reply_email:text(),status:text({default:'new'})},
+ requests: table({id:id({ uuid: false }),message:text(),reply_email:text(),status:text({default:'new'})},
   {scope:owner(),client:{intake:{target:{table:'consultants',field:'slug'},fields:['message','reply_email'],where:{accepting:true}}}}),
 });`;
 test('canonical creator and intake local types retain the ordinary contract with bounded lists', async t => {
@@ -27,7 +27,7 @@ test('canonical creator and intake local types retain the ordinary contract with
  writeFileSync(join(root,'tsconfig.json'),JSON.stringify({compilerOptions:{strict:true,skipLibCheck:false,target:'ES2022',module:'ESNext',moduleResolution:'Bundler'},include:['src']}));
  writeFileSync(join(root,'src/main.ts'),`import {data,type CreatorCapability} from 'somewhere:data';
 import {table,id,text,owner} from 'somewhere/db';
-table({id:id(),message:text()},{scope:owner(),client:{intake:{target:{table:'consultants',field:'slug'},
+table({id:id({ uuid: false }),message:text()},{scope:owner(),client:{intake:{target:{table:'consultants',field:'slug'},
 // @ts-expect-error intake.fields must name declared destination columns
 fields:['missing_destination_column']}}});
 const created=await data.notes.createAnonymous({title:'Plan'});

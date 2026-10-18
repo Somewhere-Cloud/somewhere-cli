@@ -442,7 +442,8 @@ const SCHEMA = `import { id, owner, schema, table, text } from 'somewhere/db';
 // scope; they must check the caller themselves. \`somewhere docs declared-data\`
 export default schema({
   notes: table(
-    { id: id(), title: text(), body: text({ default: '' }) },
+    // An integer key: the safe create retry below (request.retry) needs one.
+    { id: id({ uuid: false }), title: text(), body: text({ default: '' }) },
     {
       scope: owner(),
       client: {
@@ -984,9 +985,9 @@ export default async (req: Request, sw: SomewhereRuntimeContext): Promise<Respon
 
   let body: unknown;
   try { body = await req.json(); } catch { return Response.json({ error: 'INVALID_JSON' }, { status: 400 }); }
-  const id = body && typeof body === 'object' && 'id' in body ? Number(body.id) : NaN;
+  const id = body && typeof body === 'object' && 'id' in body && typeof body.id === 'string' ? body.id : '';
   const decision = body && typeof body === 'object' && 'decision' in body ? body.decision : null;
-  if (!Number.isInteger(id) || (decision !== 'approve' && decision !== 'reject')) {
+  if (!id || (decision !== 'approve' && decision !== 'reject')) {
     return Response.json({ error: 'VALIDATION_ERROR', message: 'Send { id, decision: "approve" | "reject" }.' }, { status: 400 });
   }
 

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.37.41
+
+### Changed
+
+- The `AGENTS.md` written by `somewhere init` now says to set `auth` on every `sw.endpoint` (`'required'`, `'optional'`, or `'none'` when public on purpose), because a deploy refuses an endpoint without it. Webhooks, streams and custom responses still use a bare `export default async function (req, sw)`.
+
 ## 0.37.40
 
 ### Changed

@@ -71,6 +71,16 @@ var require_declared_data_contract = __commonJS({
         if (left.k !== "o" || !["m", "g", "r"].includes(right.k)) fail(label);
         return { k: "a", p: [left, right] };
       }
+      if (value.k === "n" && keys === "g,k,w") {
+        const gate = policy(value.g, label), who = policy(value.w, label);
+        if (!["m", "g", "r"].includes(gate.k) || !["o", "a"].includes(who.k)) fail(label);
+        if (who.k === "a") {
+          const x = who.p[1];
+          const same = x.k === "r" || x.k === "g" && gate.k === "g" && x.c.toLowerCase() === gate.c.toLowerCase() || x.k === "m" && gate.k === "m" && x.m.m.toLowerCase() === gate.m.m.toLowerCase() && x.m.u.toLowerCase() === gate.m.u.toLowerCase() && JSON.stringify(x.m.g.map((c) => c.toLowerCase())) === JSON.stringify(gate.m.g.map((c) => c.toLowerCase())) && JSON.stringify(x.m.mg.map((c) => c.toLowerCase())) === JSON.stringify(gate.m.mg.map((c) => c.toLowerCase()));
+          if (!same) fail(label);
+        }
+        return { k: "n", g: gate, w: who };
+      }
       if (value.k === "g" && ["c,k,roles", "c,generation,k,roles"].includes(keys) && identifier.test(value.c)) {
         return { k: "g", c: value.c, roles: policyRoles(value.roles, label) };
       }
@@ -80,7 +90,7 @@ var require_declared_data_contract = __commonJS({
       if (value.k === "p" && keys === "k,p,pk,t,v" && [value.v, value.t, value.pk].every((item) => typeof item === "string" && identifier.test(item))) {
         if (edges + 1 > 4) fail(label);
         const inherited = policy(value.p, label, edges + 1);
-        if (!["o", "m", "a", "p", "g", "r"].includes(inherited.k)) fail(label);
+        if (!["o", "m", "a", "n", "p", "g", "r"].includes(inherited.k)) fail(label);
         return { k: "p", v: value.v, t: value.t, pk: value.pk, p: inherited };
       }
       fail(label);
@@ -100,7 +110,10 @@ var require_declared_data_contract = __commonJS({
       if (!value || typeof value !== "object") return;
       if (value.k === "m" && value.m) out.add(value.m.m);
       else if (value.k === "a") value.p.forEach((item) => policyMembershipTables(item, out));
-      else if (value.k === "p") policyMembershipTables(value.p, out);
+      else if (value.k === "n") {
+        policyMembershipTables(value.g, out);
+        policyMembershipTables(value.w, out);
+      } else if (value.k === "p") policyMembershipTables(value.p, out);
     }
     function validateInsertReceiptCapability(value) {
       if (value !== void 0 && value !== "insert-v1") fail("insert receipt capability");
@@ -187,7 +200,7 @@ var require_declared_data_contract = __commonJS({
           member = { g: [...g], m, u, mg: [...mg], ...normalizedOperations !== void 0 ? { o: [...normalizedOperations] } : {} };
         }
         const normalizedPolicy = intent === "policy" ? policy(table.policy, `${name}.policy`) : null;
-        if (normalizedPolicy && !["a", "p", "g", "r"].includes(normalizedPolicy.k)) fail(`${name}.policy root`);
+        if (normalizedPolicy && !["a", "n", "p", "g", "r"].includes(normalizedPolicy.k)) fail(`${name}.policy root`);
         if (normalizedPolicy?.k === "g" && create !== null && !create.includes(normalizedPolicy.c)) fail(`${name}.policy group create`);
         if (normalizedPolicy?.k === "a") {
           owner = normalizedPolicy.p[0].c;
@@ -195,6 +208,13 @@ var require_declared_data_contract = __commonJS({
           const fixed = branch.k === "m" ? branch.m.g : branch.k === "g" ? [branch.c] : [];
           if ([...create || [], ...update || []].includes(owner) || (update || []).some((field) => fixed.includes(field))) fail(`${name}.policy identity writes`);
           if (branch.k === "g" && create !== null && !create.includes(branch.c)) fail(`${name}.policy group create`);
+        }
+        if (normalizedPolicy?.k === "n") {
+          owner = normalizedPolicy.w.k === "o" ? normalizedPolicy.w.c : normalizedPolicy.w.p[0].c;
+          const gate = normalizedPolicy.g;
+          const fixed = gate.k === "m" ? gate.m.g : gate.k === "g" ? [gate.c] : [];
+          if ([...create || [], ...update || []].includes(owner) || (update || []).some((field) => fixed.includes(field))) fail(`${name}.policy identity writes`);
+          if (gate.k === "g" && create !== null && !create.includes(gate.c)) fail(`${name}.policy group create`);
         }
         if (normalizedPolicy?.k === "p" && create !== null && !create.includes(normalizedPolicy.v)) fail(`${name}.policy parent create`);
         let links = null;
@@ -1332,7 +1352,7 @@ interface SomewhereAuthModerationRevoked { revoked_sessions: number; revoked_ref
 // agent accounts are not listed; absent ids are omitted.
 interface SomewhereAuthDirectoryUser { id: string; email: string; display_name: string | null; email_verified: boolean; created_at: number | null }
 interface SomewhereRuntimeAuthServer {
-  listUsers(options?: { ids: readonly string[]; limit?: never; cursor?: never } | { ids?: never; limit?: number; cursor?: string }): Promise<{ users: SomewhereAuthDirectoryUser[]; next_cursor: string | null }>;
+  listUsers(options?: { ids: readonly string[]; emails?: never; limit?: never; cursor?: never } | { emails: readonly string[]; ids?: never; limit?: never; cursor?: never } | { ids?: never; emails?: never; limit?: number; cursor?: string }): Promise<{ users: SomewhereAuthDirectoryUser[]; next_cursor: string | null }>;
 }
 interface SomewhereRuntimeAuthModeration {
   ban(req: Request, userId: string, options?: { reason?: string | null } | null): Promise<SomewhereAuthModerationRevoked & {
@@ -3664,11 +3684,6 @@ interface SomewhereRuntimeTasks {
   };
 }
 
-// \u2500\u2500 sw.calls \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
-interface SomewhereRuntimeCalls {
-  newSession(options?: { thirdparty?: boolean } | null): Promise<{ session_id: string; project_id: string; authorization_status: 'persisted' }>;
-}
-
 interface SomewhereRuntimeContext {
   readonly email: SomewhereRuntimeEmail;
   readonly contacts: SomewhereRuntimeContacts;
@@ -3679,7 +3694,6 @@ interface SomewhereRuntimeContext {
   readonly jobs: SomewhereRuntimeJobs;
   readonly cron: SomewhereRuntimeCron;
   readonly tasks: SomewhereRuntimeTasks;
-  readonly calls: SomewhereRuntimeCalls;
 }
 interface __SomewhereTypedRequest<Input> extends Request { json(): Promise<Input> }
 type ServerFunction<Contract extends { input: unknown; output: unknown }> =
@@ -3743,7 +3757,7 @@ interface SomewhereEndpointConfig<Auth extends SomewhereEndpointAuth, Schema ext
     var DECLARED_COLUMN_TYPES = { integer: "number", bigint: "string", number: "number", text: "string", timestamp: "string", boolean: "boolean", json: "__SomewhereJson", blob: "number[]" };
     function declaredOwnerColumn2(name, table, scopes) {
       if (Object.prototype.hasOwnProperty.call(scopes, name)) return scopes[name];
-      const find = (policy) => !policy ? null : policy.k === "o" ? policy.c : policy.k === "a" ? find(policy.p[0]) || find(policy.p[1]) : null;
+      const find = (policy) => !policy ? null : policy.k === "o" ? policy.c : policy.k === "a" ? find(policy.p[0]) || find(policy.p[1]) : policy.k === "n" ? find(policy.w) : null;
       return find(table.policy);
     }
     function declaredTablesDeclaration3(authority) {
@@ -3961,6 +3975,7 @@ var require_schema_types = __commonJS({
   interface MemberScope extends Scope { readonly __somewhereMember: unique symbol }
   interface GroupScope extends Scope { readonly __somewhereGroup: unique symbol }
   interface AppRoleScope extends Scope { readonly __somewhereAppRole: unique symbol }
+  interface AnyOfScope extends Scope { readonly __somewhereAnyOf: unique symbol }
   interface ColumnOptions<Default> {
     nullable?: boolean; default?: Default | null; unique?: boolean;
     references?: string; onDelete?: 'cascade' | 'restrict'; renamedFrom?: string;
@@ -4016,8 +4031,9 @@ function removed(): SomewhereSchemaDeclaration.ColumnMarker;
 function removedTable(): SomewhereSchemaDeclaration.TableMarker;
 function exported(): SomewhereSchemaDeclaration.TableMarker;
 `;
-    var policySignatures = `function anyOf(owner: SomewhereSchemaDeclaration.OwnerScope, other: SomewhereSchemaDeclaration.MemberScope | SomewhereSchemaDeclaration.GroupScope | SomewhereSchemaDeclaration.AppRoleScope): SomewhereSchemaDeclaration.Scope;
-function anyOf(other: SomewhereSchemaDeclaration.MemberScope | SomewhereSchemaDeclaration.GroupScope | SomewhereSchemaDeclaration.AppRoleScope, owner: SomewhereSchemaDeclaration.OwnerScope): SomewhereSchemaDeclaration.Scope;
+    var policySignatures = `function anyOf(owner: SomewhereSchemaDeclaration.OwnerScope, other: SomewhereSchemaDeclaration.MemberScope | SomewhereSchemaDeclaration.GroupScope | SomewhereSchemaDeclaration.AppRoleScope): SomewhereSchemaDeclaration.AnyOfScope;
+function anyOf(other: SomewhereSchemaDeclaration.MemberScope | SomewhereSchemaDeclaration.GroupScope | SomewhereSchemaDeclaration.AppRoleScope, owner: SomewhereSchemaDeclaration.OwnerScope): SomewhereSchemaDeclaration.AnyOfScope;
+function allOf(gate: SomewhereSchemaDeclaration.MemberScope | SomewhereSchemaDeclaration.GroupScope | SomewhereSchemaDeclaration.AppRoleScope, who: SomewhereSchemaDeclaration.OwnerScope | SomewhereSchemaDeclaration.AnyOfScope): SomewhereSchemaDeclaration.Scope;
 function parent(options: { via: string; table?: string }): SomewhereSchemaDeclaration.Scope;
 function group(options?: { column?: string; roles?: Partial<Record<'read' | 'create' | 'update' | 'delete', string[]>> }): SomewhereSchemaDeclaration.GroupScope;
 function appRole(options: { roles: Partial<Record<'read' | 'create' | 'update' | 'delete', string[]>> }): SomewhereSchemaDeclaration.AppRoleScope;
@@ -4221,6 +4237,11 @@ function parseClientPermissions(value, columns, scope) {
   }
   if (!["owner", "member", "shared", "policy"].includes(scope.kind)) {
     return fail("serverOnly() tables cannot declare client access. Use a server function for business logic.");
+  }
+  if (scope.policy?.kind === "all_of") {
+    if (input.publicRead !== void 0 && input.publicRead !== false) return fail("allOf() tables cannot declare client.publicRead; their rows are reachable only by current members.");
+    if (input.links !== void 0) return fail("allOf() tables cannot declare client.links yet; a link would bypass current membership.");
+    if (input.intake !== void 0) return fail("allOf() tables cannot accept client.intake; public intake targets a plain owner() table.");
   }
   const identity = scope.kind === "owner" && scope.visitors === true ? "visitor" : "authenticated";
   if (input.identity !== void 0 && input.identity !== "authenticated" && input.identity !== "visitor") {
@@ -4472,7 +4493,10 @@ function bakeIntakePermissions(schema, declarations, intents, scopes) {
   const members = (policy) => {
     if (policy.k === "m") membershipTables.add(policy.m.m);
     else if (policy.k === "a") policy.p.forEach(members);
-    else if (policy.k === "p") members(policy.p);
+    else if (policy.k === "n") {
+      members(policy.g);
+      members(policy.w);
+    } else if (policy.k === "p") members(policy.p);
   };
   for (const table of Object.values(schema)) {
     if (table.member) membershipTables.add(table.member.m);
@@ -4691,9 +4715,14 @@ function validateBindings(input, tableInfo, errors) {
     if (!info.key) errors.push(`${at(entry, "table")}${kind} "${entry.name}" names table "${entry.table}", which needs exactly one id() key.`);
     return info;
   };
+  const reachesAllOf = (node) => !!node && (node.kind === "all_of" || node.kind === "parent" && reachesAllOf(node.policy));
   for (const p of input.payments ?? []) {
     const info = rowTable(p, "payment binding");
     if (!info) continue;
+    if (info.table.scope.kind === "policy" && reachesAllOf(info.table.scope.policy)) {
+      errors.push(`${at(p, "table")}payment binding "${p.name}" names table "${p.table}", which uses allOf(); payment bindings on allOf tables are not supported yet. Use a server function.`);
+      continue;
+    }
     const column = (name) => info.table.columns.find((c) => c.name === name);
     const checks = [
       ["amount", p.amount, "integer", "a required integer() column holding the amount in minor units (cents)"],
@@ -4740,7 +4769,71 @@ function exactKeys(value, keys) {
   const actual = Object.keys(value).sort();
   return actual.length === keys.length && actual.every((key, index) => key === [...keys].sort()[index]);
 }
+function validBakedMemberScope(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const member = value;
+  const memberKeys = Object.keys(member).sort().join(",");
+  const ident = (candidate) => typeof candidate === "string" && SAFE_SCOPE_IDENTIFIER.test(candidate);
+  const operations = member.o;
+  const operationOrder = ["read", "create", "update", "delete"];
+  const validOperations = operations === void 0 || Array.isArray(operations) && JSON.stringify(operations) === JSON.stringify(operationOrder.filter((operation) => operations.includes(operation))) && (operations.includes("read") || !operations.includes("update") && !operations.includes("delete"));
+  return (memberKeys === "g,m,mg,u" || memberKeys === "g,m,mg,o,u") && validOperations && Array.isArray(member.g) && member.g.length > 0 && member.g.every(ident) && Array.isArray(member.mg) && member.mg.length === member.g.length && member.mg.every(ident) && ident(member.m) && ident(member.u);
+}
 var MAX_PARENT_EDGES = 4;
+function pinShape(policy) {
+  return policy.k === "g" || policy.k === "r" ? { ...policy, generation: 1 } : policy.k === "p" ? { ...policy, p: pinShape(policy.p) } : policy.k === "a" ? { ...policy, p: [pinShape(policy.p[0]), pinShape(policy.p[1])] } : policy.k === "n" ? { ...policy, g: pinShape(policy.g), w: pinShape(policy.w) } : policy;
+}
+var ALLOF_POLICY_ADMITTED = true;
+function sameAllOfRelation(gate, x) {
+  const lower = (value) => String(value).toLowerCase();
+  if (x.k === "r") return true;
+  if (x.k === "g") return gate.k === "g" && lower(x.c) === lower(gate.c) && x.generation === gate.generation;
+  if (x.k !== "m" || gate.k !== "m") return false;
+  const a = gate.m;
+  const b = x.m;
+  return lower(a.m) === lower(b.m) && lower(a.u) === lower(b.u) && a.g.length === b.g.length && a.g.every((column, i) => lower(column) === lower(b.g[i])) && a.mg.length === b.mg.length && a.mg.every((column, i) => lower(column) === lower(b.mg[i]));
+}
+function validBakedPolicy(value, root = true, edges = 0) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const node = value;
+  const ident = (candidate) => typeof candidate === "string" && SAFE_SCOPE_IDENTIFIER.test(candidate);
+  if (!root && node.k === "o") return exactKeys(node, ["k", "c"]) && ident(node.c);
+  if (!root && node.k === "m") {
+    if (!exactKeys(node, ["k", "m"]) || !node.m || typeof node.m !== "object" || Array.isArray(node.m)) return false;
+    return validBakedMemberScope(node.m);
+  }
+  if (node.k === "a") {
+    const second = node.p?.[1]?.k;
+    return exactKeys(node, ["k", "p"]) && Array.isArray(node.p) && node.p.length === 2 && node.p[0]?.k === "o" && validBakedPolicy(node.p[0], false) && (second === "m" ? validBakedPolicy(node.p[1], false) : (second === "g" || second === "r") && validBakedPolicy(node.p[1], true));
+  }
+  if (root && node.k === "n") {
+    if (!ALLOF_POLICY_ADMITTED || !exactKeys(node, ["k", "g", "w"])) return false;
+    const gate = node.g;
+    const who = node.w;
+    if (!gate || !who) return false;
+    const gateMember = gate.m;
+    const gateValid = gate.k === "m" ? validBakedPolicy(gate, false) && gateMember?.o !== void 0 : (gate.k === "g" || gate.k === "r") && validBakedPolicy(gate, true);
+    if (!gateValid) return false;
+    if (who.k === "o") return validBakedPolicy(who, false);
+    const whoBranches = who.p;
+    if (who.k !== "a" || !validBakedPolicy(who, true) || !whoBranches) return false;
+    const x = whoBranches[1];
+    if (x.k === "m" && x.m.o === void 0) return false;
+    return sameAllOfRelation(gate, x);
+  }
+  if (root && node.k === "p") {
+    if (edges + 1 > MAX_PARENT_EDGES) return false;
+    const child = node.p?.k;
+    return exactKeys(node, ["k", "v", "t", "pk", "p"]) && ident(node.v) && ident(node.t) && ident(node.pk) && validBakedPolicy(node.p, child === "a" || child === "n" || child === "p" || child === "g" || child === "r", edges + 1);
+  }
+  if (root && node.k === "g") {
+    return exactKeys(node, ["k", "c", "roles", "generation"]) && ident(node.c) && validGroupRoles(node.roles) && Number.isSafeInteger(node.generation) && node.generation >= 1;
+  }
+  if (root && node.k === "r") {
+    return exactKeys(node, ["k", "roles", "generation"]) && validGroupRoles(node.roles) && Number.isSafeInteger(node.generation) && node.generation >= 1;
+  }
+  return false;
+}
 function bakedTableSchemaFromDeclared(declaredJson) {
   let shape;
   try {
@@ -4803,7 +4896,8 @@ function bakedTableSchemaFromDeclared(declaredJson) {
       ...visitors ? { visitors: true } : {},
       ...typeof sc.column === "string" ? { column: sc.column } : {},
       ...Array.isArray(sc.group) && sc.group.every((value) => typeof value === "string") ? { group: sc.group } : {},
-      ...policyIdentity
+      ...policyIdentity,
+      ...sc.kind === "policy" ? { policy: sc.policy } : {}
     });
     if (!parsed.ok) return null;
     if (Array.isArray(parsed.permissions.read) && !parsed.permissions.read.includes(primaryKeys[0])) return null;
@@ -4816,7 +4910,7 @@ function bakedTableSchemaFromDeclared(declaredJson) {
   }
   if (scope !== null && typeof scope === "object" && scope.kind === "policy") {
     const policy = bakedPolicyFromDeclared(scope.policy);
-    if (!policy || policy.k !== "a" && policy.k !== "p" && policy.k !== "g" && policy.k !== "r") return null;
+    if (!policy || policy.k !== "a" && policy.k !== "n" && policy.k !== "p" && policy.k !== "g" && policy.k !== "r") return null;
     return relations ? { columns: out, policy, relations, ...browser } : { columns: out, policy, ...browser };
   }
   const author = scope !== null && typeof scope === "object" && scope.kind === "shared" ? SHARED_AUTHOR_COLUMN : void 0;
@@ -4828,6 +4922,11 @@ function declaredPolicyIdentity(value) {
   const node = value;
   if (node.kind === "owner" && typeof node.column === "string") return { column: node.column };
   if (node.kind === "member" && Array.isArray(node.group) && node.group.every((entry) => typeof entry === "string")) return { group: node.group };
+  if (node.kind === "all_of") {
+    const gate = node.gate;
+    const group = gate?.kind === "group" && typeof gate.column === "string" ? [gate.column] : gate?.kind === "member" && Array.isArray(gate.group) && gate.group.every((entry) => typeof entry === "string") ? gate.group : void 0;
+    return { ...declaredPolicyIdentity(node.who), ...group ? { group } : {} };
+  }
   if (node.kind === "any_of" && Array.isArray(node.policies)) {
     const branchGroup = (child) => {
       const c = child;
@@ -4853,6 +4952,28 @@ function bakedPolicyFromDeclared(value, depth = 0, edges = 0, underParent = fals
     const left = bakedPolicyFromDeclared(node.policies[0], depth + 1);
     const right = bakedPolicyFromDeclared(node.policies[1], depth + 1, edges, second !== "member");
     return left && right ? { k: "a", p: [left, right] } : null;
+  }
+  if (node.kind === "all_of") {
+    if (depth !== 0 && !underParent) return null;
+    const leaf = (child) => {
+      const c = child;
+      if (c && c.kind === "member") {
+        const member = bakedMemberFromDeclared(c, true);
+        return member && member.o !== void 0 ? { k: "m", m: member } : null;
+      }
+      return c && (c.kind === "group" || c.kind === "app_role") ? bakedPolicyFromDeclared(c, depth + 1, edges, true) : null;
+    };
+    const gate = leaf(node.gate);
+    const whoNode = node.who;
+    let who = null;
+    if (whoNode && whoNode.kind === "owner") who = bakedPolicyFromDeclared(whoNode, depth + 1);
+    else if (whoNode && whoNode.kind === "any_of" && Array.isArray(whoNode.policies) && whoNode.policies.length === 2 && whoNode.policies[0]?.kind === "owner") {
+      const owner = bakedPolicyFromDeclared(whoNode.policies[0], depth + 2);
+      const x = leaf(whoNode.policies[1]);
+      who = owner && x ? { k: "a", p: [owner, x] } : null;
+    }
+    const baked = gate && who ? { k: "n", g: gate, w: who } : null;
+    return baked && validBakedPolicy(pinShape(baked), true, edges) ? baked : null;
   }
   if (node.kind === "group") {
     if (depth !== 0 && !underParent) return null;
@@ -4898,7 +5019,7 @@ function bakedRelationsFromDeclared(value) {
   }
   return out.length > 0 ? out : void 0;
 }
-function bakedMemberFromDeclared(scope) {
+function bakedMemberFromDeclared(scope, explicitOperations = false) {
   const s = scope;
   const cols = (v) => {
     if (!Array.isArray(v) || v.length === 0) return null;
@@ -4920,7 +5041,7 @@ function bakedMemberFromDeclared(scope) {
     const operations = s.operations;
     const allowed = ["read", "create", "update", "delete"];
     if (JSON.stringify(operations) !== JSON.stringify(allowed.filter((operation) => operations.includes(operation))) || !operations.includes("read") && (operations.includes("update") || operations.includes("delete"))) return null;
-    o = operations.length === allowed.length ? void 0 : operations;
+    o = operations.length === allowed.length && !explicitOperations ? void 0 : [...operations];
   }
   return { g, m: s.membership.toLowerCase(), u: s.memberUser.toLowerCase(), mg, ...o !== void 0 ? { o } : {} };
 }
@@ -5223,7 +5344,7 @@ function fileParentTarget(t) {
   const keys = t.columns.filter((column) => column.helper === "id");
   const key = keys.length === 1 ? keys[0] : null;
   const scope = t.scope;
-  const privateUserPolicy = scope.kind === "owner" && !scope.visitors || scope.kind === "member" || scope.kind === "policy" && ["owner", "member", "any_of", "parent", "group", "app_role"].includes(scope.policy.kind);
+  const privateUserPolicy = scope.kind === "owner" && !scope.visitors || scope.kind === "member" || scope.kind === "policy" && ["owner", "member", "any_of", "all_of", "parent", "group", "app_role"].includes(scope.policy.kind);
   return {
     key: key ? key.name : null,
     keyType: key?.uuid ? "text" : "integer",
@@ -5832,39 +5953,52 @@ function resolveGroupScopes(tables, vocabulary, errors) {
   const allRoles = [...BUILT_IN_GROUP_ROLES2, ...vocabulary?.roles ?? []];
   for (const t of tables) {
     if (t.scope.kind !== "policy") continue;
-    const branch = t.scope.policy.kind === "any_of" ? t.scope.policy.policies.find((p) => p.kind === "group") : void 0;
-    const node = t.scope.policy.kind === "group" ? t.scope.policy : branch?.kind === "group" ? branch : null;
-    if (!node) continue;
-    const declared = declaredGroupRoles.get(node);
-    if (!declared) continue;
-    const omitted = branch ? [] : allRoles;
-    const where = `line ${declared.line}: `;
-    const column = t.columns.find((c) => c.name === node.column);
-    if (!column) {
-      errors.push(`${where}Table "${t.name}" uses group({ column: '${node.column}' }), but "${node.column}" is not one of its declared columns. Declare it as ${node.column}: text().`);
-    } else if (column.helper !== "text" || column.nullable) {
-      errors.push(`${where}Table "${t.name}" uses group({ column: '${node.column}' }), which must be a non-nullable text() column: every row belongs to exactly one group.`);
+    const root = t.scope.policy;
+    const leaves = [];
+    if (root.kind === "group") leaves.push({ node: root, branch: false, allOf: false });
+    else if (root.kind === "any_of") {
+      const found = root.policies.find((p) => p.kind === "group");
+      if (found) leaves.push({ node: found, branch: true, allOf: false });
+    } else if (root.kind === "all_of") {
+      if (root.gate.kind === "group") leaves.push({ node: root.gate, branch: false, allOf: true });
+      const x = root.who.kind === "any_of" ? root.who.policies.find((p) => p.kind === "group") : void 0;
+      if (x) leaves.push({ node: x, branch: true, allOf: true });
     }
-    for (const op of GROUP_OPERATIONS) {
-      const list = declared.explicit[op] ?? omitted;
-      for (const role of list) {
-        if (!allRoles.includes(role)) {
-          errors.push(`${where}group({ roles: { ${op} } }) on table "${t.name}" names "${role}", which is not a group role. Use owner, admin, member, or a role declared in groups.roles.`);
+    for (const { node, branch, allOf } of leaves) {
+      const declared = declaredGroupRoles.get(node);
+      if (!declared) continue;
+      if (allOf && Object.keys(declared.explicit).length === 0) {
+        errors.push(`line ${declared.line}: allOf needs explicit operations: group() inside allOf() on table "${t.name}" must declare roles, such as group({ roles: { read: ['member'], create: ['member'] } }).`);
+      }
+      const omitted = branch || allOf ? [] : allRoles;
+      const where = `line ${declared.line}: `;
+      const column = t.columns.find((c) => c.name === node.column);
+      if (!column) {
+        errors.push(`${where}Table "${t.name}" uses group({ column: '${node.column}' }), but "${node.column}" is not one of its declared columns. Declare it as ${node.column}: text().`);
+      } else if (column.helper !== "text" || column.nullable) {
+        errors.push(`${where}Table "${t.name}" uses group({ column: '${node.column}' }), which must be a non-nullable text() column: every row belongs to exactly one group.`);
+      }
+      for (const op of GROUP_OPERATIONS) {
+        const list = declared.explicit[op] ?? omitted;
+        for (const role of list) {
+          if (!allRoles.includes(role)) {
+            errors.push(`${where}group({ roles: { ${op} } }) on table "${t.name}" names "${role}", which is not a group role. Use owner, admin, member, or a role declared in groups.roles.`);
+          }
+        }
+        node.roles[op] = sorted(list);
+      }
+      for (const op of ["update", "delete"]) {
+        const missing = node.roles[op].filter((role) => !node.roles.read.includes(role));
+        if (missing.length) {
+          errors.push(`${where}group() on table "${t.name}" lets ${missing.join(", ")} ${op} rows they cannot read. A role that may ${op} must also read, because the write returns the row.`);
         }
       }
-      node.roles[op] = sorted(list);
-    }
-    for (const op of ["update", "delete"]) {
-      const missing = node.roles[op].filter((role) => !node.roles.read.includes(role));
-      if (missing.length) {
-        errors.push(`${where}group() on table "${t.name}" lets ${missing.join(", ")} ${op} rows they cannot read. A role that may ${op} must also read, because the write returns the row.`);
+      if ((branch || allOf) && GROUP_OPERATIONS.every((op) => node.roles[op].length === 0)) {
+        errors.push(`${where}group() inside ${allOf ? "allOf()" : "anyOf()"} on table "${t.name}" grants no operation. List the group roles that may read, update or delete every row of the group.`);
       }
-    }
-    if (branch && GROUP_OPERATIONS.every((op) => node.roles[op].length === 0)) {
-      errors.push(`${where}group() inside anyOf() on table "${t.name}" grants no operation. List the group roles that may read, update or delete every row of the group.`);
-    }
-    if (t.client?.create && !t.client.create.includes(node.column)) {
-      errors.push(`${where}Table "${t.name}" uses group() and client.create must include "${node.column}" so every new row names the group it belongs to.`);
+      if (!(branch && allOf) && t.client?.create && !t.client.create.includes(node.column)) {
+        errors.push(`${where}Table "${t.name}" uses group() and client.create must include "${node.column}" so every new row names the group it belongs to.`);
+      }
     }
   }
 }
@@ -5970,25 +6104,35 @@ function resolveAppRoleScopes(tables, appRoles, errors) {
   for (const t of tables) {
     if (t.scope.kind !== "policy") continue;
     const root = t.scope.policy;
-    const node = root.kind === "app_role" ? root : root.kind === "any_of" ? root.policies.find((p) => p.kind === "app_role") : void 0;
-    if (!node) continue;
-    const declared = declaredLines.get(node);
-    if (!declared) continue;
-    for (const { op, name, line } of declared.names) {
-      if (!vocabulary.has(name)) {
-        errors.push(`line ${line}: appRole({ roles: { ${op} } }) on table "${t.name}" names "${name}", which is not declared in the schema's appRoles option. List only app roles declared there; group roles and admin do not apply.`);
+    const leaves = [];
+    if (root.kind === "app_role") leaves.push({ node: root, branch: false });
+    else if (root.kind === "any_of") {
+      const found = root.policies.find((p) => p.kind === "app_role");
+      if (found) leaves.push({ node: found, branch: true });
+    } else if (root.kind === "all_of") {
+      if (root.gate.kind === "app_role") leaves.push({ node: root.gate, branch: true });
+      const x = root.who.kind === "any_of" ? root.who.policies.find((p) => p.kind === "app_role") : void 0;
+      if (x) leaves.push({ node: x, branch: true });
+    }
+    for (const { node, branch } of leaves) {
+      const declared = declaredLines.get(node);
+      if (!declared) continue;
+      for (const { op, name, line } of declared.names) {
+        if (!vocabulary.has(name)) {
+          errors.push(`line ${line}: appRole({ roles: { ${op} } }) on table "${t.name}" names "${name}", which is not declared in the schema's appRoles option. List only app roles declared there; group roles and admin do not apply.`);
+        }
       }
-    }
-    for (const op of ["update", "delete"]) {
-      const missing = node.roles[op].filter((role) => !node.roles.read.includes(role));
-      if (missing.length) {
-        errors.push(`line ${declared.line}: appRole() on table "${t.name}" lets ${missing.join(", ")} ${op} rows they cannot read. A role that may ${op} must also read, because the write returns the row.`);
+      for (const op of ["update", "delete"]) {
+        const missing = node.roles[op].filter((role) => !node.roles.read.includes(role));
+        if (missing.length) {
+          errors.push(`line ${declared.line}: appRole() on table "${t.name}" lets ${missing.join(", ")} ${op} rows they cannot read. A role that may ${op} must also read, because the write returns the row.`);
+        }
       }
+      if (branch && APP_ROLE_OPERATIONS.every((op) => node.roles[op].length === 0)) {
+        errors.push(`line ${declared.line}: appRole() inside ${root.kind === "all_of" ? "allOf()" : "anyOf()"} on table "${t.name}" grants no operation. List the app roles that may read, update or delete every row.`);
+      }
+      declaredLines.delete(node);
     }
-    if (root.kind === "any_of" && APP_ROLE_OPERATIONS.every((op) => node.roles[op].length === 0)) {
-      errors.push(`line ${declared.line}: appRole() inside anyOf() on table "${t.name}" grants no operation. List the app roles that may read, update or delete every row.`);
-    }
-    declaredLines.delete(node);
   }
 }
 
@@ -6132,6 +6276,7 @@ function readSchemaOptions(reader, fail, fileErrors) {
 function policyOwner(policy) {
   if (policy.kind === "owner") return policy;
   if (policy.kind === "any_of") return policy.policies.map(policyOwner).find((value) => value !== null) ?? null;
+  if (policy.kind === "all_of") return policyOwner(policy.who);
   return null;
 }
 function scopeOwner(scope) {
@@ -6147,7 +6292,7 @@ function declaredScopeIdentityColumns(scope) {
   if (scope.kind === "owner") return [scope.column];
   if (scope.kind === "member") return [...scope.group];
   if (scope.kind !== "policy") return [];
-  const collect = (policy) => policy.kind === "owner" ? [policy.column] : policy.kind === "member" ? [...policy.group] : policy.kind === "any_of" ? policy.policies.flatMap(collect) : policy.kind === "group" ? [policy.column] : policy.kind === "app_role" ? [] : [policy.via];
+  const collect = (policy) => policy.kind === "owner" ? [policy.column] : policy.kind === "member" ? [...policy.group] : policy.kind === "any_of" ? policy.policies.flatMap(collect) : policy.kind === "all_of" ? [...collect(policy.gate), ...collect(policy.who)] : policy.kind === "group" ? [policy.column] : policy.kind === "app_role" ? [] : [policy.via];
   return [...new Set(collect(scope.policy))];
 }
 var COLUMN_HELPERS = /* @__PURE__ */ new Set([
@@ -6161,7 +6306,7 @@ var COLUMN_HELPERS = /* @__PURE__ */ new Set([
   "json",
   "blob"
 ]);
-var SCOPE_HELPERS = /* @__PURE__ */ new Set(["owner", "shared", "serverOnly", "member", "anyOf", "parent", "group", "appRole"]);
+var SCOPE_HELPERS = /* @__PURE__ */ new Set(["owner", "shared", "serverOnly", "member", "anyOf", "allOf", "parent", "group", "appRole"]);
 var TABLE_MARKER_HELPERS = /* @__PURE__ */ new Set(["removedTable", "exported"]);
 var SCHEMA_CALLABLE = /* @__PURE__ */ new Set([
   ...COLUMN_HELPERS,
@@ -6656,8 +6801,11 @@ function readMemberScope(r, tableName, scopeLine) {
       `line ${scopeLine}: member() on table "${tableName}" has a ${group.length}-column group but a ${memberGroup.length}-column member_group. The group key must have the same number of columns on both sides.`
     );
   }
-  return { kind: "member", group, membership, memberUser, memberGroup, ...operations !== void 0 ? { operations } : {} };
+  const node = { kind: "member", group, membership, memberUser, memberGroup, ...operations !== void 0 ? { operations } : {} };
+  if (operationsSeen) explicitMemberOperations.add(node);
+  return node;
 }
+var explicitMemberOperations = /* @__PURE__ */ new WeakSet();
 function readPolicyOwner(r, tableName, line) {
   r.expectPunct("(", 'after "owner"');
   let column = DEFAULT_OWNER_COLUMN;
@@ -6709,6 +6857,47 @@ function readAnyOfScope(r, tableName, line) {
   const owner = owners[0];
   const other = firstPolicy.kind === "owner" ? secondPolicy : firstPolicy;
   return { kind: "policy", policy: { kind: "any_of", policies: [owner, other] } };
+}
+var ALL_OF_FORMS = "allOf() takes a gate \u2014 member(), group() or appRole() \u2014 and then owner() or anyOf(owner(), ...).";
+var ALL_OF_EXPLICIT = "allOf needs explicit operations";
+function readAllOfScope(r, tableName, line) {
+  r.expectPunct("(", 'after "allOf"');
+  const failAt = (at, message) => {
+    throw new SchemaTsError(`line ${at}: ${message}`);
+  };
+  const gateTok = r.expectIdent(`for the gate in allOf() on table "${tableName}"`);
+  let gate;
+  if (gateTok.value === "member") gate = readPolicyMember(r, tableName, gateTok.line);
+  else if (gateTok.value === "group") gate = readGroupScope(r, tableName, gateTok.line, failAt);
+  else if (gateTok.value === "appRole") gate = readAppRoleScope(r, tableName, gateTok.line, failAt);
+  else throw new SchemaTsError(`line ${gateTok.line}: ${ALL_OF_FORMS}`);
+  r.expectPunct(",", `between the gate and who in allOf() on table "${tableName}"`);
+  const whoTok = r.expectIdent(`for who in allOf() on table "${tableName}"`);
+  let who;
+  if (whoTok.value === "owner") who = readPolicyOwner(r, tableName, whoTok.line);
+  else if (whoTok.value === "anyOf") {
+    const scope = readAnyOfScope(r, tableName, whoTok.line);
+    if (scope.kind !== "policy") throw new SchemaTsError(`line ${whoTok.line}: ${ALL_OF_FORMS}`);
+    who = scope.policy;
+  } else throw new SchemaTsError(`line ${whoTok.line}: ${ALL_OF_FORMS}`);
+  r.tryPunct(",");
+  r.expectPunct(")", "closing allOf()");
+  const x = who.kind === "any_of" ? who.policies[1] : null;
+  for (const node of [gate, ...x ? [x] : []]) {
+    if (node.kind !== "member") continue;
+    if (!explicitMemberOperations.has(node)) {
+      throw new SchemaTsError(`line ${line}: ${ALL_OF_EXPLICIT}: member() inside allOf() on table "${tableName}" must list its operations, such as operations: ['read', 'create', 'update', 'delete'].`);
+    }
+    if (node.operations === void 0) node.operations = [...MEMBER_OPERATIONS];
+  }
+  if (x) {
+    const sameMember = x.kind === "member" && gate.kind === "member" && x.membership === gate.membership && x.memberUser === gate.memberUser && x.group.length === gate.group.length && x.group.every((column, i) => column === gate.group[i]) && x.memberGroup.length === gate.memberGroup.length && x.memberGroup.every((column, i) => column === gate.memberGroup[i]);
+    const sameGroup = x.kind === "group" && gate.kind === "group" && x.column === gate.column;
+    if (x.kind !== "app_role" && !sameMember && !sameGroup) {
+      throw new SchemaTsError(`line ${line}: allOf() on table "${tableName}": the second branch of who must be appRole() or the gate's own membership \u2014 the same group() column, or the same member() relation, keys and member user.`);
+    }
+  }
+  return { kind: "policy", policy: { kind: "all_of", gate, who } };
 }
 function readParentScope(r, tableName, line) {
   r.expectPunct("(", 'after "parent"');
@@ -6774,10 +6963,11 @@ function readScope(r, tableName) {
   const tok = r.expectIdent(`for the scope of table "${tableName}"`);
   if (!SCOPE_HELPERS.has(tok.value)) {
     throw new SchemaTsError(
-      `line ${tok.line}: unknown scope "${tok.value}" on table "${tableName}". Use owner(), group(), appRole(), member(), anyOf(), parent(), shared(), or serverOnly().`
+      `line ${tok.line}: unknown scope "${tok.value}" on table "${tableName}". Use owner(), group(), appRole(), member(), anyOf(), allOf(), parent(), shared(), or serverOnly().`
     );
   }
   if (tok.value === "anyOf") return readAnyOfScope(r, tableName, tok.line);
+  if (tok.value === "allOf") return readAllOfScope(r, tableName, tok.line);
   if (tok.value === "parent") return readParentScope(r, tableName, tok.line);
   const failAt = (line, message) => {
     throw new SchemaTsError(`line ${line}: ${message}`);
@@ -7040,7 +7230,7 @@ function readTable(r, rawName, nameLine) {
     if (columns.filter((column) => column.helper === "id").length !== 1) {
       throw new SchemaTsError(`line ${nameLine}: table "${rawName}": client operations require exactly one id() column.`);
     }
-    const branch = scope.kind === "policy" && scope.policy.kind === "any_of" ? scope.policy.policies.find((node) => node.kind === "member" || node.kind === "group") : void 0;
+    const branch = scope.kind === "policy" && scope.policy.kind === "any_of" ? scope.policy.policies.find((node) => node.kind === "member" || node.kind === "group") : scope.kind === "policy" && scope.policy.kind === "all_of" && (scope.policy.gate.kind === "member" || scope.policy.gate.kind === "group") ? scope.policy.gate : void 0;
     const branchGroup = branch?.kind === "member" ? branch.group : branch?.kind === "group" ? [branch.column] : void 0;
     const parsed = parseClientPermissions(clientInput, columns, {
       ...scope,
@@ -7154,6 +7344,10 @@ function extractSchemaTs(source) {
       const visit = (node) => {
         if (node.kind === "member") out.push(node);
         else if (node.kind === "any_of") node.policies.forEach(visit);
+        else if (node.kind === "all_of") {
+          visit(node.gate);
+          visit(node.who);
+        }
       };
       if (scope.kind === "member") out.push(scope);
       else if (scope.kind === "policy") visit(scope.policy);

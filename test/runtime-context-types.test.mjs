@@ -11,7 +11,7 @@ import { runTypecheck } from '../dist/lib/typecheck.js';
 // docs must typecheck clean against it, and an undeclared binding must still fail:
 // the context is a real type, never `any`.
 const schema = `export default schema({
-  rounds: table({ id: id(), title: text(), votes: integer({ default: 0 }) }, { scope: serverOnly() }),
+  rounds: table({ id: id({ uuid: false }), title: text(), votes: integer({ default: 0 }) }, { scope: serverOnly() }),
 });`;
 const compilerOptions = { strict: true, skipLibCheck: false, target: 'ES2022', module: 'ESNext', moduleResolution: 'Bundler', lib: ['ES2022', 'DOM'] };
 
@@ -75,17 +75,17 @@ test('undeclared sw bindings still fail: the generated context is not any', asyn
 const bookclubSchema = `import { id, integer, schema, serverOnly, table, text, timestamp } from 'somewhere/db';
 export default schema({
   rounds: table({
-    id: id(), organiser_id: text(), organiser_email: text(), status: text({ default: 'open' }),
+    id: id({ uuid: false }), organiser_id: text(), organiser_email: text(), status: text({ default: 'open' }),
     open_slot: text({ nullable: true, unique: true }), winner_proposal_id: integer({ nullable: true }),
     meeting_date: text({ nullable: true }), emails_sent: integer({ default: 0 }),
     created_at: timestamp({ default: 'now' }), closed_at: text({ nullable: true }),
   }, { scope: serverOnly() }),
   proposals: table({
-    id: id(), round_id: integer({ references: 'rounds' }), title: text(), author: text(), pitch: text(),
+    id: id({ uuid: false }), round_id: integer({ references: 'rounds' }), title: text(), author: text(), pitch: text(),
     proposer_id: text(), proposer_email: text(), created_at: timestamp({ default: 'now' }),
   }, { scope: serverOnly(), indexes: [['round_id']] }),
   votes: table({
-    id: id(), round_id: integer({ references: 'rounds' }), user_id: text(),
+    id: id({ uuid: false }), round_id: integer({ references: 'rounds' }), user_id: text(),
     proposal_id: integer({ references: 'proposals' }), created_at: timestamp({ default: 'now' }),
   }, { scope: serverOnly(), unique: [['round_id', 'user_id']] }),
 });`;

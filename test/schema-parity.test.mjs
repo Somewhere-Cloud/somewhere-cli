@@ -16,7 +16,7 @@ const compilerOptions = { strict: true, skipLibCheck: false, target: 'ES2022', m
 const withConstants = `const ownRows = owner();
 const money = { amount_cents: integer(), ledger_id: bigint() };
 export default schema({
-  payments: table({ id: id(), label: text(), ...money }, {
+  payments: table({ id: id({ uuid: false }), label: text(), ...money }, {
     scope: ownRows,
     client: { read: ['id', 'label', 'amount_cents', 'ledger_id'], create: ['label', 'amount_cents', 'ledger_id'] },
   }),
@@ -28,7 +28,7 @@ const withFieldListConstant = withConstants
   .replace("read: ['id', 'label', 'amount_cents', 'ledger_id']", 'read: readable');
 // …and the same table spelled inline.
 const inline = `export default schema({
-  payments: table({ id: id(), label: text(), amount_cents: integer(), ledger_id: bigint() }, {
+  payments: table({ id: id({ uuid: false }), label: text(), amount_cents: integer(), ledger_id: bigint() }, {
     scope: owner(),
     client: { read: ['id', 'label', 'amount_cents', 'ledger_id'], create: ['label', 'amount_cents', 'ledger_id'] },
   }),
@@ -114,15 +114,15 @@ sw.ai.transcribe({ language: 'en', prompt: 'no audio' });
 
 const rowLinkSchema = `import { schema, table, id, text, integer, owner, parent, hasMany } from 'somewhere/db';
 export default schema({
-  notes: table({ id: id(), title: text(), body: text(), private_note: text() }, {
+  notes: table({ id: id({ uuid: false }), title: text(), body: text(), private_note: text() }, {
     scope: owner(), relations: { comments: hasMany('comments', 'note_id') },
     client: { read: ['id', 'title', 'body', 'private_note'], create: ['title', 'body', 'private_note'], update: ['body'],
       links: { read: ['id', 'title', 'body'], edit: ['body'], children: ['comments'], maxDays: 7 } },
   }),
-  comments: table({ id: id(), note_id: integer({ references: 'notes' }), body: text(), secret: text({ default: '' }) }, {
+  comments: table({ id: id({ uuid: false }), note_id: integer({ references: 'notes' }), body: text(), secret: text({ default: '' }) }, {
     scope: parent({ via: 'note_id' }), client: { read: ['id', 'body'], create: ['note_id', 'body'], update: ['body'] },
   }),
-  read_notes: table({ id: id(), title: text() }, {
+  read_notes: table({ id: id({ uuid: false }), title: text() }, {
     scope: owner(), client: { read: ['id', 'title'], links: { read: true, edit: false } },
   }),
 });`;

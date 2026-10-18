@@ -7,8 +7,8 @@ import {prepareDeclaredData} from '../dist/lib/declared-data.js';
 import {runTypecheck} from '../dist/lib/typecheck.js';
 const schema=`import { parent } from 'somewhere/db';
 export default schema({
- notes: table({id:id(),title:text()}, {scope:owner(),relations:{comments:hasMany('comments','note_id')},client:{read:true,create:['title'],links:{read:true,anonymousCreate:true,children:['comments']}}}),
- comments: table({id:id(),note_id:integer({references:'notes'}),body:text()}, {scope:parent({via:'note_id'}),client:{read:true}})
+ notes: table({id:id({ uuid: false }),title:text()}, {scope:owner(),relations:{comments:hasMany('comments','note_id')},client:{read:true,create:['title'],links:{read:true,anonymousCreate:true,children:['comments']}}}),
+ comments: table({id:id({ uuid: false }),note_id:integer({references:'notes'}),body:text()}, {scope:parent({via:'note_id'}),client:{read:true}})
 });`;
 function fixture(t){const root=mkdtempSync(join(tmpdir(),'cli-list-limit-'));t.after(()=>rmSync(root,{recursive:true,force:true}));mkdirSync(join(root,'src'));mkdirSync(join(root,'db'));writeFileSync(join(root,'db/schema.ts'),schema);writeFileSync(join(root,'package.json'),JSON.stringify({name:'private-list-limit-fixture',private:true}));writeFileSync(join(root,'tsconfig.json'),JSON.stringify({compilerOptions:{strict:true,skipLibCheck:false,target:'ES2022',module:'ESNext',moduleResolution:'Bundler'},include:['src']}));return root;}
 test('vendored local list types reject invalid literals and mixed unions, retaining dynamic limits and paging',async t=>{

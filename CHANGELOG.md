@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.37.42
+
+### Changed
+
+- Local checks read a bare `id()` in `db/schema.ts` as a random text key, the platform default since 2026-10-18; `id({ uuid: false })` declares an integer key. A foreign key must use its parent's key type (`text({ references })` for a random key).
+- `somewhere init --features private-data` keeps an integer key for notes, which its safe create retry needs. New starters otherwise get random text keys.
+
 ## 0.37.41
 
 ### Changed

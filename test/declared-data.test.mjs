@@ -77,6 +77,38 @@ data.projects.create({ title: 'No owner assignment', user_id: 'another-user' });
   assert.equal(bad.errors.length, 5, bad.raw);
 });
 
+test('local typecheck accepts allOf(gate, who) and refuses owner assignment on it', async t => {
+  const boardSchema = `import { allOf, anyOf, group } from 'somewhere/db';
+  export default schema({
+    cards: table({ id: id(), group_id: text(), body: text() }, {
+      scope: allOf(
+        group({ roles: { read: ['member', 'admin'], create: ['member', 'admin'], update: ['member', 'admin'], delete: ['member', 'admin'] } }),
+        anyOf(owner(), group({ roles: { read: ['member', 'admin'], update: ['admin'], delete: ['admin'] } })),
+      ),
+      client: { read: true, create: ['group_id', 'body'], update: ['body'], delete: true },
+    }),
+  });`;
+  const root = fixture(t, {
+    'db/schema.ts': boardSchema,
+    'src/main.ts': `import { data } from 'somewhere:data';
+const page = await data.cards.list({ limit: 10 });
+const body: string | undefined = page.data[0]?.body;
+await data.cards.create({ group_id: 'G1', body: 'card' });
+await data.cards.update(1, { body: 'edited' });
+await data.cards.delete(1);
+export { body };`,
+  });
+  const good = await check(root);
+  assert.equal(good.ok, true, good.raw);
+  writeFileSync(join(root, 'src', 'bad.ts'), `import { data } from 'somewhere:data';
+data.cards.create({ group_id: 'G1', body: 'x', user_id: 'someone-else' });
+data.cards.update(1, { group_id: 'G2' });
+`);
+  const bad = await check(root);
+  assert.equal(bad.ok, false);
+  assert.equal(bad.errors.length, 2, bad.raw);
+});
+
 test('vendored parser/generator artifact is pinned and its bytes match provenance', () => {
   const manifest = JSON.parse(readFileSync(new URL('../runtime/DECLARED-DATA-VENDOR.json', import.meta.url), 'utf8'));
   const artifact = readFileSync(new URL('../runtime/declared-data.cjs', import.meta.url));

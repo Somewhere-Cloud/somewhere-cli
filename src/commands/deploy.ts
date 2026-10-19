@@ -869,8 +869,12 @@ export function registerDeploy(program: Command) {
           }, flow, client), !opts.json);
         }
         if (opts.json) {
+          // A temporary session adds the claim fields to the server's result;
+          // it never replaces it, so version, release_id, warnings,
+          // stage_timing_ms and reference_check reach agents either way.
           const output = tempSession
             ? {
+                ...result,
                 url: formatted.liveUrl,
                 claim_url: tempSession.claimUrl,
                 expires_at: tempSession.expiresAt ?? null,

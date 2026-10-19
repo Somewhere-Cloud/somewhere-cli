@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.37.44
+
+### Fixed
+
+- `somewhere deploy --json` in a temporary (signed-out) session now prints the server's deploy result with the claim fields (`claim_url`, `expires_at`, `claim_connects_agent`) added. Before, it replaced the result, so `version`, `release_id`, `warnings`, `stage_timing_ms` and `reference_check` were dropped. Signed-in output is unchanged.
+
 ## 0.37.43
 
 ### Fixed

@@ -840,6 +840,8 @@ interface SomewhereGroups {
   /** Revoke in the invitation's own group, as its sender or a member who may grant its role. */
   revokeInvitation(req: Request, inviteId: string): Promise<SomewhereGroupsResult<{ revoked: true }>>;
   leave(req: Request, groupId: string): Promise<SomewhereGroupsResult<{ left: true }>>;
+  delete(req: Request, groupId: string): Promise<SomewhereGroupsResult<{ deleted: true }>>;
+  add(req: Request, groupId: string, userId: string, role: SomewhereGroupRole): Promise<SomewhereGroupsResult<{ user_id: string; role: SomewhereGroupRole }>>;
   remove(req: Request, groupId: string, userId: string): Promise<SomewhereGroupsResult<{ removed: true }>>;
   setRole(req: Request, groupId: string, userId: string, role: SomewhereGroupRole): Promise<SomewhereGroupsResult<{ user_id: string; role: SomewhereGroupRole }>>;
   appRoles: {

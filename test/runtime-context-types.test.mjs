@@ -4,6 +4,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { runTypecheck } from '../dist/lib/typecheck.js';
 
 // The generated `sw` type is the platform's own runtime declaration, vendored by
@@ -53,6 +54,28 @@ const docsHandler = `export default async function (req: Request, sw: SomewhereR
 
 test('a docs-following handler typechecks clean against the generated sw type', async t => {
   const result = await project(t, docsHandler);
+  assert.equal(result.ok, true, result.raw);
+});
+
+// Every documented sw.groups method, called as the docs show it, with no casts
+// (tsk_668f0ce2: four builds hit TS2339 on sw.groups.add from a stale vendored copy).
+test('every documented sw.groups method typechecks with no casts', async t => {
+  const result = await project(t, `export default async function (req: Request, sw: SomewhereRuntimeContext) {
+  const made = await sw.groups.create(req, { name: 'Crew' });
+  if (made.error) return Response.json(made.error, { status: made.error.status });
+  const groupId: string = made.data.id;
+  const added = await sw.groups.add(req, groupId, 'user_2', 'member');
+  const who: string | undefined = added.error ? undefined : added.data.user_id;
+  const role = await sw.groups.setRole(req, groupId, 'user_2', 'admin');
+  const listed = await sw.groups.list(req, { limit: 10 });
+  const roster = await sw.groups.members(req, groupId, { limit: 10 });
+  const invited = await sw.groups.invite(req, groupId, { email: 'x@example.test', role: 'member', redirect_uri: '/join' });
+  const removed = await sw.groups.remove(req, groupId, 'user_2');
+  const deleted = await sw.groups.delete(req, groupId);
+  const gone: boolean = deleted.error === null && deleted.data.deleted === true;
+  return Response.json({ who, role: role.error, listed: listed.error, roster: roster.error, invited: invited.error, removed: removed.error, gone });
+}
+`);
   assert.equal(result.ok, true, result.raw);
 });
 
@@ -147,7 +170,8 @@ test('declared tables: an undeclared table and a mistyped column are type errors
 // (with the compiler's pinned esbuild installed) before cutting a CLI release.
 const platformSource = process.env.SOMEWHERE_PLATFORM_SOURCE;
 test('vendored runtime declaration matches the platform source', { skip: platformSource ? false : 'SOMEWHERE_PLATFORM_SOURCE is not set' }, () => {
-  const script = new URL('../scripts/vendor-declared-data.mjs', import.meta.url).pathname;
+  // fileURLToPath, not .pathname: a checkout path with a space must still resolve.
+  const script = fileURLToPath(new URL('../scripts/vendor-declared-data.mjs', import.meta.url));
   const output = execFileSync(process.execPath, [script, platformSource, '--check'], { encoding: 'utf8' });
   assert.match(output, /parity verified/);
 });

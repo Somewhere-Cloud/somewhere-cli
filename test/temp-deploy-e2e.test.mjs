@@ -97,7 +97,7 @@ const server = createServer((req, res) => {
       deployCalls++;
       send(200, {
         ok: true,
-        data: { files: 1, url: `https://${createdSubdomain}.somewhere.tech`, has_functions: false },
+        data: { files: 1, url: `https://${createdSubdomain}.somewhere.tech`, has_functions: false, ...SERVER_DEPLOY_FIELDS },
       });
       return;
     }
@@ -119,6 +119,16 @@ const apiUrl = `http://127.0.0.1:${port}/v1`;
 // would sit unserviced and the whole test would hang. Use async spawn and
 // await completion instead, so the server keeps handling requests while the
 // child runs.
+// Fields only the server's deploy result carries. `--json` must pass them
+// through on every path, temporary or signed in.
+const SERVER_DEPLOY_FIELDS = {
+  version: 7,
+  release_id: 'rel_e2e_7',
+  stage_timing_ms: { upload: 12, compile: 340, publish: 25 },
+  warnings: ['e2e warning'],
+  reference_check: { status: 'passed' },
+};
+
 function run(args, env) {
   return new Promise((resolvePromise) => {
     const child = spawn(process.execPath, [distIndex, ...args], {
@@ -227,11 +237,14 @@ test('deploy --json with no stored credential deploys and emits the anonymous co
   const config = JSON.parse(readFileSync(join(HOME, '.somewhere', 'config.json'), 'utf8'));
   const project = JSON.parse(readFileSync(join(fixtureDir, '.somewhere.json'), 'utf8'));
   assert.deepEqual(JSON.parse(result.stdout), {
+    files: 1,
+    has_functions: false,
+    ...SERVER_DEPLOY_FIELDS,
     url: `https://${project.subdomain}.somewhere.tech`,
     claim_url: 'https://somewhere.tech/claim?token=swtc_e2e',
     expires_at: config.temp_expires_at,
     claim_connects_agent: true,
-  });
+  }, 'the temporary contract adds claim fields to the server result; it does not replace it');
   assert.equal(result.stderr, '');
 });
 
@@ -315,6 +328,29 @@ test('logged in and linked with NO flag still deploys to the account, unchanged'
   assert.equal(tempCreateCalls, beforeTempCreate, 'no temporary session minted for an account deploy');
   assert.equal(projectsCalls, beforeProjects, 'no project auto-created for an account deploy');
   assert.equal(existsSync(join(HOME, '.somewhere', 'temp-session.json')), false);
+});
+
+test('signed-in deploy --json prints the server result unchanged, with no claim fields', async () => {
+  const HOME = realLoginHome('sw-temp-e2e-home-account-json-');
+  const fixtureDir = mkdtempSync(join(tmpdir(), 'sw-temp-e2e-fixture-account-json-'));
+  writeFileSync(join(fixtureDir, 'index.html'), '<html><body>hi</body></html>\n');
+  writeFileSync(join(fixtureDir, '.somewhere.json'), JSON.stringify({
+    project_id: 'proj_account_json',
+    name: 'mine-json',
+    subdomain: 'mine-json',
+  }) + '\n');
+
+  const beforeTempCreate = tempCreateCalls;
+  const result = await run(['deploy', '--json'], {
+    cwd: fixtureDir,
+    env: { HOME, USERPROFILE: HOME, SOMEWHERE_API_URL: apiUrl },
+  });
+
+  assert.equal(result.status, 0, `expected exit 0, got ${result.status}\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`);
+  const out = JSON.parse(result.stdout);
+  for (const [key, value] of Object.entries(SERVER_DEPLOY_FIELDS)) assert.deepEqual(out[key], value, `${key} passes through`);
+  for (const key of ['claim_url', 'expires_at', 'claim_connects_agent']) assert.equal(key in out, false, `no ${key} on an account deploy`);
+  assert.equal(tempCreateCalls, beforeTempCreate, 'no temporary session minted for an account deploy');
 });
 
 test('deploy rejects an empty directory locally while static-only and functions-only projects still deploy', async () => {

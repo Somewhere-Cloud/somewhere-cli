@@ -5,7 +5,7 @@
     "worker/containers/compile/declared-data-contract.cjs": "d25b3f4c064283d375e7c2f65da8bf29eceebe99010e29c9c240b1702a444f0f",
     "worker/containers/compile/generated-declarations-render.cjs": "7ffdb34645cc9eccac6eba39dc86b646a41c4de8a1a038d2b5b46f42df9f1157",
     "worker/containers/compile/generated-declarations.cjs": "6e9902e054c5c784fd9b3c3fafc1869e79954100a45014e1132247cd82833ec4",
-    "worker/containers/compile/groups-types.cjs": "f0f38ca6f160561f997b20af44763bd07232deb2668a536cd52c1974fcfed2c8",
+    "worker/containers/compile/groups-types.cjs": "69c774890a2e3e12315e01590579a0bdfb5c02de846997b61d4dae17022992c7",
     "worker/containers/compile/runtime-types.cjs": "12026b000baed22884b435e5c19d78ac6a93ad6019bd31da0b4fd47a742cac8a",
     "worker/containers/compile/schema-types.cjs": "78b444d92d3bc072a6d97eacb2bdb82cd5163031ea0a27aa901fd00122668b92",
     "worker/containers/compile/typed-data.cjs": "1c8bec853fbee4ffd34c651076a4e1f4d8b18c0c2be5e99e31df7c9283207627",
@@ -33,5 +33,5 @@
     "worker/src/utils/managed-groups/policy.ts": "2259a883645c8bfd607ead7c37387f3ffd42ac9dfb86722c72b224adb498511e",
     "worker/src/utils/reference-check-inputs.ts": "c909cdc79cb722eb2c5d16dad75a835c03f2288f5a536f75cfae7291f7bcff86"
   },
-  "sha256": "075e68e0087a17ab686e919f163cc03741bbbc5498e0c2b4aeb27688395bc693"
+  "sha256": "248e9f49b0fdc79c82b9ea8c0e410694e9a19cec52fe56391cfb9ca0fa56e26f"
 }

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.37.43
+
+### Fixed
+
+- `sw.groups.add` and `sw.groups.delete` type-check in generated starters (TS2339 before): the vendored `runtime/declared-data.cjs` declaration is re-vendored from the platform (#22).
+
 ## 0.37.42
 
 ### Changed

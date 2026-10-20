@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.37.45
+
+### Changed
+
+- `somewhere deploy` fetches project notices alongside the deploy instead of waiting for them first, so their round trip (about 0.1-0.9 s, up to a 3 s timeout) is no longer on every deploy's path. Notices still print once, on stderr, before the result or the failure and before a `--force` confirmation prompt.
+
 ## 0.37.44
 
 ### Fixed

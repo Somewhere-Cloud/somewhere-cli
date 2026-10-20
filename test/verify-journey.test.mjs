@@ -301,7 +301,13 @@ test('--schema prints the machine-readable flow contract; --help carries a valid
   assert.deepEqual(parsed, JSON.parse(JSON.stringify(verifyFlowSchema())));
   assert.equal(parsed.oneOf.length, 2);
   assert.deepEqual(parsed['x-limits'], { ...VERIFY_JOURNEY_LIMITS });
-  assert.ok(parsed.oneOf[1].properties.journey.items.properties.actions.items.oneOf.some((item) => item.required[0] === 'goto'));
+  const [segmentSchema, groupSchema] = parsed.oneOf[1].properties.journey.items.oneOf;
+  assert.ok(segmentSchema.properties.actions.items.oneOf.some((item) => item.required[0] === 'goto'));
+  assert.deepEqual(groupSchema.required, ['parallel']);
+  assert.deepEqual(groupSchema.properties.parallel.items, segmentSchema, 'a parallel group holds ordinary segments');
+  assert.equal(groupSchema.properties.parallel.minItems, 2);
+  assert.equal(groupSchema.properties.parallel.maxItems, 3);
+  assert.equal(groupSchema.additionalProperties, false);
 
   const help = cli(['verify', '--help']);
   assert.equal(help.status, 0, help.stderr);
@@ -674,4 +680,251 @@ test('test_user: kept on request, unconfirmed delete is reported, invalid combin
   assert.match(failed.test_users.cleanup.reason, /AUTH_STORE_UNAVAILABLE/);
   assert.throws(() => normalizeVerifyJourney({ actors: { a: { test_user: true, auth: { user_id: 'x' } } }, journey: [{ as: 'a' }] }), /remove auth/);
   assert.throws(() => normalizeVerifyJourney({ actors: { a: { test_user: 'yes' } }, journey: [{ as: 'a' }] }), /must be true/);
+});
+
+// Parallel groups (realtime checks): { "parallel": [segment, segment] } runs
+// segments by different actors at the same time, each in its own browser.
+const realtime = {
+  actors: {
+    alice: { cookies: [{ name: 'pref', value: SECRET_COOKIE }] },
+    bob: { auth: { user_id: 'usr_bob' }, local_storage: { theme: SECRET_STORAGE } },
+  },
+  journey: [
+    { as: 'alice', path: '/chat', actions: [{ click: '#join' }] },
+    { parallel: [
+      { as: 'alice', path: '/chat', actions: [{ wait: { selector: '#feed', text: 'hello' } }] },
+      { as: 'bob', path: '/chat', actions: [{ fill: '#msg', value: 'hello' }, { click: '#send' }] },
+    ] },
+    { as: 'bob', actions: [{ expect: { selector: '#feed', text: 'hello' } }] },
+  ],
+};
+
+/** Holds each segment answer until `expected` segment calls have arrived. */
+function barrierClient(expected, answer = () => report()) {
+  const events = [];
+  const waiting = [];
+  const client = {
+    events,
+    runs: () => events.filter((e) => e.type === 'received').map((e) => e.body),
+    closes: (actor) => events.filter((e) => e.type === 'close' && (!actor || e.session.endsWith(`-${actor}`))),
+    async call(_method, _path, body) {
+      if (body.close === true) {
+        events.push({ type: 'close', session: body.session_id, at: Date.now() });
+        return { session_id: body.session_id, closed: true };
+      }
+      const n = client.runs().length + 1;
+      events.push({ type: 'received', body: structuredClone(body), n });
+      if (!expected.includes(n)) return answer(body, n);
+      const gate = deferred();
+      waiting.push(gate);
+      if (expected.every((m) => m <= n)) for (const item of waiting.splice(0)) item.resolve();
+      // Sequential dispatch would never release the gate: fail instead of hanging.
+      const timer = setTimeout(() => gate.reject(new Error(`call ${n} waited 2s for the rest of its parallel group to arrive`)), 2000);
+      await gate.promise.finally(() => clearTimeout(timer));
+      events.push({ type: 'resolved', session: body.session_id, n });
+      return answer(body, n);
+    },
+  };
+  return client;
+}
+
+test('parallel: a group\'s calls are in flight together, each built as its own actor\'s ordinary call', async () => {
+  const journey = normalizeVerifyJourney(realtime);
+  assert.deepEqual(journey.journey.map((s) => s.group), [undefined, 1, 1, undefined], 'a group flattens into consecutive tagged segments');
+  const client = barrierClient([2, 3]);
+  const result = await createVerifyJourneyRun({ project_id: 'club' }, journey, client, { runId: 'p1' }).run();
+  assert.equal(result.passed, true, result.verdict);
+  assert.match(result.verdict, /^PASS — 4 segments by 2 users \(alice, bob\) passed, 2 of them in parallel groups/);
+
+  const order = client.events.filter((e) => e.type !== 'close').map((e) => `${e.type}:${e.n}`);
+  assert.ok(order.indexOf('received:3') < order.indexOf('resolved:2') && order.indexOf('received:3') < order.indexOf('resolved:3'),
+    `both group bodies arrived before either answer resolved (${order.join(' ')})`);
+  assert.ok(order.indexOf('received:4') > order.indexOf('resolved:2') && order.indexOf('received:4') > order.indexOf('resolved:3'),
+    'the next item starts only after the whole group settled');
+
+  const [alice1, alice2, bob1, bob2] = client.runs();
+  assert.deepEqual([alice1, alice2, bob1, bob2].map((b) => b.session_id), ['vf-p1-alice', 'vf-p1-alice', 'vf-p1-bob', 'vf-p1-bob']);
+  // alice continues inside the group: same browser, a goto, never re-seeded.
+  assert.equal(alice2.require_existing_session, true);
+  assert.equal('url' in alice2, false);
+  assert.deepEqual(alice2.actions[0], { goto: '/chat' });
+  for (const field of ['auth', 'local_storage', 'cookies', 'headers']) assert.equal(field in alice2, false, `continued alice is not re-seeded (${field})`);
+  // bob starts inside the group: his first call, his own seeds only.
+  assert.equal('require_existing_session' in bob1, false);
+  assert.equal(bob1.url, '/chat');
+  assert.deepEqual(bob1.auth, { user_id: 'usr_bob' });
+  assert.deepEqual(bob1.local_storage, { theme: SECRET_STORAGE });
+  assert.equal('cookies' in bob1, false, 'bob never receives alice\'s cookie');
+  assert.equal(alice2.budget_ms, bob1.budget_ms, 'every segment of a group gets the same cap');
+  assert.equal(bob2.require_existing_session, true);
+  assert.equal('auth' in bob2, false, 'bob continues after the group without a second sign-in');
+
+  assert.deepEqual(result.segments.map((s) => [s.segment, s.as, s.parallel_group]), [[1, 'alice', undefined], [2, 'alice', 1], [3, 'bob', 1], [4, 'bob', undefined]]);
+  assert.match(formatVerifyJourneyReport(result).join('\n'), /segment 3 .*bob \[desktop\] \/chat .*parallel 1/);
+  assert.deepEqual(result.cleanup, [{ actor: 'alice', status: 'closed' }, { actor: 'bob', status: 'closed' }]);
+});
+
+test('parallel: two first segments each carry only their own actor\'s seeds and test identity', async () => {
+  const flow = {
+    actors: { alice: { test_user: true }, bob: { cookies: [{ name: 'pref', value: SECRET_COOKIE }] } },
+    journey: [{ parallel: [{ as: 'alice', path: '/a', actions: [{ click: '#x' }] }, { as: 'bob', actions: [{ click: '#y' }] }] }],
+  };
+  const inner = barrierClient([1, 2]);
+  const client = { async call(method, path, body, query, opts) {
+    if (path === '/auth/test-users') return method === 'POST' ? { identities: [{ user: { id: 'tu_a', email: 't@club.test', test: true } }] } : { deleted: 1 };
+    return inner.call(method, path, body, query, opts);
+  } };
+  const result = await createVerifyJourneyRun({ project_id: 'club' }, normalizeVerifyJourney(flow), client, { runId: 'p2' }).run();
+  assert.equal(result.passed, true, result.verdict);
+  const [alice, bob] = inner.runs();
+  assert.deepEqual(alice.auth, { user_id: 'tu_a' });
+  assert.equal(alice.url, '/a');
+  assert.equal('cookies' in alice, false);
+  assert.deepEqual(bob.cookies, [{ name: 'pref', value: SECRET_COOKIE }]);
+  assert.equal(bob.url, '/', 'a seeded first segment without a path starts at /');
+  assert.equal('auth' in bob, false, 'bob never receives alice\'s test identity');
+  assert.ok(!('require_existing_session' in alice) && !('require_existing_session' in bob));
+});
+
+test('parallel: groups are refused unless they are 2-3 segments by different actors, flat, with only "parallel"', () => {
+  const actors = { a: {}, b: {}, c: {} };
+  const seg = (as) => ({ as, actions: [{ click: '#x' }] });
+  const flow = (item) => ({ actors, journey: [seg('a'), seg('b'), seg('c'), item] });
+  assert.throws(() => normalizeVerifyJourney(flow({ parallel: [seg('a'), seg('a')] })), /journey\[3\]\.parallel names a twice; each segment in a parallel group is a different actor/);
+  assert.throws(() => normalizeVerifyJourney(flow({ parallel: [seg('a')] })), /journey\[3\]\.parallel has 1 segment; a parallel group runs 2 to 3 segments at the same time/);
+  assert.throws(() => normalizeVerifyJourney(flow({ parallel: [seg('a'), seg('b'), seg('c'), seg('a')] })), /journey\[3\]\.parallel has 4 segments; a parallel group runs 2 to 3/);
+  assert.throws(() => normalizeVerifyJourney(flow({ parallel: 'a,b' })), /journey\[3\]\.parallel must be an array of segments/);
+  assert.throws(() => normalizeVerifyJourney(flow({ parallel: [seg('a'), { parallel: [seg('b'), seg('c')] }] })), /journey\[3\]\.parallel\[1\] is a parallel group inside a parallel group; groups cannot be nested/);
+  assert.throws(() => normalizeVerifyJourney(flow({ parallel: [seg('a'), seg('b')], as: 'c', viewport: 'mobile' })), /journey\[3\] is a parallel group, so its only field is "parallel" \(found as, viewport\)/);
+  // Every per-segment rule still applies, named by its place in the group.
+  assert.throws(() => normalizeVerifyJourney(flow({ parallel: [seg('a'), { as: 'b', path: '//evil.test' }] })), /journey\[3\]\.parallel\[1\]\.path must be a path on this app/);
+  assert.throws(() => normalizeVerifyJourney(flow({ parallel: [seg('a'), { as: 'z' }] })), /journey\[3\]\.parallel\[1\]\.as must name one of the actors/);
+  assert.throws(() => normalizeVerifyJourney(flow({ parallel: [seg('a'), { as: 'b', extra: 1 }] })), /journey\[3\]\.parallel\[1\] has unsupported field: extra/);
+  assert.throws(() => normalizeVerifyJourney(flow({ parallel: [seg('a'), { as: 'b', visible_only: 'yes' }] })), /journey\[3\]\.parallel\[1\]\.visible_only must be boolean/);
+  assert.doesNotThrow(() => normalizeVerifyJourney(flow({ parallel: [seg('a'), { as: 'b', viewport: 'mobile', expect_requests: [{ path: '/api/x', status: 403 }] }] })));
+});
+
+test('parallel: segments in groups count toward the segment and action limits', () => {
+  const thirty = Array.from({ length: 30 }, () => ({ click: '#x' }));
+  const actors = { a: {}, b: {}, c: {} };
+  const trio = { parallel: [{ as: 'a' }, { as: 'b' }, { as: 'c' }] };
+  assert.doesNotThrow(() => normalizeVerifyJourney({ actors, journey: [trio, trio, trio, trio] }), '4 groups of 3 are exactly 12 segments');
+  assert.throws(() => normalizeVerifyJourney({ actors, journey: [trio, trio, trio, trio, { as: 'a' }] }),
+    /journey has 13 segments \(counting each segment inside a parallel group\); the limit is 12/);
+  assert.throws(() => normalizeVerifyJourney({ actors, journey: [{ as: 'a' }, { parallel: [{ as: 'a', path: '/x', actions: thirty }, { as: 'b' }] }] }),
+    /journey\[1\]\.parallel\[0\] has 31 actions \(including the goto for its path\); the limit per segment is 30/);
+  const wide = { parallel: [{ as: 'a', actions: thirty }, { as: 'b', actions: thirty }, { as: 'c', actions: thirty }] };
+  assert.throws(() => normalizeVerifyJourney({ actors, journey: [wide, { as: 'a', actions: thirty }, { as: 'b', actions: [{ click: '#y' }] }] }),
+    /journey has 121 actions in total; the limit is 120/);
+  assert.equal(VERIFY_JOURNEY_LIMITS.parallel_segments, 3);
+});
+
+test('parallel: a failure in one group segment stops later items, and both group results are reported', async () => {
+  const client = barrierClient([2, 3], (_body, n) => (n === 3
+    ? report({ passed: false, steps: [{ step: 0, action: 'fill', ok: false, error: 'selector #msg did not match' }] })
+    : report()));
+  const result = await createVerifyJourneyRun({ project_id: 'club' }, normalizeVerifyJourney(realtime), client, { runId: 'p3' }).run();
+  assert.equal(result.passed, false);
+  assert.match(result.verdict, /^FAIL — segment 3 — step 1 \(fill #msg\) failed at bob #3 desktop: selector #msg did not match/);
+  assert.equal(client.runs().length, 3, 'the item after the group did not run');
+  assert.deepEqual(result.segments.map((s) => [s.segment, s.ran, s.passed]), [[1, true, true], [2, true, true], [3, true, false], [4, false, false]]);
+  assert.equal(result.browser_runs, 3);
+  assert.deepEqual(client.closes().map((e) => e.session).sort(), ['vf-p3-alice', 'vf-p3-bob']);
+
+  // A refusal for the first group segment and a failed report for the second:
+  // the first stop in segment order is the verdict; both are reported.
+  const refused = barrierClient([2, 3], (_body, n) => {
+    if (n === 2) throw new CliApiError('SESSION_EXPIRED', 'no live browser', 409);
+    if (n === 3) return report({ passed: false, steps: [{ step: 0, action: 'fill', ok: false, error: 'nope' }] });
+    return report();
+  });
+  const second = await createVerifyJourneyRun({ project_id: 'club' }, normalizeVerifyJourney(realtime), refused, { runId: 'p4' }).run();
+  assert.match(second.verdict, /^FAIL — segment 2 \(alice, desktop\): alice's browser ended between segments, so segment 2 did not run/);
+  assert.equal(second.segments[1].error.code, 'SESSION_EXPIRED');
+  assert.deepEqual([second.segments[2].ran, second.segments[2].passed], [true, false], 'bob\'s group result is still reported');
+  assert.equal(second.segments[3].ran, false);
+});
+
+test('parallel: an execution cap in a group names the segments after the group as not run', async () => {
+  // alice's group segment is [goto /chat, wait]: the cap hits after the goto.
+  const capped = report({ passed: false, incomplete: { reason: 'execution_cap', completed: 1, next_step: 1, budget_ms: 180000, elapsed_ms: 180000 }, steps: [{ step: 0, action: 'goto', ok: true }] });
+  const client = barrierClient([2, 3], (_body, n) => (n === 2 ? capped : report()));
+  const result = await createVerifyJourneyRun({ project_id: 'club' }, normalizeVerifyJourney(realtime), client, { runId: 'p5' }).run();
+  assert.equal(client.runs().length, 3);
+  assert.match(result.verdict, /^INCOMPLETE — segment 2 \(alice, desktop\) reached its 180s execution cap/);
+  assert.match(result.verdict, / Segment 4 did not run\./, 'bob\'s parallel segment ran, so only the item after the group is named');
+  assert.equal(result.segments[1].incomplete.reason, 'execution_cap');
+  assert.equal(result.segments[2].passed, true, 'bob\'s parallel segment is reported on its own');
+});
+
+test('parallel: closeAll during a group closes both actors and waits for both in-flight calls', async () => {
+  const aliceCall = deferred();
+  const bobCall = deferred();
+  const client = controllableClient({
+    closeDelayMs: 10,
+    segment: (body, n) => (n === 2 ? aliceCall.promise : n === 3 ? bobCall.promise : report()),
+  });
+  const journeyRun = createVerifyJourneyRun({ project_id: 'club' }, normalizeVerifyJourney(realtime), client, { runId: 'p6' });
+  const running = journeyRun.run();
+  await until(() => client.runs().length === 3);
+  journeyRun.stop('VERIFY_INTERRUPTED', 'Stopped by SIGINT.');
+  const cleaning = journeyRun.closeAll();
+  await until(() => client.closes().length === 2);
+  let done = false;
+  void cleaning.then(() => { done = true; });
+  aliceCall.resolve(report());
+  const aliceSettledAt = Date.now();
+  await until(() => client.closes('alice').length === 2);
+  assert.equal(done, false, 'cleanup still waits for bob\'s call');
+  await new Promise((r) => setTimeout(r, 30));
+  assert.equal(done, false);
+  bobCall.resolve(report());
+  const bobSettledAt = Date.now();
+  const { cleanup } = await cleaning;
+  const result = await running;
+  assert.ok(client.closes('alice')[1].at >= aliceSettledAt && client.closes('bob')[1].at >= bobSettledAt,
+    'each actor is closed again after its own call settled');
+  assert.equal(client.closes('bob').length, 2);
+  assert.deepEqual(cleanup, [{ actor: 'alice', status: 'closed' }, { actor: 'bob', status: 'closed' }]);
+  assert.equal(client.runs().length, 3, 'nothing starts after the group once cleanup began');
+  assert.deepEqual(result.segments.map((s) => s.ran), [true, true, true, false]);
+  assert.match(result.verdict, /^FAIL — segment 4 \(bob, desktop\): Stopped by SIGINT\. \[VERIFY_INTERRUPTED\]$/);
+});
+
+test('parallel: an unanswered call in a group is unconfirmed for that actor only; a hung one stays inside the budget', async () => {
+  const client = controllableClient({
+    segment: (_body, n) => {
+      if (n === 3) throw new CliApiError('TIMEOUT', 'No response from POST /browser/test after 225s.', 0);
+      return report();
+    },
+  });
+  const result = await createVerifyJourneyRun({ project_id: 'club' }, normalizeVerifyJourney(realtime), client, { runId: 'p7', recloseAfterAbandonedMs: 10 }).run();
+  assert.match(result.verdict, /^INCOMPLETE — Outcome unknown/);
+  assert.equal(result.segments[1].passed, true);
+  assert.equal(result.segments[2].outcome_unknown, true);
+  assert.equal(result.segments[3].ran, false);
+  assert.deepEqual(result.cleanup.map((item) => [item.actor, item.status]), [['alice', 'closed'], ['bob', 'unconfirmed']]);
+  assert.match(result.cleanup[1].reason, /got no answer, so the platform may still start it/);
+  assert.equal(client.closes('bob').length, 2, 'the abandoned actor is closed again');
+
+  const hung = controllableClient({ segment: (_body, n) => (n === 2 || n === 3 ? new Promise(() => {}) : report()) });
+  const journeyRun = createVerifyJourneyRun({ project_id: 'club' }, normalizeVerifyJourney(realtime), hung, { runId: 'p8', cleanupBudgetMs: 300 });
+  void journeyRun.run();
+  await until(() => hung.runs().length === 3);
+  const startedAt = Date.now();
+  const { cleanup } = await journeyRun.closeAll();
+  assert.ok(Date.now() - startedAt < 600, 'both waits share one cleanup budget');
+  assert.deepEqual(cleanup.map((item) => item.status), ['unconfirmed', 'unconfirmed']);
+  assert.ok(cleanup.every((item) => /still running when cleanup ran out of time/.test(item.reason)));
+});
+
+test('parallel: the deadline is checked once before a group, which then starts together or not at all', async () => {
+  let clock = 0;
+  const client = controllableClient({
+    segment: (_body, n) => { if (n === 1) clock = VERIFY_JOURNEY_LIMITS.deadline_ms - 50_000; return report(); },
+  });
+  const result = await createVerifyJourneyRun({ project_id: 'club' }, normalizeVerifyJourney(realtime), client, { runId: 'p9', now: () => clock }).run();
+  assert.equal(client.runs().length, 1, 'no group segment started');
+  assert.match(result.verdict, /^FAIL — segment 2 \(alice, desktop\): The journey reached its 10-minute limit\. Segments 2–3 \(in parallel\) were not started: 50s were left/);
+  assert.deepEqual(result.segments.map((s) => [s.ran, s.parallel_group]), [[true, undefined], [false, 1], [false, 1], [false, undefined]]);
 });

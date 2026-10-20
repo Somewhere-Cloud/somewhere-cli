@@ -12,6 +12,13 @@ function record(value: unknown): Record<string, unknown> | null {
   return value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
 }
 
+// The checker is project-installed code: hand it no account credentials.
+function checkerEnv(): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {};
+  for (const name of ['PATH', 'HOME', 'TMPDIR', 'TMP', 'TEMP', 'LANG', 'NO_COLOR']) if (process.env[name] !== undefined) env[name] = process.env[name];
+  return env;
+}
+
 /** Use the project's existing Oxlint installation. Never download a binary or
  * install packages during an ordinary lint run. Type-aware rules are separate. */
 export function genericLint(directory: string): GenericLintResult {
@@ -22,7 +29,7 @@ export function genericLint(directory: string): GenericLintResult {
   };
   const result = spawnSync(process.execPath, [launcher, '--format', 'json', '--react-plugin', '--promise-plugin', '-W', 'correctness',
     '--ignore-pattern', '**/node_modules/**', '--ignore-pattern', '**/dist/**', '--ignore-pattern', '**/build/**', '.'], {
-    cwd: directory, encoding: 'utf8', timeout: 30_000, maxBuffer: 16 * 1024 * 1024, env: process.env,
+    cwd: directory, encoding: 'utf8', timeout: 30_000, maxBuffer: 16 * 1024 * 1024, env: checkerEnv(),
   });
   if (result.error || result.status === null) return { status: 'failed', findings: [], reason: result.error?.message ?? 'Oxlint was interrupted.' };
   try {

@@ -668,9 +668,19 @@ export function registerDeploy(program: Command) {
         }
       }
 
-      await showProjectNotices(client, projectId);
+      // Notices are advisory context: fetched alongside the deploy instead of
+      // before it, so their round trip is no longer on the deploy's path. Lines
+      // are held and printed at the next settle point (before a prompt, after
+      // the result or the failure) so they never interleave with the spinner.
+      const noticeLines: string[] = [];
+      const noticesFetched = showProjectNotices(client, projectId, { write: (line) => noticeLines.push(line) });
+      const settleNotices = async (): Promise<void> => {
+        await noticesFetched;
+        for (const line of noticeLines.splice(0)) process.stderr.write(`${line}\n`);
+      };
 
       if (opts.force && !opts.yes) {
+        await settleNotices();
         if (!process.stdin.isTTY) {
           const message = 'Refusing to force deploy without confirmation in a non-interactive shell. Run `somewhere deploy --force --yes` to overwrite remote changes intentionally.';
           if (opts.json) {
@@ -829,6 +839,7 @@ export function registerDeploy(program: Command) {
             baseText: spinner?.text ?? 'Checking deploy...',
           });
           spinner?.stop();
+          await settleNotices();
           if (opts.json) {
             printJson(plan);
           } else {
@@ -848,6 +859,7 @@ export function registerDeploy(program: Command) {
         const requestMs = performance.now() - requestStartedAt;
 
         spinner?.stop();
+        await settleNotices();
         const functionErrors = result.function_errors ?? [];
         const hasFunctionErrors = functionErrors.length > 0;
         const formatted = formatDeploySuccess(result, {
@@ -1053,6 +1065,8 @@ export function registerDeploy(program: Command) {
         rememberDeployedBase(result.active_release_id ?? result.release_id);
         if (verification?.passed === false) process.exit(1);
       } catch (err) {
+        spinner?.stop();
+        await settleNotices();
         if (
           err instanceof CliApiError &&
           (err.code === 'STALE_BASE' || err.code === 'STALE_RELEASE_BASE' || err.code === 'BASE_REQUIRED')

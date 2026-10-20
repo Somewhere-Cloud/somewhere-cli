@@ -9,8 +9,8 @@ import { getOutdatedWarning, updateProvider } from './providers/update.js';
  *  or agent/piped output. */
 const PROVIDERS: NoticeProvider[] = [updateProvider];
 
-/** Commands that manage the CLI update own their terminal output. */
-const SKIP_SUBCOMMANDS = new Set(['update']);
+/** Updates own their output; offline lint must never trigger an update fetch. */
+const SKIP_SUBCOMMANDS = new Set(['update', 'lint']);
 
 /** Commands that own their output stay silent. In particular, an `update`
  * process keeps its old in-memory

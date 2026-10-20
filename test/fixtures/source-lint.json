@@ -1,0 +1,38 @@
+[
+  {
+    "name": "credential in browser source",
+    "files": {"index.html":"<script type=\"module\" src=\"/src/main.ts\"></script>","src/main.ts":"// synthetic fixture\nconst key = 'sk_live_Fx7Qm2Lp9Rz4Kd8Wn3Ty6Hv1Bc5';"},
+    "functions": {},
+    "expected": [{"rule":"somewhere/source-secret","file":"src/main.ts","line":2}]
+  },
+  {
+    "name": "server env read and public placeholder are legitimate",
+    "files": {"index.html":"<script type=\"module\" src=\"/src/main.ts\"></script>","src/main.ts":"const key = 'pk_test_Fx7Qm2Lp9Rz4Kd8Wn3Ty6Hv1Bc5'; const example = 'sk_live_xxxxxxxxxxxxxxxxxxxxxxxx';"},
+    "functions": {"api/pay.ts":"export default async function(req, sw) { return Response.json({ configured: Boolean(sw.env.STRIPE_SECRET_KEY) }); }"},
+    "expected": []
+  },
+  {
+    "name": "schema column typo",
+    "files": {"db/schema.ts":"export default schema({\n notes: table({ id: id(), title: text() }, { scope: owner(), indexes: [['titel']] })\n});"},
+    "functions": {},
+    "expected": [{"rule":"somewhere/schema-declaration","file":"db/schema.ts","line":2}]
+  },
+  {
+    "name": "declared private table is legitimate without browser client access",
+    "files": {"db/schema.ts":"import { schema, table, id, text, owner } from 'somewhere/db';\nexport default schema({ notes: table({ id: id(), title: text() }, { scope: owner() }) });"},
+    "functions": {},
+    "expected": []
+  },
+  {
+    "name": "directory index handler from DocQA race",
+    "files": {},
+    "functions": {"api/docs/index.ts":"export default async function(req, sw) { return Response.json({ ok: true }); }"},
+    "expected": [{"rule":"somewhere/index-route","file":"api/docs/index.ts","line":1}]
+  },
+  {
+    "name": "renamed parent handler and library index are legitimate",
+    "files": {},
+    "functions": {"api/docs.ts":"export default async function(req, sw) { return Response.json({ ok: true }); }", "_lib/index.ts":"export const value = 1;"},
+    "expected": []
+  }
+]

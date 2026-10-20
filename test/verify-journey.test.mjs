@@ -601,3 +601,77 @@ test('SIGTERM with a failed close reports that browser as unconfirmed and still 
   assert.match(stderr, /alice closed, bob unconfirmed/);
   assert.match(stderr, /bob: close after its call finished failed \(AUTHORITY_UNAVAILABLE\); the platform closes an idle browser within 5 minutes/);
 });
+
+// Managed test users (founder 2026-10-20 22:45; backend tsk_b05cf814): a
+// "test_user" actor gets a fresh platform test identity, signs in once in its
+// own browser, and the identities are deleted after the browsers close.
+function testUserClient({ identities, failCreate, failDelete } = {}) {
+  const calls = [];
+  return {
+    calls,
+    async call(method, path, body) {
+      calls.push({ method, path, body: structuredClone(body) });
+      if (path === '/auth/test-users' && method === 'POST') {
+        if (failCreate) throw new CliApiError('NOT_FOUND', 'route missing', 404);
+        return { identities: identities ?? Array.from({ length: body.count }, (_, i) => ({ user: { id: `tu_${i}`, email: `t-verify-${i}@club.test.somewhere.site`, role: 'user', email_verified: true, test: true } })) };
+      }
+      if (path === '/auth/test-users' && method === 'DELETE') {
+        if (failDelete) throw new CliApiError('AUTH_STORE_UNAVAILABLE', 'store busy', 503);
+        return { deleted: body.ids.length, ids: body.ids };
+      }
+      assert.equal(path, '/browser/test');
+      if (body.close === true) return { session_id: body.session_id, closed: true };
+      return report();
+    },
+  };
+}
+const teamFlow = {
+  actors: { alice: { test_user: true }, bob: { test_user: true }, visitor: {} },
+  journey: [
+    { as: 'alice', path: '/', actions: [{ click: '#new' }] },
+    { as: 'bob', path: '/', actions: [{ click: '#join' }] },
+    { as: 'alice', actions: [{ click: '#check' }] },
+    { as: 'visitor', path: '/', actions: [{ click: '#peek' }] },
+  ],
+};
+
+test('test_user actors: one create call, one sign-in per actor, cleanup after browsers close', async () => {
+  const client = testUserClient();
+  const result = await createVerifyJourneyRun({ project_id: 'club' }, normalizeVerifyJourney(teamFlow), client, { runId: 'tu' }).run();
+  assert.equal(result.passed, true, result.verdict);
+  const creates = client.calls.filter((c) => c.path === '/auth/test-users' && c.method === 'POST');
+  assert.equal(creates.length, 1, 'all test actors are created together');
+  assert.deepEqual(creates[0].body, { project_id: 'club', count: 2, label: 'verify' });
+  const runs = client.calls.filter((c) => c.path === '/browser/test' && c.body.close !== true).map((c) => c.body);
+  assert.deepEqual(runs[0].auth, { user_id: 'tu_0' }, 'alice signs in as her own test identity');
+  assert.deepEqual(runs[1].auth, { user_id: 'tu_1' }, 'bob signs in as a different test identity');
+  assert.equal('auth' in runs[2], false, 'a continued actor reuses its signed-in browser; no second sign-in');
+  assert.equal(runs[2].require_existing_session, true);
+  assert.equal('auth' in runs[3], false, 'a plain actor stays signed out');
+  const lastClose = client.calls.findLastIndex((c) => c.body?.close === true);
+  const del = client.calls.findIndex((c) => c.path === '/auth/test-users' && c.method === 'DELETE');
+  assert.ok(del > lastClose, 'identities are deleted only after every browser is closed');
+  assert.deepEqual(client.calls[del].body, { project_id: 'club', ids: ['tu_0', 'tu_1'] });
+  assert.deepEqual(result.test_users.identities.map((i) => [i.actor, i.user_id]), [['alice', 'tu_0'], ['bob', 'tu_1']]);
+  assert.deepEqual(result.test_users.cleanup, { status: 'deleted', deleted: 2 });
+  assert.ok(!JSON.stringify(result).match(/token|password/i), 'no credential field reaches the report');
+});
+
+test('test_user: creation failure starts no browser; mismatched or non-test identities are refused', async () => {
+  for (const client of [testUserClient({ failCreate: true }),
+    testUserClient({ identities: [{ user: { id: 'u1', email: 'a@x.test', test: true } }] }),
+    testUserClient({ identities: [{ user: { id: 'u1', email: 'real@x.com' } }, { user: { id: 'u2', email: 'b@x.test', test: true } }] })]) {
+    await assert.rejects(createVerifyJourneyRun({ project_id: 'club' }, normalizeVerifyJourney(teamFlow), client).run(), /No browser was started|no browser was started/);
+    assert.equal(client.calls.filter((c) => c.path === '/browser/test').length, 0);
+  }
+});
+
+test('test_user: kept on request, unconfirmed delete is reported, invalid combinations refused', async () => {
+  const kept = await createVerifyJourneyRun({ project_id: 'club' }, normalizeVerifyJourney(teamFlow), testUserClient(), { keepTestUsers: true }).run();
+  assert.equal(kept.test_users.cleanup.status, 'kept');
+  const failed = await createVerifyJourneyRun({ project_id: 'club' }, normalizeVerifyJourney(teamFlow), testUserClient({ failDelete: true })).run();
+  assert.equal(failed.test_users.cleanup.status, 'unconfirmed');
+  assert.match(failed.test_users.cleanup.reason, /AUTH_STORE_UNAVAILABLE/);
+  assert.throws(() => normalizeVerifyJourney({ actors: { a: { test_user: true, auth: { user_id: 'x' } } }, journey: [{ as: 'a' }] }), /remove auth/);
+  assert.throws(() => normalizeVerifyJourney({ actors: { a: { test_user: 'yes' } }, journey: [{ as: 'a' }] }), /must be true/);
+});

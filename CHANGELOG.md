@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.37.56
+
+### Fixed
+
+- `somewhere docs constructor` (and other built-in object names such as `__proto__` or `toString`) now answers that no such documentation topic exists, instead of a false "Could not reach https://somewhere.tech — check your connection." Quick-link topic and alias lookups use own keys only.
+
 ## 0.37.55
 
 ### Added

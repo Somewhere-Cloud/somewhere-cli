@@ -6,7 +6,7 @@ import test from 'node:test';
 const root = mkdtempSync(join(tmpdir(), 'onboarding-output-'));
 process.env.SOMEWHERE_CONFIG_DIR = root;
 const { saveVerifyReport, writeVerifyReportTo } = await import('../dist/lib/verify-report.js');
-const { formatVerifyOutput, summarizeVerifyReport } = await import('../dist/commands/verify.js');
+const { formatVerifyOutput, formatVerifySummaryLine, summarizeVerifyReport } = await import('../dist/commands/verify.js');
 const { formatTempExpiry } = await import('../dist/commands/deploy.js');
 test.after(() => rmSync(root, { recursive: true, force: true }));
 const link = 'https://api.example.invalid/screenshot?signature=' + 'long'.repeat(100);
@@ -64,4 +64,36 @@ test('detectable clock disagreement or invalid local clock never invents a longe
   const expires = '2026-09-28T21:00:00.000Z';
   assert.equal(formatTempExpiry(expires, 10800, Date.parse('2026-09-28T11:00:00Z')), `Expires at: ${expires} (UTC)`);
   assert.equal(formatTempExpiry(expires, 10800, Number.NaN), `Expires at: ${expires} (UTC)`);
+});
+
+test('a run where no browser started is not summarised as "0 failed steps" (Haiku w2-invites, tsk_70d6db11)', () => {
+  // The w2-invites journey shape: the only segment never started its browser.
+  const journey = {
+    passed: false, mode: 'journey', steps: [], incomplete: [], refusals: null, browser_runs: 0, cleanup_confirmed: true,
+    verdict: 'FAIL — segment 1 (invitee, desktop): Browser startup or cleanup could not be confirmed. [BROWSER_STARTUP_UNAVAILABLE]',
+    segments: [{ segment: 1, as: 'invitee', viewport: 'desktop', path: '/auth/magic?token=secret-token', ran: false, passed: false,
+      error: { code: 'BROWSER_STARTUP_UNAVAILABLE', message: 'Browser startup or cleanup could not be confirmed. Work may still be pending; do not retry automatically.' } }],
+  };
+  const summary = summarizeVerifyReport(journey);
+  assert.equal(summary.segments_not_started, 1);
+  assert.deepEqual(summary.start_errors, ['BROWSER_STARTUP_UNAVAILABLE']);
+  const line = formatVerifySummaryLine(summary);
+  assert.match(line, /^Verify FAIL: no browser ran \(BROWSER_STARTUP_UNAVAILABLE\); nothing was checked, so this is not an app result\. 1 segment refused or not started/);
+  assert.doesNotMatch(line, /0 failed steps/);
+  assert.doesNotMatch(JSON.stringify(summary) + line, /secret-token|could not be confirmed|https?:\/\//, 'codes only: no messages or URLs');
+
+  // One flow whose only viewport was refused.
+  const flow = { ...report, passed: false, steps: [], refusals: [{ viewport: 'desktop', detail: { code: 'BROWSER_SESSION_LIMIT', status: 429, message: '10 of 10 active' } }] };
+  assert.match(formatVerifySummaryLine(summarizeVerifyReport(flow)), /^Verify FAIL: no browser ran \(BROWSER_SESSION_LIMIT\); .* 1 viewport refused or not started/);
+
+  // Some segments ran: the counts stay, and the unstarted one is named.
+  const partial = { ...journey, browser_runs: 1,
+    steps: [{ step: 1, viewport: 'owner #1 desktop', passed: false, name: 'expect #ok', error: 'expect failed', duration_ms: 40 }],
+    segments: [{ segment: 1, as: 'owner', viewport: 'desktop', ran: true, passed: false }, journey.segments[0]] };
+  assert.equal(formatVerifySummaryLine(summarizeVerifyReport(partial)),
+    'Verify FAIL: 1 failed steps, 0 refusals, 1 segment not started (BROWSER_STARTUP_UNAVAILABLE), 40 ms in steps; full report saved to --out destination');
+
+  // A pass reads exactly as before.
+  const pass = { ...report, passed: true, steps: [{ step: 1, viewport: 'desktop', passed: true, name: 'Save', duration_ms: 12 }] };
+  assert.equal(formatVerifySummaryLine(summarizeVerifyReport(pass)), 'Verify PASS: 0 failed steps, 0 refusals, 12 ms in steps; full report saved to --out destination');
 });

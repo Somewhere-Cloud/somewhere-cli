@@ -1613,6 +1613,16 @@ export function formatVerifyOutput(
 export function summarizeVerifyReport(report: VerifyReport | VerifyJourneyReport) {
   const durations = report.steps.map((step) => step.duration_ms).filter((value): value is number =>
     typeof value === 'number' && Number.isFinite(value) && value >= 0);
+  // A journey records a browser that never started on its segment, not in
+  // refusals. Count those too, with their codes (never messages or URLs), so a
+  // run where no browser started is not summarised as "0 failed steps".
+  const notStarted = 'segments' in report
+    ? report.segments.filter((segment) => !segment.ran && segment.error)
+    : [];
+  const startErrors = [...new Set([
+    ...(report.refusals ?? []).map((refusal) => refusal.detail?.code).filter((code): code is string => typeof code === 'string' && code !== ''),
+    ...notStarted.map((segment) => segment.error!.code).filter((code) => typeof code === 'string' && code !== ''),
+  ])];
   return {
     passed: report.passed,
     mode: 'segments' in report ? 'journey' : 'flow',
@@ -1621,6 +1631,8 @@ export function summarizeVerifyReport(report: VerifyReport | VerifyJourneyReport
     not_run_steps: report.steps.filter((step) => step.ran === false).length,
     step_duration_ms: Math.round(durations.reduce((sum, value) => sum + value, 0)),
     refusals: report.refusals?.length ?? 0,
+    ...('segments' in report ? { segments_not_started: notStarted.length } : {}),
+    ...(startErrors.length ? { start_errors: startErrors } : {}),
     incomplete: report.incomplete?.length ?? 0,
     outcome_unknown: !!report.lifecycle?.some((item) => item.detail.outcome_unknown)
       || ('segments' in report && report.segments.some((segment) => segment.outcome_unknown === true)),
@@ -1630,6 +1642,22 @@ export function summarizeVerifyReport(report: VerifyReport | VerifyJourneyReport
       cleanup_confirmed: report.cleanup_confirmed,
     } : {}),
   };
+}
+
+/** The one-line --out summary. A run in which no browser ran says so first:
+ *  "0 failed steps" under FAIL reads as a clean app, and it is not one. */
+export function formatVerifySummaryLine(summary: ReturnType<typeof summarizeVerifyReport>): string {
+  const saved = 'full report saved to --out destination';
+  const codes = summary.start_errors?.length ? ` (${summary.start_errors.join(', ')})` : '';
+  const notStarted = summary.refusals + (summary.segments_not_started ?? 0);
+  const noBrowser = !summary.passed && notStarted > 0
+    && ('browser_runs' in summary ? summary.browser_runs === 0 : summary.steps === 0);
+  if (noBrowser) {
+    return `Verify FAIL: no browser ran${codes}; nothing was checked, so this is not an app result. `
+      + `${notStarted} ${summary.mode === 'journey' ? 'segment' : 'viewport'}${notStarted === 1 ? '' : 's'} refused or not started; ${saved}`;
+  }
+  const extra = summary.segments_not_started ? `, ${summary.segments_not_started} segment${summary.segments_not_started === 1 ? '' : 's'} not started${codes}` : (summary.refusals && codes ? codes : '');
+  return `Verify ${summary.passed ? 'PASS' : 'FAIL'}: ${summary.failed_steps} failed steps, ${summary.refusals} refusals${extra}, ${summary.step_duration_ms} ms in steps; ${saved}`;
 }
 
 export function formatJourneyCleanup(cleanup: VerifyJourneyCleanup[], cleanupMs: number): string[] {
@@ -1788,7 +1816,7 @@ projects: a login approved for "Only these projects" cannot open named browsers
           if (opts.out !== undefined) {
             writeVerifyReportTo(opts.out, report);
             const summary = summarizeVerifyReport(report);
-            console.log(opts.json ? JSON.stringify(summary, null, 2) : `Verify ${summary.passed ? 'PASS' : 'FAIL'}: ${summary.failed_steps} failed steps, ${summary.refusals} refusals, ${summary.step_duration_ms} ms in steps; full report saved to --out destination`);
+            console.log(opts.json ? JSON.stringify(summary, null, 2) : formatVerifySummaryLine(summary));
           } else if (opts.json) console.log(JSON.stringify(report, null, 2));
           else for (const line of formatVerifyOutput(report)) console.log(line);
           process.exit(report.passed ? 0 : 1);
@@ -1808,7 +1836,7 @@ projects: a login approved for "Only these projects" cannot open named browsers
         if (opts.out !== undefined) {
           writeVerifyReportTo(opts.out, report);
           const summary = summarizeVerifyReport(report);
-          console.log(opts.json ? JSON.stringify(summary, null, 2) : `Verify ${summary.passed ? 'PASS' : 'FAIL'}: ${summary.failed_steps} failed steps, ${summary.refusals} refusals, ${summary.step_duration_ms} ms in steps; full report saved to --out destination`);
+          console.log(opts.json ? JSON.stringify(summary, null, 2) : formatVerifySummaryLine(summary));
         } else if (opts.json) console.log(JSON.stringify(report, null, 2));
         else for (const line of formatVerifyOutput(report)) console.log(line);
         process.exit(report.passed ? 0 : 1);

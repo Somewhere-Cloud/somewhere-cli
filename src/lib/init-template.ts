@@ -11,7 +11,7 @@ const PACKAGE_JSON = `{
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@somewhere-tech/sdk": "^0.12.1",
+    "@somewhere-tech/sdk": "^0.12.3",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-router-dom": "^7.9.5"
@@ -399,7 +399,7 @@ Deploy the raw source. There is intentionally no build script.
 
 export function createHappyPathTemplate(): InitScaffoldFile[] {
   return [
-    { path: '.gitignore', content: 'node_modules\ndist\nbuild\n.env\n' },
+    { path: '.gitignore', content: 'node_modules\ndist\nbuild\n.env\n# Generated from db/schema.ts by somewhere typecheck, dev and deploy.\n__somewhere_data.d.ts\n__somewhere_files.d.ts\n' },
     { path: 'AGENTS.md', content: INIT_AGENTS_MD },
     { path: 'CLAUDE.md', content: INIT_CLAUDE_MD },
     { path: 'README.md', content: README },

@@ -928,3 +928,39 @@ test('parallel: the deadline is checked once before a group, which then starts t
   assert.match(result.verdict, /^FAIL — segment 2 \(alice, desktop\): The journey reached its 10-minute limit\. Segments 2–3 \(in parallel\) were not started: 50s were left/);
   assert.deepEqual(result.segments.map((s) => [s.ran, s.parallel_group]), [[true, undefined], [false, 1], [false, 1], [false, undefined]]);
 });
+
+test('each segment reports the platform timing (numbers only) plus its request wall; the journey reports its phases', async () => {
+  let clock = 1_000;
+  const calls = [];
+  const client = {
+    async call(method, path, body) {
+      calls.push({ method, path, body });
+      if (path === '/auth/test-users' && method === 'POST') { clock += 30; return { identities: [{ user: { id: 'u1', email: 'a@t.test', test: true } }, { user: { id: 'u2', email: 'b@t.test', test: true } }] }; }
+      if (path === '/auth/test-users' && method === 'DELETE') { clock += 40; return { deleted: 2 }; }
+      if (body.close === true) { clock += 70; return { session_id: body.session_id, closed: true }; }
+      clock += 50;
+      return report({ timing: { browser_acquire_ms: 120, actions_ms: 300, evidence_ms: 20, browser_reused: false,
+        final_url: 'https://club.somewhere.site/secret?token=x', note_ms: 'not a number', 'https://x/?token=abc_ms': 5, nested_ms: { a: 1 } } });
+    },
+  };
+  const journey = normalizeVerifyJourney({
+    actors: { alice: { test_user: true }, bob: { test_user: true } },
+    journey: [
+      { parallel: [{ as: 'alice', path: '/a', actions: [{ click: '#a' }] }, { as: 'bob', path: '/b', actions: [{ click: '#b' }] }] },
+      { as: 'alice', path: '/c', actions: [{ click: '#c' }] },
+    ],
+  });
+  const result = await createVerifyJourneyRun({ project_id: 'club' }, journey, client, { runId: 'tm', now: () => clock }).run();
+  assert.equal(result.passed, true);
+  assert.equal(result.segments.length, 3);
+  for (const segment of result.segments) {
+    assert.deepEqual(Object.keys(segment.timing).sort(), ['actions_ms', 'browser_acquire_ms', 'browser_reused', 'evidence_ms', 'request_wall_ms']);
+    assert.equal(segment.timing.browser_acquire_ms, 120);
+    assert.ok(segment.timing.request_wall_ms >= 50, 'each call is timed from its own dispatch to its own answer');
+  }
+  assert.ok(!JSON.stringify(result.segments.map((s) => s.timing)).includes('token'), 'no URL or string key/value reaches timing');
+  assert.equal(result.timing.test_users_create_ms, 30);
+  assert.equal(result.timing.segments_ms, 150, 'three 50 ms calls; browser cleanup is not counted in segments');
+  assert.equal(result.timing.cleanup_ms, 140, 'two 70 ms closes');
+  assert.equal(result.timing.test_users_delete_ms, 40);
+});

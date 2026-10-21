@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.37.57
+
+### Changed
+
+- `somewhere lint --help` names every warning the lint reports: credentials in source, schema declarations, directory index routes, request input choosing row ownership on server writes, and `sw.email.send` awaited inside a loop (#47).
+
 ## 0.37.56
 
 ### Fixed

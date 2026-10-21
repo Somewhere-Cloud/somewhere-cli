@@ -348,7 +348,7 @@ export function formatSignedInUnlinkedExplanation(): string {
     '',
     'Next steps:',
     '  New project: run `somewhere init --bare --name <name>` (creates it in your account and links this folder; writes no files), then `somewhere deploy`.',
-    '  Existing project: run `somewhere link --project <name-or-id>` (list yours with `somewhere projects`), or deploy once with `somewhere deploy --project <name-or-id>`.',
+    '  Existing project: run `somewhere init --link --project <name-or-id>` (list yours with `somewhere projects`), or deploy once with `somewhere deploy --project <name-or-id>`.',
   ].join('\n');
 }
 
@@ -433,7 +433,7 @@ export function registerDeploy(program: Command) {
       + '\nNo project yet? Signed in, deploy never creates one on its own:\n'
       + '  somewhere init --bare --name <name>   create a project in your account and link this folder\n'
       + '  somewhere deploy                       then deploy it\n'
-      + 'Existing project: `somewhere link --project <ref>` (see `somewhere projects`), or `--project <ref>` here.\n')
+      + 'Existing project: `somewhere init --link --project <ref>` (see `somewhere projects`), or `--project <ref>` here.\n')
     .option(
       '--project <ref>',
       'Existing project to deploy to — accepts the project UUID, slug, or subdomain (all three resolve server-side). To create one, run `somewhere init --bare --name <name>`',

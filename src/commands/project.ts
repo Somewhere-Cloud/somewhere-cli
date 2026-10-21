@@ -55,7 +55,7 @@ export function registerProject(program: Command) {
         if (p.url) info(`URL: ${p.url}`);
         info(`Status: ${statusDot(p.status)}`);
         // `project create` does not link this folder; say how to deploy to it.
-        info(`Deploy to it: ${teal(`somewhere link --project ${p.id}`)} then ${teal('somewhere deploy')}, or ${teal(`somewhere deploy --project ${p.id}`)}`);
+        info(`Deploy to it: ${teal(`somewhere init --link --project ${p.id}`)} then ${teal('somewhere deploy')}, or ${teal(`somewhere deploy --project ${p.id}`)}`);
       } catch (err) {
         spinner?.fail('Failed');
         error(err instanceof Error ? err.message : String(err), err);

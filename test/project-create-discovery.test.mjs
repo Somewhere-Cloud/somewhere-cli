@@ -24,7 +24,7 @@ test('deploy --help says how to create a project, and that --project targets an 
   assert.match(out, /No project yet\?/);
   assert.match(out, /somewhere init --bare --name <name>/);
   assert.match(out, /Existing project to deploy to/);
-  assert.match(out, /somewhere link --project <ref>/);
+  assert.match(out, /somewhere init --link --project <ref>/);
 });
 
 test('projects --help names the create command', () => {

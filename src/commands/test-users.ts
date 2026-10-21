@@ -69,8 +69,9 @@ export function registerTestUsers(program: Command): void {
       'Playwright:     browser.newContext({ storageState: ".somewhere/test/alice.state.json" })',
       'Save the context back after each run:  await context.storageState({ path: ".somewhere/test/alice.state.json" })',
       'The app refreshes the short-lived access token and rotates the session on its first refresh, so an unsaved',
-      'file stops working after a run that refreshed it. Each session lasts the platform test-session lifetime',
-      '(about 1 hour; run prepare again after that). Each identity expires after 24 hours.',
+      'file stops working after a run that refreshed it. Each session ends at the time prepare prints',
+      '("session until …", session_expires_at in manifest.json); run prepare again after that.',
+      'Remove the identities with `somewhere test-users cleanup` when you are done.',
     ].join('\n'))
     .action(async (actorValues: string[], opts: { project?: string; origin?: string; json?: boolean }) => {
       let specs;

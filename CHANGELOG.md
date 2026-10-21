@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.37.55
+
+### Added
+
+- `somewhere lint`: a new warning when `sw.email.send` is awaited inside a loop (each email waits for the previous delivery); it advises bounded batches only for independent emails (#43).
+
 ## 0.37.54
 
 ### Fixed

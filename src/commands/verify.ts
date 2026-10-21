@@ -807,6 +807,10 @@ export const VERIFY_JOURNEY_LIMITS = {
 
 export interface VerifyActor {
   auth?: { user_id: string };
+  /** Sign in as a platform-managed test identity created for this run: a
+   *  verified, password-less user on the project's own test-mail domain,
+   *  deleted when the run ends. Never a real user. */
+  test_user?: true;
   local_storage?: Record<string, string>;
   cookies?: Array<{ name: string; value: string }>;
   headers?: Record<string, string>;
@@ -873,8 +877,16 @@ export interface VerifyJourneyCleanup {
   reason?: string;
 }
 
+/** Managed test identities this run created: who played which actor, and
+ *  whether they were removed afterwards. No credential is ever included. */
+export interface VerifyTestUsers {
+  identities: Array<{ actor: string; user_id: string; email: string }>;
+  cleanup: { status: 'deleted' | 'kept' | 'unconfirmed'; deleted?: number; reason?: string };
+}
+
 export interface VerifyJourneyReport extends VerifyReport {
   mode: 'journey';
+  test_users?: VerifyTestUsers;
   actors: string[];
   segments: VerifyJourneySegmentReport[];
   browser_runs: number;
@@ -913,9 +925,17 @@ export function normalizeVerifyJourney(raw: unknown, baseDir = process.cwd()): V
     if (!ACTOR_NAME.test(name)) throw new Error(`actor name "${name}" must be 1-16 lowercase letters, digits, "-" or "_", starting with a letter.`);
     const value = raw.actors[name];
     if (!isRecord(value)) throw new Error(`actors.${name} must be an object ({} for a signed-out browser).`);
-    const unknown = Object.keys(value).filter((key) => !['auth', 'local_storage', 'cookies', 'headers'].includes(key));
+    const unknown = Object.keys(value).filter((key) => !['auth', 'local_storage', 'cookies', 'headers', 'test_user'].includes(key));
     if (unknown.length) throw new Error(`actors.${name} has unsupported field${unknown.length === 1 ? '' : 's'}: ${unknown.join(', ')}.`);
     const actor: VerifyActor = {};
+    if (value.test_user !== undefined) {
+      if (value.test_user !== true) throw new Error(`actors.${name}.test_user must be true.`);
+      const seeded = ['auth', 'local_storage', 'cookies', 'headers'].filter((key) => value[key] !== undefined);
+      if (seeded.length) throw new Error(`actors.${name} is a test user, so it signs in on its own; remove ${seeded.join(', ')}.`);
+      actor.test_user = true;
+      actors[name] = actor;
+      continue;
+    }
     const auth = normalizeAuth(value.auth);
     const localStorage = normalizeStringRecord(value.local_storage, `actors.${name}.local_storage`);
     const cookies = normalizeCookies(value.cookies);
@@ -1016,7 +1036,7 @@ export function createVerifyJourneyRun(
   target: VerificationTarget,
   journey: VerifyJourney,
   client: Pick<ApiClient, 'call'>,
-  opts: { runId?: string; now?: () => number; cleanupBudgetMs?: number; recloseAfterAbandonedMs?: number } = {},
+  opts: { runId?: string; now?: () => number; cleanupBudgetMs?: number; recloseAfterAbandonedMs?: number; keepTestUsers?: boolean } = {},
 ): VerifyJourneyRun {
   const now = opts.now ?? Date.now;
   const cleanupBudgetMs = opts.cleanupBudgetMs ?? VERIFY_JOURNEY_LIMITS.cleanup_budget_ms;
@@ -1037,6 +1057,40 @@ export function createVerifyJourneyRun(
   // Actors whose healthy browser is kept after an execution-cap stop. Cleanup
   // reports them and never closes them.
   const kept = new Map<string, VerifyKeptSession>();
+  // Test identities created for this run, by actor. Created once before the
+  // first segment; each actor then signs in once, in its own browser.
+  const testIdentities = new Map<string, { user_id: string; email: string }>();
+  const testActors = Object.keys(journey.actors).filter((name) => journey.actors[name].test_user === true);
+
+  const createTestUsers = async (): Promise<void> => {
+    if (!testActors.length) return;
+    let created: { identities?: Array<{ user?: { id?: string; email?: string; test?: boolean } }> };
+    try {
+      created = await client.call('POST', '/auth/test-users', { project_id: target.project_id, count: testActors.length, label: 'verify' });
+    } catch (cause) {
+      const code = cause instanceof CliApiError ? cause.code : 'TEST_USERS_UNAVAILABLE';
+      const why = cause instanceof Error ? cause.message : String(cause);
+      throw new Error(`Could not create ${testActors.length} test user${testActors.length === 1 ? '' : 's'} for ${testActors.join(', ')}: ${why} [${code}]. No browser was started.`);
+    }
+    const identities = Array.isArray(created?.identities) ? created.identities : [];
+    const users = identities.map((item) => item.user).filter((user): user is { id: string; email: string; test?: boolean } =>
+      typeof user?.id === 'string' && typeof user.email === 'string' && user.test === true);
+    if (users.length !== testActors.length) {
+      throw new Error(`The platform returned ${users.length} test identit${users.length === 1 ? 'y' : 'ies'} for ${testActors.length} test actor${testActors.length === 1 ? '' : 's'}, so no browser was started.`);
+    }
+    testActors.forEach((name, index) => testIdentities.set(name, { user_id: users[index].id, email: users[index].email }));
+  };
+
+  const removeTestUsers = async (): Promise<VerifyTestUsers['cleanup']> => {
+    if (opts.keepTestUsers) return { status: 'kept', reason: 'kept on request; they expire 24 hours after creation' };
+    try {
+      const removed = await client.call<{ deleted?: number }>('DELETE', '/auth/test-users', { project_id: target.project_id, ids: [...testIdentities.values()].map((item) => item.user_id) });
+      return { status: 'deleted', deleted: typeof removed?.deleted === 'number' ? removed.deleted : undefined };
+    } catch (cause) {
+      const code = cause instanceof CliApiError ? cause.code : cause instanceof Error ? cause.message : String(cause);
+      return { status: 'unconfirmed', reason: `delete failed (${code}); the platform removes test users 24 hours after creation` };
+    }
+  };
 
   const stop = (code: string, message: string): void => {
     stopReason ??= { code, message };
@@ -1114,6 +1168,7 @@ export function createVerifyJourneyRun(
     if (target.url && isLoopbackUrl(target.url)) {
       throw new Error('Multi-user journeys run on the deployed app. Deploy first, then run somewhere verify --project <project> --flow <file>.');
     }
+    await createTestUsers();
     const startedAt = now();
     const deadlineAt = startedAt + VERIFY_JOURNEY_LIMITS.deadline_ms;
     const segments: VerifyJourneySegmentReport[] = [];
@@ -1175,6 +1230,7 @@ export function createVerifyJourneyRun(
           // A continued actor must be the same browser and page, or nothing runs.
           ...(!first ? { require_existing_session: true } : {}),
           ...(first && actor.auth ? { auth: actor.auth } : {}),
+          ...(first && testIdentities.has(segment.as) ? { auth: { user_id: testIdentities.get(segment.as)!.user_id } } : {}),
           ...(first && actor.local_storage ? { local_storage: actor.local_storage } : {}),
           ...(first && actor.cookies ? { cookies: actor.cookies } : {}),
           ...(first && actor.headers ? { headers: actor.headers } : {}),
@@ -1279,6 +1335,10 @@ export function createVerifyJourneyRun(
         + navigationRetryNote(shaped.navigation_retries);
     }
     const { cleanup, cleanup_ms } = await closeAll();
+    // Browsers first, then the identities they were signed in as.
+    const testUsers: VerifyTestUsers | undefined = testIdentities.size
+      ? { identities: [...testIdentities].map(([actor, item]) => ({ actor, ...item })), cleanup: await removeTestUsers() }
+      : undefined;
     if (cleanup.some((item) => item.status === 'unconfirmed')) {
       passed = false;
       const lifecycle: Array<VerifySignal<BrowserLifecycle>> = cleanup.filter((item) => item.status === 'unconfirmed')
@@ -1300,6 +1360,7 @@ export function createVerifyJourneyRun(
       cleanup_ms,
       cleanup_confirmed: cleanup.every((item) => item.status !== 'unconfirmed'),
       kept_sessions: [...kept.values()],
+      ...(testUsers ? { test_users: testUsers } : {}),
     };
   };
 
@@ -1352,7 +1413,7 @@ export function verifyFlowSchema(): Record<string, unknown> {
           actors: {
             type: 'object', minProperties: 1, maxProperties: L.actors,
             propertyNames: { pattern: ACTOR_NAME.source },
-            additionalProperties: { type: 'object', properties: seeds, additionalProperties: false, description: 'Each actor is its own browser. {} starts signed out.' },
+            additionalProperties: { type: 'object', properties: { ...seeds, test_user: { const: true, description: 'Sign in as a verified test user the platform creates for this run and deletes after it. Cannot be combined with auth or other seeds.' } }, additionalProperties: false, description: 'Each actor is its own browser. {} starts signed out; { "test_user": true } starts signed in as a fresh test user.' },
           },
           journey: {
             type: 'array', minItems: 1, maxItems: L.segments,
@@ -1495,6 +1556,7 @@ export function registerVerify(program: Command): void {
     .option('--cookie <name=value>', 'Existing app cookie to seed in every viewport. Repeatable.', collectCookie)
     .option('--json', 'Print the structured verification report as JSON.')
     .option('--out <file>', 'Write the full report to a new private file; print a bounded summary (JSON with --json).')
+    .option('--keep-test-users', 'Multi-user flows: keep the test users created for "test_user" actors instead of deleting them when the run ends (they expire 24 hours after creation).')
     .option('--schema', 'Print the JSON Schema for --flow files (one user, or several users) and exit.')
     .addHelpText('after', `
 Minimal --flow JSON:
@@ -1534,7 +1596,7 @@ Several users need a claimed account and a CLI login approved for all your
 projects: a login approved for "Only these projects" cannot open named browsers
 (SESSION_SCOPE_FORBIDDEN). Print the full flow schema with: somewhere verify --schema
 `)
-    .action(async (target: string | undefined, opts: { project?: string; url?: string; path?: string; flow?: string; session?: string; cookie?: string; json?: boolean; out?: string; schema?: boolean }) => {
+    .action(async (target: string | undefined, opts: { project?: string; url?: string; path?: string; flow?: string; session?: string; cookie?: string; json?: boolean; out?: string; schema?: boolean; keepTestUsers?: boolean }) => {
       if (opts.schema) {
         console.log(JSON.stringify(verifyFlowSchema(), null, 2));
         process.exit(0);
@@ -1595,7 +1657,7 @@ projects: a login approved for "Only these projects" cannot open named browsers
             throw new Error('--session and --cookie seed one browser; in a multi-user flow put each actor\'s seeds on that actor in the flow file.');
           }
           if (!client) client = new ApiClient(getToken());
-          const journeyRun = createVerifyJourneyRun({ ...(project ? { project_id: project } : {}), ...(url ? { url } : {}) }, input.journey, client);
+          const journeyRun = createVerifyJourneyRun({ ...(project ? { project_id: project } : {}), ...(url ? { url } : {}) }, input.journey, client, { keepTestUsers: opts.keepTestUsers === true });
           // Ctrl-C or a terminating signal: stop starting segments at once, then
           // close every opened browser within the cleanup budget and say what
           // could not be confirmed.

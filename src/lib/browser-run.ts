@@ -201,6 +201,7 @@ export async function executeLocalAction(
   const step: LocalStepResult = { action: label, ok: true };
   try {
     if ('dialog' in action) throw new Error('Native dialog answers require a hosted project browser.');
+    if (action.frame !== undefined) throw new Error('Frame-scoped actions ("frame") require a hosted project browser; the local browser runs them only on the top page, so it refuses them.');
     if ('click' in action) {
       step.selector = action.click;
       const errorText = await evaluate(session, `(() => {

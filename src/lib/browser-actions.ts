@@ -1,7 +1,10 @@
 import { readFileSync, statSync } from 'node:fs';
 import { basename, extname, resolve } from 'node:path';
 
-export type BrowserSequenceAction =
+/** `frame` scopes an action to an iframe (frame name, URL substring, child
+ *  index or iframe CSS selector), as in the platform's steps dialect. */
+export type BrowserSequenceAction = BrowserSequenceActionBody & { frame?: string };
+type BrowserSequenceActionBody =
   | { click: string }
   | { fill: string; value: string }
   | { upload: string; file: string; name: string }
@@ -110,6 +113,9 @@ export function normalizeBrowserActions(raw: unknown, baseDir = process.cwd()):
   if (!Array.isArray(raw)) return { ok: false, error: 'actions must be a JSON array.' };
   if (raw.length > 30) return { ok: false, error: `actions has ${raw.length} items; max is 30.` };
   const actions: BrowserSequenceAction[] = [];
+  // One action out per action in; `frame` is attached after the loop. It was
+  // once dropped here, so a framed eval ran on the top page (tsk_7719cf76).
+  const frames: Array<string | undefined> = [];
   for (let index = 0; index < raw.length; index++) {
     const value = raw[index];
     const at = `action ${index}`;
@@ -121,6 +127,15 @@ export function normalizeBrowserActions(raw: unknown, baseDir = process.cwd()):
     if (keys.length !== 1) return { ok: false, error: `${at}: provide exactly one of ${ACTION_KEYS.join(', ')}.` };
     const key = keys[0];
     const actionValue = record[key];
+    if (record.frame !== undefined) {
+      const frame = typeof record.frame === 'string' && record.frame.trim() ? record.frame.trim()
+        : typeof record.frame === 'number' && Number.isInteger(record.frame) && record.frame >= 0 ? String(record.frame) : null;
+      if (frame === null) return { ok: false, error: `${at}: frame must be a frame name, URL substring, child index, or iframe CSS selector.` };
+      if (key === 'goto' || key === 'dialog' || (key === 'wait' && typeof actionValue === 'number')) {
+        return { ok: false, error: `${at}: ${key === 'wait' ? 'a fixed wait' : key} applies to the whole page, so it cannot take "frame".` };
+      }
+      frames[index] = frame;
+    }
     if (key === 'click') {
       if (typeof actionValue !== 'string' || !actionValue) return { ok: false, error: `${at}: click must be a non-empty CSS selector.` };
       actions.push({ click: actionValue });
@@ -219,6 +234,7 @@ export function normalizeBrowserActions(raw: unknown, baseDir = process.cwd()):
       },
     });
   }
+  frames.forEach((frame, index) => { if (frame !== undefined) actions[index] = { ...actions[index], frame }; });
   return { ok: true, actions };
 }
 

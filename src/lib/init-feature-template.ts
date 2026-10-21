@@ -140,11 +140,17 @@ export interface EmailVerification {
   code: string;
   /** A code was emailed in this visit. */
   sent: boolean;
+  /** The code form is open: a code was emailed in this visit, or the person
+   *  already has one from an earlier email. */
+  entering: boolean;
   pending: boolean;
   error: string | null;
   canSubmit: boolean;
   setCode(value: string): void;
   sendCode(): Promise<void>;
+  /** Opens the code form without emailing anything. Sending again would
+   *  replace the code the person already has. */
+  enterCode(): void;
   submit(): Promise<void>;
   retry(): void;
 }
@@ -2695,6 +2701,7 @@ export function useEmailVerification(): EmailVerification {
   const [status, setStatus] = useState<EmailVerification['status']>('checking');
   const [code, setCode] = useState('');
   const [sent, setSent] = useState(false);
+  const [entering, setEntering] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
@@ -2724,11 +2731,14 @@ export function useEmailVerification(): EmailVerification {
     status,
     code,
     sent,
+    entering,
     pending,
     error,
     canSubmit: !pending && /^[0-9]{6}$/.test(code.trim()),
     setCode,
-    sendCode: () => run(async () => { await auth.requestEmailVerification(); setSent(true); }),
+    sendCode: () => run(async () => { await auth.requestEmailVerification(); setSent(true); setEntering(true); }),
+    // A code from an earlier email is still the current one until another is sent.
+    enterCode: () => { setError(null); setEntering(true); },
     submit: () => run(async () => { await auth.verifyEmail({ code: code.trim() }); setStatus('verified'); }),
     retry: () => setAttempt((value) => value + 1),
   };
@@ -2754,8 +2764,8 @@ export function VerifyEmailPanel({ verification }: { verification: EmailVerifica
   }
   return (
     <section className="panel verify-email" aria-label="Verify your email">
-      <p><strong>Verify your email.</strong> {verification.sent ? 'Enter the 6-digit code we emailed you.' : 'We will email you a 6-digit code.'}</p>
-      {verification.sent ? (
+      <p><strong>Verify your email.</strong> {verification.sent ? 'Enter the 6-digit code we emailed you.' : verification.entering ? 'Enter the 6-digit code from the latest email we sent you.' : 'We will email you a 6-digit code.'}</p>
+      {verification.entering ? (
         <form className="verify-email__form" onSubmit={onSubmit} noValidate>
           <label htmlFor="verify-code">Code</label>
           <input id="verify-code" inputMode="numeric" autoComplete="one-time-code" maxLength={6} required
@@ -2764,9 +2774,12 @@ export function VerifyEmailPanel({ verification }: { verification: EmailVerifica
           <button type="button" className="link-button" onClick={() => void verification.sendCode()} disabled={verification.pending}>Send a new code</button>
         </form>
       ) : (
-        <button type="button" className="button" onClick={() => void verification.sendCode()} disabled={verification.pending} aria-busy={verification.pending}>
-          Email me a code
-        </button>
+        <div className="verify-email__form">
+          <button type="button" className="button" onClick={() => void verification.sendCode()} disabled={verification.pending} aria-busy={verification.pending}>
+            Email me a code
+          </button>
+          <button type="button" className="link-button" onClick={verification.enterCode} disabled={verification.pending}>I already have a code</button>
+        </div>
       )}
       {verification.error ? <p className="error" role="alert">{verification.error}</p> : null}
     </section>
@@ -2792,8 +2805,8 @@ export function VerifyEmailPanel({ verification }: { verification: EmailVerifica
   }
   return (
     <section aria-label="Verify your email">
-      <p>Verify your email. {verification.sent ? 'Enter the 6-digit code we emailed you.' : 'We will email you a 6-digit code.'}</p>
-      {verification.sent ? (
+      <p>Verify your email. {verification.sent ? 'Enter the 6-digit code we emailed you.' : verification.entering ? 'Enter the 6-digit code from the latest email we sent you.' : 'We will email you a 6-digit code.'}</p>
+      {verification.entering ? (
         <form onSubmit={onSubmit} noValidate>
           <label htmlFor="verify-code">Code</label>{' '}
           <input id="verify-code" inputMode="numeric" autoComplete="one-time-code" maxLength={6} required
@@ -2802,9 +2815,12 @@ export function VerifyEmailPanel({ verification }: { verification: EmailVerifica
           <button type="button" onClick={() => void verification.sendCode()} disabled={verification.pending}>Send a new code</button>
         </form>
       ) : (
-        <button type="button" onClick={() => void verification.sendCode()} disabled={verification.pending} aria-busy={verification.pending}>
-          Email me a code
-        </button>
+        <p>
+          <button type="button" onClick={() => void verification.sendCode()} disabled={verification.pending} aria-busy={verification.pending}>
+            Email me a code
+          </button>{' '}
+          <button type="button" onClick={verification.enterCode} disabled={verification.pending}>I already have a code</button>
+        </p>
       )}
       {verification.error ? <p role="alert">{verification.error}</p> : null}
     </section>

@@ -1105,6 +1105,9 @@ export function registerDeploy(program: Command) {
               console.log(line);
             }
           }
+          // Beside a real login the CLI's own credentials cannot read the throwaway project.
+          const tempCheckHint = besideRealLogin ? null : formatReferenceCheckHint(result, loadProjectConfig()?.project_id === projectId);
+          if (tempCheckHint) info(tempCheckHint);
           info(
             besideRealLogin
               ? `Your permanent login is untouched. After claiming, keep this project and run ${teal(`somewhere init --link --project ${projectId}`)} only if this directory has no link. Do not unlink, create a replacement, or redeploy to recover it.`
@@ -1124,6 +1127,8 @@ export function registerDeploy(program: Command) {
             // (commands/browser.ts → loadProjectConfig()), which is not always
             // the directory this deploy targeted.
             const cwdConfig = loadProjectConfig();
+            const checkHint = formatReferenceCheckHint(result, Boolean(cwdConfig && projectId && cwdConfig.project_id === projectId));
+            if (checkHint) info(checkHint);
             for (const line of formatNextActions(
               nextActions({
                 stage: 'deploy',
@@ -1253,6 +1258,27 @@ export interface DeployResult {
   release_publish?: boolean;
   compiled_artifact_digest?: string | null;
   stage_timing_ms?: Record<string, number> | null;
+  reference_check?: { status?: string } | null;
+}
+
+/**
+ * The after-live reference check runs in the background, so the deploy
+ * answer can only say `pending`. Name the existing read that carries its
+ * result (the deploy log) for this exact version (tsk_8a68dfa2 item 4). The
+ * project is named unless this directory's link already selects it, because
+ * `call` defaults to the linked project.
+ */
+export function formatReferenceCheckHint(
+  result: DeployResult,
+  linkedHere: boolean,
+): string | null {
+  if (result.reference_check?.status !== 'pending') return null;
+  if (typeof result.version !== 'number' || !Number.isFinite(result.version)) return null;
+  if (!linkedHere && !result.project_id) return null;
+  const args = linkedHere
+    ? { version: result.version }
+    : { project_id: result.project_id, version: result.version };
+  return `A reference check is running in the background; read its result with: somewhere call project_deploy_log '${JSON.stringify(args)}'`;
 }
 
 export function formatDeployTiming(input: {

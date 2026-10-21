@@ -159,12 +159,12 @@ test('minimal starter is a small typed frontend, function, and schema', () => {
     'somewhere deploy',
     'somewhere verify',
     '--flow flow.json',
-    'auth: { user_id }',
+    '*.test.somewhere.site',
     'somewhere browser',
     'somewhere logs --tail 10',
     'somewhere errors',
-    'Signup is separate',
     'somewhere email test-inbox <addr>',
+    'verification_code',
     'serves `index.html`',
     "export { somewhereAuth as default } from '@somewhere-tech/sdk/server'",
     "createSomewhereAuth()` from `@somewhere-tech/sdk/auth",
@@ -184,7 +184,7 @@ test('minimal starter is a small typed frontend, function, and schema', () => {
   assert.match(agents, /Promise\.all/);
   // tsk_c8e60ff7: the generated client for normal data, one function for the
   // exceptional write, lookup-derived owner, and authorized structured server access.
-  assert.match(agents, /pages use `somewhere:data`[\s\S]*without API files[\s\S]*`owner\(\)` for personal rows[\s\S]*`anyOf\(\)` for owner or a permitted role[\s\S]*`shared\(\)` gives signed-in reads and creator-only writes[\s\S]*`client\.intake`[\s\S]*functions handle authorized exceptional writes and side effects[\s\S]*The owner comes from that lookup, never the body[\s\S]*authorize the caller and use `sw\.db\.server\.from`/);
+  assert.match(agents, /pages use `somewhere:data`[\s\S]*without API files[\s\S]*`owner\(\)` for personal rows[\s\S]*`anyOf\(\)` for owner or a role, `allOf\(\)` for members-only rows[\s\S]*`shared\(\)` gives signed-in reads and creator-only writes[\s\S]*`client\.intake`[\s\S]*functions handle authorized exceptional writes and side effects[\s\S]*The owner comes from that lookup, never the body[\s\S]*authorize the caller and use `sw\.db\.server\.from`/);
   assert.match(agents, /Raw SQL uses a separate raw database, never managed tables\./);
   assert.match(agents, /`sw\.db\.server\.from` \/\n`insert` \/ `update` \/ `remove`; keep `owner\(\)`\/`group\(\)`/);
   assert.doesNotMatch(

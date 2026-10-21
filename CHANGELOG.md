@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.37.51
+
+### Fixed
+
+- Starter `AGENTS.md` (from `somewhere init`) follows the current platform agent workflow: test sign-in uses managed test identities, matching the platform docs (#32).
+- `somewhere email test-inbox` prints a message's `verification_code` in its human output when one is present, not only with `--json` (#32).
+
 ## 0.37.50
 
 ### Fixed

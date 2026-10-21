@@ -101,14 +101,14 @@ test('a refusal is classified as refused and the support command never overwrite
 
 test('a hand-edited last-error.json cannot smuggle fields or text into the packet', async () => {
   const fx = fixture();
-  writeFileSync(join(fx.configDir, 'last-error.json'), JSON.stringify({ schema: 'somewhere.repro/1', code: 'DB_UNAVAILABLE', outcome: 'failed', cli_version: '0.37.63',
+  writeFileSync(join(fx.configDir, 'last-error.json'), JSON.stringify({ schema: 'somewhere.repro/1', code: 'DB_UNAVAILABLE', outcome: 'failed', client: { kind: 'cli', version: '0.37.63', note: 'hunter2-CANARY-password' },
     captured_at: '2026-10-21T00:00:00Z', message: 'hunter2-CANARY-password', trace_id: 'bad id with spaces smt_CANARYdevkey123', operation: 'GET /x?token=CANARYquery',
     command: 'db $(rm -rf ~)', extra: { sql: 'SELECT_CANARY_SQL' } }));
   const json = await run(['support', 'packet', '--json'], fx);
   assert.equal(json.status, 0, json.out);
   assert.deepEqual(leaks(json.out), [], json.out);
   const packet = JSON.parse(json.out);
-  assert.deepEqual(Object.keys(packet.collected).sort(), ['captured_at', 'cli_version', 'code', 'outcome', 'schema'].sort().concat(packet.collected.command ? ['command'] : []).sort());
+  assert.deepEqual(Object.keys(packet.collected).sort(), ['captured_at', 'client', 'code', 'outcome', 'schema'].sort().concat(packet.collected.command ? ['command'] : []).sort());
 });
 
 test('builders: route templates drop queries and ids; non-platform errors are CLI_ERROR; tool errors keep the tool name', () => {
@@ -146,13 +146,13 @@ test('review 67 #1: a mutation with no status or SERVER_SLOW is unknown, never f
 test('review 67 #2: a hand-edited record cannot carry free text in version, operation, ids or command', async () => {
   const fx = fixture();
   writeFileSync(join(fx.configDir, 'last-error.json'), JSON.stringify({ schema: 'somewhere.repro/1', code: 'DB_UNAVAILABLE', outcome: 'failed',
-    cli_version: '0.37.63 Alice Smith lives at 12', captured_at: '2026-10-21T00:00:00Z',
+    client: { kind: 'cli', version: '0.37.63 Alice Smith lives at 12' }, captured_at: '2026-10-21T00:00:00Z',
     operation: 'POST /projects/alice-smith/files/medical-record-123', project_id: '--project-evil', request_id: '-req_8f2c1a9b77d0',
     trace_id: 'trace-4e1d2c3b5a69', command: 'deploy alice smith ssn' }));
   const json = await run(['support', 'packet', '--json'], fx);
   assert.equal(json.status, 0, json.out);
   const packet = JSON.parse(json.out);
-  assert.equal(packet.collected.cli_version, 'unknown');
+  assert.deepEqual(packet.collected.client, { kind: 'cli', version: 'unknown' });
   assert.equal(packet.collected.operation, undefined, 'an untemplated path is dropped, not copied');
   assert.equal(packet.collected.project_id, undefined);
   assert.equal(packet.collected.request_id, undefined, 'an id that could read as a flag is dropped');
@@ -162,9 +162,9 @@ test('review 67 #2: a hand-edited record cannot carry free text in version, oper
   for (const step of packet.recipe.investigate) assert.ok(step.slice(1).every((part) => !part.startsWith('-') || /^--[a-z]/.test(part) && !/evil/.test(part)));
   // Controls: a genuine record keeps its template, registered command and prerelease version.
   writeFileSync(join(fx.configDir, 'last-error.json'), JSON.stringify({ schema: 'somewhere.repro/1', code: 'DB_UNAVAILABLE', outcome: 'unknown',
-    cli_version: '0.37.64-rc.1', captured_at: '2026-10-21T00:00:00Z', operation: 'POST /projects/:id/files/:seg', command: 'db query', project_id: 'proj_7c1b2a9d4e' }));
+    client: { kind: 'cli', version: '0.37.64-rc.1' }, captured_at: '2026-10-21T00:00:00Z', operation: 'POST /projects/:id/files/:seg', command: 'db query', project_id: 'proj_7c1b2a9d4e' }));
   const good = JSON.parse((await run(['support', 'packet', '--json'], fx)).out).collected;
-  assert.deepEqual([good.cli_version, good.operation, good.command, good.project_id], ['0.37.64-rc.1', 'POST /projects/:id/files/:seg', 'db query', 'proj_7c1b2a9d4e']);
+  assert.deepEqual([good.client.version, good.operation, good.command, good.project_id], ['0.37.64-rc.1', 'POST /projects/:id/files/:seg', 'db query', 'proj_7c1b2a9d4e']);
 });
 
 test('review 67 non-blocking: a deploy command that failed on a read still gets the deploy guidance', () => {
@@ -172,4 +172,15 @@ test('review 67 non-blocking: a deploy command that failed on a read still gets 
   const packet = buildPacket(record);
   assert.equal(packet.surface, 'deploy');
   assert.ok(packet.recipe.steps.some((step) => /Do NOT re-run the original deploy/.test(step)));
+});
+
+test('f74 contract: client replaces cli_version, DEPLOY_OUTCOME_UNKNOWN is unknown, a bare actions path is accepted', () => {
+  const record = buildRecord({ name: 'CliApiError', code: 'DEPLOY_OUTCOME_UNKNOWN', statusCode: 409, operation: 'POST /deploy', meta: { retry: false } }, { cliVersion: '0.37.64' });
+  assert.deepEqual(record.client, { kind: 'cli', version: '0.37.64' });
+  assert.ok(!('cli_version' in record));
+  assert.equal(record.outcome, 'unknown', 'the platform already says inspect, never retry');
+  assert.equal(buildPacket(record).recipe.rerun_original, false);
+  assert.deepEqual(buildRecord({ name: 'CliApiError', code: 'VALIDATION_ERROR', statusCode: 400, invalid: { path: 'actions' } }, { cliVersion: '1.0.0' }).invalid, { path: 'actions' });
+  assert.equal(buildRecord({ name: 'CliApiError', code: 'VALIDATION_ERROR', statusCode: 400, invalid: { path: 'actionsX' } }, { cliVersion: '1.0.0' }).invalid, undefined);
+  assert.equal(buildRecord(new Error('x'), { cliVersion: '1.0.0 junk' }).client.version, 'unknown');
 });

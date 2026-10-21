@@ -22,7 +22,7 @@ const CODE = /^[A-Z][A-Z0-9_]{1,63}$/;
 const OPAQUE_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/;
 const CLI_VERSION = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]{1,20})?$/;
 /** Codes whose mutation may still be completing server-side (client.ts SERVER_SLOW is status 0). */
-const UNKNOWN_CODES = new Set(['TIMEOUT', 'NETWORK_ERROR', 'SERVER_SLOW']);
+const UNKNOWN_CODES = new Set(['TIMEOUT', 'NETWORK_ERROR', 'SERVER_SLOW', 'DEPLOY_OUTCOME_UNKNOWN']);
 const COMMAND_NAME = /^[a-z][a-z0-9-]{0,31}$/;
 const TOOL_NAME = /^[a-z][a-z0-9_]{0,63}$/;
 const METHODS = new Set(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']);
@@ -34,7 +34,7 @@ export type Outcome = 'refused' | 'unknown' | 'failed';
  *  caller's own input the problem is, and the numeric limit. `path` is built by the platform from an
  *  index and a fixed key, never from flow text; anything that fails these shapes is dropped. */
 export interface InvalidDetail { path: string; limit_ms?: number }
-const INVALID_PATH = /^(actions|steps)\[\d{1,4}\](\.[a-z_]{1,32})?$/;
+const INVALID_PATH = /^(actions|steps)(\[\d{1,4}\](\.[a-z_]{1,32})?)?$/;
 export function safeInvalid(value: unknown): InvalidDetail | undefined {
   const v = value as { path?: unknown; limit_ms?: unknown } | null;
   if (!v || typeof v !== 'object' || typeof v.path !== 'string' || !INVALID_PATH.test(v.path)) return undefined;
@@ -48,7 +48,8 @@ export function safeStatus(value: unknown): number | undefined {
 }
 export interface ReproRecord {
   schema: typeof REPRO_SCHEMA;
-  cli_version: string;
+  /** Shared with the MCP builder (f74): `kind` names the client, `version` is its semver or 'unknown'. */
+  client: { kind: 'cli' | 'mcp'; version: string };
   captured_at: string;
   command?: string;
   code: string;
@@ -126,7 +127,7 @@ export function buildRecord(cause: unknown, context: { cliVersion: string; comma
   const outcome: Outcome = meta.responseBodyIncomplete === true || UNKNOWN_CODES.has(code)
     || (mutating && (status === undefined || status >= 500)) ? 'unknown'
     : status !== undefined && status >= 400 && status < 500 ? 'refused' : 'failed';
-  const record: ReproRecord = { schema: REPRO_SCHEMA, cli_version: context.cliVersion, captured_at: new Date(now).toISOString(), code, outcome };
+  const record: ReproRecord = { schema: REPRO_SCHEMA, client: { kind: 'cli', version: CLI_VERSION.test(context.cliVersion) ? context.cliVersion : 'unknown' }, captured_at: new Date(now).toISOString(), code, outcome };
   if (context.command) record.command = context.command;
   if (status !== undefined) record.http_status = status;
   if (operation) record.operation = operation;
@@ -163,7 +164,8 @@ export function readLastError(commands: ReadonlySet<string> = new Set()): ReproR
   let raw: Record<string, unknown>;
   try { raw = JSON.parse(readFileSync(path, 'utf8')); } catch { return null; }
   if (raw?.schema !== REPRO_SCHEMA || typeof raw.code !== 'string' || !CODE.test(raw.code)) return null;
-  const out: ReproRecord = { schema: REPRO_SCHEMA, cli_version: typeof raw.cli_version === 'string' && CLI_VERSION.test(raw.cli_version) ? raw.cli_version : 'unknown',
+  const client = (raw.client && typeof raw.client === 'object' ? raw.client : {}) as Record<string, unknown>;
+  const out: ReproRecord = { schema: REPRO_SCHEMA, client: { kind: 'cli', version: typeof client.version === 'string' && CLI_VERSION.test(client.version) ? client.version : 'unknown' },
     captured_at: typeof raw.captured_at === 'string' && Number.isFinite(Date.parse(raw.captured_at)) ? new Date(Date.parse(raw.captured_at)).toISOString() : new Date(0).toISOString(),
     code: raw.code, outcome: raw.outcome === 'refused' || raw.outcome === 'unknown' ? raw.outcome : 'failed' };
   if (typeof raw.command === 'string' && commands.has(raw.command)) out.command = raw.command;

@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.37.63
+
+### Added
+
+- `somewhere test-users prepare|address|inbox|cleanup`: prepares signed-in managed test users as standard Playwright `storageState` files (production origin only; state kept under `<project>/.somewhere/test/`, never the developer key, no token printed), gives a fresh `test.somewhere.site` address for real signup tests, reads only test-inbox mail newer than `--since` (the magic link only with `--json --include-link` or `--link-out`), and cleans up only the identities it created, with a readback receipt (#63).
+
+### Fixed
+
+- `somewhere deploy`: when the after-live reference check is still pending, text output names the existing read for this exact version (`somewhere call project_deploy_log '{"version":N}'`). `--json` is unchanged (#62).
+
 ## 0.37.62
 
 ### Fixed

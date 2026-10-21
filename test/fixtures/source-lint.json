@@ -1,0 +1,74 @@
+[
+  {
+    "name": "credential in browser source",
+    "files": {"index.html":"<script type=\"module\" src=\"/src/main.ts\"></script>","src/main.ts":"// synthetic fixture\nconst key = 'sk_live_Fx7Qm2Lp9Rz4Kd8Wn3Ty6Hv1Bc5';"},
+    "functions": {},
+    "expected": [{"rule":"somewhere/source-secret","file":"src/main.ts","line":2}]
+  },
+  {
+    "name": "server env read and public placeholder are legitimate",
+    "files": {"index.html":"<script type=\"module\" src=\"/src/main.ts\"></script>","src/main.ts":"const key = 'pk_test_Fx7Qm2Lp9Rz4Kd8Wn3Ty6Hv1Bc5'; const example = 'sk_live_xxxxxxxxxxxxxxxxxxxxxxxx';"},
+    "functions": {"api/pay.ts":"export default async function(req, sw) { return Response.json({ configured: Boolean(sw.env.STRIPE_SECRET_KEY) }); }"},
+    "expected": []
+  },
+  {
+    "name": "schema column typo",
+    "files": {"db/schema.ts":"export default schema({\n notes: table({ id: id(), title: text() }, { scope: owner(), indexes: [['titel']] })\n});"},
+    "functions": {},
+    "expected": [{"rule":"somewhere/schema-declaration","file":"db/schema.ts","line":2}]
+  },
+  {
+    "name": "declared private table is legitimate without browser client access",
+    "files": {"db/schema.ts":"import { schema, table, id, text, owner } from 'somewhere/db';\nexport default schema({ notes: table({ id: id(), title: text() }, { scope: owner() }) });"},
+    "functions": {},
+    "expected": []
+  },
+  {
+    "name": "directory index handler from DocQA race",
+    "files": {},
+    "functions": {"api/docs/index.ts":"export default async function(req, sw) { return Response.json({ ok: true }); }"},
+    "expected": [{"rule":"somewhere/index-route","file":"api/docs/index.ts","line":1}]
+  },
+  {
+    "name": "renamed parent handler and library index are legitimate",
+    "files": {},
+    "functions": {"api/docs.ts":"export default async function(req, sw) { return Response.json({ ok: true }); }", "_lib/index.ts":"export const value = 1;"},
+    "expected": []
+  },
+  {
+    "name": "request body chooses the owner of an owner() row (server write)",
+    "files": {"db/schema.ts": "import { schema, table, id, text, owner, serverOnly } from 'somewhere/db';\nexport default schema({\n notes: table({ id: id(), body: text() }, { scope: owner() }),\n cards: table({ id: id(), title: text(), created_by: text() }, { scope: serverOnly() }),\n team_members: table({ id: id(), team_id: text(), user_id: text() }, { scope: serverOnly() })\n});"},
+    "functions": {"api/notes.ts": "export default async function(req, sw) {\n  const b = await req.json();\n  await sw.db.server.insert('notes', {\n    body: b.body,\n    user_id: b.user_id,\n  });\n  return Response.json({ ok: true });\n}"},
+    "expected": [{"rule": "somewhere/request-ownership", "file": "api/notes.ts", "line": 5}]
+  },
+  {
+    "name": "request body sets created_by that the same handler trusts for edits",
+    "files": {"db/schema.ts": "import { schema, table, id, text, owner, serverOnly } from 'somewhere/db';\nexport default schema({\n notes: table({ id: id(), body: text() }, { scope: owner() }),\n cards: table({ id: id(), title: text(), created_by: text() }, { scope: serverOnly() }),\n team_members: table({ id: id(), team_id: text(), user_id: text() }, { scope: serverOnly() })\n});"},
+    "functions": {"api/cards.ts": "export default async function(req, sw) {\n  const user = await sw.auth.requireUser(req);\n  const { title, created_by } = await req.json();\n  if (req.method === 'POST') await sw.db.server.insert('cards', { title, created_by });\n  const card = await sw.db.server.get('cards', 'c1');\n  if (card.created_by !== user.id) return new Response('forbidden', { status: 403 });\n  return Response.json(card);\n}"},
+    "expected": [{"rule": "somewhere/request-ownership", "file": "api/cards.ts", "line": 4}]
+  },
+  {
+    "name": "ownership from the signed-in user, user-mode writes and display-only created_by are legitimate",
+    "files": {"db/schema.ts": "import { schema, table, id, text, owner, serverOnly } from 'somewhere/db';\nexport default schema({\n notes: table({ id: id(), body: text() }, { scope: owner() }),\n cards: table({ id: id(), title: text(), created_by: text() }, { scope: serverOnly() }),\n team_members: table({ id: id(), team_id: text(), user_id: text() }, { scope: serverOnly() })\n});"},
+    "functions": {"api/cards.ts": "export default async function(req, sw) {\n  const user = await sw.auth.requireUser(req);\n  const b = await req.json();\n  await sw.db.server.insert('cards', { title: b.title, created_by: user.id });\n  const card = await sw.db.server.get('cards', 'c1');\n  if (card.created_by !== user.id) return new Response('forbidden', { status: 403 });\n  return Response.json(card);\n}", "api/notes.ts": "export default async function(req, sw) {\n  const b = await req.json();\n  // sw.db.server.insert('notes', { user_id: b.user_id }) was removed\n  await sw.db.insert('notes', { body: b.body, user_id: b.user_id });\n  return Response.json({ ok: true });\n}", "api/log.ts": "export default async function(req, sw) {\n  const b = await req.json();\n  await sw.db.server.insert('events', { created_by: b.created_by });\n  return Response.json({ ok: true });\n}"},
+    "expected": []
+  },
+  {
+    "name": "signed job payload and admin adding a target member are legitimate",
+    "files": {"db/schema.ts": "import { schema, table, id, text, owner, serverOnly } from 'somewhere/db';\nexport default schema({\n notes: table({ id: id(), body: text() }, { scope: owner() }),\n cards: table({ id: id(), title: text(), created_by: text() }, { scope: serverOnly() }),\n team_members: table({ id: id(), team_id: text(), user_id: text() }, { scope: serverOnly() })\n});"},
+    "functions": {"api/jobs/ingest.ts": "export default async function(req, sw) {\n  if (!(await sw.jobs.verifyInvocation(req))) return new Response('denied', { status: 401 });\n  const p = await req.json();\n  await sw.db.server.insert('notes', { body: p.body, user_id: p.user_id });\n  return Response.json({ ok: true });\n}", "api/teams.ts": "export default async function(req, sw) {\n  const admin = await sw.auth.requireUser(req);\n  const b = await req.json();\n  const db = sw.db.server;\n  await db.insert('team_members', { team_id: b.teamId, user_id: b.userId });\n  return Response.json({ ok: true, by: admin.id });\n}"},
+    "expected": []
+  },
+  {
+    "name": "whole request body, spread body, formData and camelCase owner column choose ownership",
+    "files": {"db/schema.ts": "import { schema, table, id, text, owner, serverOnly } from 'somewhere/db';\nexport default schema({\n notes: table({ id: id(), body: text() }, { scope: owner() }),\n posts: table({ id: id(), body: text() }, { scope: owner({ column: 'authorId' }) }),\n cards: table({ id: id(), title: text(), list_id: text(), created_by: text() }, { scope: serverOnly() })\n});"},
+    "functions": {"api/bare.ts": "export default async function(req, sw) {\n  const b = await req.json();\n  await sw.db.server.insert('notes', b);\n}", "api/spread.ts": "export default async function(req, sw) {\n  const b = await req.json();\n  await sw.db.server.insert('notes', { ...b, body: 'x' });\n}", "api/form.ts": "export default async function(req, sw) {\n  const f = await req.formData();\n  await sw.db.server.insert('notes', { body: 'x', user_id: f.get('user_id') });\n}", "api/posts.ts": "export default async function(req, sw) {\n  const b = await req.json();\n  await sw.db.server.update('posts', { set: { body: b.body }, where: { authorId: String(b.authorId) } });\n}"},
+    "expected": [{"rule": "somewhere/request-ownership", "file": "api/bare.ts", "line": 3}, {"rule": "somewhere/request-ownership", "file": "api/form.ts", "line": 3}, {"rule": "somewhere/request-ownership", "file": "api/posts.ts", "line": 3}, {"rule": "somewhere/request-ownership", "file": "api/spread.ts", "line": 3}]
+  },
+  {
+    "name": "owner set after a spread, user-mode write beside a server alias, foreign-key comparison and comment-like strings are legitimate",
+    "files": {"db/schema.ts": "import { schema, table, id, text, owner, serverOnly } from 'somewhere/db';\nexport default schema({\n notes: table({ id: id(), body: text() }, { scope: owner() }),\n posts: table({ id: id(), body: text() }, { scope: owner({ column: 'authorId' }) }),\n cards: table({ id: id(), title: text(), list_id: text(), created_by: text() }, { scope: serverOnly() })\n});"},
+    "functions": {"api/override.ts": "export default async function(req, sw) {\n  const user = await sw.auth.requireUser(req);\n  const b = await req.json();\n  await sw.db.server.insert('notes', { ...b, user_id: user.id });\n}", "api/alias.ts": "export default async function(req, sw) {\n  const db = sw.db.server;\n  const b = await req.json();\n  await sw.db.insert('notes', { body: b.body, user_id: b.user_id });\n}", "api/lists.ts": "export default async function(req, sw) {\n  const user = await sw.auth.requireUser(req);\n  const b = await req.json();\n  const list = await sw.db.server.get('lists', b.list_id);\n  const rows = (await sw.db.server.from('cards')).data.filter(r => r.list_id === list.id);\n  await sw.db.server.insert('cards', { title: b.title, list_id: b.list_id, created_by: user.id });\n  return Response.json({ rows, by: user.id });\n}", "api/accept.ts": "export default async function(req, sw) {\n  const user = await sw.auth.requireUser(req);\n  const b = await req.json();\n  const res = await fetch('https://example.com/api/*', { headers: { accept: '*/*' } });\n  await sw.db.server.insert('cards', { title: b.title, created_by: user.id });\n  if (b.card.created_by !== user.id) return new Response('no', { status: 403 });\n  return res;\n}"},
+    "expected": []
+  }
+]

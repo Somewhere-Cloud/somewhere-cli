@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.37.50
+
+### Fixed
+
+- An expired temporary session's deploy message now first tells you to sign in with `somewhere login` if you claimed the workspace in the browser, before suggesting you delete `.somewhere.json`. The expiry message also appears only when the session's expiry time has actually passed (a session merely missing its token is no longer reported as "expired at" a future time).
+
 ## 0.37.49
 
 ### Fixed

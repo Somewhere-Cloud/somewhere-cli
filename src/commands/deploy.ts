@@ -340,6 +340,31 @@ export function formatAmbiguousRetryStaleExplanation(transportFailure: string): 
   ].join('\n');
 }
 
+/** Signed in, nothing linked: deploy never creates or links a project in the
+ *  account on its own; say exactly how to (tsk_8a68dfa2 item 15). */
+export function formatSignedInUnlinkedExplanation(): string {
+  return [
+    'No project is linked to this folder. You are signed in, so deploy will not create or pick a project in your account on its own.',
+    '',
+    'Next steps:',
+    '  New project: run `somewhere init --bare --name <name>` (creates it in your account and links this folder; writes no files), then `somewhere deploy`.',
+    '  Existing project: run `somewhere link --project <name-or-id>` (list yours with `somewhere projects`), or deploy once with `somewhere deploy --project <name-or-id>`.',
+  ].join('\n');
+}
+
+/** The stored temporary session expired before this deploy (tsk_8a68dfa2
+ *  item 14). Built only from this machine's own record, so it says nothing
+ *  about whether any project exists. */
+export function formatExpiredTemporaryProjectExplanation(expiredAt: string): string {
+  return [
+    `The temporary workspace on this machine expired at ${expiredAt} without being claimed. Its projects can no longer be deployed to, and a new temporary workspace cannot deploy to this folder's linked project. Nothing was deployed.`,
+    '',
+    'Next steps:',
+    '  Start a new temporary project: delete this folder\'s .somewhere.json, then run `somewhere deploy` again.',
+    '  Keep your work in an account: sign in (`somewhere login`, or `somewhere signup`), then run `somewhere init --bare --name <name>` and `somewhere deploy`.',
+  ].join('\n');
+}
+
 // No record of which published version this folder's source came from (a
 // folder linked to an existing project, or state from an older CLI). The CLI
 // never fills the gap with the current version: that would publish stale files
@@ -477,6 +502,23 @@ export function registerDeploy(program: Command) {
       }
 
       const storedConfig = loadConfig();
+      // The stored temporary session expired unclaimed and this deploy targets
+      // an existing project (a folder link or --project). A freshly minted
+      // temporary account owns no project, so minting one only to get a
+      // PROJECT_NOT_FOUND back is skipped: the answer comes from this
+      // machine's own record, before any request (tsk_8a68dfa2 item 14).
+      if (
+        storedConfig?.temporary && storedConfig.temp_expires_at && !isTempSessionLive(storedConfig)
+        && (opts.project || findProjectConfigEntry(targetDir))
+      ) {
+        const message = formatExpiredTemporaryProjectExplanation(storedConfig.temp_expires_at);
+        if (opts.json) {
+          printJson({ ok: false, error: 'TEMPORARY_SESSION_EXPIRED', message, temp_expires_at: storedConfig.temp_expires_at });
+        } else {
+          console.error(message);
+        }
+        process.exit(1);
+      }
 
       // Anonymous deploy is the default first-touch path. A caller with no
       // saved credential should get a live app from `somewhere deploy`, not a
@@ -664,9 +706,7 @@ export function registerDeploy(program: Command) {
             process.exit(1);
           }
         } else {
-          error(
-            'No project linked. Run `somewhere init` or pass --project <id>',
-          );
+          error(formatSignedInUnlinkedExplanation());
           process.exit(1);
         }
       } else if (linkedProjectEntry && projectConfigMatchesRef(linkedProjectEntry.config, projectId)) {

@@ -101,3 +101,21 @@ test('lint does not read binary assets, while deploy collection still does', asy
   assert.equal(result.ok, true);
   assert.equal(result.checked_files, Object.keys(deploy.files).length + Object.keys(deploy.functions).length);
 });
+
+// The help text names every rule the vendored lint can report, so it cannot
+// fall behind a re-vendor that adds one.
+test('lint --help names every vendored source-lint rule', () => {
+  const fixtures = JSON.parse(readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'fixtures', 'source-lint.json'), 'utf8'));
+  const rules = [...new Set(fixtures.flatMap((f) => f.expected.map((e) => e.rule)))].sort();
+  const help = spawnSync(process.execPath, [join(dirname(fileURLToPath(import.meta.url)), '..', 'dist', 'index.js'), 'lint', '--help'], { encoding: 'utf8', env: { ...process.env, SOMEWHERE_CONFIG_DIR: mkdtempSync(join(tmpdir(), 'sw-lint-help-')) } }).stdout.replace(/\s+/g, ' ');
+  const words = {
+    'somewhere/source-secret': 'credentials in source',
+    'somewhere/schema-declaration': 'schema declarations',
+    'somewhere/index-route': 'directory index routes',
+    'somewhere/request-ownership': 'row ownership',
+    'somewhere/sequential-email': 'awaited inside a loop',
+  };
+  assert.deepEqual(rules, Object.keys(words).sort(), 'a new vendored rule needs a help phrase');
+  for (const [rule, phrase] of Object.entries(words)) assert.ok(help.includes(phrase), `help mentions ${rule}`);
+});
+

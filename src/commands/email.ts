@@ -21,6 +21,7 @@ interface EmailTestInboxMessage {
   text: string | null;
   created_at: string;
   magic_link: string | null;
+  verification_code: string | null;
 }
 
 interface EmailTestInboxResult {
@@ -52,6 +53,7 @@ function parseTestInbox(value: unknown): EmailTestInboxResult {
       text: typeof message.text === 'string' ? message.text : null,
       created_at: message.created_at,
       magic_link: typeof message.magic_link === 'string' ? message.magic_link : null,
+      verification_code: typeof message.verification_code === 'string' ? message.verification_code : null,
     };
   });
   return {
@@ -73,6 +75,7 @@ function printTestInbox(inbox: EmailTestInboxResult): void {
     console.log(`id: ${message.id}`);
     console.log(`to: ${message.to}`);
     console.log(`magic_link: ${message.magic_link ?? 'null'}`);
+    if (message.verification_code !== null) console.log(`verification_code: ${message.verification_code}`);
     if (message.text !== null) console.log(`text:\n${message.text}`);
     if (message.html !== null) console.log(`html:\n${message.html}`);
   }

@@ -18,12 +18,12 @@ After edits: \`somewhere typecheck\` and focused local/browser tests. Publish:
    before going live; \`somewhere deploy-check\` runs them without publishing
    (diagnosis, review, \`--run /api/x\`).
 2. Run \`somewhere verify\` once on the final deployed journey (or
-   \`--flow flow.json\`); rerun after relevant fixes. Test users:
-   \`auth: { user_id }\`; several users: \`actors\` + \`journey\` (\`somewhere docs browser\`).
+   \`--flow flow.json\`); rerun after fixes. Sign test users up
+   in-app at \`*.test.somewhere.site\`; more: \`actors\` + \`journey\` (\`somewhere docs browser\`).
 3. \`somewhere browser\` inspects a page; \`somewhere logs --tail 10\`, then
    \`somewhere errors\`: read the failure first.
-4. Signup is separate. Test mail: \`somewhere email test-inbox <addr>\`.
-   Full test workflow: \`somewhere docs recipe-signed-in-app\`.
+4. Test mail: \`somewhere email test-inbox <addr>\` includes \`verification_code\`.
+   Don't retest sign-in or \`sw.db.from\` scoping; test each table's scope, auth before \`sw.db.server\`/raw SQL, bad input and journeys.
 
 Routes: \`index.html\` loads \`src/main.tsx\`; every extensionless path with no file
 (\`/signin\`) serves \`index.html\`, so one app routes by \`location.pathname\`.
@@ -43,16 +43,15 @@ role, email_verified, … }\` or throws 401 \`AUTH_REQUIRED\`;
 \`sw.auth.fromRequest(req)\` returns it or \`null\`.
 
 Functions: JSON endpoints use \`sw.endpoint({ auth, body, rateLimit, handler:
-async ({ body, user, params }, sw) => value })\`; always set \`auth\` to
-\`'required'\`, \`'optional'\` or \`'none'\` (public on purpose), or deploy refuses
-it. Webhooks, streams and custom responses use a bare \`export default async
+async ({ body, user, params }, sw) => value })\`; set \`auth\` (\`'required'\`,
+\`'optional'\`, \`'none'\`) or deploy refuses it. Webhooks and streaming use a bare \`export default async
 function (req, sw)\` returning a \`Response\`. Params: \`params.id\` there,
 \`sw.params.id\` bare; \`somewhere typecheck\` types bare handlers too.
 
 Data: declare tables in \`db/schema.ts\`; pages use \`somewhere:data\`
 (\`data.notes.list()\`, \`.create()\`, \`.update(id, …)\`) without API files.
 Use \`owner()\` for personal rows, \`group()\` for invited teams, \`appRole()\`
-for app-wide roles, and \`anyOf()\` for owner or a permitted role.
+for app-wide roles, \`anyOf()\` for owner or a role, \`allOf()\` for members-only rows.
 \`shared()\` gives signed-in reads and creator-only writes. \`client\` sets browser
 columns; \`publicRead: { where }\` admits visitors. Public-profile enquiries use
 \`client.intake\` (\`somewhere docs declared-data\`). Keep scopes and grants;

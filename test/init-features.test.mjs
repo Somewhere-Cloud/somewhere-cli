@@ -162,7 +162,7 @@ test('every combination separates types, services, hooks, pages and presentation
     assert.doesNotMatch(all, /fonts\.googleapis|@import url|https?:\/\/[^\s'"`]*\.(woff2?|ttf)/, `${label}: no remote fonts`);
     const pkg = JSON.parse(read('package.json'));
     assert.deepEqual(Object.keys(pkg.dependencies).sort(), ['@somewhere-tech/sdk', 'react', 'react-dom']);
-    assert.equal(pkg.dependencies['@somewhere-tech/sdk'], '0.12.3', 'the SDK release that refreshes short-lived app sessions');
+    assert.equal(pkg.dependencies['@somewhere-tech/sdk'], '0.12.4', 'the SDK release that refreshes short-lived app sessions');
     assert.equal(pkg.scripts.build, undefined);
   }
 });
@@ -527,7 +527,7 @@ test('MFA continuation is shared by password, magic-link and invitation landings
     assert.match(starter.read('src/auth/magic-link.ts'), /window\.location\.replace\(target\.current\)/);
     assert.doesNotMatch(starter.read('src/auth/useMfaContinuation.ts') + starter.read('src/ui/MfaStep.tsx'), /mfa_token|localStorage|sessionStorage|fetch\(|console\./);
     assert.match(starter.read('src/ui/MfaStep.tsx'), /autoComplete="one-time-code"/);
-    assert.equal(JSON.parse(starter.read('package.json')).dependencies['@somewhere-tech/sdk'], '0.12.3', 'the SDK release that refreshes short-lived app sessions');
+    assert.equal(JSON.parse(starter.read('package.json')).dependencies['@somewhere-tech/sdk'], '0.12.4', 'the SDK release that refreshes short-lived app sessions');
   }
   const starter = generate('auth','headless');
   let state = [], cursor = 0, calls = [], done = 0;

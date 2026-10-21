@@ -76,5 +76,17 @@
     "files": {"db/schema.ts": "export default schema({ cards: table({ id: id(), title: text(), created_by: text() }, { scope: serverOnly() }) });"},
     "functions": {"api/cards.ts": "export default async function(req, sw) {\n  const user = await sw.auth.requireUser(req);\n  const b = await req.json();\n  const card = await sw.db.server.get('cards', b.id);\n  if (card.created_by !== user.id) return new Response('no', { status: 403 });\n  await sw.db.server.update('cards', { set: { title: b.title }, where: { id: b.id } });\n  return Response.json({ ok: true });\n}"},
     "expected": []
+  },
+  {
+    "name": "an awaited sw.email.send in a for\u2026of, a braceless for and a while loop waits for each delivery",
+    "files": {},
+    "functions": {"api/close.ts": "export default async function(req, sw) {\n  const { data: members } = await sw.db.server.from('members');\n  for (const m of members) {\n    await sw.email.send({ to: m.email, subject: 'Round closed', text: 'Thanks' });\n  }\n  return Response.json({ ok: true });\n}", "api/remind.ts": "export default async function(req, sw) {\n  const due = await sw.db.server.from('requests');\n  for (const r of due.data) await sw.email.send({ to: r.email, subject: 'Reminder', text: 'Due soon' });\n  return Response.json({ ok: true });\n}", "api/queue.ts": "export default async function(req, sw) {\n  let next = await sw.db.server.get('outbox', 'head');\n  while (next) {\n    await sw.email.send({ to: next.to, subject: next.subject, text: next.text });\n    next = await sw.db.server.get('outbox', next.after);\n  }\n  return Response.json({ ok: true });\n}"},
+    "expected": [{"rule": "somewhere/sequential-email", "file": "api/close.ts", "line": 4}, {"rule": "somewhere/sequential-email", "file": "api/queue.ts", "line": 4}, {"rule": "somewhere/sequential-email", "file": "api/remind.ts", "line": 3}]
+  },
+  {
+    "name": "forEach callbacks, bounded batches, dependent back-to-back sends, nested functions and comments are not sequential-send warnings",
+    "files": {},
+    "functions": {"api/each.ts": "export default async function(req, sw) {\n  const { data: members } = await sw.db.server.from('members');\n  members.forEach(async (m) => { await sw.email.send({ to: m.email, subject: 'Hi', text: 'x' }); });\n  return Response.json({ ok: true });\n}", "api/batch.ts": "export default async function(req, sw) {\n  const { data: ms } = await sw.db.server.from('members');\n  for (let i = 0; i < ms.length; i += 5) {\n    await Promise.allSettled(ms.slice(i, i + 5).map(async (m) => await sw.email.send({ to: m.email, subject: 'Hi', text: 'x' })));\n  }\n  return Response.json({ ok: true });\n}", "api/pair.ts": "export default async function(req, sw) {\n  const first = await sw.email.send({ to: 'a@example.com', subject: 'Confirm', text: 'x' });\n  await sw.email.send({ to: 'b@example.com', subject: 'Receipt', text: String(first.data?.id) });\n  return Response.json({ ok: true });\n}", "api/nested.ts": "export default async function(req, sw) {\n  const jobs = [];\n  for (const m of [1, 2]) {\n    const send = async () => await sw.email.send({ to: 'x@example.com', subject: String(m), text: 'x' });\n    jobs.push(send);\n    jobs.push(async function later() { await sw.email.send({ to: 'y@example.com', subject: 'y', text: 'y' }); });\n  }\n  // for (const m of list) await sw.email.send(m)\n  const note = 'for (const m of list) await sw.email.send(m)';\n  return Response.json({ n: jobs.length, note });\n}"},
+    "expected": []
   }
 ]

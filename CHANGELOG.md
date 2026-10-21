@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.37.62
+
+### Fixed
+
+- `somewhere verify` reports and their printed text mask credential-bearing parts of URLs: URL userinfo; in the query or fragment, the value of a credential parameter (`token`, `access_token`, `refresh_token`, `auth_token`, `code`, `secret`, `signature`, `sig`, `key`, `api_key`, `apikey`, `creator_secret`, `dsn`, `password`, also percent-encoded or nested encoded in another parameter) or a JWT/key-shaped value under any name; and credential-shaped path segments. This covers a journey segment's `path` and `final_url`, each viewport's `final_url`, `target` and `goto` step labels. The browser still opens the original URL. Error messages and reports saved earlier are not rewritten (#57).
+- Starter apps from `somewhere init`: the email-verification panel offers "I already have a code" beside "Email me a code". It opens the code form without sending another email, so a code already received still works after a new tab or reload. A failed or rate-limited send still does not open the form (#59).
+
 ## 0.37.61
 
 ### Fixed

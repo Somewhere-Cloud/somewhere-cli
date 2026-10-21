@@ -155,14 +155,68 @@ function navigationRetryNote(retries: VerifyReport['navigation_retries']): strin
   return ` The start page was opened a second time at ${retries.map((r) => r.viewport).join(', ')}: the first navigation timed out with no document response observed while the page was still blank (no action had run).`;
 }
 
-/** A request path for a summary: no query or fragment, and a path segment
- *  shaped like a credential (a JWT, a platform or provider key) is redacted. */
+/** A path segment shaped like a credential: a JWT, a platform or provider key. */
+const credentialSegment = (segment: string) =>
+  /^eyJ[\w-]+\.[\w-]+\.[\w-]*$/.test(segment) || /^smt_[\w-]+$/.test(segment) || /^sk-[\w-]{20,}$/.test(segment);
+
+/** A request path for a summary: no query or fragment, and a credential-shaped
+ *  path segment is redacted. */
 function summaryPath(url: string): string {
   let path = url.split(/[?#]/)[0];
   try { path = new URL(url).pathname; } catch { /* keep the stripped value */ }
-  return path.split('/').map((segment) => (
-    /^eyJ[\w-]+\.[\w-]+\.[\w-]*$/.test(segment) || /^smt_[\w-]+$/.test(segment) || /^sk-[\w-]{20,}$/.test(segment) ? '<redacted>' : segment
-  )).join('/');
+  return path.split('/').map((segment) => (credentialSegment(segment) ? '<redacted>' : segment)).join('/');
+}
+
+// Query/fragment parameters that carry a credential: the list the platform
+// applies to stored request URLs (worker/src/utils/log-sanitize.ts
+// SENSITIVE_PARAMS), plus `code` and `auth_token`. A magic sign-in link is
+// /auth/magic?token=…; an OAuth callback carries ?code=… or #access_token=….
+// A diagnostic URL never needs a replayable value, so `code` is masked even
+// where an app uses it for something harmless such as a promo code.
+const CREDENTIAL_PARAMS = new Set(['access_token', 'refresh_token', 'creator_secret', 'auth_token', 'secret', 'signature', 'api_key', 'apikey', 'token', 'code', 'key', 'sig', 'dsn', 'password']);
+// The same names nested, percent-encoded, inside another parameter's value
+// (redirect_uri=https%3A%2F%2Fapp%2F%3Ftoken%3D…) or after a plain `?` there.
+const NESTED_CREDENTIAL_RE = new RegExp(`((?:\\?|%3F|%26|%23)(?:${[...CREDENTIAL_PARAMS].join('|')})(?:=|%3D))(?:(?!%26|%23)[^&#\\s])*`, 'gi');
+
+/** A name or value as the server reads it: percent-decoded (twice at most). */
+function decoded(raw: string): string {
+  let value = raw;
+  for (let i = 0; i < 2; i++) {
+    try { const next = decodeURIComponent(value); if (next === value) break; value = next; } catch { break; }
+  }
+  return value;
+}
+
+/** `a=1&token=x` → `a=1&token=<redacted>`. Masked: a listed name, or a value
+ *  shaped like a credential (a JWT, a platform or provider key) under any name,
+ *  e.g. #id_token=eyJ…. Pieces without `=` (`#top`) are kept. */
+function maskParams(part: string): string {
+  return part.split('&').map((pair) => {
+    const eq = pair.indexOf('=');
+    if (eq <= 0) return pair;
+    const name = pair.slice(0, eq);
+    return CREDENTIAL_PARAMS.has(decoded(name).toLowerCase()) || credentialSegment(decoded(pair.slice(eq + 1))) ? `${name}=<redacted>` : pair;
+  }).join('&').replace(NESTED_CREDENTIAL_RE, '$1<redacted>');
+}
+
+/** A URL or path as a report, summary or error shows it. Masked: URL userinfo
+ *  (user:password@), in the query or fragment the value of a listed credential
+ *  parameter (also when its name is percent-encoded, or nested encoded inside
+ *  another parameter) or a JWT/key-shaped value under any name, and a
+ *  credential-shaped path segment. Kept: scheme, host,
+ *  path, other parameters and plain fragments. The browser still receives the
+ *  original. */
+function reportUrl(url: string): string {
+  const unauthed = url.replace(/^([a-z][a-z0-9+.-]*:\/\/)[^/?#@\s]*@/i, '$1<redacted>@');
+  const hash = unauthed.indexOf('#');
+  const beforeHash = hash < 0 ? unauthed : unauthed.slice(0, hash);
+  const fragment = hash < 0 ? null : unauthed.slice(hash + 1);
+  const q = beforeHash.indexOf('?');
+  const head = q < 0 ? beforeHash : beforeHash.slice(0, q);
+  const query = q < 0 ? null : beforeHash.slice(q + 1);
+  return head.split('/').map((segment) => (credentialSegment(segment) ? '<redacted>' : segment)).join('/')
+    + (query === null ? '' : `?${maskParams(query)}`)
+    + (fragment === null ? '' : `#${maskParams(fragment)}`);
 }
 
 const GENERIC_RESOURCE_FAILURE = /^Failed to load resource: the server responded with a status of (\d{3})\b/;
@@ -400,7 +454,7 @@ function actionName(action: BrowserSequenceAction | undefined, fallback: string)
   if ('expect' in action) return `expect ${action.expect.selector}`;
   if ('screenshot' in action) return `screenshot ${action.screenshot}`;
   if ('dialog' in action) return `dialog ${action.dialog}`;
-  if ('goto' in action) return `goto ${action.goto}`;
+  if ('goto' in action) return `goto ${reportUrl(action.goto)}`;
   return `eval ${action.eval}`;
 }
 
@@ -662,14 +716,14 @@ function shapeVerificationReport(
   return {
     passed,
     verdict,
-    target,
+    target: reportUrl(target),
     viewports: requestedViewports.map((viewport) => {
       const report = runs.find((item) => item.viewport.label === viewport.label)?.report;
       const refusal = refusals.find((item) => item.viewport === viewport.label);
       return {
         label: viewport.label, width: viewport.width, height: viewport.height,
         passed: report ? reportPassed(report) : false,
-        final_url: report?.final_url ?? target,
+        final_url: reportUrl(report?.final_url ?? target),
         ...(refusal ? { refusal: refusal.detail.message } : {}),
       };
     }),
@@ -1244,7 +1298,7 @@ export function createVerifyJourneyRun(
             segment: index + 1,
             as: segment.as,
             viewport: viewport.label,
-            ...(segment.path ? { path: segment.path } : {}),
+            ...(segment.path ? { path: reportUrl(segment.path) } : {}),
             ...(segment.group !== undefined ? { parallel_group: segment.group } : {}),
             ran: false,
             passed: false,
@@ -1364,7 +1418,7 @@ export function createVerifyJourneyRun(
           if (!first && report.session_note) {
             const message = `${segment.as}'s browser ended between segments (${report.session_note}), so ${segment.as} is no longer the same signed-in user. Keep each actor's gap between segments under 5 minutes and run the journey again.`;
             itemStop ??= stopAt('error', 'VERIFY_ACTOR_SESSION_ENDED', message);
-            segments.push({ ...base, ran: true, final_url: report.final_url, error: { code: 'VERIFY_ACTOR_SESSION_ENDED', message } });
+            segments.push({ ...base, ran: true, final_url: report.final_url === undefined ? undefined : reportUrl(report.final_url), error: { code: 'VERIFY_ACTOR_SESSION_ENDED', message } });
             continue;
           }
           const capped = mapIncomplete(report, actions, offset);
@@ -1383,12 +1437,12 @@ export function createVerifyJourneyRun(
                 close: `somewhere call browser '${JSON.stringify({ project_id: target.project_id, session_id: sessionId, close: true })}'`,
               });
             }
-            segments.push({ ...base, ran: true, passed: false, incomplete: capped, ...(report.session_closed === true ? { session_closed: true as const } : {}), ...(report.final_url ? { final_url: report.final_url } : {}) });
+            segments.push({ ...base, ran: true, passed: false, incomplete: capped, ...(report.session_closed === true ? { session_closed: true as const } : {}), ...(report.final_url ? { final_url: reportUrl(report.final_url) } : {}) });
             itemStop ??= stopAt('incomplete', 'VERIFY_EXECUTION_CAP');
             continue;
           }
           const passed = reportPassed(report);
-          segments.push({ ...base, ran: true, passed, ...(report.final_url ? { final_url: report.final_url } : {}) });
+          segments.push({ ...base, ran: true, passed, ...(report.final_url ? { final_url: reportUrl(report.final_url) } : {}) });
           if (!passed) itemStop ??= stopAt('report');
         }
         if (itemStop) {

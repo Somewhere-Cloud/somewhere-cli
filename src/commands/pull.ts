@@ -15,6 +15,8 @@ import { dim, error, info, printJson, success, teal, warn } from '../lib/output.
 import {
   SCAFFOLD_PACKAGE_FILENAME,
   SCAFFOLD_TSCONFIG_FILENAME,
+  SCAFFOLD_GITIGNORE_FILENAME,
+  buildScaffoldGitignore,
   buildScaffoldPackageJson,
   buildScaffoldTsconfig,
   extractDeps,
@@ -157,9 +159,10 @@ export function registerPull(program: Command) {
         if (removed.skipped.length > 10) info(dim(`  ...and ${removed.skipped.length - 10} more`));
       }
 
-      // Scaffold the two files a local typecheck needs (tsconfig + package.json)
+      // Scaffold the files a local typecheck needs (tsconfig + package.json)
       // so `somewhere typecheck` / `tsc --noEmit` can catch a dropped import
-      // BEFORE deploy. Written only when absent — never clobbers a project's
+      // BEFORE deploy, plus a .gitignore for the declarations typecheck
+      // generates. Written only when absent — never clobbers a project's
       // own config, even with --force (that flag is for source files, not
       // local tooling we're adding on top).
       const scaffolded = scaffoldTypecheckFiles(outDir, body.static_files);
@@ -199,6 +202,14 @@ function scaffoldTypecheckFiles(
       buildScaffoldPackageJson(basename(outDir), deps),
     );
     added.push(SCAFFOLD_PACKAGE_FILENAME);
+  }
+
+  // Deploys never carry dotfiles, so a pulled app has no .gitignore of its
+  // own unless this folder already had one; an existing one is left as is.
+  const gitignorePath = join(outDir, SCAFFOLD_GITIGNORE_FILENAME);
+  if (!existsSync(gitignorePath)) {
+    writeFileSync(gitignorePath, buildScaffoldGitignore());
+    added.push(SCAFFOLD_GITIGNORE_FILENAME);
   }
 
   return added;

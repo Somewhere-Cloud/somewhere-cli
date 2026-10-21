@@ -67,6 +67,9 @@ test('expired temporary session + linked folder: explains expiry, mints nothing,
   assert.ok(r.stderr.includes(`expired at ${expiredAt} without being claimed`), r.stderr);
   assert.match(r.stderr, /Nothing was deployed/);
   assert.match(r.stderr, /delete this folder's \.somewhere\.json, then run `somewhere deploy`/);
+  // Someone who claimed the workspace is told to sign in BEFORE being told to delete the link.
+  const claimAt = r.stderr.indexOf('If you claimed this workspace in the browser, sign in with `somewhere login`');
+  assert.ok(claimAt >= 0 && claimAt < r.stderr.indexOf('.somewhere.json'), r.stderr);
   assert.match(r.stderr, /somewhere init --bare --name <name>/);
   assert.doesNotMatch(r.stdout + r.stderr, /Project not found|proof-of-work|proj_old_temp/i);
   assert.deepEqual(requests, []);
@@ -97,4 +100,13 @@ test('signed in, nothing linked: names the one-command recoveries and creates no
   assert.match(r.stderr, /somewhere deploy --project <name-or-id>/);
   assert.match(r.stderr, /somewhere projects/);
   assert.ok(!requests.some((x) => x.startsWith('POST')), `no create/deploy: ${requests.join(', ')}`);
+});
+
+test('only a passed expiry time counts as expired; a missing token alone does not', async () => {
+  const { temporarySessionExpired } = await import(join(dirname(distIndex), 'commands', 'deploy.js'));
+  const now = Date.now();
+  assert.equal(temporarySessionExpired({ temp_expires_at: new Date(now - 1000).toISOString() }, now), true);
+  assert.equal(temporarySessionExpired({ temp_expires_at: new Date(now + 3_600_000).toISOString() }, now), false, 'future expiry with no token is not expired');
+  assert.equal(temporarySessionExpired({}, now), false);
+  assert.equal(temporarySessionExpired({ temp_expires_at: 'not-a-date' }, now), false);
 });

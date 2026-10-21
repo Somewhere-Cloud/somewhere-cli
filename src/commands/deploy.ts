@@ -360,6 +360,7 @@ export function formatExpiredTemporaryProjectExplanation(expiredAt: string): str
     `The temporary workspace on this machine expired at ${expiredAt} without being claimed. Its projects can no longer be deployed to, and a new temporary workspace cannot deploy to this folder's linked project. Nothing was deployed.`,
     '',
     'Next steps:',
+    '  If you claimed this workspace in the browser, sign in with `somewhere login` and deploy again; your projects are in your account.',
     '  Start a new temporary project: delete this folder\'s .somewhere.json, then run `somewhere deploy` again.',
     '  Keep your work in an account: sign in (`somewhere login`, or `somewhere signup`), then run `somewhere init --bare --name <name>` and `somewhere deploy`.',
   ].join('\n');
@@ -388,6 +389,14 @@ function findProjectConfigEntry(targetDir: string): ProjectConfigEntry | null {
 
 /** A temporary credential is reusable until its window closes; no recorded
  *  expiry means the server never gave one, which is not a reason to re-mint. */
+/** The stored temporary session's own expiry time has passed. A session that
+ *  is merely missing its token is not reported as expired. */
+export function temporarySessionExpired(session: { temp_expires_at?: string } | null, nowMs = Date.now()): boolean {
+  if (!session?.temp_expires_at) return false;
+  const expiresMs = new Date(session.temp_expires_at).getTime();
+  return Number.isFinite(expiresMs) && expiresMs <= nowMs;
+}
+
 export function isTempSessionLive(
   session: { token?: string; temp_expires_at?: string } | null,
   nowMs = Date.now(),
@@ -508,7 +517,7 @@ export function registerDeploy(program: Command) {
       // PROJECT_NOT_FOUND back is skipped: the answer comes from this
       // machine's own record, before any request (tsk_8a68dfa2 item 14).
       if (
-        storedConfig?.temporary && storedConfig.temp_expires_at && !isTempSessionLive(storedConfig)
+        storedConfig?.temporary && storedConfig.temp_expires_at && temporarySessionExpired(storedConfig)
         && (opts.project || findProjectConfigEntry(targetDir))
       ) {
         const message = formatExpiredTemporaryProjectExplanation(storedConfig.temp_expires_at);

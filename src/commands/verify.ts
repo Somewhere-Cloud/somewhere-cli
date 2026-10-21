@@ -922,8 +922,9 @@ export interface VerifyJourneySegmentReport {
 }
 
 /** A segment's measured time, in ms. `request_wall_ms` is this CLI's request
- *  (send to answer); every other field is the platform's report.timing as
- *  sent, with its nesting (e.g. evidence_ms inside actions_ms). */
+ *  (send to answer); every other field is a flat numeric field of the
+ *  platform's report.timing, whose phases may contain one another (e.g.
+ *  evidence_ms is part of actions_ms). */
 export type VerifySegmentTiming = { request_wall_ms: number; browser_reused?: boolean } & Record<string, number | boolean>;
 
 /** Whole-journey phases, in ms, around the segments. */
@@ -934,13 +935,18 @@ export interface VerifyJourneyTiming {
   test_users_delete_ms?: number;
 }
 
-/** The platform timing of one browser call, numbers only. */
+/** A platform timing field name: a plain snake_case `*_ms` word, so neither a
+ *  value nor a key can carry a URL, id or credential into the report. */
+const TIMING_KEY = /^[a-z][a-z_]{0,40}_ms$/;
+
+/** The platform timing of one browser call, numbers only (flat fields; a
+ *  nested object is dropped). */
 function segmentTiming(report: BrowserResult, requestWallMs: number): VerifySegmentTiming {
   const timing: VerifySegmentTiming = { request_wall_ms: requestWallMs };
   const raw = (report as { timing?: unknown }).timing;
   if (raw && typeof raw === 'object') {
     for (const [key, value] of Object.entries(raw)) {
-      if (key.endsWith('_ms') && typeof value === 'number' && Number.isFinite(value)) timing[key] = value;
+      if (TIMING_KEY.test(key) && typeof value === 'number' && Number.isFinite(value)) timing[key] = value;
       else if (key === 'browser_reused' && typeof value === 'boolean') timing.browser_reused = value;
     }
   }
@@ -1301,6 +1307,7 @@ export function createVerifyJourneyRun(
     await createTestUsers();
     const testUsersCreateMs = testActors.length ? now() - createStartedAt : undefined;
     const startedAt = now();
+    let segmentsEndedAt = startedAt;
     const deadlineAt = startedAt + VERIFY_JOURNEY_LIMITS.deadline_ms;
     const segments: VerifyJourneySegmentReport[] = [];
     const runs: Array<{ viewport: ResolvedViewport; report: BrowserResult; actions: BrowserSequenceAction[]; offset: 0 | 1 }> = [];
@@ -1486,6 +1493,7 @@ export function createVerifyJourneyRun(
         }
       }
     } finally {
+      segmentsEndedAt = now();
       await closeAll();
     }
     const shaped = shapeVerificationReport(target.url ?? target.project_id, { actions: [] }, runs);
@@ -1517,7 +1525,7 @@ export function createVerifyJourneyRun(
       verdict = `PASS — ${journey.journey.length} segment${journey.journey.length === 1 ? '' : 's'} by ${names.length} user${names.length === 1 ? '' : 's'} (${names.join(', ')}) passed${parallelCount ? `, ${parallelCount} of them in parallel groups (several users at the same time)` : ''}; page, console, and network healthy.`
         + navigationRetryNote(shaped.navigation_retries);
     }
-    const segmentsMs = now() - startedAt;
+    const segmentsMs = segmentsEndedAt - startedAt;
     const { cleanup, cleanup_ms } = await closeAll();
     // Browsers first, then the identities they were signed in as.
     const deleteStartedAt = now();

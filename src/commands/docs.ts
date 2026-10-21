@@ -291,7 +291,9 @@ export function parsePublicDocsGroups(value: unknown): PublicDocsGroup[] {
 export function parsePublicDocsAliases(value: unknown): Record<string, string> {
   const aliases = value && typeof value === 'object' ? (value as Record<string, unknown>).aliases : undefined;
   if (!aliases || typeof aliases !== 'object' || Array.isArray(aliases)) return {};
-  const out: Record<string, string> = {};
+  // No prototype: a requested topic such as `constructor` or `__proto__` must
+  // never resolve to an inherited member.
+  const out: Record<string, string> = Object.create(null);
   for (const [alias, target] of Object.entries(aliases as Record<string, unknown>)) {
     if (typeof target === 'string' && target) out[alias.toLowerCase()] = target;
   }
@@ -308,7 +310,9 @@ export function findPublicDocsPage(
   const byId = (id: string) => pages.find((page) => page.id.toLowerCase() === id.toLowerCase());
   const lower = requested.trim().toLowerCase();
   const normalized = lower.replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-  const target = aliases[lower] ?? aliases[normalized];
+  const own = (key: string): string | undefined =>
+    Object.prototype.hasOwnProperty.call(aliases, key) && typeof aliases[key] === 'string' ? aliases[key] : undefined;
+  const target = own(lower) ?? own(normalized);
   return byId(requested) ?? (target ? byId(target) : undefined);
 }
 

@@ -81,3 +81,16 @@ test('an older manifest without aliases keeps today\'s not-found answer', async 
     assert.match(r.stderr + r.stdout, /No documentation topic named "schema-changes"/);
   });
 });
+
+test('inherited object names never resolve through aliases', async () => {
+  const { findPublicDocsPage, parsePublicDocsAliases } = await import('../dist/commands/docs.js');
+  const pages = [{ id: 'sw.db', title: 'sw.db', body: '' }];
+  for (const manifest of [{}, { aliases: { 'schema-changes': 'sw.db' } }]) {
+    const aliases = parsePublicDocsAliases(manifest);
+    for (const name of ['constructor', '__proto__', 'toString', 'hasOwnProperty']) {
+      assert.equal(findPublicDocsPage(pages, aliases, name), undefined, name);
+    }
+  }
+  // A plain object passed by a caller is guarded too.
+  assert.equal(findPublicDocsPage(pages, {}, 'constructor'), undefined);
+});

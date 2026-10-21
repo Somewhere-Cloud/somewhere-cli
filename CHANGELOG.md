@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.37.59
+
+### Fixed
+
+- `somewhere deploy` in a folder whose `.somewhere.json` links a project this sign-in can't open (for example an expired, unclaimed temporary project) now explains that, says nothing was deployed, and lists the next steps: see your projects, `somewhere init --link --project <name-or-id>`, or delete the link and `somewhere init --bare --name <name>`. `--json` adds `linked_project_id`, `deployed: false` and `next_steps` (#51).
+- Project commands run in an unlinked folder (logs, errors, env, project view, open, verify, browser open, db, db rows, status, pull, rollback, run, git) name the exact link and create commands instead of "run from a linked directory" (#51).
+
 ## 0.37.58
 
 ### Fixed

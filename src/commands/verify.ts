@@ -783,13 +783,17 @@ export async function runVerification(
 // Several signed-in people in one run: each actor is its own named browser
 // session on the platform (a separate browser, so no cookie, storage or cache
 // is shared between actors), and the journey's segments run in the order
-// written, each as one ordinary bounded browser call. Every call carries the
-// project, so the platform's owned-origin rules apply to every actor on every
+// written, each as one ordinary bounded browser call. A { "parallel": [...] }
+// item sends the calls of 2-3 segments by different actors at the same time
+// (realtime checks); each is still its own actor's ordinary call. Every call
+// carries the project, so the platform's owned-origin rules apply to every actor on every
 // step. Sessions this run opened are closed when it ends, whatever the outcome.
 
 export const VERIFY_JOURNEY_LIMITS = {
   actors: 3,
   segments: 12,
+  /** Segments in one { "parallel": [...] } item, each by a different actor. */
+  parallel_segments: 3,
   actions_per_segment: 30,
   total_actions: 120,
   deadline_ms: 10 * 60 * 1000,
@@ -823,6 +827,9 @@ export interface VerifyJourneySegment {
   expect_requests: ExpectedBrowserRequest[];
   visible_only: boolean;
   viewport: VerifyViewportInput;
+  /** Set on the consecutive segments of one { "parallel": [...] } item: they
+   *  run at the same time, each by a different actor. */
+  group?: number;
 }
 
 export interface VerifyJourney {
@@ -835,6 +842,8 @@ export interface VerifyJourneySegmentReport {
   as: string;
   viewport: string;
   path?: string;
+  /** Segments sharing this number ran at the same time. */
+  parallel_group?: number;
   ran: boolean;
   /** Request sent, but browser execution is unconfirmed. */
   outcome_unknown?: true;
@@ -948,13 +957,38 @@ export function normalizeVerifyJourney(raw: unknown, baseDir = process.cwd()): V
     actors[name] = actor;
   }
   if (!Array.isArray(raw.journey) || raw.journey.length < 1) throw new Error('journey must be a non-empty array of segments like { "as": "alice", "path": "/", "actions": [...] }.');
-  if (raw.journey.length > limits.segments) {
-    throw new Error(`journey has ${raw.journey.length} segments; the limit is ${limits.segments}. Each segment is one browser run, so combine consecutive steps by the same actor.`);
+  // A { "parallel": [...] } item becomes consecutive segments sharing a group
+  // number; everything after this (limits, reports, indices) is per segment.
+  const flat: Array<{ value: unknown; at: string; group?: number }> = [];
+  let groups = 0;
+  raw.journey.forEach((item, index) => {
+    const at = `journey[${index}]`;
+    if (!isRecord(item) || item.parallel === undefined) { flat.push({ value: item, at }); return; }
+    const extraKeys = Object.keys(item).filter((key) => key !== 'parallel');
+    if (extraKeys.length) throw new Error(`${at} is a parallel group, so its only field is "parallel" (found ${extraKeys.join(', ')}). Put as, path, actions and the rest on each segment inside it.`);
+    const members = item.parallel;
+    if (!Array.isArray(members) || members.length < 2 || members.length > limits.parallel_segments) {
+      const count = Array.isArray(members) ? `has ${members.length} segment${members.length === 1 ? '' : 's'}` : 'must be an array of segments';
+      throw new Error(`${at}.parallel ${count}; a parallel group runs 2 to ${limits.parallel_segments} segments at the same time, each by a different actor.`);
+    }
+    groups += 1;
+    const actorsInGroup = new Set<string>();
+    members.forEach((member, inner) => {
+      const memberAt = `${at}.parallel[${inner}]`;
+      if (isRecord(member) && member.parallel !== undefined) throw new Error(`${memberAt} is a parallel group inside a parallel group; groups cannot be nested. List every segment that runs at the same time in one "parallel" array.`);
+      if (isRecord(member) && typeof member.as === 'string') {
+        if (actorsInGroup.has(member.as)) throw new Error(`${at}.parallel names ${member.as} twice; each segment in a parallel group is a different actor, because one browser does one thing at a time.`);
+        actorsInGroup.add(member.as);
+      }
+      flat.push({ value: member, at: memberAt, group: groups });
+    });
+  });
+  if (flat.length > limits.segments) {
+    throw new Error(`journey has ${flat.length} segments${groups ? ' (counting each segment inside a parallel group)' : ''}; the limit is ${limits.segments}. Each segment is one browser run, so combine consecutive steps by the same actor.`);
   }
   const seen = new Set<string>();
   let total = 0;
-  const journey = raw.journey.map((value, index): VerifyJourneySegment => {
-    const at = `journey[${index}]`;
+  const journey = flat.map(({ value, at, group }): VerifyJourneySegment => {
     if (!isRecord(value)) throw new Error(`${at} must be an object.`);
     const unknown = Object.keys(value).filter((key) => !['as', 'path', 'actions', 'expect_requests', 'visible_only', 'viewport'].includes(key));
     if (unknown.length) throw new Error(`${at} has unsupported field${unknown.length === 1 ? '' : 's'}: ${unknown.join(', ')}.`);
@@ -983,6 +1017,7 @@ export function normalizeVerifyJourney(raw: unknown, baseDir = process.cwd()): V
       expect_requests: normalizeExpectedRequests(value.expect_requests),
       visible_only: value.visible_only === true,
       viewport,
+      ...(group !== undefined ? { group } : {}),
     };
   });
   if (total > limits.total_actions) throw new Error(`journey has ${total} actions in total; the limit is ${limits.total_actions}.`);
@@ -1050,8 +1085,9 @@ export function createVerifyJourneyRun(
   // Actors whose last call ended without a platform answer (client timeout or
   // lost connection): the platform may still be running it.
   const abandoned = new Map<string, string>();
-  // The one segment call in flight, if any.
-  let inFlight: { actor: string; settled: Promise<unknown> } | null = null;
+  // Segment calls in flight, by actor: one for a sequential segment, up to
+  // one per actor while a parallel group runs.
+  const inFlight = new Map<string, Promise<unknown>>();
   let stopReason: { code: string; message: string } | null = null;
   let closing: Promise<{ cleanup: VerifyJourneyCleanup[]; cleanup_ms: number }> | null = null;
   // Actors whose healthy browser is kept after an execution-cap stop. Cleanup
@@ -1116,7 +1152,7 @@ export function createVerifyJourneyRun(
     closing ??= (async () => {
       const startedAt = now();
       const budgetEnd = startedAt + cleanupBudgetMs;
-      const pending = inFlight;
+      const pending = [...inFlight];
       const actors = [...opened].filter((actor) => !kept.has(actor));
       // One concurrent pass: every opened browser at once, one shared budget.
       const first = await Promise.all(actors.map(async (actor) => [actor, await closeOne(actor, budgetEnd)] as const));
@@ -1127,22 +1163,23 @@ export function createVerifyJourneyRun(
           : { actor, status: result.closed ? 'closed' : 'already_closed' });
       }
       // A call still in flight may create or reuse its browser after the close
-      // above. Wait for it inside the budget, then close that actor again.
-      if (pending) {
-        const settled = await settleWithin(pending.settled, budgetEnd - now());
+      // above. Wait for each inside the budget (all at once), then close that
+      // actor again.
+      await Promise.all(pending.map(async ([actor, call]) => {
+        const settled = await settleWithin(call, budgetEnd - now());
         if (!settled) {
-          outcome.set(pending.actor, { actor: pending.actor, status: 'unconfirmed', reason: `its call was still running when cleanup ran out of time; ${UNCONFIRMED_BACKSTOP}` });
-        } else if (!abandoned.has(pending.actor)) {
-          const again = await closeOne(pending.actor, budgetEnd);
-          const earlier = outcome.get(pending.actor);
-          outcome.set(pending.actor, 'error' in again
-            ? { actor: pending.actor, status: 'unconfirmed', reason: `close after its call finished failed (${again.error}); ${UNCONFIRMED_BACKSTOP}` }
-            : { actor: pending.actor, status: again.closed || earlier?.status === 'closed' ? 'closed' : 'already_closed' });
+          outcome.set(actor, { actor, status: 'unconfirmed', reason: `its call was still running when cleanup ran out of time; ${UNCONFIRMED_BACKSTOP}` });
+        } else if (!abandoned.has(actor)) {
+          const again = await closeOne(actor, budgetEnd);
+          const earlier = outcome.get(actor);
+          outcome.set(actor, 'error' in again
+            ? { actor, status: 'unconfirmed', reason: `close after its call finished failed (${again.error}); ${UNCONFIRMED_BACKSTOP}` }
+            : { actor, status: again.closed || earlier?.status === 'closed' ? 'closed' : 'already_closed' });
         }
-      }
+      }));
       // A transport or lifecycle outcome can settle after this close. Close once
       // more inside the budget, but do not claim it proves final cleanup.
-      for (const actor of actors.filter((name) => abandoned.has(name))) {
+      await Promise.all(actors.filter((name) => abandoned.has(name)).map(async (actor) => {
         const waitMs = Math.min(recloseAfterAbandonedMs, budgetEnd - now());
         if (waitMs > 0) await new Promise((resolveWait) => setTimeout(resolveWait, waitMs));
         const again = await closeOne(actor, budgetEnd);
@@ -1151,7 +1188,7 @@ export function createVerifyJourneyRun(
           status: 'unconfirmed',
           reason: `${abandoned.get(actor)}${'error' in again ? ` (the second close failed: ${again.error})` : ''}; ${UNCONFIRMED_BACKSTOP}`,
         });
-      }
+      }));
       const keptCleanup = [...kept.values()].map((item): VerifyJourneyCleanup => ({ actor: item.actor, status: 'kept_open', reason: item.close }));
       return { cleanup: [...actors.map((actor) => outcome.get(actor)!), ...keptCleanup], cleanup_ms: now() - startedAt };
     })();
@@ -1177,137 +1214,186 @@ export function createVerifyJourneyRun(
     // 'report': the segment ran and its own report failed (the step verdict
     // says why). 'error': the segment could not run or could not continue.
     // 'incomplete': the segment reached its execution cap with nothing failed.
-    let stopped: { kind: 'report' | 'error' | 'incomplete'; segment: number; as: string; viewport: string; code: string; message: string } | null = null;
+    type Stop = { kind: 'report' | 'error' | 'incomplete'; segment: number; as: string; viewport: string; code: string; message: string };
+    let stopped: Stop | null = null;
+    // The last segment number of the item (a segment, or a parallel group)
+    // the journey stopped in: segments after it did not run.
+    let stoppedItemEnd = 0;
     const deadlineMessage = `The journey reached its ${VERIFY_JOURNEY_LIMITS.deadline_ms / 60000}-minute limit.`;
+    // Items in run order: a sequential segment alone, or a parallel group's
+    // consecutive segments together.
+    const items: Array<Array<{ index: number; segment: VerifyJourneySegment }>> = [];
+    for (const [index, segment] of journey.journey.entries()) {
+      const last = items.at(-1);
+      if (segment.group !== undefined && last && last[0].segment.group === segment.group) last.push({ index, segment });
+      else items.push([{ index, segment }]);
+    }
     try {
-      for (const [index, segment] of journey.journey.entries()) {
-        const viewport = resolveViewport(segment.viewport);
-        const label = `${segment.as} #${index + 1} ${viewport.label}`;
-        const base: VerifyJourneySegmentReport = {
-          segment: index + 1,
-          as: segment.as,
-          viewport: viewport.label,
-          ...(segment.path ? { path: segment.path } : {}),
-          ran: false,
-          passed: false,
-        };
+      for (const item of items) {
+        const entries = item.map(({ index, segment }) => {
+          const viewport = resolveViewport(segment.viewport);
+          const base: VerifyJourneySegmentReport = {
+            segment: index + 1,
+            as: segment.as,
+            viewport: viewport.label,
+            ...(segment.path ? { path: segment.path } : {}),
+            ...(segment.group !== undefined ? { parallel_group: segment.group } : {}),
+            ran: false,
+            passed: false,
+          };
+          return { index, segment, viewport, label: `${segment.as} #${index + 1} ${viewport.label}`, base };
+        });
+        const head = entries[0];
+        const itemEnd = entries[entries.length - 1].index + 1;
+        const notRun = entries.slice(1).map((entry) => entry.base);
+        // Checked once before the item: a parallel group starts together or not at all.
         if (!stopped && !stopReason && now() >= deadlineAt) stop('VERIFY_JOURNEY_DEADLINE', deadlineMessage);
-        if (stopped) { segments.push(base); continue; }
+        if (stopped) { segments.push(...entries.map((entry) => entry.base)); continue; }
         if (stopReason) {
-          stopped = { kind: 'error', segment: index + 1, as: segment.as, viewport: viewport.label, ...stopReason };
-          segments.push({ ...base, error: { ...stopReason } });
+          stopped = { kind: 'error', segment: head.index + 1, as: head.segment.as, viewport: head.viewport.label, ...stopReason };
+          stoppedItemEnd = itemEnd;
+          segments.push({ ...head.base, error: { ...stopReason } }, ...notRun);
           continue;
         }
-        const actor = journey.actors[segment.as];
-        const first = !started.has(segment.as);
-        const offset: 0 | 1 = !first && segment.path ? 1 : 0;
-        const actions = offset ? [{ goto: segment.path } as BrowserSequenceAction, ...segment.actions] : segment.actions;
         // One connected run per segment, capped so its answer (cap plus
         // transport headroom) still arrives inside the journey's deadline. A
-        // segment that cannot get the minimum cap is not started at all.
+        // segment that cannot get the minimum cap is not started at all. Every
+        // segment of a parallel group gets the same cap, computed once.
         const remaining = deadlineAt - now();
         const budgetMs = Math.min(VERIFY_JOURNEY_LIMITS.segment_budget_ms, remaining - VERIFY_JOURNEY_LIMITS.transport_headroom_ms);
         if (budgetMs < VERIFY_JOURNEY_LIMITS.min_segment_budget_ms) {
-          const message = `${deadlineMessage} Segment ${index + 1} was not started: ${Math.max(0, Math.floor(remaining / 1000))}s were left, less than the ${VERIFY_JOURNEY_LIMITS.min_segment_budget_ms / 1000}s minimum run plus ${VERIFY_JOURNEY_LIMITS.transport_headroom_ms / 1000}s for its answer.`;
+          const what = entries.length > 1 ? `Segments ${head.index + 1}–${itemEnd} (in parallel) were` : `Segment ${head.index + 1} was`;
+          const message = `${deadlineMessage} ${what} not started: ${Math.max(0, Math.floor(remaining / 1000))}s were left, less than the ${VERIFY_JOURNEY_LIMITS.min_segment_budget_ms / 1000}s minimum run plus ${VERIFY_JOURNEY_LIMITS.transport_headroom_ms / 1000}s for its answer.`;
           stop('VERIFY_JOURNEY_DEADLINE', message);
-          stopped = { kind: 'error', segment: index + 1, as: segment.as, viewport: viewport.label, code: 'VERIFY_JOURNEY_DEADLINE', message };
-          segments.push({ ...base, error: { code: 'VERIFY_JOURNEY_DEADLINE', message } });
+          stopped = { kind: 'error', segment: head.index + 1, as: head.segment.as, viewport: head.viewport.label, code: 'VERIFY_JOURNEY_DEADLINE', message };
+          stoppedItemEnd = itemEnd;
+          segments.push({ ...head.base, error: { code: 'VERIFY_JOURNEY_DEADLINE', message } }, ...notRun);
           continue;
         }
-        const hasSeeds = actor.local_storage !== undefined || actor.cookies !== undefined || actor.headers !== undefined;
-        const url = first ? (segment.path ?? target.url ?? (hasSeeds ? '/' : undefined)) : undefined;
-        const body: Record<string, unknown> = {
-          project_id: target.project_id,
-          session_id: sessions[segment.as],
-          ...(url ? { url } : {}),
-          actions,
-          expect_requests: segment.expect_requests,
-          visible_only: segment.visible_only,
-          viewport: viewport.wire,
-          capture_after: true,
-          inline: false,
-          budget_ms: budgetMs,
-          // A continued actor must be the same browser and page, or nothing runs.
-          ...(!first ? { require_existing_session: true } : {}),
-          ...(first && actor.auth ? { auth: actor.auth } : {}),
-          ...(first && testIdentities.has(segment.as) ? { auth: { user_id: testIdentities.get(segment.as)!.user_id } } : {}),
-          ...(first && actor.local_storage ? { local_storage: actor.local_storage } : {}),
-          ...(first && actor.cookies ? { cookies: actor.cookies } : {}),
-          ...(first && actor.headers ? { headers: actor.headers } : {}),
-        };
         const waitMs = budgetMs + VERIFY_JOURNEY_LIMITS.transport_headroom_ms;
-        opened.add(segment.as);
-        started.add(segment.as);
-        abandoned.delete(segment.as);
-        const call = client.call<BrowserResult>('POST', '/browser/test', body, undefined, { timeoutMs: waitMs });
-        inFlight = { actor: segment.as, settled: call };
-        let report: BrowserResult;
-        try {
-          report = await call;
-        } catch (cause) {
-          const code = cause instanceof CliApiError ? cause.code : 'VERIFY_SEGMENT_FAILED';
-          const message = cause instanceof Error ? cause.message : String(cause);
-          const unknown = transportUnknown(cause);
-          if (unknown) {
-            abandoned.set(segment.as, 'its call got no answer, so the platform may still start it');
-            report = unknown;
+        // Every call of the item is sent before any answer is awaited; each
+        // body is built exactly as for a sequential segment.
+        const dispatched = entries.map((entry) => {
+          const { segment } = entry;
+          const actor = journey.actors[segment.as];
+          const first = !started.has(segment.as);
+          const offset: 0 | 1 = !first && segment.path ? 1 : 0;
+          const actions = offset ? [{ goto: segment.path } as BrowserSequenceAction, ...segment.actions] : segment.actions;
+          const hasSeeds = actor.local_storage !== undefined || actor.cookies !== undefined || actor.headers !== undefined;
+          const url = first ? (segment.path ?? target.url ?? (hasSeeds ? '/' : undefined)) : undefined;
+          const body: Record<string, unknown> = {
+            project_id: target.project_id,
+            session_id: sessions[segment.as],
+            ...(url ? { url } : {}),
+            actions,
+            expect_requests: segment.expect_requests,
+            visible_only: segment.visible_only,
+            viewport: entry.viewport.wire,
+            capture_after: true,
+            inline: false,
+            budget_ms: budgetMs,
+            // A continued actor must be the same browser and page, or nothing runs.
+            ...(!first ? { require_existing_session: true } : {}),
+            ...(first && actor.auth ? { auth: actor.auth } : {}),
+            ...(first && testIdentities.has(segment.as) ? { auth: { user_id: testIdentities.get(segment.as)!.user_id } } : {}),
+            ...(first && actor.local_storage ? { local_storage: actor.local_storage } : {}),
+            ...(first && actor.cookies ? { cookies: actor.cookies } : {}),
+            ...(first && actor.headers ? { headers: actor.headers } : {}),
+          };
+          opened.add(segment.as);
+          started.add(segment.as);
+          abandoned.delete(segment.as);
+          const call = new Promise<BrowserResult>((resolveCall) => {
+            resolveCall(client.call<BrowserResult>('POST', '/browser/test', body, undefined, { timeoutMs: waitMs }));
+          });
+          // Settles after the abandoned mark is set, so closeAll waiting on it
+          // already knows whether the platform may still be running this call.
+          const settled = call.then(
+            (report) => ({ ok: true as const, report }),
+            (cause: unknown) => {
+              const unknown = transportUnknown(cause);
+              if (unknown) abandoned.set(segment.as, 'its call got no answer, so the platform may still start it');
+              return { ok: false as const, cause, unknown };
+            },
+          ).finally(() => { inFlight.delete(segment.as); });
+          inFlight.set(segment.as, settled);
+          return { ...entry, first, offset, actions, settled };
+        });
+        const results = await Promise.all(dispatched.map((entry) => entry.settled));
+        // Every result is reported, in segment order; the first stop wins.
+        let itemStop: Stop | null = null;
+        for (const [position, entry] of dispatched.entries()) {
+          const { index, segment, viewport, label, base, first, offset, actions } = entry;
+          const result = results[position];
+          const stopAt = (kind: Stop['kind'], code = '', message = ''): Stop => ({ kind, segment: index + 1, as: segment.as, viewport: viewport.label, code, message });
+          let report: BrowserResult;
+          if (result.ok) {
+            report = result.report;
+          } else if (result.unknown) {
+            report = result.unknown;
           } else {
+            const { cause } = result;
+            const code = cause instanceof CliApiError ? cause.code : 'VERIFY_SEGMENT_FAILED';
+            const message = cause instanceof Error ? cause.message : String(cause);
             const refusedMessage = !first && (code === 'SESSION_EXPIRED' || code === 'SESSION_TARGET_LOST')
               ? `${segment.as}'s ${code === 'SESSION_EXPIRED' ? 'browser ended' : 'page could not be identified'} between segments, so segment ${index + 1} did not run (nothing was started, seeded or navigated). ${message}`
               : message;
-            stopped = { kind: 'error', segment: index + 1, as: segment.as, viewport: viewport.label, code, message: refusedMessage };
+            itemStop ??= stopAt('error', code, refusedMessage);
             segments.push({ ...base, error: { code, message: refusedMessage } });
             continue;
           }
-        } finally {
-          inFlight = null;
-        }
-        runs.push({ viewport: { ...viewport, label }, report, actions, offset });
-        const unknown = readBrowserLifecycle(report);
-        if (unknown) {
-          if (!abandoned.has(segment.as)) abandoned.set(segment.as, `the platform reported ${unknown.status}; late allocation or cleanup may still settle`);
-          segments.push({ ...base, ran: !report.transport_error, outcome_unknown: true, lifecycle: unknown,
-            ...(report.transport_error ? { error: report.transport_error } : {}) });
-          stopped = { kind: 'report', segment: index + 1, as: segment.as, viewport: viewport.label, code: '', message: '' };
-          continue;
-        }
-        // A continued actor whose browser was reaped would carry on signed out
-        // in a fresh browser; that is a different person, so the journey stops.
-        if (!first && report.session_note) {
-          const message = `${segment.as}'s browser ended between segments (${report.session_note}), so ${segment.as} is no longer the same signed-in user. Keep each actor's gap between segments under 5 minutes and run the journey again.`;
-          stopped = { kind: 'error', segment: index + 1, as: segment.as, viewport: viewport.label, code: 'VERIFY_ACTOR_SESSION_ENDED', message };
-          segments.push({ ...base, ran: true, final_url: report.final_url, error: { code: stopped.code, message } });
-          continue;
-        }
-        const capped = mapIncomplete(report, actions, offset);
-        if (capped) {
-          // The browser is healthy and the platform kept it: leave it open for
-          // the caller rather than erasing the evidence in cleanup. A browser
-          // the platform reports closed is not claimed as kept.
-          const sessionId = sessions[segment.as];
-          if (report.session_closed !== true && report.idle_expires_at && report.absolute_expires_at) {
-            kept.set(segment.as, {
-              actor: segment.as,
-              session_id: sessionId,
-              ...(report.session_expires_at ? { session_expires_at: report.session_expires_at } : {}),
-              ...(report.idle_expires_at ? { idle_expires_at: report.idle_expires_at } : {}),
-              ...(report.absolute_expires_at ? { absolute_expires_at: report.absolute_expires_at } : {}),
-              close: `somewhere call browser '${JSON.stringify({ project_id: target.project_id, session_id: sessionId, close: true })}'`,
-            });
+          runs.push({ viewport: { ...viewport, label }, report, actions, offset });
+          const unknown = readBrowserLifecycle(report);
+          if (unknown) {
+            if (!abandoned.has(segment.as)) abandoned.set(segment.as, `the platform reported ${unknown.status}; late allocation or cleanup may still settle`);
+            segments.push({ ...base, ran: !report.transport_error, outcome_unknown: true, lifecycle: unknown,
+              ...(report.transport_error ? { error: report.transport_error } : {}) });
+            itemStop ??= stopAt('report');
+            continue;
           }
-          segments.push({ ...base, ran: true, passed: false, incomplete: capped, ...(report.session_closed === true ? { session_closed: true as const } : {}), ...(report.final_url ? { final_url: report.final_url } : {}) });
-          stopped = { kind: 'incomplete', segment: index + 1, as: segment.as, viewport: viewport.label, code: 'VERIFY_EXECUTION_CAP', message: '' };
-          continue;
+          // A continued actor whose browser was reaped would carry on signed out
+          // in a fresh browser; that is a different person, so the journey stops.
+          if (!first && report.session_note) {
+            const message = `${segment.as}'s browser ended between segments (${report.session_note}), so ${segment.as} is no longer the same signed-in user. Keep each actor's gap between segments under 5 minutes and run the journey again.`;
+            itemStop ??= stopAt('error', 'VERIFY_ACTOR_SESSION_ENDED', message);
+            segments.push({ ...base, ran: true, final_url: report.final_url, error: { code: 'VERIFY_ACTOR_SESSION_ENDED', message } });
+            continue;
+          }
+          const capped = mapIncomplete(report, actions, offset);
+          if (capped) {
+            // The browser is healthy and the platform kept it: leave it open for
+            // the caller rather than erasing the evidence in cleanup. A browser
+            // the platform reports closed is not claimed as kept.
+            const sessionId = sessions[segment.as];
+            if (report.session_closed !== true && report.idle_expires_at && report.absolute_expires_at) {
+              kept.set(segment.as, {
+                actor: segment.as,
+                session_id: sessionId,
+                ...(report.session_expires_at ? { session_expires_at: report.session_expires_at } : {}),
+                ...(report.idle_expires_at ? { idle_expires_at: report.idle_expires_at } : {}),
+                ...(report.absolute_expires_at ? { absolute_expires_at: report.absolute_expires_at } : {}),
+                close: `somewhere call browser '${JSON.stringify({ project_id: target.project_id, session_id: sessionId, close: true })}'`,
+              });
+            }
+            segments.push({ ...base, ran: true, passed: false, incomplete: capped, ...(report.session_closed === true ? { session_closed: true as const } : {}), ...(report.final_url ? { final_url: report.final_url } : {}) });
+            itemStop ??= stopAt('incomplete', 'VERIFY_EXECUTION_CAP');
+            continue;
+          }
+          const passed = reportPassed(report);
+          segments.push({ ...base, ran: true, passed, ...(report.final_url ? { final_url: report.final_url } : {}) });
+          if (!passed) itemStop ??= stopAt('report');
         }
-        const passed = reportPassed(report);
-        segments.push({ ...base, ran: true, passed, ...(report.final_url ? { final_url: report.final_url } : {}) });
-        if (!passed) stopped = { kind: 'report', segment: index + 1, as: segment.as, viewport: viewport.label, code: '', message: '' };
+        if (itemStop) {
+          stopped = itemStop;
+          stoppedItemEnd = itemEnd;
+        }
       }
     } finally {
       await closeAll();
     }
     const shaped = shapeVerificationReport(target.url ?? target.project_id, { actions: [] }, runs);
     const names = Object.keys(journey.actors);
+    const parallelCount = journey.journey.filter((segment) => segment.group !== undefined).length;
     let passed = !stopped && runs.length === journey.journey.length && shaped.passed;
     let verdict: string;
     const cappedSegment = stopped?.kind === 'incomplete' ? segments.find((item) => item.segment === stopped?.segment) : undefined;
@@ -1315,9 +1401,9 @@ export function createVerifyJourneyRun(
     if (stopped?.kind === 'error') {
       verdict = `FAIL — segment ${stopped.segment} (${stopped.as}, ${stopped.viewport}): ${stopped.message} [${stopped.code}]`;
     } else if (stopped?.kind === 'incomplete' && cappedSegment?.incomplete) {
-      const later = journey.journey.length - stopped.segment;
+      const later = journey.journey.length - stoppedItemEnd;
       verdict = `INCOMPLETE — ${incompleteSentence(cappedSegment.incomplete, `segment ${stopped.segment} (${stopped.as}, ${stopped.viewport})`)}`
-        + (later ? ` Segment${later === 1 ? '' : 's'} ${stopped.segment + 1}${later > 1 ? `–${journey.journey.length}` : ''} did not run.` : '')
+        + (later ? ` Segment${later === 1 ? '' : 's'} ${stoppedItemEnd + 1}${later > 1 ? `–${journey.journey.length}` : ''} did not run.` : '')
         + (keptSession
           ? ` ${stopped.as}'s browser is kept open as session "${keptSession.session_id}" so its page can be inspected; `
             + (keptSession.session_expires_at
@@ -1331,7 +1417,7 @@ export function createVerifyJourneyRun(
     } else if (!passed) {
       verdict = shaped.verdict.replace(/^FAIL — /, `FAIL — segment ${stopped?.segment ?? '?'} — `);
     } else {
-      verdict = `PASS — ${journey.journey.length} segment${journey.journey.length === 1 ? '' : 's'} by ${names.length} user${names.length === 1 ? '' : 's'} (${names.join(', ')}) passed; page, console, and network healthy.`
+      verdict = `PASS — ${journey.journey.length} segment${journey.journey.length === 1 ? '' : 's'} by ${names.length} user${names.length === 1 ? '' : 's'} (${names.join(', ')}) passed${parallelCount ? `, ${parallelCount} of them in parallel groups (several users at the same time)` : ''}; page, console, and network healthy.`
         + navigationRetryNote(shaped.navigation_retries);
     }
     const { cleanup, cleanup_ms } = await closeAll();
@@ -1395,6 +1481,18 @@ export function verifyFlowSchema(): Record<string, unknown> {
     cookies: { type: 'array', items: { type: 'object', required: ['name', 'value'], properties: { name: { type: 'string' }, value: { type: 'string' } } } },
     headers: { type: 'object', additionalProperties: { type: 'string' } },
   };
+  const segment = {
+    type: 'object', required: ['as'],
+    properties: {
+      as: { type: 'string', description: 'Actor name' },
+      path: { ...path, description: 'Where this segment starts: the actor\'s first page, or a goto for a continued actor.' },
+      actions: { type: 'array', maxItems: L.actions_per_segment, items: action },
+      expect_requests: expectRequests,
+      viewport: { ...viewport, default: 'desktop' },
+      visible_only: { type: 'boolean' },
+    },
+    additionalProperties: false,
+  };
   return {
     $schema: 'https://json-schema.org/draft/2020-12/schema',
     title: 'somewhere verify --flow',
@@ -1417,18 +1515,17 @@ export function verifyFlowSchema(): Record<string, unknown> {
           },
           journey: {
             type: 'array', minItems: 1, maxItems: L.segments,
-            items: {
-              type: 'object', required: ['as'],
+            description: `Items run in order. Segments inside a parallel group count toward the ${L.segments}-segment limit.`,
+            items: { oneOf: [segment, {
+              type: 'object', required: ['parallel'],
               properties: {
-                as: { type: 'string', description: 'Actor name' },
-                path: { ...path, description: 'Where this segment starts: the actor\'s first page, or a goto for a continued actor.' },
-                actions: { type: 'array', maxItems: L.actions_per_segment, items: action },
-                expect_requests: expectRequests,
-                viewport: { ...viewport, default: 'desktop' },
-                visible_only: { type: 'boolean' },
+                parallel: {
+                  type: 'array', minItems: 2, maxItems: L.parallel_segments, items: segment,
+                  description: 'Segments that run at the same time, each by a different actor (for example one actor waits for a message while another sends it). Each keeps its own browser; nesting is not allowed.',
+                },
               },
               additionalProperties: false,
-            },
+            }] },
           },
         },
         additionalProperties: false,
@@ -1483,7 +1580,7 @@ export function formatVerifyJourneyReport(report: VerifyJourneyReport, evidenceP
   const lines = formatVerifyReport(report, evidencePath);
   const segmentLines = report.segments.map((segment) => {
     const mark = segment.outcome_unknown ? teal('outcome unknown') : !segment.ran && !segment.error ? dim('not run') : segment.incomplete ? teal('incomplete') : segment.passed ? green('✓') : red('✗');
-    return `segment ${segment.segment} ${mark} ${segment.as} [${segment.viewport}]${segment.path ? ` ${segment.path}` : ''}${segment.error ? ` ${dim(`— ${segment.error.code}`)}` : ''}`;
+    return `segment ${segment.segment} ${mark} ${segment.as} [${segment.viewport}]${segment.path ? ` ${segment.path}` : ''}${segment.parallel_group !== undefined ? ` ${dim(`(parallel ${segment.parallel_group})`)}` : ''}${segment.error ? ` ${dim(`— ${segment.error.code}`)}` : ''}`;
   });
   return [lines[0], ...segmentLines, ...lines.slice(1), `browser runs used: ${report.browser_runs}${report.segments.some((segment) => segment.outcome_unknown && !segment.ran) ? '; additional browser execution is unconfirmed' : ''}`, ...formatJourneyCleanup(report.cleanup, report.cleanup_ms)];
 }
@@ -1587,7 +1684,9 @@ Several users in one run (--project required; each actor is its own browser):
     ]
   }
 Segments run in order; a later segment for the same actor continues in that
-actor's browser (path becomes a goto). Limits: ${VERIFY_JOURNEY_LIMITS.actors} actors, ${VERIFY_JOURNEY_LIMITS.segments} segments,
+actor's browser (path becomes a goto). For realtime checks, an item
+{ "parallel": [segment, segment] } runs 2-${VERIFY_JOURNEY_LIMITS.parallel_segments} segments by different actors at the
+same time (alice waits for a message while bob sends it). Limits: ${VERIFY_JOURNEY_LIMITS.actors} actors, ${VERIFY_JOURNEY_LIMITS.segments} segments,
 ${VERIFY_JOURNEY_LIMITS.actions_per_segment} actions per segment, ${VERIFY_JOURNEY_LIMITS.total_actions} in total, ${VERIFY_JOURNEY_LIMITS.deadline_ms / 60000} minutes. Each segment is one browser
 run against your plan's browser limits. When the run ends or is interrupted,
 every actor browser is closed within ${VERIFY_JOURNEY_LIMITS.cleanup_budget_ms / 1000} seconds; any close that cannot be

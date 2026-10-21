@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.37.46
+
+### Added
+
+- `somewhere lint`: an offline, advisory source lint (warning-only; never blocks a deploy). Runs locally with no credentials; `--generic` also runs the project's own oxlint with a scrubbed environment and no shell (#26).
+- `somewhere lint` carries the platform's source-lint version 2 rules, re-vendored with full parity against the platform (#29).
+- `somewhere verify`: an actor may declare `{ "test_user": true }`. The run creates that many managed test identities in one request, signs each actor in once in its own browser, and deletes the identities after every browser closes (`--keep-test-users` keeps them; they expire after 24 h). No password or token is requested or reported (#27).
+- `somewhere verify`: a journey item may be `{ "parallel": [segment, segment] }` — 2–3 segments by different actors whose browser calls run at the same time, for realtime checks. Reports carry `parallel_group` (#28).
+
 ## 0.37.45
 
 ### Changed

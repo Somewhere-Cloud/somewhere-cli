@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.37.53
+
+### Changed
+
+- `somewhere deploy --help` has a "No project yet?" section naming `somewhere init --bare --name <name>` (create a project in your account and link this folder), and `--project` now says it takes an existing project.
+- `somewhere projects` help and its empty-list line name `somewhere init --bare --name <name>`.
+- `somewhere project create` says how to deploy to the project it made (`somewhere link --project <id>` then `somewhere deploy`, or `somewhere deploy --project <id>`).
+- When the platform reports no live URL, the CLI names `somewhere project view <id>` instead of "check the dashboard".
+
 ## 0.37.52
 
 ### Fixed

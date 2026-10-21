@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.37.60
+
+### Fixed
+
+- `somewhere verify --out` no longer summarises a run in which no browser started as "0 failed steps": it says "Verify FAIL: no browser ran (<codes>); nothing was checked, so this is not an app result", and a partial journey names its unstarted segments. `--json` summaries add `segments_not_started` and `start_errors` (error codes only) (#50).
+
 ## 0.37.59
 
 ### Fixed

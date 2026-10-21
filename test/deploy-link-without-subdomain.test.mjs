@@ -95,7 +95,8 @@ test('a failed project lookup still reports the successful deploy', async () => 
   const out = r.stdout + r.stderr;
   assert.equal(r.status, 0, out);
   assert.doesNotMatch(out, /Deploy failed|reading 'trim'/);
-  assert.match(out, /Deployed — check the dashboard for the live URL\./);
+  assert.match(out, /The platform did not report the live URL; `somewhere project view [^`]+` shows it\./);
+  assert.doesNotMatch(out, /check the dashboard/);
 });
 
 test('a link file with subdomain prints its URL without a project lookup', async () => {

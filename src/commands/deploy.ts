@@ -429,10 +429,14 @@ export function registerDeploy(program: Command) {
     .description('Deploy the current directory (anonymous automatically when logged out)')
     .addHelpText('after', '\nFunctions missing from the directory: a full `somewhere deploy` REMOVES deployed functions that\n'
       + 'are not in this directory (each one is named in the output). `--scope functions` keeps them unless\n'
-      + '--replace-functions. `somewhere promote` is the opposite: it keeps them unless --prune.\n')
+      + '--replace-functions. `somewhere promote` is the opposite: it keeps them unless --prune.\n'
+      + '\nNo project yet? Signed in, deploy never creates one on its own:\n'
+      + '  somewhere init --bare --name <name>   create a project in your account and link this folder\n'
+      + '  somewhere deploy                       then deploy it\n'
+      + 'Existing project: `somewhere link --project <ref>` (see `somewhere projects`), or `--project <ref>` here.\n')
     .option(
       '--project <ref>',
-      'Project to deploy to — accepts the project UUID, slug, or subdomain (all three resolve server-side)',
+      'Existing project to deploy to — accepts the project UUID, slug, or subdomain (all three resolve server-side). To create one, run `somewhere init --bare --name <name>`',
     )
     .option(
       '--scope <scope>',
@@ -1037,7 +1041,7 @@ export function registerDeploy(program: Command) {
           if (formatted.liveUrl) {
             success(`Live URL: ${teal(formatted.liveUrl)}`);
           } else {
-            info('Live URL unavailable — check the dashboard.');
+            info(`Live URL not reported by the platform; \`somewhere project view ${formatted.projectRef ?? '<project>'}\` shows it.`);
           }
           info(`Claim URL: ${teal(tempSession.claimUrl)}`);
           if (tempSession.expiresAt) {
@@ -1350,9 +1354,12 @@ export function formatDeploySuccess(
         ? result.project_id.trim()
         : null,
     liveUrl,
+    // Only an older platform omits the URL; name the command that shows it.
     liveMessage: liveUrl
       ? `Live at ${liveUrl}`
-      : 'Deployed — check the dashboard for the live URL.',
+      : `Deployed. The platform did not report the live URL; \`somewhere project view ${
+        typeof result.project_id === 'string' && result.project_id.trim() ? result.project_id.trim() : '<project>'
+      }\` shows it.`,
   };
 }
 

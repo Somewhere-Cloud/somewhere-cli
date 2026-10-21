@@ -6,7 +6,7 @@ import test from 'node:test';
 const root = mkdtempSync(join(tmpdir(), 'onboarding-output-'));
 process.env.SOMEWHERE_CONFIG_DIR = root;
 const { saveVerifyReport, writeVerifyReportTo } = await import('../dist/lib/verify-report.js');
-const { formatVerifyOutput, formatVerifySummaryLine, summarizeVerifyReport } = await import('../dist/commands/verify.js');
+const { formatVerifyOutput, formatVerifySummaryLine, nextFreeOutPath, outExistsMessage, summarizeVerifyReport } = await import('../dist/commands/verify.js');
 const { formatTempExpiry } = await import('../dist/commands/deploy.js');
 test.after(() => rmSync(root, { recursive: true, force: true }));
 const link = 'https://api.example.invalid/screenshot?signature=' + 'long'.repeat(100);
@@ -96,4 +96,15 @@ test('a run where no browser started is not summarised as "0 failed steps" (Haik
   // A pass reads exactly as before.
   const pass = { ...report, passed: true, steps: [{ step: 1, viewport: 'desktop', passed: true, name: 'Save', duration_ms: 12 }] };
   assert.equal(formatVerifySummaryLine(summarizeVerifyReport(pass)), 'Verify PASS: 0 failed steps, 0 refusals, 12 ms in steps; full report saved to --out destination');
+});
+
+test('an existing --out names the next free report path; reports are still never overwritten (Haiku w2/w3, tsk_70d6db11)', () => {
+  const taken = new Set(['flows/run2-report.json', 'flows/run2-report-2.json']);
+  const exists = (p) => taken.has(p);
+  assert.equal(nextFreeOutPath('flows/run2-report.json', exists), 'flows/run2-report-3.json', 'skips names already taken');
+  assert.equal(nextFreeOutPath('flows/run2-report-2.json', exists), 'flows/run2-report-3.json', 'a numbered name counts on');
+  assert.equal(nextFreeOutPath('report', () => false), 'report-2', 'no extension');
+  assert.equal(nextFreeOutPath('a/b.c/rep', () => false), 'a/b.c/rep-2', 'a dot in a directory is not an extension');
+  assert.equal(outExistsMessage('flows/run2-report.json', exists),
+    '--out file already exists (flows/run2-report.json); reports are never overwritten. Rerun with a new path, for example --out flows/run2-report-3.json, or move the old report first.');
 });

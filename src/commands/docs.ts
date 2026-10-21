@@ -286,7 +286,33 @@ export function parsePublicDocsGroups(value: unknown): PublicDocsGroup[] {
   });
 }
 
-async function fetchPublicManifestWithGroups(): Promise<{ pages: PublicDocsPage[]; groups: PublicDocsGroup[] }> {
+/** The manifest's topic aliases (`{ alias: canonicalId }`), the same names the
+ *  signed-in docs tool resolves (tsk_51155c7d). Absent on older manifests. */
+export function parsePublicDocsAliases(value: unknown): Record<string, string> {
+  const aliases = value && typeof value === 'object' ? (value as Record<string, unknown>).aliases : undefined;
+  if (!aliases || typeof aliases !== 'object' || Array.isArray(aliases)) return {};
+  const out: Record<string, string> = {};
+  for (const [alias, target] of Object.entries(aliases as Record<string, unknown>)) {
+    if (typeof target === 'string' && target) out[alias.toLowerCase()] = target;
+  }
+  return out;
+}
+
+/** The page a requested topic names: its own id, else a manifest alias matched
+ *  the way the docs tool matches (lowercase, then non-alphanumeric runs as `-`). */
+export function findPublicDocsPage(
+  pages: PublicDocsPage[],
+  aliases: Record<string, string>,
+  requested: string,
+): PublicDocsPage | undefined {
+  const byId = (id: string) => pages.find((page) => page.id.toLowerCase() === id.toLowerCase());
+  const lower = requested.trim().toLowerCase();
+  const normalized = lower.replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  const target = aliases[lower] ?? aliases[normalized];
+  return byId(requested) ?? (target ? byId(target) : undefined);
+}
+
+async function fetchPublicManifestWithGroups(): Promise<{ pages: PublicDocsPage[]; groups: PublicDocsGroup[]; aliases: Record<string, string> }> {
   const res = await fetch(DOCS_BASE + PUBLIC_MANIFEST_PATH, {
     headers: { 'User-Agent': 'somewhere-cli' },
   });
@@ -295,7 +321,7 @@ async function fetchPublicManifestWithGroups(): Promise<{ pages: PublicDocsPage[
   }
   try {
     const body = await res.json() as unknown;
-    return { pages: parsePublicDocsManifest(body), groups: parsePublicDocsGroups(body) };
+    return { pages: parsePublicDocsManifest(body), groups: parsePublicDocsGroups(body), aliases: parsePublicDocsAliases(body) };
   } catch (cause) {
     throw new Error(`Could not read ${DOCS_BASE}${PUBLIC_MANIFEST_PATH}: ${cause instanceof Error ? cause.message : String(cause)}`);
   }
@@ -583,8 +609,8 @@ export function registerDocs(program: Command) {
         }
 
         try {
-          const pages = await fetchPublicManifest();
-          const page = pages.find(({ id }) => id.toLowerCase() === resolvedTopic.toLowerCase());
+          const { pages, aliases } = await fetchPublicManifestWithGroups();
+          const page = findPublicDocsPage(pages, aliases, resolvedTopic);
           if (page) {
             const rendered = renderPublicDocsView(page, view);
             if (rendered.failure) {

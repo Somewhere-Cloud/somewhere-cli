@@ -21,7 +21,7 @@ const PACKAGE_JSON = `{
     "typecheck": "somewhere typecheck"
   },
   "dependencies": {
-    "@somewhere-tech/sdk": "0.12.1",
+    "@somewhere-tech/sdk": "0.12.3",
     "react": "19.2.7",
     "react-dom": "19.2.7"
   },
@@ -2993,7 +2993,7 @@ export function createFeatureTemplate(
   const agent = selection.modules.includes('agent');
   const magicLink = selection.modules.includes('magic-link');
   const files: InitScaffoldFile[] = [
-    { path: '.gitignore', content: 'node_modules\ndist\nbuild\n.env\n' },
+    { path: '.gitignore', content: 'node_modules\ndist\nbuild\n.env\n# Generated from db/schema.ts by somewhere typecheck, dev and deploy.\n__somewhere_data.d.ts\n__somewhere_files.d.ts\n' },
     { path: 'AGENTS.md', content: INIT_AGENTS_MD },
     { path: 'CLAUDE.md', content: INIT_CLAUDE_MD },
     { path: 'README.md', content: readme(selection) },

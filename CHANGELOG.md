@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.37.47
+
+### Changed
+
+- `somewhere init` starters use `@somewhere-tech/sdk` 0.12.3, which refreshes short-lived per-app sessions without making valid-token reads wait (0.12.1 could not refresh them). The feature starter keeps an exact pin; the basic starter keeps its caret range (#31).
+- New projects' `.gitignore` excludes the generated `src/__somewhere_data.d.ts` and `src/__somewhere_files.d.ts`; `typecheck`, `dev` and `deploy` regenerate them from `db/schema.ts`. Existing projects are untouched (#31).
+
+## 0.37.46
+
+### Added
+
+- `somewhere lint`: an offline, advisory source lint (warning-only; never blocks a deploy). Runs locally with no credentials; `--generic` also runs the project's own oxlint with a scrubbed environment and no shell (#26).
+- `somewhere lint` carries the platform's source-lint version 2 rules, re-vendored with full parity against the platform (#29).
+- `somewhere verify`: an actor may declare `{ "test_user": true }`. The run creates that many managed test identities in one request, signs each actor in once in its own browser, and deletes the identities after every browser closes (`--keep-test-users` keeps them; they expire after 24 h). No password or token is requested or reported (#27).
+- `somewhere verify`: a journey item may be `{ "parallel": [segment, segment] }` — 2–3 segments by different actors whose browser calls run at the same time, for realtime checks. Reports carry `parallel_group` (#28).
+
 ## 0.37.45
 
 ### Changed

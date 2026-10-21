@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.37.49
+
+### Fixed
+
+- `somewhere deploy` with an expired, unclaimed temporary session and a linked (or `--project`) project now stops before sending anything and says the temporary workspace expired and nothing was deployed. Previously it created a new temporary account and failed with PROJECT_NOT_FOUND. `--json` answers `TEMPORARY_SESSION_EXPIRED` with `temp_expires_at`.
+- Signed in with no linked project, `somewhere deploy` now names the exact next steps (`somewhere init --bare --name <name>`, `somewhere link --project <name-or-id>`, or `somewhere deploy --project <name-or-id>`) instead of "No project linked. Run `somewhere init`". It still never creates or links a project on its own.
+
 ## 0.37.48
 
 ### Fixed

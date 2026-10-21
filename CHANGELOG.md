@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.37.52
+
+### Fixed
+
+- The expired temporary-session deploy message no longer opens with "expired … without being claimed", which contradicted its next step for someone who did claim the workspace in the browser. It now says this machine has no record of a claim; the first step is still "sign in with `somewhere login` if you claimed it".
+- `somewhere lint` no longer reads binary assets, and carries the vendored source-lint fix for a `user.id` false positive (#37).
+- `somewhere verify`: when a request you declared with `expect_requests` came back with a different status, the verdict now leads with that mismatch ("Expected /api/deny to return 200; saw 403.") instead of only reporting the status as undeclared. The pass/fail result and exit code are unchanged (#36).
+
 ## 0.37.51
 
 ### Fixed

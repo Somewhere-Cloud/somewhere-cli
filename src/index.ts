@@ -8,6 +8,7 @@ import { registerLink } from './commands/link.js';
 import { registerProject } from './commands/project.js';
 import { registerDeploy } from './commands/deploy.js';
 import { registerPull } from './commands/pull.js';
+import { registerLint } from './commands/lint.js';
 import { registerTypecheck } from './commands/typecheck.js';
 import { registerHooks } from './commands/hooks.js';
 import { registerPromote } from './commands/promote.js';
@@ -79,6 +80,7 @@ registerProject(program);
 registerDeploy(program);
 registerPull(program);
 registerTypecheck(program);
+registerLint(program);
 registerHooks(program);
 registerPromote(program);
 registerRollback(program);
@@ -134,7 +136,7 @@ collectNotices(process.argv)
   .catch(() => {});
 try {
   const command = process.argv[2] || '';
-  const skipRecovery = ['login', 'signup', 'logout', 'docs', '--help', '-h', '--version', '-V'].includes(command);
+  const skipRecovery = ['lint', 'login', 'signup', 'logout', 'docs', '--help', '-h', '--version', '-V'].includes(command);
   const recovery = skipRecovery ? { kind: 'none' as const } : await recoverClaimHandoff();
   if (recovery.kind === 'recovered' && recovery.message && !jsonOutputRequested) info(recovery.message);
   if (recovery.kind === 'manual' && recovery.message && !['login', 'signup', 'logout', 'docs'].includes(command)) {

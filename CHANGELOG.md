@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.37.61
+
+### Fixed
+
+- `somewhere verify --out <existing file>` still never overwrites a report, and now names the next free path to rerun with (for example `--out flows/run2-report-3.json`) (#56).
+- `somewhere pull` writes the starters' `.gitignore` when the folder has none, so the declarations `somewhere typecheck` generates (`__somewhere_data.d.ts`, `__somewhere_files.d.ts`) stay untracked in a pulled app. An existing `.gitignore` is never changed (#55).
+- `somewhere lint`: quoted verifier text can no longer hide a row-ownership warning; the exception now covers only executable verifier member calls. Vendored with the platform's source lint (#53).
+
 ## 0.37.60
 
 ### Fixed

@@ -167,23 +167,49 @@ function summaryPath(url: string): string {
   return path.split('/').map((segment) => (credentialSegment(segment) ? '<redacted>' : segment)).join('/');
 }
 
-// Query parameters that carry a credential: the same list the platform
-// applies to stored request URLs (worker/src/utils/log-sanitize.ts
-// SENSITIVE_PARAMS), longest first. A magic sign-in link is
-// /auth/magic?token=…; the value is a live sign-in credential.
-const CREDENTIAL_PARAMS = ['access_token', 'refresh_token', 'creator_secret', 'secret', 'signature', 'api_key', 'apikey', 'token', 'key', 'sig', 'dsn', 'password'];
-// Plain (?token=) or percent-encoded inside another parameter (%3Ftoken%3D, %26token%3D).
-const CREDENTIAL_PARAM_RE = new RegExp(`((?:[?&]|%3F|%26)(?:${CREDENTIAL_PARAMS.join('|')})(?:=|%3D))(?:(?!%26|%23)[^&#\\s])*`, 'gi');
+// Query/fragment parameters that carry a credential: the same list the
+// platform applies to stored request URLs (worker/src/utils/log-sanitize.ts
+// SENSITIVE_PARAMS). A magic sign-in link is /auth/magic?token=…; an OAuth
+// implicit callback is …#access_token=…; both values are live credentials.
+const CREDENTIAL_PARAMS = new Set(['access_token', 'refresh_token', 'creator_secret', 'secret', 'signature', 'api_key', 'apikey', 'token', 'key', 'sig', 'dsn', 'password']);
+// The same names nested, percent-encoded, inside another parameter's value
+// (redirect_uri=https%3A%2F%2Fapp%2F%3Ftoken%3D…) or after a plain `?` there.
+const NESTED_CREDENTIAL_RE = new RegExp(`((?:\\?|%3F|%26|%23)(?:${[...CREDENTIAL_PARAMS].join('|')})(?:=|%3D))(?:(?!%26|%23)[^&#\\s])*`, 'gi');
 
-/** A URL or path as it appears in a report, summary or error: path, status-relevant
- *  query and fragment stay readable; a credential query value or credential-shaped
- *  path segment becomes <redacted>. The browser still receives the original. */
+/** A parameter name as the server reads it: percent-decoded (twice at most), lower case. */
+function paramName(raw: string): string {
+  let name = raw;
+  for (let i = 0; i < 2; i++) {
+    try { const decoded = decodeURIComponent(name); if (decoded === name) break; name = decoded; } catch { break; }
+  }
+  return name.toLowerCase();
+}
+
+/** `a=1&token=x` → `a=1&token=<redacted>`; pieces without `=` (`#top`) are kept. */
+function maskParams(part: string): string {
+  return part.split('&').map((pair) => {
+    const eq = pair.indexOf('=');
+    return eq > 0 && CREDENTIAL_PARAMS.has(paramName(pair.slice(0, eq))) ? `${pair.slice(0, eq)}=<redacted>` : pair;
+  }).join('&').replace(NESTED_CREDENTIAL_RE, '$1<redacted>');
+}
+
+/** A URL or path as a report, summary or error shows it. Masked: URL userinfo
+ *  (user:password@), the value of a listed credential parameter in the query or
+ *  fragment (also when its name is percent-encoded, or nested encoded inside
+ *  another parameter), and a credential-shaped path segment. Kept: scheme, host,
+ *  path, other parameters and plain fragments. The browser still receives the
+ *  original. */
 function reportUrl(url: string): string {
-  const cut = url.search(/[?#]/);
-  const head = cut < 0 ? url : url.slice(0, cut);
-  const tail = cut < 0 ? '' : url.slice(cut);
+  const unauthed = url.replace(/^([a-z][a-z0-9+.-]*:\/\/)[^/?#@\s]*@/i, '$1<redacted>@');
+  const hash = unauthed.indexOf('#');
+  const beforeHash = hash < 0 ? unauthed : unauthed.slice(0, hash);
+  const fragment = hash < 0 ? null : unauthed.slice(hash + 1);
+  const q = beforeHash.indexOf('?');
+  const head = q < 0 ? beforeHash : beforeHash.slice(0, q);
+  const query = q < 0 ? null : beforeHash.slice(q + 1);
   return head.split('/').map((segment) => (credentialSegment(segment) ? '<redacted>' : segment)).join('/')
-    + tail.replace(CREDENTIAL_PARAM_RE, '$1<redacted>');
+    + (query === null ? '' : `?${maskParams(query)}`)
+    + (fragment === null ? '' : `#${maskParams(fragment)}`);
 }
 
 const GENERIC_RESOURCE_FAILURE = /^Failed to load resource: the server responded with a status of (\d{3})\b/;

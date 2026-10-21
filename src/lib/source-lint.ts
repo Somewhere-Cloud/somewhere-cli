@@ -17,7 +17,12 @@ export interface SourceLintSnapshot {
   findings: LintFinding[];
   source_sha256: string;
   schema_sha256: string | null;
-  coverage: { schema: 'checked' | 'absent'; authorization: 'not-assessed' };
+  coverage: {
+    schema: 'checked' | 'absent';
+    /** Present from source lint v2: the request-to-ownership trace on server writes. */
+    request_ownership?: 'checked' | 'partial' | 'skipped' | 'not-applicable';
+    authorization: 'not-assessed';
+  };
 }
 interface SourceLintVendor {
   lintSourceSnapshot(files: Record<string, string>, functions: Record<string, string>): Promise<SourceLintSnapshot>;
@@ -35,7 +40,8 @@ export interface LocalLintResult extends SourceLintSnapshot {
  * run the project's installed linter in a child process. */
 export async function lintProject(directory: string, options: { generic?: boolean } = {}): Promise<LocalLintResult> {
   const started = performance.now();
-  const collected = collectFiles(directory);
+  // Lint reads text only; skipping binary reads keeps asset-heavy projects fast.
+  const collected = collectFiles(directory, { readBinary: false });
   const require = createRequire(import.meta.url);
   const vendor = require('../../runtime/source-lint.cjs') as SourceLintVendor;
   const report = await vendor.lintSourceSnapshot(collected.files, collected.functions);

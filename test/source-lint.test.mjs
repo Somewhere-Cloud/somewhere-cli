@@ -82,3 +82,22 @@ test('installed generic checker diagnostics are warnings; crashes and malformed 
   writeFileSync(launcher, 'console.log("not JSON");');
   assert.equal(genericLint(dir).status, 'failed');
 });
+
+test('lint does not read binary assets, while deploy collection still does', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'sw-lint-binary-'));
+  mkdirSync(join(dir, 'public'));
+  writeFileSync(join(dir, 'index.html'), '<script type="module" src="/main.js"></script>');
+  writeFileSync(join(dir, 'main.js'), 'console.log(1);');
+  writeFileSync(join(dir, 'public', 'hero.png'), Buffer.alloc(4096, 7));
+  const deploy = collectFiles(dir);
+  const lintOnly = collectFiles(dir, { readBinary: false });
+  const key = Object.keys(deploy.binaryFiles).find((name) => name.endsWith('hero.png'));
+  assert.ok(key, 'the asset is collected as binary');
+  assert.equal(deploy.binaryFiles[key], Buffer.alloc(4096, 7).toString('base64'));
+  assert.equal(lintOnly.binaryFiles[key], '');
+  assert.deepEqual(lintOnly.files, deploy.files);
+  assert.deepEqual(lintOnly.skipped, deploy.skipped);
+  const result = await lintProject(dir);
+  assert.equal(result.ok, true);
+  assert.equal(result.checked_files, Object.keys(deploy.files).length + Object.keys(deploy.functions).length);
+});

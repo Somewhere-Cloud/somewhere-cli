@@ -20338,8 +20338,166 @@ function requestOwnershipFindings(functions, schema) {
   return { findings, skippedFiles, truncated };
 }
 
+// worker/src/services/source-lint-email.ts
+var MAX_FILE_BYTES2 = 256 * 1024;
+var MAX_FINDINGS_PER_FILE2 = 20;
+var MAX_FINDINGS2 = 100;
+var SEND = /await\s+sw\s*\.\s*email\s*\.\s*send\s*\(/y;
+var LOOP_HEADER = /(?:^|[^\w$.])(?:for|while)\s*(?:await\s*)?$/;
+var BLOCK_HEADER = /(?:^|[^\w$.])(?:if|switch|catch|with)\s*$/;
+function scanFile(source) {
+  const offsets = [];
+  const seenLoops = /* @__PURE__ */ new Set();
+  const stack = [];
+  let lastParen = null;
+  let quote = null;
+  let lastDoClose = -1;
+  const prevNonSpace = (i) => {
+    let j = i - 1;
+    while (j >= 0 && /\s/.test(source[j])) j--;
+    return j;
+  };
+  const nextNonSpace = (i) => {
+    let j = i;
+    while (j < source.length && /\s/.test(source[j])) j++;
+    return j;
+  };
+  const popLoopStatements = () => {
+    while (stack.length && stack[stack.length - 1].kind === "loopstmt") stack.pop();
+  };
+  for (let i = 0; i < source.length; i++) {
+    const ch = source[i];
+    if (quote) {
+      if (ch === "\\") i++;
+      else if (ch === quote || ch === "\n" && quote !== "`") quote = null;
+      continue;
+    }
+    const current = stack[stack.length - 1];
+    if (current?.kind === "loopstmt") {
+      if (ch === "\n" && current.started) {
+        stack.pop();
+        continue;
+      }
+      if (!/\s/.test(ch)) current.started = true;
+    }
+    if (ch === '"' || ch === "'" || ch === "`") {
+      quote = ch;
+      continue;
+    }
+    if (ch === "/") {
+      const p = prevNonSpace(i);
+      const before = p < 0 ? "" : source[p];
+      if (p < 0 || "(,=:[!&|?{};+-*%~^".includes(before) || /(?:^|[^\w$])(?:return|typeof|case|in|of|await|yield)$/.test(source.slice(Math.max(0, p - 7), p + 1))) {
+        let j = i + 1, inClass = false;
+        for (; j < source.length && source[j] !== "\n"; j++) {
+          if (source[j] === "\\") {
+            j++;
+            continue;
+          }
+          if (source[j] === "[") inClass = true;
+          else if (source[j] === "]") inClass = false;
+          else if (source[j] === "/" && !inClass) break;
+        }
+        i = j;
+        continue;
+      }
+    }
+    if (ch === "(") {
+      stack.push({ kind: "paren", open: i });
+      continue;
+    }
+    if (ch === ")") {
+      while (stack.length && stack[stack.length - 1].kind === "loopstmt") stack.pop();
+      const top2 = stack[stack.length - 1];
+      if (top2?.kind === "paren") {
+        stack.pop();
+        lastParen = { open: top2.open, close: i };
+        const header = source.slice(Math.max(0, top2.open - 24), top2.open);
+        const next = source[nextNonSpace(i + 1)];
+        const trailer = /(?:^|[^\w$.])while\s*$/.exec(header);
+        const doTrailer = trailer !== null && prevNonSpace(top2.open - (header.length - header.lastIndexOf("while"))) === lastDoClose;
+        if (LOOP_HEADER.test(header) && next !== "{" && next !== ";" && !doTrailer) {
+          stack.push({ kind: "loopstmt", open: i, depth: stack.length, started: false });
+        }
+      }
+      continue;
+    }
+    if (ch === "{") {
+      const p = prevNonSpace(i);
+      let kind = "block";
+      if (p >= 1 && source[p] === ">" && source[p - 1] === "=") kind = "function";
+      else if (lastParen && (lastParen.close === p || lastParen.close < p && i - lastParen.close <= 128 && /^\s*:[^{};=()]*$/.test(source.slice(lastParen.close + 1, i)))) {
+        const header = source.slice(Math.max(0, lastParen.open - 24), lastParen.open);
+        kind = LOOP_HEADER.test(header) ? "loop" : BLOCK_HEADER.test(header) ? "block" : "function";
+      } else if (/(?:^|[^\w$.])do\s*$/.test(source.slice(Math.max(0, i - 8), i))) {
+        stack.push({ kind: "loop", open: i, isDo: true });
+        continue;
+      }
+      stack.push({ kind, open: i });
+      continue;
+    }
+    if (ch === "}") {
+      popLoopStatements();
+      let k = stack.length - 1;
+      while (k >= 0 && stack[k].kind === "paren") k--;
+      const closed = k >= 0 ? stack[k] : void 0;
+      if (closed && closed.kind === "loop" && closed.isDo) lastDoClose = i;
+      stack.length = Math.max(0, k);
+      popLoopStatements();
+      continue;
+    }
+    if (ch === ";") {
+      const top2 = stack[stack.length - 1];
+      if (top2?.kind === "loopstmt" && top2.depth === stack.length - 1) stack.pop();
+      continue;
+    }
+    if (ch !== "a" || /[\w$.]/.test(source[i - 1] ?? "")) continue;
+    SEND.lastIndex = i;
+    if (!SEND.test(source)) continue;
+    const top = stack[stack.length - 1];
+    if (top?.kind === "paren") continue;
+    if (/=>\s*(?:async\s*)?$/.test(source.slice(Math.max(0, i - 64), i))) continue;
+    for (let k = stack.length - 1; k >= 0; k--) {
+      const frame = stack[k];
+      if (frame.kind === "function") break;
+      if (frame.kind === "loop" || frame.kind === "loopstmt") {
+        if (!seenLoops.has(frame.open)) {
+          seenLoops.add(frame.open);
+          offsets.push(i);
+        }
+        break;
+      }
+    }
+  }
+  return offsets;
+}
+function sequentialEmailFindings(functions) {
+  const findings = [];
+  let skippedFiles = 0;
+  let truncated = false;
+  for (const [file, raw] of Object.entries(functions)) {
+    if (typeof raw !== "string" || !raw.includes("email")) continue;
+    if (raw.length > MAX_FILE_BYTES2) {
+      skippedFiles++;
+      continue;
+    }
+    const source = stripComments(raw);
+    const offsets = scanFile(source);
+    if (offsets.length === 0) continue;
+    const starts = lineIndex(source);
+    for (const [n, offset] of offsets.entries()) {
+      if (n >= MAX_FINDINGS_PER_FILE2 || findings.length >= MAX_FINDINGS2) {
+        truncated = true;
+        break;
+      }
+      findings.push({ file, line: lineAt2(starts, offset) });
+    }
+  }
+  return { findings, skippedFiles, truncated };
+}
+
 // worker/src/services/source-lint.ts
-var SOURCE_LINT_VERSION = "2";
+var SOURCE_LINT_VERSION = "3";
 async function lintSourceSnapshot(files, functions = {}) {
   const entries2 = (map) => Object.keys(map).sort().map((key) => [key, map[key]]);
   const sha256 = async (value) => {
@@ -20402,6 +20560,24 @@ function lintSource(files, functions = {}) {
       }
     }
   }
+  let sequentialEmail = Object.keys(functions).length === 0 ? "not-applicable" : "checked";
+  try {
+    const result = sequentialEmailFindings(functions);
+    if (result.skippedFiles > 0 || result.truncated) sequentialEmail = "partial";
+    for (const finding of result.findings) {
+      findings.push({
+        rule: "somewhere/sequential-email",
+        severity: "warning",
+        file: finding.file,
+        line: finding.line,
+        message: "sw.email.send is awaited inside a loop, so each email waits for the previous one to be delivered and the total time grows with the number of recipients. A handler or job that reaches its time limit stops sending the rest without an error.",
+        fix: "If each email is independent of the others, send them a few at a time (for example batches of 5 with Promise.allSettled per batch) or move bulk sending into a job. Keep the loop sequential when order matters or an email depends on an earlier result; avoid one unbounded Promise.all over an arbitrary list.",
+        docs: "https://somewhere.tech/docs/sw.email.txt"
+      });
+    }
+  } catch {
+    sequentialEmail = "skipped";
+  }
   for (const finding of apiIndexRouteFindings(functions)) {
     findings.push({
       rule: "somewhere/index-route",
@@ -20417,6 +20593,6 @@ function lintSource(files, functions = {}) {
   return {
     version: SOURCE_LINT_VERSION,
     findings,
-    coverage: { schema: schema === void 0 ? "absent" : "checked", request_ownership: requestOwnership, authorization: "not-assessed" }
+    coverage: { schema: schema === void 0 ? "absent" : "checked", request_ownership: requestOwnership, sequential_email: sequentialEmail, authorization: "not-assessed" }
   };
 }

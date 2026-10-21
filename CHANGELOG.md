@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.37.58
+
+### Fixed
+
+- `somewhere browser --actions` and `somewhere verify` flows keep an action's `"frame"` (frame name, URL substring, child index, or iframe CSS selector) and send it to the platform, so a framed `fill`, `eval` or `expect` runs inside the iframe instead of on the top page. Before, `frame` was dropped, and a framed `eval` could pass against the top page. Whole-page actions (`goto`, `dialog`, a fixed `wait`) and malformed frames are refused; the local browser refuses framed actions; `verify --schema` lists `frame` (#48).
+
 ## 0.37.57
 
 ### Changed

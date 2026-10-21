@@ -88,5 +88,81 @@
     "files": {},
     "functions": {"api/each.ts": "export default async function(req, sw) {\n  const { data: members } = await sw.db.server.from('members');\n  members.forEach(async (m) => { await sw.email.send({ to: m.email, subject: 'Hi', text: 'x' }); });\n  return Response.json({ ok: true });\n}", "api/batch.ts": "export default async function(req, sw) {\n  const { data: ms } = await sw.db.server.from('members');\n  for (let i = 0; i < ms.length; i += 5) {\n    await Promise.allSettled(ms.slice(i, i + 5).map(async (m) => await sw.email.send({ to: m.email, subject: 'Hi', text: 'x' })));\n  }\n  return Response.json({ ok: true });\n}", "api/pair.ts": "export default async function(req, sw) {\n  const first = await sw.email.send({ to: 'a@example.com', subject: 'Confirm', text: 'x' });\n  await sw.email.send({ to: 'b@example.com', subject: 'Receipt', text: String(first.data?.id) });\n  return Response.json({ ok: true });\n}", "api/nested.ts": "export default async function(req, sw) {\n  const jobs = [];\n  for (const m of [1, 2]) {\n    const send = async () => await sw.email.send({ to: 'x@example.com', subject: String(m), text: 'x' });\n    jobs.push(send);\n    jobs.push(async function later() { await sw.email.send({ to: 'y@example.com', subject: 'y', text: 'y' }); });\n  }\n  // for (const m of list) await sw.email.send(m)\n  const note = 'for (const m of list) await sw.email.send(m)';\n  return Response.json({ n: jobs.length, note });\n}"},
     "expected": []
+  },
+  {
+    "name": "verifier text and declarations cannot hide request ownership",
+    "files": {
+      "db/schema.ts": "export default schema({ notes: table({ id: id(), body: text() }, { scope: owner() }) });"
+    },
+    "functions": {
+      "api/single.ts": "const hint = 'verifySignature(';\nexport default async function(req, sw) {\n  const b = await req.json();\n  await sw.db.server.insert('notes', { body: b.body, user_id: b.user_id });\n}",
+      "api/double.ts": "const hint = \"sw.jobs.verifyInvocation(\";\nexport default async function(req, sw) {\n  const b = await req.json();\n  await sw.db.server.insert('notes', { body: b.body, user_id: b.user_id });\n}",
+      "api/escaped.ts": "const hint = \"\\\"verifyWebhook(\";\nexport default async function(req, sw) {\n  const b = await req.json();\n  await sw.db.server.insert('notes', { body: b.body, user_id: b.user_id });\n}",
+      "api/template.ts": "const hint = `stripe.webhooks.constructEvent(`;\nexport default async function(req, sw) {\n  const b = await req.json();\n  await sw.db.server.insert('notes', { body: b.body, user_id: b.user_id });\n}",
+      "api/nested-template.ts": "const hint = `outer ${`verifySignature(`}`;\nexport default async function(req, sw) {\n  const b = await req.json();\n  await sw.db.server.insert('notes', { body: b.body, user_id: b.user_id });\n}",
+      "api/regex.ts": "const hint = /verifySignature(foo)/;\nexport default async function(req, sw) {\n  const b = await req.json();\n  await sw.db.server.insert('notes', { body: b.body, user_id: b.user_id });\n}",
+      "api/comment.ts": "/* sw.jobs.verifyInvocation( */\nexport default async function(req, sw) {\n  const b = await req.json();\n  await sw.db.server.insert('notes', { body: b.body, user_id: b.user_id });\n}",
+      "api/declaration.ts": "function verifySignature(value: unknown) { return true; }\nexport default async function(req, sw) {\n  const b = await req.json();\n  await sw.db.server.insert('notes', { body: b.body, user_id: b.user_id });\n}",
+      "api/method.ts": "const verifier = { verifySignature(value: unknown) { return true; } };\nexport default async function(req, sw) {\n  const b = await req.json();\n  await sw.db.server.insert('notes', { body: b.body, user_id: b.user_id });\n}"
+    },
+    "expected": [
+      {
+        "rule": "somewhere/request-ownership",
+        "file": "api/comment.ts",
+        "line": 4
+      },
+      {
+        "rule": "somewhere/request-ownership",
+        "file": "api/declaration.ts",
+        "line": 4
+      },
+      {
+        "rule": "somewhere/request-ownership",
+        "file": "api/double.ts",
+        "line": 4
+      },
+      {
+        "rule": "somewhere/request-ownership",
+        "file": "api/escaped.ts",
+        "line": 4
+      },
+      {
+        "rule": "somewhere/request-ownership",
+        "file": "api/method.ts",
+        "line": 4
+      },
+      {
+        "rule": "somewhere/request-ownership",
+        "file": "api/nested-template.ts",
+        "line": 4
+      },
+      {
+        "rule": "somewhere/request-ownership",
+        "file": "api/regex.ts",
+        "line": 4
+      },
+      {
+        "rule": "somewhere/request-ownership",
+        "file": "api/single.ts",
+        "line": 4
+      },
+      {
+        "rule": "somewhere/request-ownership",
+        "file": "api/template.ts",
+        "line": 4
+      }
+    ]
+  },
+  {
+    "name": "explicit signed verifier member calls remain advisory exceptions",
+    "files": {
+      "db/schema.ts": "export default schema({ notes: table({ id: id(), body: text() }, { scope: owner() }) });"
+    },
+    "functions": {
+      "api/job.ts": "await sw.jobs /* member */ . verifyInvocation /* call */ (req);\nexport default async function(req, sw) {\n  const b = await req.json();\n  await sw.db.server.insert('notes', { body: b.body, user_id: b.user_id });\n}",
+      "api/webhook.ts": "const event = stripe.webhooks.constructEvent(raw, signature, secret);\nexport default async function(req, sw) {\n  const b = await req.json();\n  await sw.db.server.insert('notes', { body: b.body, user_id: b.user_id });\n}",
+      "api/template-call.ts": "const receipt = `job ${await sw.jobs.verifyInvocation(req)}`;\nexport default async function(req, sw) {\n  const b = await req.json();\n  await sw.db.server.insert('notes', { body: b.body, user_id: b.user_id });\n}"
+    },
+    "expected": []
   }
 ]

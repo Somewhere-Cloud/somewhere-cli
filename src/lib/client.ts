@@ -1,3 +1,4 @@
+import { operationLabel } from './repro-packet.js';
 import type { ApiResponse } from '../types.js';
 import type { BodyInit, Response as UndiciResponse } from 'undici';
 import { fetchWithProxy as undiciFetch } from './http.js';
@@ -77,6 +78,11 @@ export class ApiClient {
     try {
       return await this.request<T>(method, path, body, query, opts);
     } catch (err) {
+      // The repro packet reads only this id-templated label, never the path, query or body.
+      if (err instanceof CliApiError && !('operation' in err)) {
+        const label = operationLabel(method, path);
+        if (label) Object.defineProperty(err, 'operation', { value: label, enumerable: false });
+      }
       if (!(err instanceof CliApiError) || err.code !== 'API_KEY_EXPIRED') throw err;
       const refreshed = await this.refreshAccessKey(opts?.timeoutMs);
       // refreshAccessKey now THROWS a clear re-login error when it can't refresh

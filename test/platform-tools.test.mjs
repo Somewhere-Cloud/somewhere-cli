@@ -228,6 +228,7 @@ test('generic and Tier-1 commands are thin adapters over the full MCP tool surfa
                             html: '<a href="https://platform.somewhere.site/auth?token=magic">Sign in</a>',
                             text: 'Sign in',
                             magic_link: 'https://platform.somewhere.site/auth?token=magic',
+                            verification_code: '123456',
                             created_at: '2026-09-03T20:00:00.000Z',
                           }],
                           limit: 20,
@@ -300,6 +301,7 @@ test('generic and Tier-1 commands are thin adapters over the full MCP tool surfa
     assert.equal(inboxHuman.status, 0, inboxHuman.stderr);
     assert.match(inboxHuman.stdout, /Test inbox robot@platform\.test\.somewhere\.site — 1 message/);
     assert.match(inboxHuman.stdout, /magic_link: https:\/\/platform\.somewhere\.site\/auth\?token=magic/);
+    assert.match(inboxHuman.stdout, /verification_code: 123456/, 'the human view prints the code the docs name');
 
     const wrongInbox = await run([
       'email', 'test-inbox', 'real@example.com', '--project', 'platform', '--json',

@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.37.51
+
+### Fixed
+
+- Starter `AGENTS.md` (from `somewhere init`) follows the current platform agent workflow: test sign-in uses managed test identities, matching the platform docs (#32).
+- `somewhere email test-inbox` prints a message's `verification_code` in its human output when one is present, not only with `--json` (#32).
+
+## 0.37.50
+
+### Fixed
+
+- An expired temporary session's deploy message now first tells you to sign in with `somewhere login` if you claimed the workspace in the browser, before suggesting you delete `.somewhere.json`. The expiry message also appears only when the session's expiry time has actually passed (a session merely missing its token is no longer reported as "expired at" a future time).
+
+## 0.37.49
+
+### Fixed
+
+- `somewhere deploy` with an expired, unclaimed temporary session and a linked (or `--project`) project now stops before sending anything and says the temporary workspace expired and nothing was deployed. Previously it created a new temporary account and failed with PROJECT_NOT_FOUND. `--json` answers `TEMPORARY_SESSION_EXPIRED` with `temp_expires_at`.
+- Signed in with no linked project, `somewhere deploy` now names the exact next steps (`somewhere init --bare --name <name>`, `somewhere link --project <name-or-id>`, or `somewhere deploy --project <name-or-id>`) instead of "No project linked. Run `somewhere init`". It still never creates or links a project on its own.
+
+## 0.37.48
+
+### Fixed
+
+- `somewhere deploy` no longer reports "Your deploy was NOT applied" when its own automatic retry, sent after the first attempt timed out or lost its connection, is refused as STALE_RELEASE_BASE: the first attempt may already be live, so the CLI now says that and asks you to check the live release. `--json` adds `first_attempt_outcome: "unknown"` and `first_attempt_failure`. Other stale-base answers are unchanged.
+
 ## 0.37.47
 
 ### Changed

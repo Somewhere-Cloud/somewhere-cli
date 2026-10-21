@@ -294,3 +294,41 @@ test('an upload mapping missing either side fails locally with actionable copy',
     );
   }
 });
+
+test('frame is carried onto each action for the platform, never dropped (tsk_7719cf76)', () => {
+  const normalized = normalizeBrowserActions([
+    { click: '#ok' },
+    { fill: 'input[name=cardnumber]', value: '4242', frame: '#card iframe' },
+    { eval: 'document.title', frame: ' own ' },
+    { expect: { selector: '#inner', visible: true }, frame: 1 },
+    { wait: '#inner', frame: 'own' },
+  ]);
+  assert.equal(normalized.ok, true, JSON.stringify(normalized));
+  assert.deepEqual(normalized.actions, [
+    { click: '#ok' },
+    { fill: 'input[name=cardnumber]', value: '4242', frame: '#card iframe' },
+    { eval: 'document.title', frame: 'own' },
+    { expect: { selector: '#inner', visible: true }, frame: '1' },
+    { wait: '#inner', frame: 'own' },
+  ]);
+});
+
+test('whole-page actions and malformed frames refuse "frame" instead of ignoring it', () => {
+  for (const [action, reason] of [
+    [{ goto: '/club', frame: 'own' }, /goto applies to the whole page/],
+    [{ dialog: 'accept', frame: 'own' }, /dialog applies to the whole page/],
+    [{ wait: 500, frame: 'own' }, /a fixed wait applies to the whole page/],
+    [{ eval: '1', frame: '' }, /frame must be a frame name/],
+    [{ eval: '1', frame: -1 }, /frame must be a frame name/],
+  ]) {
+    const result = normalizeBrowserActions([action]);
+    assert.equal(result.ok, false, JSON.stringify(action));
+    assert.match(result.error, reason);
+  }
+});
+
+test('the local browser refuses a framed action rather than running it on the top page', async () => {
+  const [result] = await executeLocalActions(fakeSession(), [{ eval: 'document.title', frame: 'own' }], Date.now() + 5_000);
+  assert.equal(result.ok, false);
+  assert.match(result.error, /require a hosted project browser/);
+});

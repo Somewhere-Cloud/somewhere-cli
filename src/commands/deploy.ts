@@ -357,7 +357,7 @@ export function formatSignedInUnlinkedExplanation(): string {
  *  about whether any project exists. */
 export function formatExpiredTemporaryProjectExplanation(expiredAt: string): string {
   return [
-    `The temporary workspace on this machine expired at ${expiredAt} without being claimed. Its projects can no longer be deployed to, and a new temporary workspace cannot deploy to this folder's linked project. Nothing was deployed.`,
+    `The temporary workspace on this machine expired at ${expiredAt}, and this machine has no record of a claim. Its projects can no longer be deployed to, and a new temporary workspace cannot deploy to this folder's linked project. Nothing was deployed.`,
     '',
     'Next steps:',
     '  If you claimed this workspace in the browser, sign in with `somewhere login` and deploy again; your projects are in your account.',

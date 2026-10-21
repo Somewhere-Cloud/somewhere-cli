@@ -64,7 +64,8 @@ test('expired temporary session + linked folder: explains expiry, mints nothing,
   const { app, configDir } = fixture({ config: expiredTemp, link });
   const r = await run(['deploy'], app, configDir);
   assert.equal(r.status, 1, r.stdout + r.stderr);
-  assert.ok(r.stderr.includes(`expired at ${expiredAt} without being claimed`), r.stderr);
+  assert.ok(r.stderr.includes(`expired at ${expiredAt}, and this machine has no record of a claim`), r.stderr);
+  assert.doesNotMatch(r.stderr, /without being claimed/);
   assert.match(r.stderr, /Nothing was deployed/);
   assert.match(r.stderr, /delete this folder's \.somewhere\.json, then run `somewhere deploy`/);
   // Someone who claimed the workspace is told to sign in BEFORE being told to delete the link.

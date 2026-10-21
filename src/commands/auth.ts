@@ -166,6 +166,33 @@ export async function readPlanName(client: Pick<ApiClient, 'call'>, tierId: stri
   }
 }
 
+/**
+ * whoami's count is every project the account owns, in any status; `somewhere projects` lists owned
+ * and shared/group projects but leaves out archived ones and ones being deleted. Say which is which,
+ * so the two numbers reconcile instead of looking like a lost project (tsk_8a68dfa2). A failed
+ * breakdown read never fails whoami: the count is still labelled.
+ */
+export async function describeProjectCount(client: ApiClient, owned: number): Promise<string> {
+  const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
+  try {
+    const [all, archived] = await Promise.all([
+      client.call<{ projects?: Array<{ status?: string; is_owner?: boolean }> }>('GET', '/projects', undefined, { include_deleted: '1', fields: 'compact' }),
+      client.call<{ projects?: Array<{ status?: string; is_owner?: boolean }> }>('GET', '/projects', undefined, { archived: 'only', fields: 'compact' }),
+    ]);
+    const rows = all.projects ?? [];
+    const deleting = rows.filter((p) => p.is_owner === true && (p.status === 'deleting' || p.status === 'delete_failed')).length;
+    const shared = rows.filter((p) => p.is_owner !== true && p.status !== 'deleting' && p.status !== 'delete_failed').length;
+    const archivedOwned = (archived.projects ?? []).filter((p) => p.is_owner === true).length;
+    const listedOwned = owned - deleting - archivedOwned;
+    const hidden = [archivedOwned ? `${archivedOwned} archived` : '', deleting ? `${deleting} being deleted` : ''].filter(Boolean);
+    if (!hidden.length && !shared) return `${plural(owned, 'project')} you own`;
+    return `${plural(owned, 'project')} you own (\`somewhere projects\` lists ${listedOwned} of them`
+      + `${shared ? ` plus ${shared} shared with you` : ''}${hidden.length ? `; not listed: ${hidden.join(', ')}` : ''})`;
+  } catch {
+    return `${plural(owned, 'project')} you own (any status)`;
+  }
+}
+
 export function registerAuth(program: Command) {
   program
     .command('login')
@@ -254,7 +281,7 @@ export function registerAuth(program: Command) {
         console.log(`${teal(r.user.email)}  ${dim(`(${tier})`)}`);
         if (r.user.name) info(dim(r.user.name));
         if (r.user.username) info(dim(`@${r.user.username}`));
-        info(dim(`${r.stats.projects} project${r.stats.projects === 1 ? '' : 's'}, ${r.stats.api_keys} active key${r.stats.api_keys === 1 ? '' : 's'}`));
+        info(dim(`${await describeProjectCount(client, r.stats.projects)}, ${r.stats.api_keys} active key${r.stats.api_keys === 1 ? '' : 's'}`));
         info(dim(`key ${config.token.slice(0, 12)}…`));
         if (r.session) {
           info(dim(`session ${r.session.label} · access: ${describeScope(r.session.scope)}`));

@@ -130,3 +130,46 @@ test('a verify refusal records only the agreed { path, limit_ms } detail alongsi
   const hostile = buildRecord({ name: 'CliApiError', code: 'VALIDATION_ERROR', statusCode: 400, invalid: { path: 'button[data-x="hunter2"]' } }, { cliVersion: '0.37.64' });
   assert.equal(hostile.invalid, undefined);
 });
+
+test('review 67 #1: a mutation with no status or SERVER_SLOW is unknown, never failed; reads and refusals keep their outcome', () => {
+  const slow = buildRecord({ name: 'CliApiError', code: 'SERVER_SLOW', statusCode: 0, operation: 'POST /deploy' }, { cliVersion: '1.0.0' });
+  assert.equal(slow.outcome, 'unknown');
+  assert.equal(buildPacket(slow).recipe.rerun_original, false);
+  assert.match(buildPacket(slow).recipe.steps[0], /never retry it blindly/);
+  const tool = buildRecord({ name: 'PlatformToolError', code: 'INTERNAL_ERROR', tool: 'project_deploy' }, { cliVersion: '1.0.0' });
+  assert.deepEqual([tool.operation, tool.outcome], ['tool:project_deploy', 'unknown']);
+  // Controls: a failed read stays failed, a mutation refused with a 4xx stays refused.
+  assert.equal(buildRecord({ name: 'CliApiError', code: 'INTERNAL_ERROR', operation: 'GET /projects/:id' }, { cliVersion: '1.0.0' }).outcome, 'failed');
+  assert.equal(buildRecord({ name: 'CliApiError', code: 'VALIDATION_ERROR', statusCode: 400, operation: 'POST /deploy' }, { cliVersion: '1.0.0' }).outcome, 'refused');
+});
+
+test('review 67 #2: a hand-edited record cannot carry free text in version, operation, ids or command', async () => {
+  const fx = fixture();
+  writeFileSync(join(fx.configDir, 'last-error.json'), JSON.stringify({ schema: 'somewhere.repro/1', code: 'DB_UNAVAILABLE', outcome: 'failed',
+    cli_version: '0.37.63 Alice Smith lives at 12', captured_at: '2026-10-21T00:00:00Z',
+    operation: 'POST /projects/alice-smith/files/medical-record-123', project_id: '--project-evil', request_id: '-req_8f2c1a9b77d0',
+    trace_id: 'trace-4e1d2c3b5a69', command: 'deploy alice smith ssn' }));
+  const json = await run(['support', 'packet', '--json'], fx);
+  assert.equal(json.status, 0, json.out);
+  const packet = JSON.parse(json.out);
+  assert.equal(packet.collected.cli_version, 'unknown');
+  assert.equal(packet.collected.operation, undefined, 'an untemplated path is dropped, not copied');
+  assert.equal(packet.collected.project_id, undefined);
+  assert.equal(packet.collected.request_id, undefined, 'an id that could read as a flag is dropped');
+  assert.equal(packet.collected.trace_id, 'trace-4e1d2c3b5a69', 'control: a valid id is kept');
+  assert.equal(packet.collected.command, undefined, 'only registered command paths are kept');
+  assert.doesNotMatch(json.out, /alice|smith|medical|ssn|evil|Alice/);
+  for (const step of packet.recipe.investigate) assert.ok(step.slice(1).every((part) => !part.startsWith('-') || /^--[a-z]/.test(part) && !/evil/.test(part)));
+  // Controls: a genuine record keeps its template, registered command and prerelease version.
+  writeFileSync(join(fx.configDir, 'last-error.json'), JSON.stringify({ schema: 'somewhere.repro/1', code: 'DB_UNAVAILABLE', outcome: 'unknown',
+    cli_version: '0.37.64-rc.1', captured_at: '2026-10-21T00:00:00Z', operation: 'POST /projects/:id/files/:seg', command: 'db query', project_id: 'proj_7c1b2a9d4e' }));
+  const good = JSON.parse((await run(['support', 'packet', '--json'], fx)).out).collected;
+  assert.deepEqual([good.cli_version, good.operation, good.command, good.project_id], ['0.37.64-rc.1', 'POST /projects/:id/files/:seg', 'db query', 'proj_7c1b2a9d4e']);
+});
+
+test('review 67 non-blocking: a deploy command that failed on a read still gets the deploy guidance', () => {
+  const record = buildRecord({ name: 'CliApiError', code: 'INTERNAL_ERROR', statusCode: 500, operation: 'GET /projects/:id' }, { cliVersion: '1.0.0', command: 'deploy' });
+  const packet = buildPacket(record);
+  assert.equal(packet.surface, 'deploy');
+  assert.ok(packet.recipe.steps.some((step) => /Do NOT re-run the original deploy/.test(step)));
+});

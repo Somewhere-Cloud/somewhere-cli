@@ -18,7 +18,11 @@ export const OMITTED = ['message', 'hint_text', 'stack', 'console', 'request_bod
   'sql', 'url_query', 'emails', 'headers', 'cookies', 'tokens', 'passwords', 'source', 'env'] as const;
 
 const CODE = /^[A-Z][A-Z0-9_]{1,63}$/;
-const OPAQUE_ID = /^[A-Za-z0-9._:-]{8,128}$/;
+/** Leading alphanumeric: an id substituted into an investigate argv can never read as a flag. */
+const OPAQUE_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/;
+const CLI_VERSION = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]{1,20})?$/;
+/** Codes whose mutation may still be completing server-side (client.ts SERVER_SLOW is status 0). */
+const UNKNOWN_CODES = new Set(['TIMEOUT', 'NETWORK_ERROR', 'SERVER_SLOW']);
 const COMMAND_NAME = /^[a-z][a-z0-9-]{0,31}$/;
 const TOOL_NAME = /^[a-z][a-z0-9_]{0,63}$/;
 const METHODS = new Set(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']);
@@ -73,7 +77,7 @@ export function routeTemplate(path: string): string | undefined {
   if (typeof path !== 'string' || !path.startsWith('/')) return undefined;
   const bare = path.split(/[?#]/)[0];
   const segments = bare.split('/').slice(1).map((segment) => {
-    if (ROUTE_WORDS.has(segment)) return segment;
+    if (ROUTE_WORDS.has(segment) || segment === ':id' || segment === ':seg') return segment;
     if (/^[A-Za-z0-9._:-]{1,128}$/.test(segment)) return ':id';
     return ':seg';
   });
@@ -85,6 +89,14 @@ export function operationLabel(method: string, path: string): string | undefined
   const verb = String(method).toUpperCase();
   const route = routeTemplate(path);
   return METHODS.has(verb) && route ? `${verb} ${route}` : undefined;
+}
+
+/** An operation is kept only if it is already a template: `METHOD <routeTemplate fixed point>` or `tool:<name>`. */
+export function safeOperation(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  if (value.startsWith('tool:')) return toolOperation(value.slice(5));
+  const match = /^([A-Z]{3,6}) (\/\S{0,200})$/.exec(value);
+  return match && METHODS.has(match[1]) && routeTemplate(match[2]) === match[2] ? value : undefined;
 }
 
 export function toolOperation(name: unknown): string | undefined {
@@ -106,13 +118,13 @@ export function buildRecord(cause: unknown, context: { cliVersion: string; comma
   const code = platform && typeof typed.code === 'string' && CODE.test(typed.code) ? typed.code : platform ? 'UNCLASSIFIED' : 'CLI_ERROR';
   const meta = (typed.meta && typeof typed.meta === 'object' ? typed.meta : {}) as Record<string, unknown>;
   const status = typeof typed.statusCode === 'number' && Number.isInteger(typed.statusCode) && typed.statusCode >= 100 && typed.statusCode <= 599 ? typed.statusCode : undefined;
-  const operation = typeof typed.operation === 'string' && /^(GET|POST|PUT|PATCH|DELETE) \/[A-Za-z0-9/:_-]{0,200}$|^tool:[a-z][a-z0-9_]{0,63}$/.test(typed.operation) ? typed.operation
-    : typed.name === 'PlatformToolError' ? toolOperation(typed.tool) : undefined;
+  const operation = safeOperation(typed.operation) ?? (typed.name === 'PlatformToolError' ? toolOperation(typed.tool) : undefined);
   const id = (value: unknown) => (typeof value === 'string' && OPAQUE_ID.test(value) ? value : undefined);
   const now = context.now ?? Date.now();
   const mutating = operation ? MUTATING.has(operation.split(' ')[0]) || operation.startsWith('tool:') : false;
-  const outcome: Outcome = meta.responseBodyIncomplete === true || code === 'TIMEOUT' || code === 'NETWORK_ERROR'
-    || (mutating && status !== undefined && status >= 500) ? 'unknown'
+  // A mutation with no status (a tool error, SERVER_SLOW's 0) or a 5xx may have landed: unknown, never retried.
+  const outcome: Outcome = meta.responseBodyIncomplete === true || UNKNOWN_CODES.has(code)
+    || (mutating && (status === undefined || status >= 500)) ? 'unknown'
     : status !== undefined && status >= 400 && status < 500 ? 'refused' : 'failed';
   const record: ReproRecord = { schema: REPRO_SCHEMA, cli_version: context.cliVersion, captured_at: new Date(now).toISOString(), code, outcome };
   if (context.command) record.command = context.command;
@@ -143,19 +155,20 @@ export function writeLastError(record: ReproRecord): void {
   }
 }
 
-/** Re-validate on read: a hand-edited file cannot smuggle a field into the packet. */
-export function readLastError(): ReproRecord | null {
+/** Re-validate on read: a hand-edited file cannot smuggle a field into the packet. `commands` is the
+ *  registered command tree's paths; a command outside it is dropped. */
+export function readLastError(commands: ReadonlySet<string> = new Set()): ReproRecord | null {
   const path = join(cliConfigDir(), LAST_ERROR_FILE);
   if (!existsSync(path)) return null;
   let raw: Record<string, unknown>;
   try { raw = JSON.parse(readFileSync(path, 'utf8')); } catch { return null; }
   if (raw?.schema !== REPRO_SCHEMA || typeof raw.code !== 'string' || !CODE.test(raw.code)) return null;
-  const out: ReproRecord = { schema: REPRO_SCHEMA, cli_version: typeof raw.cli_version === 'string' && /^\d+\.\d+\.\d+/.test(raw.cli_version) ? raw.cli_version.slice(0, 32) : 'unknown',
+  const out: ReproRecord = { schema: REPRO_SCHEMA, cli_version: typeof raw.cli_version === 'string' && CLI_VERSION.test(raw.cli_version) ? raw.cli_version : 'unknown',
     captured_at: typeof raw.captured_at === 'string' && Number.isFinite(Date.parse(raw.captured_at)) ? new Date(Date.parse(raw.captured_at)).toISOString() : new Date(0).toISOString(),
     code: raw.code, outcome: raw.outcome === 'refused' || raw.outcome === 'unknown' ? raw.outcome : 'failed' };
-  if (typeof raw.command === 'string') { const c = commandPath(raw.command.split(' ')); if (c) out.command = c; }
+  if (typeof raw.command === 'string' && commands.has(raw.command)) out.command = raw.command;
   if (typeof raw.http_status === 'number' && Number.isInteger(raw.http_status) && raw.http_status >= 100 && raw.http_status <= 599) out.http_status = raw.http_status;
-  if (typeof raw.operation === 'string' && /^(GET|POST|PUT|PATCH|DELETE) \/[A-Za-z0-9/:_-]{0,200}$|^tool:[a-z][a-z0-9_]{0,63}$/.test(raw.operation)) out.operation = raw.operation;
+  const operation = safeOperation(raw.operation); if (operation) out.operation = operation;
   for (const key of ['request_id', 'trace_id', 'project_id'] as const) if (typeof raw[key] === 'string' && OPAQUE_ID.test(raw[key] as string)) out[key] = raw[key] as string;
   if (typeof raw.retry === 'boolean') out.retry = raw.retry;
   if (typeof raw.retry_after_ms === 'number' && Number.isInteger(raw.retry_after_ms) && raw.retry_after_ms >= 0) out.retry_after_ms = raw.retry_after_ms;
@@ -180,7 +193,7 @@ function guidanceFor(record: ReproRecord): Guidance {
         'Write a minimal flow reproducing the shape: <FLOW_FILE> with one action of the same kind (no real data)',
         'Run: somewhere verify --project <TEST_PROJECT> --flow <FLOW_FILE> --json and compare the code'] };
   }
-  if (/^POST \/deploy|^tool:project_deploy|^(deploy|promote|rollback)\b/.test(`${op} ${record.command ?? ''}`.trim())) {
+  if (/^POST \/deploy|^tool:project_deploy/.test(op) || /^(deploy|promote|rollback)\b/.test(record.command ?? '')) {
     return { surface: 'deploy',
       investigate: [['somewhere', 'status', ...project], ['somewhere', 'logs', ...project]],
       recipe: ['Do NOT re-run the original deploy until its outcome is known.',

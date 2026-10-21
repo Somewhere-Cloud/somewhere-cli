@@ -4,6 +4,20 @@ import { error, info, printJson, printJsonError, success, warn } from '../lib/ou
 import { buildPacket, readLastError, REPRO_SCHEMA } from '../lib/repro-packet.js';
 import { writePrivateFile } from '../lib/test-identities.js';
 
+/** Every registered command path ('db query', 'browser test', …), so a recorded command is kept only if it names one. */
+function commandPaths(program: Command): Set<string> {
+  const paths = new Set<string>();
+  const walk = (command: Command, prefix: string[]) => {
+    for (const child of command.commands) {
+      const path = [...prefix, child.name()];
+      paths.add(path.join(' '));
+      walk(child, path);
+    }
+  };
+  walk(program, []);
+  return paths;
+}
+
 export function registerSupport(program: Command): void {
   const support = program
     .command('support')
@@ -20,10 +34,11 @@ export function registerSupport(program: Command): void {
       'request/trace/project ids, the platform\'s retry verdict, outcome and timing. It never holds the error',
       'message, stack, console, request or response bodies, arguments, SQL, URL queries, emails, headers,',
       'cookies, tokens, passwords, source or environment. Nothing is sent anywhere by this command.',
+      'The error code is any UPPER_SNAKE word the platform or CLI returned; it is not checked against a list.',
     ].join('\n'))
     .action((opts: { json?: boolean; out?: string }) => {
       try {
-        const record = readLastError();
+        const record = readLastError(commandPaths(program));
         if (!record) {
           if (opts.json) printJsonError('NO_FAILURE_RECORDED', 'No failed command is recorded on this machine yet.');
           else info('No failed command is recorded on this machine yet.');

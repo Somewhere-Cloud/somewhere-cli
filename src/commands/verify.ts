@@ -167,36 +167,43 @@ function summaryPath(url: string): string {
   return path.split('/').map((segment) => (credentialSegment(segment) ? '<redacted>' : segment)).join('/');
 }
 
-// Query/fragment parameters that carry a credential: the same list the
-// platform applies to stored request URLs (worker/src/utils/log-sanitize.ts
-// SENSITIVE_PARAMS). A magic sign-in link is /auth/magic?token=…; an OAuth
-// implicit callback is …#access_token=…; both values are live credentials.
-const CREDENTIAL_PARAMS = new Set(['access_token', 'refresh_token', 'creator_secret', 'secret', 'signature', 'api_key', 'apikey', 'token', 'key', 'sig', 'dsn', 'password']);
+// Query/fragment parameters that carry a credential: the list the platform
+// applies to stored request URLs (worker/src/utils/log-sanitize.ts
+// SENSITIVE_PARAMS), plus `code` and `auth_token`. A magic sign-in link is
+// /auth/magic?token=…; an OAuth callback carries ?code=… or #access_token=….
+// A diagnostic URL never needs a replayable value, so `code` is masked even
+// where an app uses it for something harmless such as a promo code.
+const CREDENTIAL_PARAMS = new Set(['access_token', 'refresh_token', 'creator_secret', 'auth_token', 'secret', 'signature', 'api_key', 'apikey', 'token', 'code', 'key', 'sig', 'dsn', 'password']);
 // The same names nested, percent-encoded, inside another parameter's value
 // (redirect_uri=https%3A%2F%2Fapp%2F%3Ftoken%3D…) or after a plain `?` there.
 const NESTED_CREDENTIAL_RE = new RegExp(`((?:\\?|%3F|%26|%23)(?:${[...CREDENTIAL_PARAMS].join('|')})(?:=|%3D))(?:(?!%26|%23)[^&#\\s])*`, 'gi');
 
-/** A parameter name as the server reads it: percent-decoded (twice at most), lower case. */
-function paramName(raw: string): string {
-  let name = raw;
+/** A name or value as the server reads it: percent-decoded (twice at most). */
+function decoded(raw: string): string {
+  let value = raw;
   for (let i = 0; i < 2; i++) {
-    try { const decoded = decodeURIComponent(name); if (decoded === name) break; name = decoded; } catch { break; }
+    try { const next = decodeURIComponent(value); if (next === value) break; value = next; } catch { break; }
   }
-  return name.toLowerCase();
+  return value;
 }
 
-/** `a=1&token=x` → `a=1&token=<redacted>`; pieces without `=` (`#top`) are kept. */
+/** `a=1&token=x` → `a=1&token=<redacted>`. Masked: a listed name, or a value
+ *  shaped like a credential (a JWT, a platform or provider key) under any name,
+ *  e.g. #id_token=eyJ…. Pieces without `=` (`#top`) are kept. */
 function maskParams(part: string): string {
   return part.split('&').map((pair) => {
     const eq = pair.indexOf('=');
-    return eq > 0 && CREDENTIAL_PARAMS.has(paramName(pair.slice(0, eq))) ? `${pair.slice(0, eq)}=<redacted>` : pair;
+    if (eq <= 0) return pair;
+    const name = pair.slice(0, eq);
+    return CREDENTIAL_PARAMS.has(decoded(name).toLowerCase()) || credentialSegment(decoded(pair.slice(eq + 1))) ? `${name}=<redacted>` : pair;
   }).join('&').replace(NESTED_CREDENTIAL_RE, '$1<redacted>');
 }
 
 /** A URL or path as a report, summary or error shows it. Masked: URL userinfo
- *  (user:password@), the value of a listed credential parameter in the query or
- *  fragment (also when its name is percent-encoded, or nested encoded inside
- *  another parameter), and a credential-shaped path segment. Kept: scheme, host,
+ *  (user:password@), in the query or fragment the value of a listed credential
+ *  parameter (also when its name is percent-encoded, or nested encoded inside
+ *  another parameter) or a JWT/key-shaped value under any name, and a
+ *  credential-shaped path segment. Kept: scheme, host,
  *  path, other parameters and plain fragments. The browser still receives the
  *  original. */
 function reportUrl(url: string): string {

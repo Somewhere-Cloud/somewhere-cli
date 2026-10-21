@@ -1,8 +1,9 @@
 // Verify reports and their text mask the credential-bearing parts of URLs the
 // caller or the browser supplied (tsk_70d6db11): URL userinfo, the value of a
-// listed credential parameter (the platform log-sanitize list) in the query or
-// fragment, also when its name is percent-encoded or it is nested encoded in
-// another parameter, and credential-shaped path segments. Covered fields:
+// listed credential parameter (the platform log-sanitize list plus code and
+// auth_token) in the query or fragment, also when its name is percent-encoded or
+// it is nested encoded in another parameter, a JWT/key-shaped value under any
+// name, and credential-shaped path segments. Covered fields:
 // segment path/final_url, viewport final_url, target, goto labels. A Haiku round
 // on 2026-10-21 kept /auth/magic?token=… in a journey's segments[].path (CLI
 // 0.37.60). The browser still navigates to the original URL.
@@ -11,7 +12,7 @@ import assert from 'node:assert/strict';
 
 const { createVerifyJourneyRun, formatVerifyJourneyReport, formatVerifyReport, normalizeVerifyJourney, normalizeVerifyFlow, runVerification } = await import('../dist/commands/verify.js');
 
-const SECRETS = ['MAGIC_SECRET_1', 'MAGIC_SECRET_2', 'FINAL_SECRET_3', 'NESTED_SECRET_4', 'TARGET_SECRET_5', 'USERINFO_SECRET_6', 'FRAGMENT_SECRET_7', 'ENCODED_SECRET_8', 'ENCODED_SECRET_9', 'HASHQ_SECRET_10'];
+const SECRETS = ['MAGIC_SECRET_1', 'MAGIC_SECRET_2', 'FINAL_SECRET_3', 'NESTED_SECRET_4', 'TARGET_SECRET_5', 'USERINFO_SECRET_6', 'FRAGMENT_SECRET_7', 'ENCODED_SECRET_8', 'ENCODED_SECRET_9', 'HASHQ_SECRET_10', 'CODE_SECRET_11', 'AUTH_SECRET_12', 'SMTKEY_SECRET_13', 'IDTOKEN_SECRET_14'];
 const report = (overrides = {}) => ({
   passed: true, final_url: 'https://app.somewhere.site/club', console_errors: [], page_errors: [], failed_requests: [], request_expectations: [],
   steps: [{ step: 0, action: 'click', ok: true }], screenshots: [{ label: 'page', fs_path: '/_browser_tests/r/page.jpg', url: 'https://api.test/s/page.jpg' }], session_expires_at: '2026-10-21T12:03:00.000Z', ...overrides,
@@ -84,8 +85,26 @@ test('boundary: userinfo, fragment credentials and percent-encoded names are mas
   assert.ok(client.runs().every((c) => c.body.url === url), 'navigation uses the original');
 });
 
+test('value shape and the added names: a JWT/key-shaped value under any name, code and auth_token are masked', async () => {
+  const jwt = 'eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJJRFRPS0VOX1NFQ1JFVF8xNCJ9.IDTOKEN_SECRET_14';
+  const cases = [
+    { path: `/cb#id_token=${jwt}&state=s1`, want: '/cb#id_token=<redacted>&state=s1' },
+    { path: '/x?k=smt_SMTKEY_SECRET_13&page=1', want: '/x?k=<redacted>&page=1' },
+    { path: `/x?t=${encodeURIComponent(jwt)}`, want: '/x?t=<redacted>' },
+    { path: '/oauth/callback?code=CODE_SECRET_11&state=s2', want: '/oauth/callback?code=<redacted>&state=s2' },
+    { path: '/x?auth_token=AUTH_SECRET_12', want: '/x?auth_token=<redacted>' },
+  ];
+  for (const { path, want } of cases) {
+    const client = fakeClient(() => report());
+    const result = await createVerifyJourneyRun({ project_id: 'app' }, normalizeVerifyJourney({ actors: { a: {} }, journey: [{ as: 'a', path, actions: [{ click: '#x' }] }] }), client, { runId: 'r4' }).run();
+    assert.equal(result.segments[0].path, want);
+    assert.deepEqual(leaks(JSON.stringify(result) + formatVerifyJourneyReport(result)), []);
+    assert.equal(client.runs()[0].body.url, path, 'navigation uses the original');
+  }
+});
+
 test('LEGIT: ordinary URLs and app data are not masked', async () => {
-  for (const path of ['/club?page=2&q=hello', '/keyboard?monkey=1&keys=3&tokens=4', '/redeem?code=PROMO-10&invite_id=inv_1', '/a/b#token-anchor', '/docs#section-2', '/cb#token_type=bearer&state=abc', '/members#tab=members', '/u/@alice?email=a@b.example', '/x?%74ab=1']) {
+  for (const path of ['/club?page=2&q=hello', '/keyboard?monkey=1&keys=3&tokens=4', '/redeem?coupon=PROMO-10&invite_id=inv_1', '/a/b#token-anchor', '/docs#section-2', '/cb#token_type=bearer&state=abc', '/members#tab=members', '/u/@alice?email=a@b.example', '/x?%74ab=1', '/x?t=eyJunk&ref=sk-short', '/x?codes=3&zip_code=94110']) {
     const client = fakeClient(() => report({ final_url: `https://app.somewhere.site${path}` }));
     const result = await createVerifyJourneyRun({ project_id: 'app' }, normalizeVerifyJourney({ actors: { a: {} }, journey: [{ as: 'a', path, actions: [{ click: '#x' }] }] }), client, { runId: 'r2' }).run();
     assert.equal(result.segments[0].path, path, path);

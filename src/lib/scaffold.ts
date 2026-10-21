@@ -18,6 +18,18 @@ import { TYPECHECK_TYPESCRIPT_VERSION } from './typecheck-version.js';
 
 export const SCAFFOLD_TSCONFIG_FILENAME = 'tsconfig.json';
 export const SCAFFOLD_PACKAGE_FILENAME = 'package.json';
+export const SCAFFOLD_GITIGNORE_FILENAME = '.gitignore';
+
+/**
+ * The starters' .gitignore (tsk_8a68dfa2 item 8). Deploys skip dotfiles, so a
+ * pulled app never brings one down, and `somewhere typecheck`/`dev` then leave
+ * the generated schema declarations (thousands of lines under src/) untracked
+ * in git. Same text as the `somewhere init` starters; a test pins the two
+ * together.
+ */
+export function buildScaffoldGitignore(): string {
+  return 'node_modules\ndist\nbuild\n.env\n# Generated from db/schema.ts by somewhere typecheck, dev and deploy.\n__somewhere_data.d.ts\n__somewhere_files.d.ts\n';
+}
 
 /**
  * The lenient tsconfig that catches undefined symbols (TS2304) without

@@ -157,10 +157,10 @@ var require_declared_data_contract = __commonJS({
           record(publicRead, `${name} public read`);
           if (Object.keys(publicRead).some((key) => key !== "where")) fail(`${name} public read`);
           record(publicRead.where, `${name} public read predicate`);
-          const entries = Object.entries(publicRead.where);
-          if (!entries.length || entries.length > 8) fail(`${name} public read predicate`);
+          const entries2 = Object.entries(publicRead.where);
+          if (!entries2.length || entries2.length > 8) fail(`${name} public read predicate`);
           const where = {};
-          for (const [field, value] of entries.sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) {
+          for (const [field, value] of entries2.sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) {
             const column = columns.find((column2) => column2.n === field);
             if (!column || ["json", "blob"].includes(column.t) || !(value === null || typeof value === "string" && value.length <= 256 || typeof value === "boolean" || typeof value === "number" && Number.isFinite(value))) fail(`${name} public read predicate`);
             if (value === null ? column.nul !== 1 : column.t === "boolean" ? typeof value !== "boolean" : column.t === "integer" ? !Number.isSafeInteger(value) : column.t === "number" ? typeof value !== "number" : column.t === "bigint" ? !canonicalBigintText(value) : ["text", "timestamp"].includes(column.t) ? typeof value !== "string" : true) fail(`${name} public read predicate type`);
@@ -886,7 +886,7 @@ function evaluateStaticStringExpression(expression) {
   if (values.length === 0 || !/^\s*$/.test(expression.slice(consumed))) return null;
   return values.join("");
 }
-function evaluateInterpolatedTemplateLiteral(literal, bindings) {
+function evaluateInterpolatedTemplateLiteral(literal, bindings2) {
   if (literal[0] !== "`" || literal[literal.length - 1] !== "`") return null;
   const body = literal.slice(1, -1);
   let value = "";
@@ -901,7 +901,7 @@ function evaluateInterpolatedTemplateLiteral(literal, bindings) {
     if (end === -1) return null;
     const name = body.slice(i + 2, end).trim();
     if (!new RegExp(`^${JS_IDENTIFIER_SOURCE}$`).test(name)) return null;
-    const binding = bindings.get(name);
+    const binding = bindings2.get(name);
     if (binding === void 0) return null;
     const segment = decodeJsStringLiteral("`" + body.slice(segmentStart, i) + "`");
     if (segment === null) return null;
@@ -1015,13 +1015,13 @@ function deriveReversibleStrings(source) {
 }
 function importSpecifiers(source) {
   const specifiers = /* @__PURE__ */ new Set();
-  const bindings = /* @__PURE__ */ new Map();
+  const bindings2 = /* @__PURE__ */ new Map();
   STATIC_STRING_BINDING.lastIndex = 0;
   IMPORT_SPECIFIER.lastIndex = 0;
   let match;
   while ((match = STATIC_STRING_BINDING.exec(source)) !== null) {
     const value = evaluateStaticStringExpression(match[2]);
-    if (value !== null) bindings.set(match[1], value);
+    if (value !== null) bindings2.set(match[1], value);
   }
   while ((match = IMPORT_SPECIFIER.exec(source)) !== null) specifiers.add(match[1]);
   COMPUTED_MODULE_SPECIFIER.lastIndex = 0;
@@ -1031,7 +1031,7 @@ function importSpecifiers(source) {
   }
   INTERPOLATED_MODULE_SPECIFIER.lastIndex = 0;
   while ((match = INTERPOLATED_MODULE_SPECIFIER.exec(source)) !== null) {
-    const specifier = evaluateInterpolatedTemplateLiteral(match[1], bindings);
+    const specifier = evaluateInterpolatedTemplateLiteral(match[1], bindings2);
     if (specifier !== null) specifiers.add(specifier);
   }
   return [...specifiers];
@@ -16886,10 +16886,10 @@ function parseClientPermissions(value, columns, scope) {
 }
 function parseEqualityWhere(where, columns, label) {
   if (!where || typeof where !== "object" || Array.isArray(where)) return `${label} must be a non-empty object.`;
-  const entries = Object.entries(where);
-  if (entries.length === 0 || entries.length > 8) return `${label} must declare 1 to 8 equality fields.`;
+  const entries2 = Object.entries(where);
+  if (entries2.length === 0 || entries2.length > 8) return `${label} must declare 1 to 8 equality fields.`;
   const normalized = {};
-  for (const [rawName, literal] of entries) {
+  for (const [rawName, literal] of entries2) {
     const name = rawName.toLowerCase();
     const column = columns?.find((candidate) => candidate.name === name);
     if (Object.prototype.hasOwnProperty.call(normalized, name)) return `${label} declares field "${rawName}" twice.`;
@@ -17106,7 +17106,7 @@ function readNamed(r, fail, option, kind, keys, readField) {
   return out;
 }
 function readPaymentBindings(r, fail) {
-  const entries = readNamed(r, fail, "payments", "payment binding", ["table", "amount", "currency", "onPaid"], (key, fields, name) => {
+  const entries2 = readNamed(r, fail, "payments", "payment binding", ["table", "amount", "currency", "onPaid"], (key, fields, name) => {
     if (key !== "onPaid") {
       fields[key] = readString(r, fail, `payments.${name}.${key}`).value.toLowerCase();
       return;
@@ -17142,14 +17142,14 @@ function readPaymentBindings(r, fail) {
     if (transition.from.some((t) => t.value === transition.to.value)) fail(transition.to.line, `payments.${name}.onPaid.${column.name}.to must differ from every from state.`);
     fields.status = { column: column.name.toLowerCase(), from: transition.from.map((t) => t.value).sort(), to: transition.to.value };
   });
-  return byName(entries.map(({ name, fields }) => {
+  return byName(entries2.map(({ name, fields }) => {
     const binding = { name, ...fields };
     lines.set(binding, lines.get(fields));
     return binding;
   }));
 }
 function readJobBindings(r, fail) {
-  const entries = readNamed(r, fail, "jobs", "job binding", ["table", "operations", "maxDurationSeconds"], (key, fields, name) => {
+  const entries2 = readNamed(r, fail, "jobs", "job binding", ["table", "operations", "maxDurationSeconds"], (key, fields, name) => {
     if (key === "table") fields.table = readString(r, fail, `jobs.${name}.table`).value.toLowerCase();
     else if (key === "operations") fields.operations = readOperations(r, fail, `jobs.${name}.operations`, ROW_OPERATIONS);
     else {
@@ -17160,14 +17160,14 @@ function readJobBindings(r, fail) {
       fields.maxDurationSeconds = Number(t.value);
     }
   });
-  return byName(entries.map(({ name, fields }) => {
+  return byName(entries2.map(({ name, fields }) => {
     const binding = { name, ...fields };
     lines.set(binding, lines.get(fields));
     return binding;
   }));
 }
 function readServiceRoles(r, fail) {
-  const entries = readNamed(r, fail, "serviceRoles", "service role", ["tables"], (_key, fields, name) => {
+  const entries2 = readNamed(r, fail, "serviceRoles", "service role", ["tables"], (_key, fields, name) => {
     r.expectPunct("{", `opening serviceRoles.${name}.tables \u2014 declare { table: ['read', ...] }`);
     const tables = [];
     const tableLines = {};
@@ -17187,7 +17187,7 @@ function readServiceRoles(r, fail) {
     fields.tables = tables.sort((a, b) => a.table < b.table ? -1 : a.table > b.table ? 1 : 0);
     lines.set(fields.tables, tableLines);
   });
-  return byName(entries.map(({ name, fields }) => {
+  return byName(entries2.map(({ name, fields }) => {
     const role = { name, tables: fields.tables };
     lines.set(role, lines.get(fields));
     return role;
@@ -17809,8 +17809,8 @@ function resolveSchemaConstants(tokens, callable, maxTokens, fail) {
     }
     const value = [];
     expandRange(start, end2, value, name);
-    const objectLiteral = isPunct(tokens[start], "{") && matchingClose(tokens, start) === end2 - 1;
-    constants.set(name, { name, line: nameTok.line, tokens: value, objectLiteral });
+    const objectLiteral2 = isPunct(tokens[start], "{") && matchingClose(tokens, start) === end2 - 1;
+    constants.set(name, { name, line: nameTok.line, tokens: value, objectLiteral: objectLiteral2 });
     i = isPunct(tokens[k], ";") ? k + 1 : k;
   }
   if (isIdent(tokens[i], "export") && isIdent(tokens[i + 1], "const")) {
@@ -18828,6 +18828,9 @@ function policyOwner(policy) {
 function scopeOwner(scope) {
   return scope.kind === "owner" ? scope : scope.kind === "policy" ? policyOwner(scope.policy) : null;
 }
+function declaredOwnerColumn(scope) {
+  return scopeOwner(scope)?.column ?? null;
+}
 function declaredScopeIdentityColumns(scope) {
   if (scope.kind === "owner") return [scope.column];
   if (scope.kind === "member") return [...scope.group];
@@ -19560,7 +19563,7 @@ function readScope(r, tableName) {
 function readColumnLists(r, tableName, optionName) {
   const startLine = r.peek().line;
   r.expectPunct("[", `for "${optionName}" of table "${tableName}"`);
-  const entries = [];
+  const entries2 = [];
   while (!r.tryPunct("]")) {
     const entryLine = r.peek().line;
     r.expectPunct("[", `for a "${optionName}" entry of table "${tableName}" (it is a list of column lists, e.g. [['a'], ['b', 'c']])`);
@@ -19586,16 +19589,16 @@ function readColumnLists(r, tableName, optionName) {
     if (entry.length > MAX_INDEX_COLUMNS) {
       throw new SchemaTsError(`line ${entryLine}: a "${optionName}" entry on table "${tableName}" lists ${entry.length} columns (max ${MAX_INDEX_COLUMNS}).`);
     }
-    entries.push({ columns: entry, line: entryLine });
+    entries2.push({ columns: entry, line: entryLine });
     if (!r.tryPunct(",")) {
       r.expectPunct("]", `closing "${optionName}" of table "${tableName}"`);
       break;
     }
   }
-  if (entries.length > MAX_INDEXES) {
-    throw new SchemaTsError(`line ${startLine}: table "${tableName}" declares ${entries.length} "${optionName}" entries (max ${MAX_INDEXES}).`);
+  if (entries2.length > MAX_INDEXES) {
+    throw new SchemaTsError(`line ${startLine}: table "${tableName}" declares ${entries2.length} "${optionName}" entries (max ${MAX_INDEXES}).`);
   }
-  return entries;
+  return entries2;
 }
 function readTable(r, rawName, nameLine) {
   const callee = r.expectIdent(`for table "${rawName}"`);
@@ -19980,17 +19983,274 @@ function extractSchemaTs(source, options = {}) {
   }
 }
 
+// worker/src/services/source-lint-ownership.ts
+var MAX_FILE_BYTES = 256 * 1024;
+var MAX_PAYLOAD_CHARS = 8 * 1024;
+var COMPARE_WINDOW = 96;
+var MAX_FINDINGS_PER_FILE = 20;
+var MAX_FINDINGS = 100;
+var IDENT2 = /^[A-Za-z_$][\w$]*$/;
+var WRITE = /\.(insert|update)\(\s*(['"`])([A-Za-z_]\w{0,63})\2\s*,\s*/g;
+var VERIFIED = /\b(?:verifyInvocation|verifyWebhook|constructEvent|verifySignature)\s*\(/;
+function stripComments(source) {
+  let out = "";
+  let i = 0;
+  while (i < source.length) {
+    const ch = source[i];
+    const next = source[i + 1];
+    if (ch === '"' || ch === "'" || ch === "`") {
+      let j = i + 1;
+      while (j < source.length && source[j] !== ch && !(ch !== "`" && source[j] === "\n")) j += source[j] === "\\" ? 2 : 1;
+      out += source.slice(i, j + 1);
+      i = j + 1;
+    } else if (ch === "/" && next === "/") {
+      while (i < source.length && source[i] !== "\n") {
+        out += " ";
+        i++;
+      }
+    } else if (ch === "/" && next === "*") {
+      const end = source.indexOf("*/", i + 2);
+      const stop = end < 0 ? source.length : end + 2;
+      out += source.slice(i, stop).replace(/[^\n]/g, " ");
+      i = stop;
+    } else {
+      out += ch;
+      i++;
+    }
+  }
+  return out;
+}
+function bindings(source) {
+  const b = { objects: /* @__PURE__ */ new Set(), forms: /* @__PURE__ */ new Set(), values: /* @__PURE__ */ new Set(), callers: /* @__PURE__ */ new Set() };
+  const input = String.raw`\(?\s*(?:await\s+)?[\w$.]{1,64}\.(json|formData)\(\)`;
+  for (const m of source.matchAll(new RegExp(String.raw`\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*(?::[^=;\n]{0,200})?=\s*${input}`, "g"))) {
+    (m[2] === "formData" ? b.forms : b.objects).add(m[1]);
+  }
+  const destructure = (names) => {
+    for (const part of names.split(",")) {
+      const name = part.split("=")[0].split(":").pop()?.trim();
+      if (name && IDENT2.test(name)) b.values.add(name.toLowerCase());
+    }
+  };
+  for (const m of source.matchAll(new RegExp(String.raw`\b(?:const|let|var)\s*\{([^{}]{0,2000})\}\s*(?::[^=;\n]{0,200})?=\s*${input}`, "g"))) destructure(m[1]);
+  for (const m of source.matchAll(/\b(?:const|let|var)\s*\{([^{}]{0,2000})\}\s*=\s*([A-Za-z_$][\w$]*)\s*[;\n]/g)) if (b.objects.has(m[2])) destructure(m[1]);
+  for (const m of source.matchAll(/\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*[\w$.]{0,64}(?:searchParams|\bparams)\.get\(/g)) b.values.add(m[1].toLowerCase());
+  for (const m of source.matchAll(/\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*(?::[^=;\n]{0,200})?=\s*(?:await\s+)?sw\.auth\.\w{1,40}\(/g)) b.callers.add(m[1]);
+  for (const m of source.matchAll(/\b(?:const|let|var)\s*\{([^{}]{0,2000})\}\s*=\s*(?:await\s+)?sw\.auth\.\w{1,40}\(/g)) {
+    for (const part of m[1].split(",")) {
+      const name = part.split("=")[0].split(":").pop()?.trim();
+      if (name && IDENT2.test(name)) b.callers.add(name);
+    }
+  }
+  return b;
+}
+function serverReceivers(source) {
+  const receivers = ["sw.db.server"];
+  for (const m of source.matchAll(/\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*sw\.db\.server\b(?!\.)/g)) receivers.push(m[1]);
+  return receivers;
+}
+function receivedBy(source, dot, receivers) {
+  return receivers.some((receiver) => {
+    const start = dot - receiver.length;
+    return start >= 0 && source.startsWith(receiver, start) && !/[\w$.]/.test(source[start - 1] ?? "");
+  });
+}
+function objectLiteral(source, index) {
+  if (source[index] !== "{") return null;
+  const end = Math.min(source.length, index + MAX_PAYLOAD_CHARS);
+  let depth = 0;
+  let quote = null;
+  for (let i = index; i < end; i++) {
+    const ch = source[i];
+    if (quote) {
+      if (ch === "\\") i++;
+      else if (ch === quote) quote = null;
+      continue;
+    }
+    if (ch === '"' || ch === "'" || ch === "`") quote = ch;
+    else if (ch === "{") depth++;
+    else if (ch === "}" && --depth === 0) return source.slice(index, i + 1);
+  }
+  return null;
+}
+function comparedToCaller(source, lower, column, callers) {
+  if (callers.size === 0) return false;
+  const needle = `.${column.toLowerCase()}`;
+  const callerId = (text) => {
+    for (const m of text.matchAll(/([A-Za-z_$][\w$]*)(?:\??\.[A-Za-z_$][\w$]*){0,3}\??\.id\b/g)) if (callers.has(m[1])) return true;
+    for (const m of text.matchAll(/([A-Za-z_$][\w$]*)\??\.(?:userId|user_id)\b/g)) if (callers.has(m[1])) return true;
+    return false;
+  };
+  for (let at = lower.indexOf(needle); at >= 0; at = lower.indexOf(needle, at + 1)) {
+    const after = at + needle.length;
+    if (/[\w$]/.test(lower[after] ?? "")) continue;
+    const right = source.slice(after, after + COMPARE_WINDOW);
+    const op = /^\s*[!=]==?\s*/.exec(right);
+    if (op && callerId(right.slice(op[0].length))) return true;
+    const left = source.slice(Math.max(0, at - COMPARE_WINDOW), at);
+    const lop = /[!=]==?\s*[\w$.?]{0,80}$/.exec(left);
+    if (lop && callerId(left.slice(0, lop.index).slice(-COMPARE_WINDOW))) return true;
+  }
+  return false;
+}
+function lineIndex(source) {
+  const starts = [0];
+  for (let i = source.indexOf("\n"); i >= 0; i = source.indexOf("\n", i + 1)) starts.push(i + 1);
+  return starts;
+}
+function lineAt2(starts, offset) {
+  let lo = 0, hi = starts.length - 1;
+  while (lo < hi) {
+    const mid = lo + hi + 1 >> 1;
+    if (starts[mid] <= offset) lo = mid;
+    else hi = mid - 1;
+  }
+  return lo + 1;
+}
+function requestValue(value, b) {
+  const v = value.trim().replace(/^(?:String|Number|BigInt)\(\s*([\s\S]*?)\s*\)$/, "$1").trim();
+  const member = /^([A-Za-z_$][\w$]*)(?:\??\.[A-Za-z_$][\w$]*|\[[^\]]{1,64}\])$/.exec(v);
+  if (member && b.objects.has(member[1])) return true;
+  const form = /^([A-Za-z_$][\w$]*)\.get\(\s*['"`][\w-]{1,64}['"`]\s*\)$/.exec(v);
+  if (form && b.forms.has(form[1])) return true;
+  return IDENT2.test(v) && b.values.has(v.toLowerCase());
+}
+function entries(payload) {
+  const out = [];
+  let depth = 0, quote = null, start = 1;
+  const push = (end) => {
+    const text = payload.slice(start, end);
+    const lead = text.length - text.trimStart().length;
+    const body = text.trim();
+    if (body) {
+      const spread = /^\.\.\.\s*([A-Za-z_$][\w$]*)$/.exec(body);
+      const keyed = /^['"]?([A-Za-z_$][\w$]*)['"]?\s*(?::\s*([\s\S]*))?$/.exec(body);
+      if (spread) out.push({ key: null, spread: spread[1], value: "", offset: start + lead });
+      else if (keyed) out.push({ key: keyed[1], spread: null, value: keyed[2] ?? keyed[1], offset: start + lead });
+    }
+    start = end + 1;
+  };
+  for (let i = 1; i < payload.length - 1; i++) {
+    const ch = payload[i];
+    if (quote) {
+      if (ch === "\\") i++;
+      else if (ch === quote) quote = null;
+      continue;
+    }
+    if (ch === '"' || ch === "'" || ch === "`") quote = ch;
+    else if ("{[(".includes(ch)) depth++;
+    else if ("}])".includes(ch)) depth--;
+    else if (ch === "," && depth === 0) push(i);
+  }
+  push(payload.length - 1);
+  return out;
+}
+function requestOwnershipFindings(functions, schema) {
+  const findings = [];
+  let skippedFiles = 0;
+  let truncated = false;
+  for (const [file, raw] of Object.entries(functions)) {
+    if (!file.startsWith("api/") || typeof raw !== "string" || !raw.includes("server")) continue;
+    if (raw.length > MAX_FILE_BYTES) {
+      skippedFiles++;
+      continue;
+    }
+    if (findings.length >= MAX_FINDINGS) {
+      truncated = true;
+      break;
+    }
+    const source = stripComments(raw);
+    if (VERIFIED.test(source)) continue;
+    const b = bindings(source);
+    if (b.objects.size === 0 && b.forms.size === 0 && b.values.size === 0) continue;
+    const lower = source.toLowerCase();
+    const receivers = serverReceivers(source);
+    const starts = lineIndex(source);
+    const columnsByTable = /* @__PURE__ */ new Map();
+    const seen = /* @__PURE__ */ new Set();
+    let fileCount = 0;
+    let fileFull = false;
+    const report = (table, column, offset) => {
+      if (fileCount >= MAX_FINDINGS_PER_FILE || findings.length >= MAX_FINDINGS) {
+        truncated = true;
+        fileFull = true;
+        return false;
+      }
+      const line = lineAt2(starts, offset);
+      const key = `${line}\0${table}\0${column}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        fileCount++;
+        findings.push({ file, line, table, column });
+      }
+      return true;
+    };
+    const ownershipColumns = (table) => {
+      const cached = columnsByTable.get(table);
+      if (cached) return cached;
+      const declared = schema.tables.find((t) => t.name === table);
+      let columns = [];
+      if (declared) {
+        const owner = declaredOwnerColumn(declared.scope);
+        if (owner) columns = [owner];
+        else if (declared.scope.kind === "server_only") {
+          columns = declared.columns.map((c) => c.name).filter((name) => comparedToCaller(source, lower, name, b.callers));
+        }
+      }
+      columnsByTable.set(table, columns);
+      return columns;
+    };
+    for (const m of source.matchAll(WRITE)) {
+      if (fileFull) break;
+      if (!receivedBy(source, m.index, receivers)) continue;
+      const table = m[3].toLowerCase();
+      const columns = ownershipColumns(table);
+      if (columns.length === 0) continue;
+      const at = m.index + m[0].length;
+      const bare = /^([A-Za-z_$][\w$]*)\s*[,)]/.exec(source.slice(at, at + 80));
+      if (bare && b.objects.has(bare[1])) {
+        report(table, columns.join(", "), at);
+        continue;
+      }
+      const payload = objectLiteral(source, at);
+      if (!payload) {
+        if (source[at] === "{") truncated = true;
+        continue;
+      }
+      let list = entries(payload);
+      if (m[1] === "update") {
+        list = list.flatMap((e) => {
+          if (e.key !== "set" && e.key !== "where") return [e];
+          const valueAt = payload.indexOf(e.value, e.offset);
+          const inner = valueAt < 0 ? null : objectLiteral(payload, valueAt);
+          return inner ? entries(inner).map((x) => ({ ...x, offset: valueAt + x.offset })) : [];
+        });
+      }
+      const spreadIndex = list.findIndex((e) => e.spread !== null && b.objects.has(e.spread));
+      const spreadColumns = [];
+      for (const column of columns) {
+        const keyed = list.map((e, index) => ({ e, index })).filter(({ e }) => e.key?.toLowerCase() === column);
+        const last = keyed[keyed.length - 1];
+        if (last && requestValue(last.e.value, b)) report(table, last.e.key ?? column, at + last.e.offset);
+        else if (spreadIndex >= 0 && (!last || last.index < spreadIndex)) spreadColumns.push(column);
+      }
+      if (spreadColumns.length > 0) report(table, spreadColumns.join(", "), at + list[spreadIndex].offset);
+    }
+  }
+  return { findings, skippedFiles, truncated };
+}
+
 // worker/src/services/source-lint.ts
-var SOURCE_LINT_VERSION = "1";
+var SOURCE_LINT_VERSION = "2";
 async function lintSourceSnapshot(files, functions = {}) {
-  const entries = (map) => Object.keys(map).sort().map((key) => [key, map[key]]);
+  const entries2 = (map) => Object.keys(map).sort().map((key) => [key, map[key]]);
   const sha256 = async (value) => {
     const bytes = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
     return Array.from(new Uint8Array(bytes), (byte) => byte.toString(16).padStart(2, "0")).join("");
   };
   const schema = files["db/schema.ts"];
   const [source_sha256, schema_sha256] = await Promise.all([
-    sha256(JSON.stringify([entries(files), entries(functions)])),
+    sha256(JSON.stringify([entries2(files), entries2(functions)])),
     schema === void 0 ? Promise.resolve(null) : sha256(schema)
   ]);
   return { ...lintSource(files, functions), source_sha256, schema_sha256 };
@@ -20006,9 +20266,11 @@ function lintSource(files, functions = {}) {
     docs: "https://somewhere.tech/docs/sw.env.txt"
   }));
   const schema = files["db/schema.ts"];
+  let requestOwnership = "not-applicable";
   if (schema !== void 0) {
     const parsed = extractSchemaTs(schema);
     if (!parsed.ok) {
+      requestOwnership = "skipped";
       for (const message of parsed.errors) {
         findings.push({
           rule: "somewhere/schema-declaration",
@@ -20017,6 +20279,26 @@ function lintSource(files, functions = {}) {
           line: Number(/\bline (\d+):/.exec(message)?.[1] ?? 1),
           message,
           fix: "Correct this declaration using the indicated schema helper, column or access rule. The same schema parser runs during deploy.",
+          docs: "https://somewhere.tech/docs/declared-data.txt"
+        });
+      }
+    } else {
+      let ownership = [];
+      try {
+        const result = requestOwnershipFindings(functions, parsed.declaration);
+        ownership = result.findings;
+        requestOwnership = result.skippedFiles > 0 || result.truncated ? "partial" : "checked";
+      } catch {
+        requestOwnership = "skipped";
+      }
+      for (const finding of ownership) {
+        findings.push({
+          rule: "somewhere/request-ownership",
+          severity: "warning",
+          file: finding.file,
+          line: finding.line,
+          message: `${finding.table}.${finding.column} is set or matched through sw.db.server from request input, so a caller can choose whose row this is. Lint cannot see authorization done elsewhere; confirm this write is authorized.`,
+          fix: `Set ${finding.column} from the signed-in user (sw.auth) or use the user-mode sw.db write, which sets ownership itself. If the handler intentionally acts for another user, check the caller's role before this write.`,
           docs: "https://somewhere.tech/docs/declared-data.txt"
         });
       }
@@ -20037,6 +20319,6 @@ function lintSource(files, functions = {}) {
   return {
     version: SOURCE_LINT_VERSION,
     findings,
-    coverage: { schema: schema === void 0 ? "absent" : "checked", authorization: "not-assessed" }
+    coverage: { schema: schema === void 0 ? "absent" : "checked", request_ownership: requestOwnership, authorization: "not-assessed" }
   };
 }

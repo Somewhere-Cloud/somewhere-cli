@@ -78,13 +78,14 @@
     "worker/src/runtime/search.ts": "26906aefdc880c1bdcf85456d5d33013512617c5381247b4f17270009a2b7839",
     "worker/src/runtime/storage.ts": "15c7953b994497c7883b774f79ae93bae96e16373a0826cc733d21005de22ad7",
     "worker/src/runtime/tasks.ts": "75efa2e3083853bfba1dc49745ede8865ddd218b84d568a00da2dbd669f9ab23",
-    "worker/src/runtime/version.ts": "cfe166eb697ec4847106e28429ddbc329b936286c5401f82074e7c23d6af237f",
+    "worker/src/runtime/version.ts": "beac16713611ce7b992c3b2bfcc6932a250ab16b7eea3a34bdef93a30d5e27d3",
     "worker/src/runtime/visitor-session.generated.ts": "d86a544fec5249b527546ddca305567549c35b6b635080442cf970b2a1ec69a4",
     "worker/src/runtime/web.ts": "269590d44ffa6239bb6e79999b58ba42435c230f045daea52bf73d09519afb0e",
     "worker/src/security/browser-secret-scan.ts": "7967283a5425ae05c90c03bc9d18b83163b99944fe02cbf3df580f755d304807",
     "worker/src/services/database/draft-ready-read.ts": "906932eba8355a2dcaff57f417bd3d175e517584653310499db0f41b91e6d72f",
     "worker/src/services/jobs/limits.ts": "9ba371e4635a3b469cea721fb9eba20e69757d8a771d6ab181837f39b8280103",
-    "worker/src/services/source-lint.ts": "8c3836b6c7e2686479475950e31fdadf5362b111f0e694fa5e028acf875b6dd7",
+    "worker/src/services/source-lint-ownership.ts": "eb2fafa266e2671e47a85b07085f818ce0bbc4d0761558155af62fe95923809c",
+    "worker/src/services/source-lint.ts": "acfc7b1b10def657ff7d7db7577180f5a3e03f37c5bbc186e2b3e01bb74fb210",
     "worker/src/utils/api-index-route-warnings.ts": "44b5d0a4fd8f6ca8d432506d1ac8d10217a9cec5ea09a402d7f7ee7cec77c7ae",
     "worker/src/utils/authority.ts": "c8ae94d6bb996a17c39bcd2f3457ff0226406581a5a91e0bc6c818db801f5622",
     "worker/src/utils/authority/intake-bake.ts": "7216e288e40673819295d999b3bdbf5e4319e1e21608e3b81eda9d102ff8d636",
@@ -131,6 +132,6 @@
     "worker/src/utils/sql-tokens.ts": "a00607453624fb05ee2a063b73b290ce26ffa50cc133c331152862d533881b7f",
     "worker/src/vendor/neondatabase-serverless/source.generated.ts": "96a3c18fde7d8888fdb53a4d7cd0721c238a234521d2084d1e66868a8df8e69c"
   },
-  "sha256": "c8b23fbc8bd9c3dbbe2cb8b149e613cce1cd3b5fb86c949a24ba1aed1828a3ff",
-  "fixtures_sha256": "8b5e3cf3df8968a8bbdc40a63cd95030b4eabca8c573ea0e6b7ecab60c9bb4d4"
+  "sha256": "6325b6da51db380a67a0b28e58888d2167c5f4e8e54f91ab605c5bd4bb44288f",
+  "fixtures_sha256": "aa8f94512700e3201fb323e03b860b1b74d3e78be504ea740a9dc117a501bc03"
 }

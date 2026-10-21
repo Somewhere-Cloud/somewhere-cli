@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.37.64
+
+### Added
+
+- `somewhere verify` multi-user journeys report where their time went: each segment carries `timing` (the platform's own browser-call timing numbers and `browser_reused`, plus this CLI's `request_wall_ms`), and the journey adds `test_users_create_ms`, `segments_ms`, `cleanup_ms` and `test_users_delete_ms`. Reporting only; no behaviour, ordering or cleanup change (#68).
+
+### Fixed
+
+- Starter apps from `somewhere init` adopt `@somewhere-tech/sdk` 0.12.4 (feature starter exact `0.12.4`, basic starter `^0.12.4`), which issues an expiry on every cookie reply and reconciles an orphaned refresh marker without a rotation replay (#64).
+
 ## 0.37.63
 
 ### Added
@@ -8,6 +18,7 @@
 
 ### Fixed
 
+- `somewhere whoami` says what its project count counts, so it reconciles with `somewhere projects` (for example "6 projects you own (`somewhere projects` lists 5 of them; not listed: 1 archived)"); `--json` still prints the raw account response. Shipped in 0.37.63; this entry was added afterwards (#66).
 - `somewhere deploy`: when the after-live reference check is still pending, text output names the existing read for this exact version (`somewhere call project_deploy_log '{"version":N}'`). `--json` is unchanged (#62).
 
 ## 0.37.62

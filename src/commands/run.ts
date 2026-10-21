@@ -4,6 +4,7 @@ import { Command } from 'commander';
 import { ApiClient, CliApiError } from '../lib/client.js';
 import { getToken, loadProjectConfig } from '../lib/config.js';
 import { bold, dim, error, red, teal, warn } from '../lib/output.js';
+import { unlinkedFolderHint } from '../lib/link-hint.js';
 
 interface RunResult {
   result: unknown;
@@ -78,7 +79,7 @@ export function registerRun(program: Command) {
       if (!projectId) {
         const config = loadProjectConfig();
         if (!config) {
-          error('No project. Pass --project <id> or run from a linked directory.');
+          error('No project. Pass --project <id> or run from a linked directory.' + unlinkedFolderHint());
           process.exit(1);
         }
         projectId = config.project_id;

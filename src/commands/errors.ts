@@ -3,6 +3,7 @@ import { ApiClient, CliApiError } from '../lib/client.js';
 import { getToken, loadProjectConfig } from '../lib/config.js';
 import { dim, error, red, table, teal, timeAgo, yellow } from '../lib/output.js';
 import { chooseProjectRef, projectRefConflictMessage } from '../lib/project-ref.js';
+import { unlinkedFolderHint } from '../lib/link-hint.js';
 
 interface ErrorRow {
   endpoint?: string | null;
@@ -63,7 +64,7 @@ export function registerErrors(program: Command) {
       if (!projectId) {
         const config = loadProjectConfig();
         if (!config) {
-          error('No project. Pass a project ID (positionally or with --project) or run from a linked directory.');
+          error('No project. Pass a project ID (positionally or with --project) or run from a linked directory.' + unlinkedFolderHint());
           process.exit(1);
         }
         projectId = config.project_id;

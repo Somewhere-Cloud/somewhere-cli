@@ -16,6 +16,7 @@ import {
   type BrowserSequenceAction,
   type ExpectedBrowserRequest,
 } from '../lib/browser-actions.js';
+import { unlinkedFolderHint } from '../lib/link-hint.js';
 
 /** The browser run drives a real headless session server-side (navigate +
  *  settle + screenshot) — give it a wider budget than a normal API call. */
@@ -753,7 +754,7 @@ export function registerBrowser(program: Command) {
 
       if (!body.url && !body.project_id) {
         error(
-          'Nothing to open. Pass a URL or --project, or run from a linked project directory.',
+          'Nothing to open. Pass a URL or --project, or run from a linked project directory.' + unlinkedFolderHint(),
         );
         process.exit(1);
       }

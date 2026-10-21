@@ -352,6 +352,34 @@ export function formatSignedInUnlinkedExplanation(): string {
   ].join('\n');
 }
 
+/** The folder's link names a project this sign-in cannot open (tsk_8a68dfa2
+ *  item 14: typically a temporary project that expired unclaimed, after the
+ *  developer signed in). The platform answers not-found and no-access alike,
+ *  so this names possibilities only, never which one. Reached only when the
+ *  platform refused the deploy before applying anything. */
+export function linkedProjectNotFoundSteps(signedIn: boolean): string[] {
+  return signedIn
+    ? [
+        'See your projects: `somewhere projects`.',
+        'Deploy this folder to one of them: `somewhere init --link --project <name-or-id>`, then `somewhere deploy`.',
+        // init refuses a linked folder without a terminal, so the stale link goes first.
+        'Or create a new project for it: delete this folder\'s .somewhere.json (your other files are kept), run `somewhere init --bare --name <name>`, then `somewhere deploy`.',
+      ]
+    : [
+        'If the project is in your account, sign in with `somewhere login` and deploy again.',
+        'Start a new temporary project: delete this folder\'s .somewhere.json, then run `somewhere deploy` again.',
+      ];
+}
+
+export function formatLinkedProjectNotFoundExplanation(linkedProjectId: string, signedIn: boolean): string {
+  return [
+    `This folder is linked to project ${linkedProjectId} (in .somewhere.json), which this ${signedIn ? 'sign-in' : 'temporary workspace'} cannot open. It may belong to another account or have been deleted; a temporary project that expired unclaimed cannot be recovered. Nothing was deployed.`,
+    '',
+    'Next steps:',
+    ...linkedProjectNotFoundSteps(signedIn).map((step) => `  ${step}`),
+  ].join('\n');
+}
+
 /** The stored temporary session expired before this deploy (tsk_8a68dfa2
  *  item 14). Built only from this machine's own record, so it says nothing
  *  about whether any project exists. */
@@ -836,6 +864,12 @@ export function registerDeploy(program: Command) {
           : `Deploying ${totalFiles} files (${formatBytes(totalBytes)})...`;
       }
 
+      // The platform answered the deploy (or dry run); a later failure is not
+      // a refused deploy, so it never gets the relink advice below.
+      let deployAnswered = false;
+      // The target came from this folder's link, not --project or a project
+      // created just now: a not-found then means the link itself is stale.
+      const targetFromLink = !opts.project && Boolean(linkedProjectEntry) && projectId === linkedProjectEntry?.config.project_id;
       try {
         const body: Record<string, unknown> = {
           project_id: projectId,
@@ -909,6 +943,7 @@ export function registerDeploy(program: Command) {
             dryRun: true,
             baseText: spinner?.text ?? 'Checking deploy...',
           });
+          deployAnswered = true;
           spinner?.stop();
           await settleNotices();
           if (opts.json) {
@@ -927,6 +962,7 @@ export function registerDeploy(program: Command) {
           dryRun: false,
           baseText: spinner?.text ?? 'Deploying...',
         });
+        deployAnswered = true;
         const requestMs = performance.now() - requestStartedAt;
 
         spinner?.stop();
@@ -1170,16 +1206,23 @@ export function registerDeploy(program: Command) {
         // Always show the error code + HTTP status — "Project not found"
         // with no code/status left a customer unable to tell auth from
         // routing from payload failures (pfb_70e9d140c5a0).
+        const staleLink = err instanceof CliApiError && err.code === 'PROJECT_NOT_FOUND'
+          && targetFromLink && !deployAnswered && projectId;
         if (err instanceof CliApiError) {
           // The correlation ids, ALWAYS — a deploy failure the developer cannot
           // name is one we cannot find either (tsk_9c5ed7f8).
           const reference = formatErrorReference(err.meta);
+          const signedIn = !tempSession;
           if (opts.json) {
-            printJsonError(err.code, err.message, platformErrorEnvelope(err)?.extra);
+            printJsonError(err.code, err.message, {
+              ...(platformErrorEnvelope(err)?.extra ?? {}),
+              ...(staleLink ? { linked_project_id: projectId, deployed: false, next_steps: linkedProjectNotFoundSteps(signedIn) } : {}),
+            });
           } else {
             error(
               `${err.message} ${dim(err.statusCode ? `[${err.code}, HTTP ${err.statusCode}]` : `[${err.code}]`)}`,
             );
+            if (staleLink) console.error(`\n${formatLinkedProjectNotFoundExplanation(projectId as string, signedIn)}`);
             if (reference) info(dim(reference));
           }
         } else {

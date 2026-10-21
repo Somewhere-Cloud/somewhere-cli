@@ -19,6 +19,7 @@ import {
   buildScaffoldTsconfig,
   extractDeps,
 } from '../lib/scaffold.js';
+import { unlinkedFolderHint } from '../lib/link-hint.js';
 
 interface SourceResponse {
   project_id: string;
@@ -57,7 +58,7 @@ export function registerPull(program: Command) {
       let projectId = projectArg;
       if (!projectId) {
         if (!linkedProjectEntry) {
-          error('No project specified and no .somewhere.json found. Pass a project ID or run `somewhere init`.');
+          error('No project specified and no .somewhere.json found. Pass a project ID.' + unlinkedFolderHint());
           process.exit(1);
         }
         projectId = linkedProjectEntry.config.project_id;

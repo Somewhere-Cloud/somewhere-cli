@@ -5,6 +5,7 @@ import { ApiClient, CliApiError } from '../lib/client.js';
 import { getToken, loadProjectConfig } from '../lib/config.js';
 import { dim, error, info, platformErrorEnvelope, printJson, printJsonError, success, teal, warn } from '../lib/output.js';
 import { chooseProjectRef, projectRefConflictMessage } from '../lib/project-ref.js';
+import { unlinkedFolderHint } from '../lib/link-hint.js';
 
 interface RollbackResult {
   restored_at: string;
@@ -52,10 +53,10 @@ export function registerRollback(program: Command) {
         const config = loadProjectConfig();
         if (!config) {
           if (opts.json) {
-            printJsonError('NO_PROJECT', 'No project specified and no .somewhere.json found.');
+            printJsonError('NO_PROJECT', 'No project specified and no .somewhere.json found.' + unlinkedFolderHint());
             process.exit(1);
           }
-          error('No project specified and no .somewhere.json found.');
+          error('No project specified and no .somewhere.json found.' + unlinkedFolderHint());
           process.exit(1);
         }
         projectId = config.project_id;

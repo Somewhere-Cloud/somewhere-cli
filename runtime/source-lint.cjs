@@ -13056,9 +13056,17 @@ var AUTH_JS = `    auth: (function () {
             err.code = 'VALIDATION_ERROR';
             throw err;
           }
+          // Carries expires_at like login/signup, so a cookie-mode verify tells the client when to
+          // refresh. Without it the SDK refreshed at once and a page change orphaned the pending
+          // marker (pfb_01e440702f31). The link is already consumed: an unreadable token returns
+          // the session unchanged rather than throwing it away.
           return platformJSON('/v1/auth/magic-link/verify', {
             method: 'POST',
             body: JSON.stringify({ ...opts, project_id: projectId }),
+          }).then((d) => {
+            const access = d && (d.token || d.access_token);
+            if (!access || d.expires_at !== undefined) return d;
+            try { return { ...d, expires_at: __sw_preflightJwt(access).expSec * 1000 }; } catch { return d; }
           });
         },
 
@@ -25915,7 +25923,10 @@ function requestOwnershipFindings(functions, schema) {
         skippedFiles++;
       } else {
         try {
-          if (hasVerifierCall(raw)) continue;
+          if (hasVerifierCall(raw)) {
+            skippedFiles++;
+            continue;
+          }
         } catch {
           skippedFiles++;
         }

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.37.48
+
+### Fixed
+
+- `somewhere deploy` no longer reports "Your deploy was NOT applied" when its own automatic retry, sent after the first attempt timed out or lost its connection, is refused as STALE_RELEASE_BASE: the first attempt may already be live, so the CLI now says that and asks you to check the live release. `--json` adds `first_attempt_outcome: "unknown"` and `first_attempt_failure`. Other stale-base answers are unchanged.
+
 ## 0.37.47
 
 ### Changed

@@ -71,6 +71,8 @@ export function platformErrorEnvelope(
 let failureHook: ((cause: unknown) => void) | null = null;
 /** index.ts installs the local repro capture here; output.ts stays dependency-free. */
 export function setFailureHook(hook: ((cause: unknown) => void) | null): void { failureHook = hook; }
+/** Record a failure that a command reports in its own output (for example verify's summary) without printing. */
+export function noteFailure(cause: unknown): void { try { failureHook?.(cause); } catch { /* never affects the command */ } }
 
 export function error(msg: string, cause?: unknown) {
   try { failureHook?.(cause); } catch { /* local diagnostics never change a command's failure */ }

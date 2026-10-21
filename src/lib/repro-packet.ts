@@ -25,6 +25,23 @@ const METHODS = new Set(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']);
 const MUTATING = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
 export type Outcome = 'refused' | 'unknown' | 'failed';
+
+/** The one structured detail a refusal may carry (agreed with Deploy f74, tsk_da2dba3d): where in the
+ *  caller's own input the problem is, and the numeric limit. `path` is built by the platform from an
+ *  index and a fixed key, never from flow text; anything that fails these shapes is dropped. */
+export interface InvalidDetail { path: string; limit_ms?: number }
+const INVALID_PATH = /^(actions|steps)\[\d{1,4}\](\.[a-z_]{1,32})?$/;
+export function safeInvalid(value: unknown): InvalidDetail | undefined {
+  const v = value as { path?: unknown; limit_ms?: unknown } | null;
+  if (!v || typeof v !== 'object' || typeof v.path !== 'string' || !INVALID_PATH.test(v.path)) return undefined;
+  const out: InvalidDetail = { path: v.path };
+  if (typeof v.limit_ms === 'number' && Number.isSafeInteger(v.limit_ms) && v.limit_ms > 0) out.limit_ms = v.limit_ms;
+  return out;
+}
+export function safeCode(value: unknown): string | undefined { return typeof value === 'string' && CODE.test(value) ? value : undefined; }
+export function safeStatus(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 100 && value <= 599 ? value : undefined;
+}
 export interface ReproRecord {
   schema: typeof REPRO_SCHEMA;
   cli_version: string;
@@ -40,6 +57,7 @@ export interface ReproRecord {
   retry_after_ms?: number;
   outcome: Outcome;
   duration_ms?: number;
+  invalid?: InvalidDetail;
 }
 
 /** Static API route words. Anything else in a path (a slug, a file path, a name) is never copied:
@@ -79,7 +97,7 @@ export function commandPath(names: string[]): string | undefined {
   return kept.length ? kept.join(' ') : undefined;
 }
 
-interface TypedFailure { name?: string; code?: unknown; statusCode?: unknown; meta?: Record<string, unknown>; operation?: unknown; tool?: unknown }
+interface TypedFailure { name?: string; code?: unknown; statusCode?: unknown; meta?: Record<string, unknown>; operation?: unknown; tool?: unknown; data?: unknown; invalid?: unknown }
 
 /** Build the record from a failure's typed fields. `cause` is never read for text. */
 export function buildRecord(cause: unknown, context: { cliVersion: string; command?: string; projectId?: string; startedAt?: number; now?: number }): ReproRecord {
@@ -106,6 +124,8 @@ export function buildRecord(cause: unknown, context: { cliVersion: string; comma
   if (typeof meta.retry === 'boolean') record.retry = meta.retry;
   if (typeof meta.retryAfterMs === 'number' && Number.isInteger(meta.retryAfterMs) && meta.retryAfterMs >= 0) record.retry_after_ms = meta.retryAfterMs;
   if (context.startedAt && now >= context.startedAt) record.duration_ms = now - context.startedAt;
+  const invalid = safeInvalid(typed.invalid ?? (typed.data as { invalid?: unknown } | undefined)?.invalid);
+  if (invalid) record.invalid = invalid;
   return record;
 }
 
@@ -140,6 +160,7 @@ export function readLastError(): ReproRecord | null {
   if (typeof raw.retry === 'boolean') out.retry = raw.retry;
   if (typeof raw.retry_after_ms === 'number' && Number.isInteger(raw.retry_after_ms) && raw.retry_after_ms >= 0) out.retry_after_ms = raw.retry_after_ms;
   if (typeof raw.duration_ms === 'number' && Number.isInteger(raw.duration_ms) && raw.duration_ms >= 0) out.duration_ms = raw.duration_ms;
+  const invalid = safeInvalid(raw.invalid); if (invalid) out.invalid = invalid;
   return out;
 }
 

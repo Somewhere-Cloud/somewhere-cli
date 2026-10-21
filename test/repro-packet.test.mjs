@@ -122,3 +122,11 @@ test('builders: route templates drop queries and ids; non-platform errors are CL
   assert.equal(buildPacket(record).surface, 'browser_verify');
   assert.equal(buildRecord(Object.assign(new Error('x'), { name: 'CliApiError', code: 'lower-case-bad', statusCode: 9999 }), { cliVersion: '1' }).code, 'UNCLASSIFIED');
 });
+
+test('a verify refusal records only the agreed { path, limit_ms } detail alongside its code', () => {
+  const record = buildRecord({ name: 'CliApiError', code: 'VALIDATION_ERROR', statusCode: 400, invalid: { path: 'actions[6].wait', limit_ms: 45000 } }, { cliVersion: '0.37.64', command: 'verify' });
+  assert.deepEqual(record.invalid, { path: 'actions[6].wait', limit_ms: 45000 });
+  assert.equal(buildPacket(record).surface, 'browser_verify');
+  const hostile = buildRecord({ name: 'CliApiError', code: 'VALIDATION_ERROR', statusCode: 400, invalid: { path: 'button[data-x="hunter2"]' } }, { cliVersion: '0.37.64' });
+  assert.equal(hostile.invalid, undefined);
+});

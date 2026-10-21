@@ -94,3 +94,17 @@ test('inherited object names never resolve through aliases', async () => {
   // A plain object passed by a caller is guarded too.
   assert.equal(findPublicDocsPage(pages, {}, 'constructor'), undefined);
 });
+
+test('Object.prototype names are unknown topics, never a false network error (tsk_409858c5)', async () => {
+  await withManifest(WITH_ALIASES, async (base) => {
+    for (const name of ['constructor', '__proto__', 'toString', 'hasOwnProperty']) {
+      const r = await run(['docs', name], base);
+      assert.equal(r.status, 1, name);
+      assert.match(r.stderr + r.stdout, new RegExp(`No documentation topic named "${name}"`), `${name}: not found`);
+      assert.doesNotMatch(r.stderr + r.stdout, /Could not reach|fetch failed/, `${name}: no false network error`);
+    }
+    // Quick links and their aliases still resolve as before.
+    const quick = await run(['docs', 'anon', '--json'], base);
+    assert.doesNotMatch(quick.stderr + quick.stdout, /No documentation topic/);
+  });
+});

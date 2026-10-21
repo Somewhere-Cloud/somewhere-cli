@@ -573,9 +573,13 @@ export function registerDocs(program: Command) {
         return;
       }
       const requestedTopic = topic ?? 'docs';
-      const key = TOPICS[requestedTopic]
+      // Own keys only: `constructor`, `__proto__` or `toString` must not resolve
+      // to an Object.prototype member and report a false network error (tsk_409858c5).
+      const ownKey = (map: object, name: string) => Object.prototype.hasOwnProperty.call(map, name);
+      const lowerTopic = requestedTopic.toLowerCase();
+      const key = ownKey(TOPICS, requestedTopic)
         ? requestedTopic
-        : ALIASES[requestedTopic.toLowerCase()];
+        : ownKey(ALIASES, lowerTopic) ? ALIASES[lowerTopic as keyof typeof ALIASES] : undefined;
       const resolvedTopic = key ?? requestedTopic;
       const entry = key ? TOPICS[key] : undefined;
       if (entry && view.kind === 'section') {

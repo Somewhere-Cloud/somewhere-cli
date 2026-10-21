@@ -322,6 +322,50 @@ export function formatStaleReleaseBaseExplanation(changedFiles: string[] = [], h
   ].filter((line): line is string => line !== null).join('\n');
 }
 
+/**
+ * STALE_RELEASE_BASE on a retry the CLI sent after its own timeout or lost
+ * connection: the refusal itself changed nothing, but the FIRST attempt may
+ * have gone live (its answer never arrived), so "NOT applied" would be false.
+ */
+export function formatAmbiguousRetryStaleExplanation(transportFailure: string): string {
+  const what = transportFailure === 'TIMEOUT' ? 'timed out'
+    : transportFailure === 'SERVER_SLOW' ? 'stalled waiting for the server'
+      : 'lost its connection';
+  return [
+    `The first deploy attempt ${what} before the platform answered, so it may already have gone live. The automatic retry was refused because the live release is now newer than the version this folder came from; that refusal changed nothing.`,
+    '',
+    'Next steps:',
+    '  Check the live release before deploying again: run `somewhere pull` into a separate folder (or open the dashboard) and compare it with your changes.',
+    '  If your changes are live, you are done. If they are not, deploy again from the pulled source, or run `somewhere deploy --force` to replace the live release intentionally.',
+  ].join('\n');
+}
+
+/** Signed in, nothing linked: deploy never creates or links a project in the
+ *  account on its own; say exactly how to (tsk_8a68dfa2 item 15). */
+export function formatSignedInUnlinkedExplanation(): string {
+  return [
+    'No project is linked to this folder. You are signed in, so deploy will not create or pick a project in your account on its own.',
+    '',
+    'Next steps:',
+    '  New project: run `somewhere init --bare --name <name>` (creates it in your account and links this folder; writes no files), then `somewhere deploy`.',
+    '  Existing project: run `somewhere link --project <name-or-id>` (list yours with `somewhere projects`), or deploy once with `somewhere deploy --project <name-or-id>`.',
+  ].join('\n');
+}
+
+/** The stored temporary session expired before this deploy (tsk_8a68dfa2
+ *  item 14). Built only from this machine's own record, so it says nothing
+ *  about whether any project exists. */
+export function formatExpiredTemporaryProjectExplanation(expiredAt: string): string {
+  return [
+    `The temporary workspace on this machine expired at ${expiredAt} without being claimed. Its projects can no longer be deployed to, and a new temporary workspace cannot deploy to this folder's linked project. Nothing was deployed.`,
+    '',
+    'Next steps:',
+    '  If you claimed this workspace in the browser, sign in with `somewhere login` and deploy again; your projects are in your account.',
+    '  Start a new temporary project: delete this folder\'s .somewhere.json, then run `somewhere deploy` again.',
+    '  Keep your work in an account: sign in (`somewhere login`, or `somewhere signup`), then run `somewhere init --bare --name <name>` and `somewhere deploy`.',
+  ].join('\n');
+}
+
 // No record of which published version this folder's source came from (a
 // folder linked to an existing project, or state from an older CLI). The CLI
 // never fills the gap with the current version: that would publish stale files
@@ -345,6 +389,14 @@ function findProjectConfigEntry(targetDir: string): ProjectConfigEntry | null {
 
 /** A temporary credential is reusable until its window closes; no recorded
  *  expiry means the server never gave one, which is not a reason to re-mint. */
+/** The stored temporary session's own expiry time has passed. A session that
+ *  is merely missing its token is not reported as expired. */
+export function temporarySessionExpired(session: { temp_expires_at?: string } | null, nowMs = Date.now()): boolean {
+  if (!session?.temp_expires_at) return false;
+  const expiresMs = new Date(session.temp_expires_at).getTime();
+  return Number.isFinite(expiresMs) && expiresMs <= nowMs;
+}
+
 export function isTempSessionLive(
   session: { token?: string; temp_expires_at?: string } | null,
   nowMs = Date.now(),
@@ -459,6 +511,23 @@ export function registerDeploy(program: Command) {
       }
 
       const storedConfig = loadConfig();
+      // The stored temporary session expired unclaimed and this deploy targets
+      // an existing project (a folder link or --project). A freshly minted
+      // temporary account owns no project, so minting one only to get a
+      // PROJECT_NOT_FOUND back is skipped: the answer comes from this
+      // machine's own record, before any request (tsk_8a68dfa2 item 14).
+      if (
+        storedConfig?.temporary && storedConfig.temp_expires_at && temporarySessionExpired(storedConfig)
+        && (opts.project || findProjectConfigEntry(targetDir))
+      ) {
+        const message = formatExpiredTemporaryProjectExplanation(storedConfig.temp_expires_at);
+        if (opts.json) {
+          printJson({ ok: false, error: 'TEMPORARY_SESSION_EXPIRED', message, temp_expires_at: storedConfig.temp_expires_at });
+        } else {
+          console.error(message);
+        }
+        process.exit(1);
+      }
 
       // Anonymous deploy is the default first-touch path. A caller with no
       // saved credential should get a live app from `somewhere deploy`, not a
@@ -646,9 +715,7 @@ export function registerDeploy(program: Command) {
             process.exit(1);
           }
         } else {
-          error(
-            'No project linked. Run `somewhere init` or pass --project <id>',
-          );
+          error(formatSignedInUnlinkedExplanation());
           process.exit(1);
         }
       } else if (linkedProjectEntry && projectConfigMatchesRef(linkedProjectEntry.config, projectId)) {
@@ -1076,10 +1143,13 @@ export function registerDeploy(program: Command) {
             err.code === 'BASE_REQUIRED'
               ? formatBaseRequiredExplanation()
               : err.code === 'STALE_RELEASE_BASE'
-                ? formatStaleReleaseBaseExplanation(readStringList(err.data?.changed_files), err.data?.history_unavailable === true)
+                ? (deployRetriedAfterTransportFailure(err)
+                  ? formatAmbiguousRetryStaleExplanation(deployRetriedAfterTransportFailure(err)!)
+                  : formatStaleReleaseBaseExplanation(readStringList(err.data?.changed_files), err.data?.history_unavailable === true))
                 : formatStaleBaseExplanation(readStaleBaseDetails(err.data));
+          const firstAttempt = err.code === 'STALE_RELEASE_BASE' ? deployRetriedAfterTransportFailure(err) : null;
           if (opts.json) {
-            printJson({ ok: false, error: err.code, message, ...(err.data ?? {}) });
+            printJson({ ok: false, error: err.code, message, ...(err.data ?? {}), ...(firstAttempt ? { first_attempt_outcome: 'unknown', first_attempt_failure: firstAttempt } : {}) });
           } else {
             console.error(message);
           }
@@ -1323,11 +1393,25 @@ interface DeployRetryOptions {
   baseText: string;
 }
 
+/**
+ * Errors from a deploy re-sent after the CLI's OWN transport verdict
+ * (TIMEOUT / SERVER_SLOW / NETWORK_ERROR) on the previous attempt. That first
+ * attempt may have completed on the server, so a STALE_RELEASE_BASE answer to
+ * the retry does not mean the deploy was not applied (tsk_8a68dfa2 item 1).
+ */
+const retriedAfterTransportFailure = new WeakMap<object, string>();
+
+/** The client-detected failure the deploy was retried after, if any. */
+export function deployRetriedAfterTransportFailure(err: unknown): string | null {
+  return err && typeof err === 'object' ? retriedAfterTransportFailure.get(err) ?? null : null;
+}
+
 async function callDeployWithRetry<T>(
   client: ApiClient,
   body: Record<string, unknown>,
   opts: DeployRetryOptions,
 ): Promise<T> {
+  let transportFailure: string | null = null;
   for (let attempt = 1; attempt <= DEPLOY_MAX_ATTEMPTS; attempt++) {
     const startedAt = Date.now();
     const stopHeartbeat = startDeployHeartbeat(opts, attempt, startedAt);
@@ -1336,9 +1420,13 @@ async function callDeployWithRetry<T>(
         timeoutMs: deployTimeoutMs(),
       });
     } catch (err) {
+      if (transportFailure && err && typeof err === 'object') retriedAfterTransportFailure.set(err, transportFailure);
       if (attempt >= DEPLOY_MAX_ATTEMPTS) throw err;
 
       if (!isRetryableDeployError(err)) throw err;
+      // Only the CLI's own verdicts leave the first attempt's outcome unknown;
+      // a platform retry: true says that attempt changed nothing.
+      transportFailure = err instanceof CliApiError && RETRYABLE_DEPLOY_CODES.has(err.code) ? err.code : null;
       const waitMs = retryWaitMs(err);
       if (!opts.json) {
         opts.spinner?.stop();

@@ -49,11 +49,11 @@ function generateGreen() {
   return { dir, result };
 }
 
-test('auth template SDK defaults adopt 0.12.1 (MFA continuation, social sign-in and email verification routes) and preserve exact versus caret policy', () => {
+test('auth template SDK defaults adopt 0.12.3 (refresh of short-lived app sessions without waiting on valid-token reads) and preserve exact versus caret policy', () => {
   const selection = { requested: ['auth'], added: [], modules: ['auth'], ui: 'styled' };
   for (const [files, expected] of [
-    [createFeatureTemplate(selection, { appName: 'Starter' }), '0.12.1'],
-    [createHappyPathTemplate(), '^0.12.1'],
+    [createFeatureTemplate(selection, { appName: 'Starter' }), '0.12.3'],
+    [createHappyPathTemplate(), '^0.12.3'],
   ]) {
     const manifest = JSON.parse(files.find((file) => file.path === 'package.json').content);
     assert.equal(manifest.dependencies['@somewhere-tech/sdk'], expected);
@@ -124,7 +124,7 @@ test('minimal starter is a small typed frontend, function, and schema', () => {
   });
   assert.equal(
     readFileSync(join(dir, '.gitignore'), 'utf8'),
-    'node_modules\ndist\nbuild\n.env\n',
+    'node_modules\ndist\nbuild\n.env\n# Generated from db/schema.ts by somewhere typecheck, dev and deploy.\n__somewhere_data.d.ts\n__somewhere_files.d.ts\n',
   );
   for (const version of [
     ...Object.values(pkg.dependencies),
@@ -244,7 +244,7 @@ test('default starter is the auth module: SDK client, packaged handler, hooks, r
   assert.doesNotMatch(app, /fetch\(/, 'components never fetch; services do');
   assert.match(app, /Checking your session/, 'a visible loading state, never a blank gate');
   const pkg = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'));
-  assert.equal(pkg.dependencies['@somewhere-tech/sdk'], '0.12.1');
+  assert.equal(pkg.dependencies['@somewhere-tech/sdk'], '0.12.3');
   for (const version of [...Object.values(pkg.dependencies), ...Object.values(pkg.devDependencies)]) {
     assert.match(version, /^\d+\.\d+\.\d+$/, `dependency is not pinned: ${version}`);
   }
@@ -360,7 +360,7 @@ test('one generated template consumes the SDK auth adapter and server data/files
   assert.equal(result.created.length, 18);
   assert.equal(
     readFileSync(join(dir, '.gitignore'), 'utf8'),
-    'node_modules\ndist\nbuild\n.env\n',
+    'node_modules\ndist\nbuild\n.env\n# Generated from db/schema.ts by somewhere typecheck, dev and deploy.\n__somewhere_data.d.ts\n__somewhere_files.d.ts\n',
   );
 
   const auth = readFileSync(join(dir, 'api/auth/[...path].ts'), 'utf8');
@@ -401,7 +401,7 @@ test('one generated template consumes the SDK auth adapter and server data/files
   assert.match('JWT rotation remains SDK-owned.', authMechanicsTerms);
 
   const packageJson = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'));
-  assert.equal(packageJson.dependencies['@somewhere-tech/sdk'], '^0.12.1');
+  assert.equal(packageJson.dependencies['@somewhere-tech/sdk'], '^0.12.3');
   assert.equal(packageJson.scripts.build, undefined);
 
   const approvedAuthGuidance =
@@ -594,4 +594,17 @@ test('generated starter produces a clean deploy-check request fixture', () => {
   assert.equal(body.project_id, 'fixture-project');
   assert.deepEqual(body.functions, collected.functions);
   assert.deepEqual(body.files, collected.files);
+});
+
+// Generated editor declarations are rebuilt from db/schema.ts on every
+// typecheck, dev and deploy, so new projects keep them out of version control.
+test('init templates ignore exactly the generated declaration files', async () => {
+  const { DATA_DECLARATION_FILE, FILES_DECLARATION_FILE } = await import('../dist/lib/declared-data.js');
+  const { createGreenTemplate } = await import('../dist/lib/init-green-template.js');
+  const selection = { requested: ['auth'], added: [], modules: ['auth'], ui: 'styled' };
+  for (const files of [createHappyPathTemplate(), createFeatureTemplate(selection, { appName: 'Starter' }), createGreenTemplate()]) {
+    const ignored = files.find((file) => file.path === '.gitignore').content.split('\n');
+    assert.ok(ignored.includes(DATA_DECLARATION_FILE) && ignored.includes(FILES_DECLARATION_FILE));
+    for (const keep of ['src', 'api', 'db', 'db/schema.ts', '*.ts']) assert.ok(!ignored.includes(keep), `${keep} stays tracked`);
+  }
 });

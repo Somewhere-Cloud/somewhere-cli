@@ -148,7 +148,7 @@ Deploy the raw source. The platform compiles it; do not create or deploy a
 
 export function createGreenTemplate(): InitScaffoldFile[] {
   return [
-    { path: '.gitignore', content: 'node_modules\ndist\nbuild\n.env\n' },
+    { path: '.gitignore', content: 'node_modules\ndist\nbuild\n.env\n# Generated from db/schema.ts by somewhere typecheck, dev and deploy.\n__somewhere_data.d.ts\n__somewhere_files.d.ts\n' },
     { path: 'AGENTS.md', content: INIT_AGENTS_MD },
     { path: 'CLAUDE.md', content: INIT_CLAUDE_MD },
     { path: 'README.md', content: README },

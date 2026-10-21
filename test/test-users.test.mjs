@@ -222,3 +222,26 @@ test('cleanup that cannot confirm removal keeps the manifest and the state, and 
   const unknown = JSON.parse((await run(['cleanup', '--json'], app, configDir)).out);
   assert.deepEqual(unknown.identities.unknown, ['u_1_1'], 'an unconfirmed readback is unknown, not removed');
 });
+
+test('a manifest whose state file points outside .somewhere/test is refused and nothing is deleted', async () => {
+  reset();
+  const { app, configDir } = fixture();
+  assert.equal((await run(['prepare', 'alice'], app, configDir)).status, 0);
+  const outside = join(app, 'precious.txt');
+  writeFileSync(outside, 'keep me');
+  const path = join(app, '.somewhere', 'test', 'manifest.json');
+  const manifest = JSON.parse(readFileSync(path, 'utf8'));
+  manifest.actors[0].state_file = '../../precious.txt';
+  writeFileSync(path, JSON.stringify(manifest));
+  const r = await run(['cleanup'], app, configDir);
+  assert.equal(r.status, 1);
+  assert.match(r.out, /MANIFEST_INVALID/);
+  assert.equal(readFileSync(outside, 'utf8'), 'keep me', 'the file outside the state dir is untouched');
+  assert.equal(api.calls.filter((c) => c.method === 'DELETE').length, 0, 'no identity deleted from a refused manifest');
+  manifest.actors[0].state_file = 'alice.state.json';
+  manifest.actors[0].name = '../alice';
+  writeFileSync(path, JSON.stringify(manifest));
+  assert.match((await run(['cleanup'], app, configDir)).out, /MANIFEST_INVALID/);
+  assert.match((await run(['inbox', '../alice', '--since', '0'], app, configDir)).out, /MANIFEST_INVALID/);
+});
+

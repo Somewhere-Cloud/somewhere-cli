@@ -123,11 +123,23 @@ export function ensureGitignored(root: string): 'present' | 'added' | 'created' 
   return 'added';
 }
 
+/** The manifest is a file on disk that may have been committed or edited, so every field later used
+ *  to touch the filesystem or the API is validated here: an actor's state file is always exactly
+ *  `<name>.state.json` for a valid actor name, so cleanup can never delete outside .somewhere/test/. */
 export function readManifest(root: string): TestManifest | null {
   const path = join(stateDir(root), MANIFEST_FILE);
   if (!existsSync(path)) return null;
-  const value = JSON.parse(readFileSync(path, 'utf8')) as TestManifest;
-  if (value?.schema !== 1 || !Array.isArray(value.actors) || typeof value.project_id !== 'string') throw new Error(`${path} is not a test-users manifest.`);
+  const invalid = (why: string) => Object.assign(new Error(`${path} is not a valid test-users manifest (${why}); nothing was changed.`), { code: 'MANIFEST_INVALID' });
+  let value: TestManifest;
+  try { value = JSON.parse(readFileSync(path, 'utf8')) as TestManifest; } catch { throw invalid('not JSON'); }
+  if (value?.schema !== 1 || !Array.isArray(value.actors) || typeof value.project_id !== 'string') throw invalid('wrong shape');
+  const seen = new Set<string>();
+  for (const actor of value.actors) {
+    if (!actor || typeof actor.name !== 'string' || !ACTOR.test(actor.name) || seen.has(actor.name)) throw invalid('bad actor name');
+    if (actor.state_file !== `${actor.name}.state.json`) throw invalid(`actor ${actor.name} has a state file other than ${actor.name}.state.json`);
+    if (typeof actor.user_id !== 'string' || !actor.user_id || typeof actor.email !== 'string' || !actor.email.includes('@')) throw invalid(`actor ${actor.name} has no user id or email`);
+    seen.add(actor.name);
+  }
   return value;
 }
 
@@ -250,6 +262,8 @@ export function parseSince(value: string): number {
 export function removeStateFiles(root: string, actors: ManifestActor[]): string[] {
   const removed: string[] = [];
   for (const actor of actors) {
+    // Belt and braces after readManifest: only a plain `<name>.state.json` inside the state dir.
+    if (!ACTOR.test(actor.name) || actor.state_file !== `${actor.name}.state.json`) continue;
     const path = join(stateDir(root), actor.state_file);
     if (existsSync(path)) { rmSync(path, { force: true }); removed.push(actor.state_file); }
   }

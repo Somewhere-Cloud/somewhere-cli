@@ -1662,6 +1662,31 @@ export function formatVerifyOutput(
   }
 }
 
+/** A report is never overwritten (it is private evidence of a past run), so a
+ *  rerun needs a new --out path. Name the first free sibling so a rerun is one
+ *  copy-paste: run-report.json → run-report-2.json, -3, … (Haiku workers
+ *  w2-invites, w3-invites and w3-data each invented names by hand). */
+export function nextFreeOutPath(path: string, exists: (candidate: string) => boolean = existsSync): string | null {
+  const dot = path.lastIndexOf('.');
+  const slash = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'));
+  const hasExt = dot > slash + 1;
+  const stem = hasExt ? path.slice(0, dot) : path;
+  const ext = hasExt ? path.slice(dot) : '';
+  const numbered = /^(.*)-(\d+)$/.exec(stem);
+  const base = numbered ? numbered[1] : stem;
+  for (let n = numbered ? Number(numbered[2]) + 1 : 2; n < 1000; n++) {
+    const candidate = `${base}-${n}${ext}`;
+    if (!exists(candidate)) return candidate;
+  }
+  return null;
+}
+
+export function outExistsMessage(path: string, exists?: (candidate: string) => boolean): string {
+  const next = nextFreeOutPath(path, exists);
+  return `--out file already exists (${path}); reports are never overwritten. `
+    + (next ? `Rerun with a new path, for example --out ${next}` : 'Rerun with a new path') + ', or move the old report first.';
+}
+
 /** Only local booleans, counts and durations belong in opt-in stdout. The
  * full evidence, including eval values and screenshot links, stays in --out. */
 export function summarizeVerifyReport(report: VerifyReport | VerifyJourneyReport) {
@@ -1792,7 +1817,7 @@ projects: a login approved for "Only these projects" cannot open named browsers
       }
       try {
         if (opts.out !== undefined && !opts.out.trim()) throw new Error('--out requires a file path.');
-        if (opts.out !== undefined && existsSync(opts.out)) throw new Error('--out file already exists; choose a new path.');
+        if (opts.out !== undefined && existsSync(opts.out)) throw new Error(outExistsMessage(opts.out));
         let url = opts.url ?? (target && /^https?:\/\//i.test(target) ? target : undefined);
         if (opts.path !== undefined) {
           if (url !== undefined) throw new Error('Pass --url or --path, not both (including a positional URL).');

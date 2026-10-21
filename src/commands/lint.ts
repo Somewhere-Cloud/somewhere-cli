@@ -5,7 +5,7 @@ import { printJson } from '../lib/output.js';
 
 export function registerLint(program: Command): void {
   program.command('lint [dir]')
-    .description('Check Somewhere source contracts offline before deploy: credentials, schema declarations and directory index routes. Reports warnings with file, line, fix and docs. Does not install packages or change files; authorization and general type correctness are not proved.')
+    .description('Check Somewhere source contracts offline before deploy: credentials in source, schema declarations, directory index routes, request input choosing row ownership on server writes, and sw.email.send awaited inside a loop. Reports warnings with rule, file, line, fix and docs. Does not install packages or change files; authorization and general type correctness are not proved.')
     .option('--generic', 'Also run the project’s installed Oxlint; no downloads or type-aware checking')
     .option('--json', 'Print structured findings and source/schema fingerprints')
     .action(async (dir: string | undefined, opts: { json?: boolean; generic?: boolean }) => {

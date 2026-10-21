@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.37.47
+
+### Changed
+
+- `somewhere init` starters use `@somewhere-tech/sdk` 0.12.3, which refreshes short-lived per-app sessions without making valid-token reads wait (0.12.1 could not refresh them). The feature starter keeps an exact pin; the basic starter keeps its caret range (#31).
+- New projects' `.gitignore` excludes the generated `src/__somewhere_data.d.ts` and `src/__somewhere_files.d.ts`; `typecheck`, `dev` and `deploy` regenerate them from `db/schema.ts`. Existing projects are untouched (#31).
+
 ## 0.37.46
 
 ### Added

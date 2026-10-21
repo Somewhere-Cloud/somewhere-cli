@@ -77,6 +77,21 @@ export function error(msg: string, cause?: unknown) {
     return;
   }
   console.error(`${red('✗')} ${msg}`);
+  const ids = platformErrorIds(cause);
+  if (ids) console.error(`  ${ids}`);
+}
+
+/**
+ * The platform's code and request/trace ids for a text-mode failure (tsk_c95a437d): an agent reading
+ * text output gets the same handles `--json` carries. Only validated shapes are printed, so a server
+ * cannot place arbitrary text here; the message above stays the platform's own.
+ */
+export function platformErrorIds(cause: unknown): string | null {
+  const platform = platformErrorEnvelope(cause);
+  if (!platform || !/^[A-Z][A-Z0-9_]{1,63}$/.test(platform.code)) return null;
+  const id = (value: unknown) => (typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/.test(value) ? value : null);
+  const request = id(platform.extra.request_id), trace = id(platform.extra.trace_id);
+  return [`code ${platform.code}`, request && `request ${request}`, trace && `trace ${trace}`].filter(Boolean).join(' · ');
 }
 
 export function warn(msg: string) {

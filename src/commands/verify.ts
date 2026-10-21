@@ -916,6 +916,35 @@ export interface VerifyJourneySegmentReport {
   error?: { code: string; message: string };
   /** The segment reached its execution cap with nothing failed before it. */
   incomplete?: VerifyIncomplete;
+  /** Where this segment's time went: the platform's own browser timing plus
+   *  this CLI's request wall. Numbers only, never a URL, id or credential. */
+  timing?: VerifySegmentTiming;
+}
+
+/** A segment's measured time, in ms. `request_wall_ms` is this CLI's request
+ *  (send to answer); every other field is the platform's report.timing as
+ *  sent, with its nesting (e.g. evidence_ms inside actions_ms). */
+export type VerifySegmentTiming = { request_wall_ms: number; browser_reused?: boolean } & Record<string, number | boolean>;
+
+/** Whole-journey phases, in ms, around the segments. */
+export interface VerifyJourneyTiming {
+  test_users_create_ms?: number;
+  segments_ms: number;
+  cleanup_ms: number;
+  test_users_delete_ms?: number;
+}
+
+/** The platform timing of one browser call, numbers only. */
+function segmentTiming(report: BrowserResult, requestWallMs: number): VerifySegmentTiming {
+  const timing: VerifySegmentTiming = { request_wall_ms: requestWallMs };
+  const raw = (report as { timing?: unknown }).timing;
+  if (raw && typeof raw === 'object') {
+    for (const [key, value] of Object.entries(raw)) {
+      if (key.endsWith('_ms') && typeof value === 'number' && Number.isFinite(value)) timing[key] = value;
+      else if (key === 'browser_reused' && typeof value === 'boolean') timing.browser_reused = value;
+    }
+  }
+  return timing;
 }
 
 /** An actor's browser deliberately left open after an execution-cap stop, so
@@ -967,6 +996,7 @@ export interface VerifyJourneyReport extends VerifyReport {
   cleanup_confirmed: boolean;
   /** Browsers left open on purpose after an execution-cap stop. */
   kept_sessions: VerifyKeptSession[];
+  timing: VerifyJourneyTiming;
 }
 
 const ACTOR_NAME = /^[a-z][a-z0-9_-]{0,15}$/;
@@ -1267,7 +1297,9 @@ export function createVerifyJourneyRun(
     if (target.url && isLoopbackUrl(target.url)) {
       throw new Error('Multi-user journeys run on the deployed app. Deploy first, then run somewhere verify --project <project> --flow <file>.');
     }
+    const createStartedAt = now();
     await createTestUsers();
+    const testUsersCreateMs = testActors.length ? now() - createStartedAt : undefined;
     const startedAt = now();
     const deadlineAt = startedAt + VERIFY_JOURNEY_LIMITS.deadline_ms;
     const segments: VerifyJourneySegmentReport[] = [];
@@ -1365,13 +1397,14 @@ export function createVerifyJourneyRun(
           opened.add(segment.as);
           started.add(segment.as);
           abandoned.delete(segment.as);
+          const requestStartedAt = now();
           const call = new Promise<BrowserResult>((resolveCall) => {
             resolveCall(client.call<BrowserResult>('POST', '/browser/test', body, undefined, { timeoutMs: waitMs }));
           });
           // Settles after the abandoned mark is set, so closeAll waiting on it
           // already knows whether the platform may still be running this call.
           const settled = call.then(
-            (report) => ({ ok: true as const, report }),
+            (report) => ({ ok: true as const, report, wallMs: now() - requestStartedAt }),
             (cause: unknown) => {
               const unknown = transportUnknown(cause);
               if (unknown) abandoned.set(segment.as, 'its call got no answer, so the platform may still start it');
@@ -1389,8 +1422,10 @@ export function createVerifyJourneyRun(
           const result = results[position];
           const stopAt = (kind: Stop['kind'], code = '', message = ''): Stop => ({ kind, segment: index + 1, as: segment.as, viewport: viewport.label, code, message });
           let report: BrowserResult;
+          let timing: { timing: VerifySegmentTiming } | Record<string, never> = {};
           if (result.ok) {
             report = result.report;
+            timing = { timing: segmentTiming(report, result.wallMs) };
           } else if (result.unknown) {
             report = result.unknown;
           } else {
@@ -1408,7 +1443,7 @@ export function createVerifyJourneyRun(
           const unknown = readBrowserLifecycle(report);
           if (unknown) {
             if (!abandoned.has(segment.as)) abandoned.set(segment.as, `the platform reported ${unknown.status}; late allocation or cleanup may still settle`);
-            segments.push({ ...base, ran: !report.transport_error, outcome_unknown: true, lifecycle: unknown,
+            segments.push({ ...base, ...timing, ran: !report.transport_error, outcome_unknown: true, lifecycle: unknown,
               ...(report.transport_error ? { error: report.transport_error } : {}) });
             itemStop ??= stopAt('report');
             continue;
@@ -1418,7 +1453,7 @@ export function createVerifyJourneyRun(
           if (!first && report.session_note) {
             const message = `${segment.as}'s browser ended between segments (${report.session_note}), so ${segment.as} is no longer the same signed-in user. Keep each actor's gap between segments under 5 minutes and run the journey again.`;
             itemStop ??= stopAt('error', 'VERIFY_ACTOR_SESSION_ENDED', message);
-            segments.push({ ...base, ran: true, final_url: report.final_url === undefined ? undefined : reportUrl(report.final_url), error: { code: 'VERIFY_ACTOR_SESSION_ENDED', message } });
+            segments.push({ ...base, ...timing, ran: true, final_url: report.final_url === undefined ? undefined : reportUrl(report.final_url), error: { code: 'VERIFY_ACTOR_SESSION_ENDED', message } });
             continue;
           }
           const capped = mapIncomplete(report, actions, offset);
@@ -1437,12 +1472,12 @@ export function createVerifyJourneyRun(
                 close: `somewhere call browser '${JSON.stringify({ project_id: target.project_id, session_id: sessionId, close: true })}'`,
               });
             }
-            segments.push({ ...base, ran: true, passed: false, incomplete: capped, ...(report.session_closed === true ? { session_closed: true as const } : {}), ...(report.final_url ? { final_url: reportUrl(report.final_url) } : {}) });
+            segments.push({ ...base, ...timing, ran: true, passed: false, incomplete: capped, ...(report.session_closed === true ? { session_closed: true as const } : {}), ...(report.final_url ? { final_url: reportUrl(report.final_url) } : {}) });
             itemStop ??= stopAt('incomplete', 'VERIFY_EXECUTION_CAP');
             continue;
           }
           const passed = reportPassed(report);
-          segments.push({ ...base, ran: true, passed, ...(report.final_url ? { final_url: reportUrl(report.final_url) } : {}) });
+          segments.push({ ...base, ...timing, ran: true, passed, ...(report.final_url ? { final_url: reportUrl(report.final_url) } : {}) });
           if (!passed) itemStop ??= stopAt('report');
         }
         if (itemStop) {
@@ -1482,11 +1517,14 @@ export function createVerifyJourneyRun(
       verdict = `PASS — ${journey.journey.length} segment${journey.journey.length === 1 ? '' : 's'} by ${names.length} user${names.length === 1 ? '' : 's'} (${names.join(', ')}) passed${parallelCount ? `, ${parallelCount} of them in parallel groups (several users at the same time)` : ''}; page, console, and network healthy.`
         + navigationRetryNote(shaped.navigation_retries);
     }
+    const segmentsMs = now() - startedAt;
     const { cleanup, cleanup_ms } = await closeAll();
     // Browsers first, then the identities they were signed in as.
+    const deleteStartedAt = now();
     const testUsers: VerifyTestUsers | undefined = testIdentities.size
       ? { identities: [...testIdentities].map(([actor, item]) => ({ actor, ...item })), cleanup: await removeTestUsers() }
       : undefined;
+    const testUsersDeleteMs = testUsers ? now() - deleteStartedAt : undefined;
     if (cleanup.some((item) => item.status === 'unconfirmed')) {
       passed = false;
       const lifecycle: Array<VerifySignal<BrowserLifecycle>> = cleanup.filter((item) => item.status === 'unconfirmed')
@@ -1509,6 +1547,12 @@ export function createVerifyJourneyRun(
       cleanup_confirmed: cleanup.every((item) => item.status !== 'unconfirmed'),
       kept_sessions: [...kept.values()],
       ...(testUsers ? { test_users: testUsers } : {}),
+      timing: {
+        ...(testUsersCreateMs !== undefined ? { test_users_create_ms: testUsersCreateMs } : {}),
+        segments_ms: segmentsMs,
+        cleanup_ms,
+        ...(testUsersDeleteMs !== undefined ? { test_users_delete_ms: testUsersDeleteMs } : {}),
+      },
     };
   };
 

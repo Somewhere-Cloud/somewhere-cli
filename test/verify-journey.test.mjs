@@ -928,3 +928,20 @@ test('parallel: the deadline is checked once before a group, which then starts t
   assert.match(result.verdict, /^FAIL — segment 2 \(alice, desktop\): The journey reached its 10-minute limit\. Segments 2–3 \(in parallel\) were not started: 50s were left/);
   assert.deepEqual(result.segments.map((s) => [s.ran, s.parallel_group]), [[true, undefined], [false, 1], [false, 1], [false, undefined]]);
 });
+
+test('each segment reports the platform timing (numbers only) plus its request wall; the journey reports its phases', async () => {
+  let clock = 1_000;
+  const client = fakeClient(() => {
+    clock += 50;
+    return report({ timing: { browser_acquire_ms: 120, actions_ms: 300, evidence_ms: 20, browser_reused: false, final_url: 'https://club.somewhere.site/secret?token=x', note_ms: 'not a number' } });
+  });
+  const result = await createVerifyJourneyRun({ project_id: 'club' }, normalizeVerifyJourney(bookclub), client, { runId: 'tm', now: () => clock }).run();
+  assert.equal(result.passed, true);
+  for (const segment of result.segments) {
+    assert.deepEqual(segment.timing, { request_wall_ms: 50, browser_acquire_ms: 120, actions_ms: 300, evidence_ms: 20, browser_reused: false });
+  }
+  assert.ok(!JSON.stringify(result.segments.map((s) => s.timing)).includes('token'), 'no URL or other string reaches timing');
+  assert.equal(result.timing.segments_ms, 200, 'four 50 ms segments');
+  assert.equal(typeof result.timing.cleanup_ms, 'number');
+  assert.equal(result.timing.test_users_create_ms, undefined, 'no test users, no create phase');
+});

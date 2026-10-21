@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.37.54
+
+### Fixed
+
+- Signed out, `somewhere docs <topic>` resolves the same topic names the docs tool does: after an exact page id, it looks the name up in the public docs manifest's `aliases` (lowercased, then with non-alphanumeric runs as `-`), so `somewhere docs schema-changes` opens `sw.db`. A manifest without `aliases` keeps today's behavior, and a real page id always wins.
+
 ## 0.37.53
 
 ### Changed

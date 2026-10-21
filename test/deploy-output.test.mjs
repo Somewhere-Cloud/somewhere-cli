@@ -63,7 +63,26 @@ test('does not construct a linked-project URL when the deploy response omits pro
   assert.equal(formatted.headline, '2 static files uploaded (1 KB)');
   assert.equal(formatted.projectRef, null);
   assert.equal(formatted.liveUrl, null);
-  assert.equal(formatted.liveMessage, 'Deployed — check the dashboard for the live URL.');
+  assert.equal(formatted.liveMessage, 'Deployed. The platform did not report the live URL; `somewhere project view <project>` shows it.');
+});
+
+test('a missing URL names the command that shows it for this project (tsk_8f3c32bc)', () => {
+  const formatted = formatDeploySuccess(
+    { project_id: 'proj_owned', has_functions: false },
+    { functionCount: 0, totalBytes: 1024 },
+  );
+  assert.equal(formatted.liveUrl, null);
+  assert.equal(formatted.liveMessage, 'Deployed. The platform did not report the live URL; `somewhere project view proj_owned` shows it.');
+  assert.doesNotMatch(formatted.liveMessage, /dashboard/);
+});
+
+test('a server-reported url is the live URL even with no link (owned --project deploy)', () => {
+  const formatted = formatDeploySuccess(
+    { project_id: 'proj_owned', url: 'https://owned-app.somewhere.site', has_functions: false },
+    { functionCount: 0, totalBytes: 1024 },
+  );
+  assert.equal(formatted.liveUrl, 'https://owned-app.somewhere.site');
+  assert.equal(formatted.liveMessage, 'Live at https://owned-app.somewhere.site');
 });
 
 test('reports missing deploy fields honestly without rendering undefined', () => {
@@ -76,7 +95,7 @@ test('reports missing deploy fields honestly without rendering undefined', () =>
   assert.equal(formatted.headline, 'Static files uploaded (1 KB)');
   assert.equal(formatted.projectRef, null);
   assert.equal(formatted.liveUrl, null);
-  assert.equal(formatted.liveMessage, 'Deployed — check the dashboard for the live URL.');
+  assert.equal(formatted.liveMessage, 'Deployed. The platform did not report the live URL; `somewhere project view <project>` shows it.');
   assert.doesNotMatch(JSON.stringify(formatted), /undefined/);
 });
 

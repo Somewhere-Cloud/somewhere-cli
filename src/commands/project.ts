@@ -54,6 +54,8 @@ export function registerProject(program: Command) {
         info(`ID: ${dim(p.id)}`);
         if (p.url) info(`URL: ${p.url}`);
         info(`Status: ${statusDot(p.status)}`);
+        // `project create` does not link this folder; say how to deploy to it.
+        info(`Deploy to it: ${teal(`somewhere init --link --project ${p.id}`)} then ${teal('somewhere deploy')}, or ${teal(`somewhere deploy --project ${p.id}`)}`);
       } catch (err) {
         spinner?.fail('Failed');
         error(err instanceof Error ? err.message : String(err), err);
@@ -71,7 +73,7 @@ export function registerProject(program: Command) {
   // Also register top-level `somewhere projects` alias
   program
     .command('projects')
-    .description('List all projects')
+    .description('List all projects (create one with `somewhere init --bare --name <name>`)')
     .option('--json', 'Print the raw projects response as JSON')
     .action(listProjects);
 
@@ -423,7 +425,7 @@ async function listProjects(opts: { json?: boolean } = {}) {
     }
 
     if (!result.projects.length) {
-      info('No projects yet. Create one: somewhere project create <name>');
+      info('No projects yet. Create one and link this folder: somewhere init --bare --name <name>');
       return;
     }
 

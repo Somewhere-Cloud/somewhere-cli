@@ -97,7 +97,7 @@ test('signed in, nothing linked: names the one-command recoveries and creates no
   assert.equal(r.status, 1, r.stdout + r.stderr);
   assert.match(r.stderr, /No project is linked to this folder/);
   assert.match(r.stderr, /somewhere init --bare --name <name>/);
-  assert.match(r.stderr, /somewhere link --project <name-or-id>/);
+  assert.match(r.stderr, /somewhere init --link --project <name-or-id>/);
   assert.match(r.stderr, /somewhere deploy --project <name-or-id>/);
   assert.match(r.stderr, /somewhere projects/);
   assert.ok(!requests.some((x) => x.startsWith('POST')), `no create/deploy: ${requests.join(', ')}`);

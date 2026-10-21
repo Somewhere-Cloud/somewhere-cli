@@ -61,6 +61,9 @@ export interface CollectedFiles {
 export interface CollectOptions {
   /** Root files to publish on purpose (`somewhere deploy --include NOTES.md`). */
   include?: string[];
+  /** Read binary assets into base64 (deploy needs them). Lint only reads
+   * text, so it passes false and binaries are recorded with empty content. */
+  readBinary?: boolean;
 }
 
 /** Walk a directory tree and bucket every file into static / binary / function,
@@ -114,7 +117,7 @@ export function collectFiles(baseDir: string, options: CollectOptions = {}): Col
     out.excluded.sort((a, b) => a.path.localeCompare(b.path));
   }
 
-  for (const relPath of publish) classifyInto(out, baseDir, relPath);
+  for (const relPath of publish) classifyInto(out, baseDir, relPath, options.readBinary !== false);
   return out;
 }
 
@@ -195,13 +198,13 @@ export function classifyKey(relPath: string): { kind: FileKind; key: string } {
 }
 
 /** Read one file off disk and place it in the right bucket of `out`. */
-export function classifyInto(out: CollectedFiles, baseDir: string, relPath: string) {
+export function classifyInto(out: CollectedFiles, baseDir: string, relPath: string, readBinary = true) {
   const fullPath = join(baseDir, relPath);
   const { kind, key } = classifyKey(relPath);
   if (kind === 'function') {
     out.functions[key] = readFileSync(fullPath, 'utf-8');
   } else if (kind === 'binary') {
-    out.binaryFiles[key] = readFileSync(fullPath).toString('base64');
+    out.binaryFiles[key] = readBinary ? readFileSync(fullPath).toString('base64') : '';
   } else {
     out.files[key] = readFileSync(fullPath, 'utf-8');
   }

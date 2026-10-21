@@ -253,3 +253,31 @@ test('a viewport that never reached the request is not evidence for duplicate cr
   assert.match(report.verdict, /^FAIL — step 2 \(.*\) failed at desktop/);
   assert.doesNotMatch(report.verdict + formatVerifyReport(report).join('\n'), /once per viewport|possible cause|created once/);
 });
+
+// Journey 7e6163b7 (tsk_8a68dfa2 item 13): expect_requests {/api/deny, 200} that came back 403
+// reported only "403 undeclared"; the failed expectation now leads.
+const denyFlow = (expected) => ({
+  actions: [{ eval: "fetch('/api/deny').then((r) => r.status)" }],
+  expect_requests: expected,
+  viewports: ['desktop'],
+});
+const denyReport = (expectations) => platformReport({
+  passed: false,
+  failed_requests: [{ url: `${ORIGIN}/api/deny`, status: 403, method: 'GET', initiator: 'eval' }],
+  request_expectations: expectations,
+  steps: [{ step: 0, action: 'eval', ok: true, duration_ms: 5 }],
+});
+
+test('a declared status that came back different leads the verdict with the mismatch', async () => {
+  const report = await runVerification({ project_id: 'club' }, normalizeVerifyFlow(denyFlow([{ path: '/api/deny', status: 200 }])),
+    client([denyReport([{ path: '/api/deny', status: 200, ok: false, error: 'Expected /api/deny to return 200; saw 403.' }])]));
+  assert.equal(report.passed, false);
+  assert.match(report.verdict, /^FAIL — Expected \/api\/deny to return 200; saw 403\. \(at desktop\) GET \/api\/deny answered 403 at desktop, which the flow did not declare\./);
+});
+
+test('an unrelated failed expectation does not take over an undeclared refusal', async () => {
+  const report = await runVerification({ project_id: 'club' }, normalizeVerifyFlow(denyFlow([{ path: '/api/ok', status: 200 }])),
+    client([denyReport([{ path: '/api/ok', status: 200, ok: false, error: 'Expected a request containing /api/ok with status 200; no matching request was observed.' }])]));
+  assert.equal(report.passed, false);
+  assert.match(report.verdict, /^FAIL — GET \/api\/deny answered 403 at desktop, which the flow did not declare\./);
+});

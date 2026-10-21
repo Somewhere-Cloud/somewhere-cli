@@ -619,7 +619,14 @@ function shapeVerificationReport(
   } else if (unexplainedConsole) {
     verdict = `FAIL — console error at ${unexplainedConsole.viewport}: ${String(unexplainedConsole.detail)}`;
   } else if (undeclared.length) {
-    verdict = undeclaredStatusVerdict(undeclared[0], undeclared);
+    // A declared status that came back different leads: "expected 200, saw 403" is the
+    // failure; the undeclared 403 is how it showed up.
+    const mismatch = failedExpectation?.detail.error
+      && undeclared.some((item) => item.viewport === failedExpectation.viewport && item.path.includes(failedExpectation.detail.path))
+      ? failedExpectation : undefined;
+    verdict = mismatch
+      ? `FAIL — ${mismatch.detail.error} (at ${mismatch.viewport}) ${undeclaredStatusVerdict(undeclared[0], undeclared).replace(/^FAIL — /, '')}`
+      : undeclaredStatusVerdict(undeclared[0], undeclared);
   } else if (failedRequests.length) {
     verdict = `FAIL — unexpected request failure at ${failedRequests[0].viewport}: ${JSON.stringify(failedRequests[0].detail)}`;
   } else if (failedExpectation) {

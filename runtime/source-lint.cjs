@@ -489,12 +489,16 @@ async function intake(table, reference, values, extra) {
     var INTAKE_CLIENT_DECLARATIONS = `
   export interface IntakeResult { readonly accepted: true; readonly idempotency: InsertReceipt; readonly request: InsertRequest<IntakeResult> }
 `;
+    var ROW_CAN_DECLARATION = "  /** Row capability hint (list/get with can: true): whether the signed-in caller may update or delete this row now, by the same rule the write enforces. A hint for UI; the write is still the final answer. */\n  export interface RowCan { readonly update: boolean; readonly delete: boolean; }\n";
     var INSERT_CLIENT_DECLARATIONS = `
   export interface InsertReceipt { readonly replayed: boolean; readonly created_at: number; readonly result_until: number; readonly refuse_until: number; }
   export interface InsertRequest<T> { readonly key: string; readonly createdAt: number; retry(): Promise<T>; }
   export type InsertResult<T> = T & { readonly idempotency: InsertReceipt; readonly request: InsertRequest<InsertResult<T>> };
 `;
-    function describeDataClient(authority, contract_digest, insertReceiptCapability, localTypes = false) {
+    var CLIENT_GENERATION = 2;
+    var ACCEPTED_CLIENT_GENERATIONS = Object.freeze([2, 1]);
+    function describeDataClient(authority, contract_digest, insertReceiptCapability, localTypes = false, generation = CLIENT_GENERATION) {
+      if (!ACCEPTED_CLIENT_GENERATIONS.includes(generation)) throw new Error(`Unknown data client generation ${generation}.`);
       const canonical = authority ? canonicalize2(authority.schema, authority.intents, authority.scopes, insertReceiptCapability) : canonicalize2({}, {}, {}, insertReceiptCapability);
       const { tables } = JSON.parse(canonical);
       const declarations = [];
@@ -516,8 +520,16 @@ async function intake(table, reference, values, extra) {
         const methods = [];
         if (client.read !== false) {
           const equality = readable.filter((field) => !["json", "blob"].includes(columns.find((column) => column.n === field).t));
-          operations.push(`list<const L extends number = number>(options?: { limit?: L & (number extends L ? unknown : [L] extends [PageSize] ? unknown : never); after?: ${id}; where?: ${shape(columns, equality, "update")} }): Promise<{ data: ${row}[]; next: ${id} | null; has_more: boolean }>`);
-          operations.push(`get(id: ${id}): Promise<{ data: ${row} | null }>`);
+          if (generation >= 2) {
+            const listOptions = `limit?: L & (number extends L ? unknown : [L] extends [PageSize] ? unknown : never); after?: ${id}; where?: ${shape(columns, equality, "update")}`;
+            operations.push(`list<const L extends number = number>(options: { ${listOptions}; can: true }): Promise<{ data: (${row} & { can: RowCan })[]; next: ${id} | null; has_more: boolean }>`);
+            operations.push(`list<const L extends number = number>(options?: { ${listOptions}; can?: false }): Promise<{ data: ${row}[]; next: ${id} | null; has_more: boolean }>`);
+            operations.push(`get(id: ${id}, options: { can: true }): Promise<{ data: (${row} & { can: RowCan }) | null }>`);
+            operations.push(`get(id: ${id}, options?: { can?: false }): Promise<{ data: ${row} | null }>`);
+          } else {
+            operations.push(`list<const L extends number = number>(options?: { limit?: L & (number extends L ? unknown : [L] extends [PageSize] ? unknown : never); after?: ${id}; where?: ${shape(columns, equality, "update")} }): Promise<{ data: ${row}[]; next: ${id} | null; has_more: boolean }>`);
+            operations.push(`get(id: ${id}): Promise<{ data: ${row} | null }>`);
+          }
           methods.push("list", "get");
           const numeric = equality.filter((field) => ["integer", "number"].includes(columns.find((column) => column.n === field).t));
           const fieldUnion = (list) => list.map((field) => JSON.stringify(field)).join(" | ");
@@ -649,7 +661,7 @@ async function intake(table, reference, values, extra) {
       const declaration = `declare module ${JSON.stringify("somewhere:data")} {
   type PageSize = ${Array.from({ length: 100 }, (_, i) => i + 1).join(" | ")};
   export type Json = string | number | boolean | null | Json[] | { [key: string]: Json };
-${receiptCapable ? localTypes ? INSERT_CLIENT_DECLARATIONS.replace("readonly idempotency:", "readonly idempotency?:").replace("readonly request:", "readonly request?:") : INSERT_CLIENT_DECLARATIONS : ""}${anonymousTables.length ? ANONYMOUS_CLIENT_DECLARATIONS : ""}${intakeTables.length ? INTAKE_CLIENT_DECLARATIONS : ""}  export class DataError extends Error { readonly status: number; readonly code: string | null;${receiptCapable ? " readonly request?: InsertRequest<unknown>; readonly outcome?: string; readonly write_committed?: boolean; readonly retry?: false; readonly retryable?: false; readonly idempotency?: InsertReceipt;" : ""} constructor(status: number, payload: unknown); }
+${generation >= 2 ? ROW_CAN_DECLARATION : ""}${receiptCapable ? localTypes ? INSERT_CLIENT_DECLARATIONS.replace("readonly idempotency:", "readonly idempotency?:").replace("readonly request:", "readonly request?:") : INSERT_CLIENT_DECLARATIONS : ""}${anonymousTables.length ? ANONYMOUS_CLIENT_DECLARATIONS : ""}${intakeTables.length ? INTAKE_CLIENT_DECLARATIONS : ""}  export class DataError extends Error { readonly status: number; readonly code: string | null;${receiptCapable ? " readonly request?: InsertRequest<unknown>; readonly outcome?: string; readonly write_committed?: boolean; readonly retry?: false; readonly retryable?: false; readonly idempotency?: InsertReceipt;" : ""} constructor(status: number, payload: unknown); }
   export const data: { ${declarations.join(";\n    ")} };
 }
 `;
@@ -657,7 +669,7 @@ ${receiptCapable ? localTypes ? INSERT_CLIENT_DECLARATIONS.replace("readonly ide
 class DataError extends Error{constructor(status,payload){super(payload&&typeof payload.message==="string"?payload.message:payload&&typeof payload.error==="string"?payload.error:"Data operation failed");this.name="DataError";this.status=status;this.code=payload&&typeof payload.error==="string"?payload.error:null}}
 const validateListLimit=input=>{if(input.limit!==undefined&&(!Number.isInteger(input.limit)||input.limit<1||input.limit>100))throw new DataError(400,{error:"DATA_INPUT_INVALID",message:"limit must be an integer from 1 to 100"})};
 let swReadSession=null,swInFlight=0,swStarts=0;const swReadSessionVoid=()=>{swReadSession=null;swStarts++};const invoke=async(table,operation,input)=>{if(operation==="list"||operation==="relation_list")validateListLimit(input);const alone=swInFlight===0,start=++swStarts,isRead=operation==="list"||operation==="get"||operation==="aggregate"||operation==="relation_list";swInFlight++;let response;try{response=await fetch("/__sw/data",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json",...(swReadSession?{"X-Sw-Read-Session":swReadSession}:{})},body:JSON.stringify({...input,contract,table,operation})})}catch(error){if(!isRead)swReadSession=null;throw error}finally{swInFlight--}const next=response.headers&&typeof response.headers.get==="function"?response.headers.get("X-Sw-Read-Session"):null;if(!alone||swStarts!==start||swInFlight!==0)swReadSession=null;else if(next&&/^swrs1[.][A-Za-z0-9_-]+[.][A-Za-z0-9_-]+$/.test(next))swReadSession=next;else if(!isRead||!response.ok)swReadSession=null;const payload=await response.json().catch(()=>{throw new DataError(response.status,{error:"INVALID_DATA_RESPONSE",message:"Data operation returned an invalid response"})});if(!response.ok)throw new DataError(response.status,payload);return payload};
-${receiptCapable ? INSERT_CLIENT_RUNTIME + "const receiptTables=" + JSON.stringify(receiptTables) + ";\n" : ""}${anonymousTables.length ? ANONYMOUS_CLIENT_RUNTIME + CREATOR_CLIENT_RUNTIME : ""}${intakeTables.length ? INTAKE_CLIENT_RUNTIME : ""}${linkedSpec.length ? LINK_CLIENT_RUNTIME : ""}const data=Object.freeze(Object.fromEntries(${JSON.stringify(runtimeTables)}.map(([table,operations,relations])=>{const entries=operations.map(operation=>[operation,operation==="list"||operation==="aggregate"?(options={})=>invoke(table,operation,options):operation==="create"?${receiptCapable ? "(values,...extra)=>createWithReceipt(table,values,extra,receiptTables.includes(table))" : "values=>invoke(table,operation,{values})"}:${anonymousTables.length ? 'operation==="createAnonymous"?(values,...extra)=>createAnonymous(table,values,extra):' : ""}${intakeTables.length ? 'operation==="intake"?(reference,values,...extra)=>intake(table,reference,values,extra):' : ""}operation==="update"?(id,values)=>invoke(table,operation,{id,values}):operation==="createLink"?(id,options)=>createLink(table,id,options):operation==="links"?id=>invoke(table,"link_list",{id}):operation==="revokeLink"?(id,link_id)=>invoke(table,"link_revoke",{id,link_id}):id=>invoke(table,operation,{id})]);if(relations.length)entries.push(["relations",Object.freeze(Object.fromEntries(relations.map(relation=>[relation,Object.freeze({list:(parent_id,options={})=>invoke(table,"relation_list",{...options,relation,parent_id})})])))]);return[table,Object.freeze(Object.fromEntries(entries))];}).concat(${linkedSpec.length ? `[["links",links],["linked",linkedView(${JSON.stringify(linkedSpec)})]]` : "[]"})${creatorSpec.length ? `.concat([["creators",creators],["creator",creatorView(${JSON.stringify(creatorSpec)})]])` : ""}));
+${receiptCapable ? INSERT_CLIENT_RUNTIME + "const receiptTables=" + JSON.stringify(receiptTables) + ";\n" : ""}${anonymousTables.length ? ANONYMOUS_CLIENT_RUNTIME + CREATOR_CLIENT_RUNTIME : ""}${intakeTables.length ? INTAKE_CLIENT_RUNTIME : ""}${linkedSpec.length ? LINK_CLIENT_RUNTIME : ""}const data=Object.freeze(Object.fromEntries(${JSON.stringify(runtimeTables)}.map(([table,operations,relations])=>{const entries=operations.map(operation=>[operation,operation==="list"||operation==="aggregate"?(options={})=>invoke(table,operation,options):operation==="create"?${receiptCapable ? "(values,...extra)=>createWithReceipt(table,values,extra,receiptTables.includes(table))" : "values=>invoke(table,operation,{values})"}:${anonymousTables.length ? 'operation==="createAnonymous"?(values,...extra)=>createAnonymous(table,values,extra):' : ""}${intakeTables.length ? 'operation==="intake"?(reference,values,...extra)=>intake(table,reference,values,extra):' : ""}operation==="update"?(id,values)=>invoke(table,operation,{id,values}):operation==="createLink"?(id,options)=>createLink(table,id,options):operation==="links"?id=>invoke(table,"link_list",{id}):operation==="revokeLink"?(id,link_id)=>invoke(table,"link_revoke",{id,link_id}):${generation >= 2 ? 'operation==="get"?(id,options={})=>invoke(table,operation,options&&options.can===true?{id,can:true}:{id}):' : ""}id=>invoke(table,operation,{id})]);if(relations.length)entries.push(["relations",Object.freeze(Object.fromEntries(relations.map(relation=>[relation,Object.freeze({list:(parent_id,options={})=>invoke(table,"relation_list",{...options,relation,parent_id})})])))]);return[table,Object.freeze(Object.fromEntries(entries))];}).concat(${linkedSpec.length ? `[["links",links],["linked",linkedView(${JSON.stringify(linkedSpec)})]]` : "[]"})${creatorSpec.length ? `.concat([["creators",creators],["creator",creatorView(${JSON.stringify(creatorSpec)})]])` : ""}));
 export{data,DataError};
 `;
       return { contract_digest, declaration, runtime, manifest: { version: 1, contract_digest, tables, declaration, ...insertReceiptCapability === void 0 ? {} : { insert_receipt: insertReceiptCapability } } };
@@ -665,7 +677,7 @@ export{data,DataError};
     function describeDataClientLocalDeclaration(authority) {
       return describeDataClient(authority, "", "insert-v1", true).declaration;
     }
-    module2.exports = { canonicalize: canonicalize2, describeDataClient, describeDataClientLocalDeclaration, validateInsertReceiptCapability };
+    module2.exports = { canonicalize: canonicalize2, describeDataClient, describeDataClientLocalDeclaration, validateInsertReceiptCapability, CLIENT_GENERATION, ACCEPTED_CLIENT_GENERATIONS };
   }
 });
 
@@ -3732,6 +3744,7 @@ function managedIntentFromIR(ir, schema) {
   if (ir.offset !== void 0) out.offset = ir.offset;
   if (ir.include) out.include = ir.include.map((r) => r.name);
   if (ir.relationWhere) out.relationWhere = ir.relationWhere.map((r) => ({ name: r.name, where: r.where.map(predicates.leaf) }));
+  if (ir.can) out.can = true;
   if (ir.aggregates) out.aggregates = ir.aggregates.map((a) => ({ fn: a.fn, ...a.column !== void 0 ? { column: a.column } : {} }));
   if (ir.groupBy) out.groupBy = [...ir.groupBy];
   if (ir.having) out.having = ir.having.map((h) => ({ op: h.op, alias: h.alias, value: h.value }));
@@ -5388,7 +5401,8 @@ function renderQuerySql(ir, principalId, returning, context) {
       params.push(link.digest, link.epoch);
       return "EXISTS (SELECT 1 FROM " + q("_sw_row_link_creator_sessions") + " AS " + ls + " JOIN " + q("_sw_row_link_creators") + " AS " + lc + " ON " + lc + "." + q("id") + " = " + ls + "." + q("grant_id") + " JOIN " + q("_sw_row_link_epochs") + " AS " + le + " ON " + le + "." + q("table_name") + " = " + lc + "." + q("table_name") + " JOIN " + q("_sw_row_incarnations") + " AS " + li + " ON " + li + "." + q("table_name") + " = " + lc + "." + q("table_name") + " AND " + li + "." + q("row_key") + " = " + lc + "." + q("row_key") + " AND " + li + "." + q("incarnation") + " = " + lc + "." + q("incarnation") + " JOIN " + q(context.physicalTable(link.root)) + " AS " + lr + " ON CAST(" + lr + "." + q(creator.key) + " AS TEXT) = " + lc + "." + q("row_key") + " AND " + lr + "." + q(creator.owner) + " = " + lc + "." + q("principal") + " WHERE " + ls + "." + q("token_digest") + " = ? AND " + ls + "." + q("expires_at") + " > unixepoch() AND " + lc + "." + q("id") + " = ? AND " + lc + "." + q("table_name") + " = ? AND " + lc + "." + q("row_key") + " = " + key + " AND " + lc + "." + q("ended_at") + " IS NULL AND " + le + "." + q("digest") + " = ? AND " + le + "." + q("epoch") + " = ? AND " + lc + "." + q("minted_epoch") + " = " + le + "." + q("epoch") + ")";
     },
-    privateScopePredicate(scope) {
+    privateScopePredicate(scope, operation) {
+      const op = operation || policyOperation;
       if (!scope)
         return null;
       if (scope.mode === "unscoped" || scope.mode === "server")
@@ -5402,9 +5416,9 @@ function renderQuerySql(ir, principalId, returning, context) {
         return frags.join(" AND ");
       }
       if (scope.mode === "member")
-        return helpers.memberScopePredicate(scope.member, null, policyOperation);
+        return helpers.memberScopePredicate(scope.member, null, op);
       if (scope.mode === "policy")
-        return helpers.policyPredicate(scope.policy, null, null, policyOperation);
+        return helpers.policyPredicate(scope.policy, null, null, op);
       if (scope.mode === "link")
         return helpers.linkGuard(scope.link, tableSql + "." + q(scope.link.column), null);
       return null;
@@ -5450,6 +5464,20 @@ function renderQuerySql(ir, principalId, returning, context) {
       }
       return frags.length ? " WHERE " + frags.join(" AND ") : "";
     },
+    // Row capability hint (tsk_668f0ce2 item 7, Option C): the private scope predicate the
+    // update/delete write would render for this caller (ir.can carries that write scope), as a 0/1
+    // column. A null scope (the operation is not allowed) renders 0. Only a signed-in caller's
+    // own scope qualifies, so no shareable result ever carries a personal hint.
+    canHint(scope, operation) {
+      if (ir.kind !== "select" || !ir.scope || (ir.scope.mode === "public" ? !ir.scope.privateScope : ir.scope.mode === "server" || ir.scope.mode === "link" || ir.scope.mode === "intake"))
+        context.fail("sw.db.from: can hints need a signed-in caller on a private table; nothing ran.");
+      if (scope === null)
+        return "0";
+      if (scope.mode !== "user" && scope.mode !== "member" && scope.mode !== "policy")
+        context.fail("sw.db.from: can hints need a signed-in caller on a private table; nothing ran.");
+      const predicate = helpers.privateScopePredicate(scope, operation);
+      return "CASE WHEN " + (predicate && predicate !== "1" ? "(" + predicate + ")" : "1") + " THEN 1 ELSE 0 END";
+    },
     aggSql(a) {
       return a.column === void 0 ? context.aggregates[a.fn] + "(*)" : context.aggregates[a.fn] + "(" + q(a.column) + ")";
     }
@@ -5460,7 +5488,8 @@ function renderQuerySql(ir, principalId, returning, context) {
   let sql;
   if (ir.kind === "select") {
     const cols = ir.columns && ir.columns.length ? context.map(ir.columns, q).join(", ") : "*";
-    sql = "SELECT " + cols + " FROM " + tableSql + helpers.whereSql();
+    const canCols = ir.can ? ", " + helpers.canHint(ir.can.update, "update") + " AS " + q("__sw_can_update") + ", " + helpers.canHint(ir.can.delete, "delete") + " AS " + q("__sw_can_delete") : "";
+    sql = "SELECT " + cols + canCols + " FROM " + tableSql + helpers.whereSql();
     if (ir.order && ir.order.length) {
       sql += " ORDER BY " + context.map(ir.order, function(o) {
         return q(o.column) + " " + (o.dir === "desc" ? "DESC" : "ASC");
@@ -5803,7 +5832,10 @@ var DB_PUBLIC_READ_JS = DB_GENERATED_OWNER_READ_JS + `      function __sw_shared
       }
 
       async function __sw_structFrom(table, opts, authority, generatedRead) {
-        opts = __sw_structReadOpts(opts, generatedRead ? ['where', 'order', 'limit', 'columns'] : authority === __sw_structServerNamespace ? ['where', 'order', 'limit', 'offset', 'columns', 'include', 'has'] : ['where', 'order', 'limit', 'offset', 'columns', 'asServer', 'include', 'has'], 'sw.db.from');
+        opts = __sw_structReadOpts(opts, generatedRead ? ['where', 'order', 'limit', 'columns', 'can'] : authority === __sw_structServerNamespace ? ['where', 'order', 'limit', 'offset', 'columns', 'include', 'has'] : ['where', 'order', 'limit', 'offset', 'columns', 'asServer', 'include', 'has', 'can'], 'sw.db.from');
+        if (opts.can !== undefined && opts.can !== true && opts.can !== false) __sw_structThrow('sw.db.from: can must be true or false.');
+        const wantsCan = opts.can === true;
+        if (wantsCan && opts.asServer === true) __sw_structThrow('sw.db.from: can hints describe the signed-in caller; they are unavailable with asServer.');
         let columns;
         if (opts.columns !== undefined && opts.columns !== null) {
           if (!__sw_arrayIsArray(opts.columns)) __sw_structThrow('sw.db.from: columns must be an array of column names.');
@@ -5826,7 +5858,39 @@ var DB_PUBLIC_READ_JS = DB_GENERATED_OWNER_READ_JS + `      function __sw_shared
         // is the only caller that reads it back.
         if (!generatedRead && typeof __sw_declaredPublicReadNote !== 'undefined') {
           __sw_declaredPublicReadNote(__sw_dbNamespace,
-            !!publicRead && !decided.scope && decided.principalId === undefined, table);
+            !wantsCan && !!publicRead && !decided.scope && decided.principalId === undefined, table);
+        }
+        // Row capability hints (tsk_668f0ce2 item 7): for a signed-in caller only. Each entry is the
+        // scope sw.db.update / sw.db.remove would resolve for this same caller on this table (null
+        // when that operation is refused before any SQL), so the hint renders the write's own rule.
+        let can, canPrincipal;
+        if (wantsCan) {
+          const refuse = function () {
+            const err = new Error('sw.db.from on "' + table + '": can hints describe what the signed-in caller may change; send the request signed in on a private table.');
+            err.code = 'AUTH_REQUIRED'; err.status = 401; err.__sw_expose = true;
+            throw err;
+          };
+          if (decided.scope && decided.scope.mode !== 'user' && decided.scope.mode !== 'member' && decided.scope.mode !== 'policy' && decided.scope.mode !== 'unscoped') refuse();
+          const writeScope = async function (verb) {
+            try { return await __sw_structResolveScope(table, verb, undefined); } // exactly as sw.db.update / remove call it
+            catch (error) {
+              if (error && (error.status === 403 || error.status === 401)) return null;
+              throw error;
+            }
+          };
+          const forUpdate = await writeScope('update'), forDelete = await writeScope('remove');
+          // The hint principal is the caller the writes would act as. A shared table's read has
+          // no principal of its own (it is unscoped), so it is taken from the write resolution.
+          canPrincipal = decided.principalId !== undefined ? decided.principalId
+            : forUpdate && forUpdate.principalId !== undefined ? forUpdate.principalId
+            : forDelete && forDelete.principalId !== undefined ? forDelete.principalId : undefined;
+          if (canPrincipal === undefined) {
+            const me = await __sw_structRequestIdentity(false);
+            canPrincipal = me && me.id !== undefined && me.id !== null ? me.id : undefined;
+          }
+          if (canPrincipal === undefined) refuse();
+          const sameCaller = function (resolved) { return resolved && resolved.principalId === canPrincipal ? resolved.scope : null; };
+          can = { update: sameCaller(forUpdate), delete: sameCaller(forDelete) };
         }
         // Composed joins (tsk_1186c9a): resolve declared relations. Both absent \u2192
         // ir.include / ir.relationWhere stay unset and the IR (and its shape
@@ -5849,10 +5913,26 @@ var DB_PUBLIC_READ_JS = DB_GENERATED_OWNER_READ_JS + `      function __sw_shared
         };
         if (includeRefs.length) ir.include = includeRefs;
         if (relationWhere.length) ir.relationWhere = relationWhere;
+        if (can) ir.can = can;
         __sw_structEnforceSchema('from', ir);
-        const result = await __sw_structExec('sw.db.from', ir, joinPrincipalId, null, generatedRead);
+        // An unscoped root (a shared table) renders no identity of its own; the hints bind the caller.
+        const result = await __sw_structExec('sw.db.from', ir, can && joinPrincipalId === undefined ? canPrincipal : joinPrincipalId, null, generatedRead);
         if (includeRefs.length && !__sw_usesManagedEndpoint()) await __sw_structAttachIncludes(result, includeRefs, joinPrincipalId);
+        if (can) __sw_structAttachCan(result);
         return result;
+      }
+
+      // The renderer returns the hints as two internal 0/1 columns; each row instead carries
+      // can: { update, delete } and the internal columns never reach the caller.
+      function __sw_structAttachCan(result) {
+        const rows = result && __sw_arrayIsArray(result.data) ? result.data : [];
+        for (let i = 0; i < rows.length; i++) {
+          const row = rows[i];
+          if (!row || typeof row !== 'object') continue;
+          row.can = { update: row.__sw_can_update === 1 || row.__sw_can_update === true, delete: row.__sw_can_delete === 1 || row.__sw_can_delete === true };
+          delete row.__sw_can_update;
+          delete row.__sw_can_delete;
+        }
       }
 
       // \u2500\u2500 Public-result invalidation (tsk_96a05d52) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
@@ -15278,7 +15358,10 @@ function declaredListGetPlan(operation, input, shape, fields, fail) {
   }
   const limit = operation === "get" ? 1 : input.limit === void 0 ? 25 : input.limit;
   if (!Number.isInteger(limit) || limit < 1 || limit > 100) fail(400, "DATA_INPUT_INVALID", "limit must be an integer from 1 to 100.");
-  return { limit, primaryKey, options: { where, columns: [...fields], order: [[primaryKey, "asc"]], limit: operation === "get" ? 1 : limit + 1 } };
+  if (input.can !== void 0 && input.can !== true && input.can !== false) fail(400, "DATA_INPUT_INVALID", "can must be true or false.");
+  const options = { where, columns: [...fields], order: [[primaryKey, "asc"]], limit: operation === "get" ? 1 : limit + 1 };
+  if (input.can === true) options.can = true;
+  return { limit, primaryKey, options };
 }
 function declaredListGetPayload(operation, rows, fields, primaryKey, limit) {
   const helpers = {
@@ -15286,6 +15369,8 @@ function declaredListGetPayload(operation, rows, fields, primaryKey, limit) {
       if (row === null || row === void 0) return null;
       const result = /* @__PURE__ */ Object.create(null);
       for (const field of fields) result[field] = row[field];
+      const can = row.can;
+      if (can && typeof can === "object") result.can = { update: can.update === true, delete: can.delete === true };
       return result;
     }
   };
@@ -15575,10 +15660,10 @@ async function __sw_handleDeclaredData(request, sw, env) {
   const input = await __sw_dataReadBody(request);
   __sw_dataObject(input, 'Request');
   const operation = input.operation;
-  const extras = operation === 'list' ? ['limit', 'after', 'where']
+  const extras = operation === 'list' ? ['limit', 'after', 'where', 'can']
     : operation === 'relation_list' ? ['relation', 'parent_id', 'limit', 'after', 'where', 'link']
     : operation === 'aggregate' ? ['count', 'sum', 'avg', 'min', 'max', 'groupBy', 'where', 'having', 'order', 'limit']
-    : operation === 'get' ? ['id', 'link'] : operation === 'delete' ? ['id']
+    : operation === 'get' ? ['id', 'link', 'can'] : operation === 'delete' ? ['id']
     : operation === 'create' ? ['values', 'link', 'idempotency_key'] : operation === 'update' ? ['id', 'values', 'link']
     // Row links (declared-links.ts): the owner's link administration.
     : operation === 'link_create' ? ['id', 'access', 'expires_in_days'] : operation === 'link_list' ? ['id']
@@ -15817,6 +15902,17 @@ async function __sw_handleDeclaredData(request, sw, env) {
       // A selected token's refusal is final. Never refresh or replay after dispatch.
       if (ownerRead && error && error.status === 401 && (error.code === 'AUTH_REQUIRED' || error.code === 'AUTH_INVALID_CREDS')) __sw_dataFail(401, 'AUTH_REQUIRED', 'Sign in to use this data operation.');
       throw error;
+    }
+    // Row capability hints (tsk_668f0ce2 item 7): the platform's per-row answer, narrowed by this
+    // door's own constants, exactly what an update/delete here would refuse before any SQL: the
+    // operation must be declared for the browser client, and membership tables are never written
+    // from the browser. A hint only; the write itself still enforces.
+    if (plan.options.can) {
+      const membership = Object.values(__SW_DATA_SCHEMA).some(item => item.member && item.member.m === table || __sw_dataPolicyUsesMembership(item.policy, table));
+      const declared = (op) => !membership && !!policy[op] && policy[op] !== null;
+      for (const row of result.data || []) {
+        if (row && row.can) row.can = { update: row.can.update === true && declared('update'), delete: row.can.delete === true && declared('delete') };
+      }
     }
     const payload = __sw_dataListGetPayload(operation, result.data, fields, plan.primaryKey, plan.limit);
     return ownerRead ? payload : __sw_dataPublicResult(sw, env, payload);
@@ -20084,6 +20180,8 @@ function comparedToCaller(source, lower, column, callers) {
   for (let at = lower.indexOf(needle); at >= 0; at = lower.indexOf(needle, at + 1)) {
     const after = at + needle.length;
     if (/[\w$]/.test(lower[after] ?? "")) continue;
+    const owner = /([A-Za-z_$][\w$]*)\??$/.exec(source.slice(Math.max(0, at - 64), at));
+    if (owner && callers.has(owner[1])) continue;
     const right = source.slice(after, after + COMPARE_WINDOW);
     const op = /^\s*[!=]==?\s*/.exec(right);
     if (op && callerId(right.slice(op[0].length))) return true;
@@ -20170,18 +20268,18 @@ function requestOwnershipFindings(functions, schema) {
     const seen = /* @__PURE__ */ new Set();
     let fileCount = 0;
     let fileFull = false;
-    const report = (table, column, offset) => {
+    const report = (table, columns, offset) => {
       if (fileCount >= MAX_FINDINGS_PER_FILE || findings.length >= MAX_FINDINGS) {
         truncated = true;
         fileFull = true;
         return false;
       }
       const line = lineAt2(starts, offset);
-      const key = `${line}\0${table}\0${column}`;
+      const key = `${line}\0${table}\0${columns.join(",")}`;
       if (!seen.has(key)) {
         seen.add(key);
         fileCount++;
-        findings.push({ file, line, table, column });
+        findings.push({ file, line, table, columns });
       }
       return true;
     };
@@ -20209,7 +20307,7 @@ function requestOwnershipFindings(functions, schema) {
       const at = m.index + m[0].length;
       const bare = /^([A-Za-z_$][\w$]*)\s*[,)]/.exec(source.slice(at, at + 80));
       if (bare && b.objects.has(bare[1])) {
-        report(table, columns.join(", "), at);
+        report(table, columns, at);
         continue;
       }
       const payload = objectLiteral(source, at);
@@ -20231,10 +20329,10 @@ function requestOwnershipFindings(functions, schema) {
       for (const column of columns) {
         const keyed = list.map((e, index) => ({ e, index })).filter(({ e }) => e.key?.toLowerCase() === column);
         const last = keyed[keyed.length - 1];
-        if (last && requestValue(last.e.value, b)) report(table, last.e.key ?? column, at + last.e.offset);
+        if (last && requestValue(last.e.value, b)) report(table, [last.e.key ?? column], at + last.e.offset);
         else if (spreadIndex >= 0 && (!last || last.index < spreadIndex)) spreadColumns.push(column);
       }
-      if (spreadColumns.length > 0) report(table, spreadColumns.join(", "), at + list[spreadIndex].offset);
+      if (spreadColumns.length > 0) report(table, spreadColumns, at + list[spreadIndex].offset);
     }
   }
   return { findings, skippedFiles, truncated };
@@ -20297,8 +20395,8 @@ function lintSource(files, functions = {}) {
           severity: "warning",
           file: finding.file,
           line: finding.line,
-          message: `${finding.table}.${finding.column} is set or matched through sw.db.server from request input, so a caller can choose whose row this is. Lint cannot see authorization done elsewhere; confirm this write is authorized.`,
-          fix: `Set ${finding.column} from the signed-in user (sw.auth) or use the user-mode sw.db write, which sets ownership itself. If the handler intentionally acts for another user, check the caller's role before this write.`,
+          message: finding.columns.length === 1 ? `${finding.table}.${finding.columns[0]} is set or matched through sw.db.server from request input, so a caller can choose whose row this is. Lint cannot see authorization done elsewhere; confirm this write is authorized.` : `${finding.table} ownership columns ${finding.columns.join(", ")} are set through sw.db.server from the whole request body, so a caller can choose whose row this is. Lint cannot see authorization done elsewhere; confirm this write is authorized.`,
+          fix: `Set ${finding.columns.join(" and ")} from the signed-in user (sw.auth) or use the user-mode sw.db write, which sets ownership itself. If the handler intentionally acts for another user, check the caller's role before this write.`,
           docs: "https://somewhere.tech/docs/declared-data.txt"
         });
       }

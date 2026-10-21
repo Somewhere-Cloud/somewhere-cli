@@ -1,10 +1,11 @@
 import { loadProjectConfig } from './config.js';
+import { unlinkedFolderHint } from './link-hint.js';
 
 export function resolveProjectRef(explicit: string | undefined): string {
   if (explicit) return explicit;
   const config = loadProjectConfig();
   if (config?.project_id) return config.project_id;
-  throw new Error('No project. Pass --project <slug-or-id> or run from a linked directory.');
+  throw new Error('No project. Pass --project <slug-or-id> or run from a linked directory.' + unlinkedFolderHint());
 }
 
 export function isRecord(value: unknown): value is Record<string, unknown> {

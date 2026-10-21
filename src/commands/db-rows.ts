@@ -2,6 +2,7 @@ import type { Command } from 'commander';
 import { ApiClient } from '../lib/client.js';
 import { getToken, loadProjectConfig } from '../lib/config.js';
 import { error, table, info } from '../lib/output.js';
+import { unlinkedFolderHint } from '../lib/link-hint.js';
 
 interface RowsOptions { project?: string; where: string[]; limit: string; offset: string; json?: boolean }
 interface RowsResult {
@@ -26,7 +27,7 @@ export function registerDbRows(db: Command): void {
     .action(async (tableName: string, opts: RowsOptions) => {
       try {
         const projectId = opts.project ?? loadProjectConfig()?.project_id;
-        if (!projectId) throw new Error('No project. Pass --project <id> or run from a linked directory.');
+        if (!projectId) throw new Error('No project. Pass --project <id> or run from a linked directory.' + unlinkedFolderHint());
         if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(tableName)) throw new Error('table must be a declared table name.');
         if (opts.where.length > 32) throw new Error('--where accepts at most 32 filters.');
         const filters = opts.where.map(entry => {

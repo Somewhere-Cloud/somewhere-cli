@@ -17,6 +17,7 @@ import { withVerifyProgress } from '../lib/verify-progress.js';
 import { saveVerifyReport, writeVerifyReportTo } from '../lib/verify-report.js';
 import { getProjectServingUrl } from '../lib/project-urls.js';
 import { readBrowserIncomplete, readBrowserLifecycle, formatStepDuration, stringifyResult, type BrowserLifecycle, type BrowserResult } from './browser.js';
+import { unlinkedFolderHint } from '../lib/link-hint.js';
 
 /** The local browser's own bound (no platform execution cap applies). */
 const VERIFY_TIMEOUT_MS = 90_000;
@@ -1726,7 +1727,7 @@ projects: a login approved for "Only these projects" cannot open named browsers
         let client: ApiClient | undefined = local || !primaryUsable ? undefined : new ApiClient(getToken());
         let project = opts.project ?? (target && !/^https?:\/\//i.test(target) ? target : undefined)
           ?? (url ? undefined : linkedProjectId);
-        if (!url && !project) throw new Error('Nothing to verify. Pass --url, --project, or run from a linked project directory.');
+        if (!url && !project) throw new Error('Nothing to verify. Pass --url, --project, or run from a linked project directory.' + unlinkedFolderHint());
         if (url && !local && !opts.project) {
           if (!project && client) project = await linkedVerifyTarget(url, client, linkedProjectId);
           if (!project) {

@@ -6,6 +6,7 @@ import { getToken, loadProjectConfig } from '../lib/config.js';
 import open from '../lib/open.js';
 import { dim, error, info, printJson, success, teal } from '../lib/output.js';
 import { getProjectServingUrl } from '../lib/project-urls.js';
+import { unlinkedFolderHint } from '../lib/link-hint.js';
 
 interface GitHubInstallation {
   installation_id: number;
@@ -60,7 +61,7 @@ function projectRef(explicit?: string): string {
   if (explicit) return explicit;
   const config = loadProjectConfig();
   if (config) return config.project_id;
-  throw new Error('No project specified and no .somewhere.json found. Pass --project <id-or-slug>.');
+  throw new Error('No project specified and no .somewhere.json found. Pass --project <id-or-slug>.' + unlinkedFolderHint());
 }
 
 function inferGitHubRepo(): string | null {

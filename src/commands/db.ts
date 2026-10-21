@@ -6,6 +6,7 @@ import ora from '../lib/spinner.js';
 import { ApiClient } from '../lib/client.js';
 import { getToken, loadProjectConfig } from '../lib/config.js';
 import { dim, error, info, printJson, success, table, teal, yellow } from '../lib/output.js';
+import { unlinkedFolderHint } from '../lib/link-hint.js';
 
 // Fields consumed by the human-readable adapter. --json preserves the complete
 // canonical response, including count/last_row_id and transport metadata.
@@ -31,7 +32,7 @@ export function registerDb(program: Command) {
       if (!projectId) {
         const config = loadProjectConfig();
         if (!config) {
-          error('No project specified and no .somewhere.json found. Pass --project <id>.');
+          error('No project specified and no .somewhere.json found. Pass --project <id>.' + unlinkedFolderHint());
           process.exit(1);
         }
         projectId = config.project_id;
@@ -109,7 +110,7 @@ export function registerDb(program: Command) {
       if (!projectId) {
         const config = loadProjectConfig();
         if (!config) {
-          error('No project specified and no .somewhere.json found. Pass --project <id>.');
+          error('No project specified and no .somewhere.json found. Pass --project <id>.' + unlinkedFolderHint());
           process.exit(1);
         }
         projectId = config.project_id;
@@ -184,7 +185,7 @@ export function registerDb(program: Command) {
       if (!projectId) {
         const config = loadProjectConfig();
         if (!config) {
-          error('No project specified and no .somewhere.json found. Pass --project <id>.');
+          error('No project specified and no .somewhere.json found. Pass --project <id>.' + unlinkedFolderHint());
           process.exit(1);
         }
         projectId = config.project_id;

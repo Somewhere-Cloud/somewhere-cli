@@ -7,6 +7,7 @@ import { isRecord, unwrapPlatformData } from '../lib/platform-command.js';
 import { fallbackProjectServingUrl, getProjectServingUrl } from '../lib/project-urls.js';
 import { chooseProjectRef, projectRefConflictMessage } from '../lib/project-ref.js';
 import { promoteCommands } from '../lib/promote-handoff.js';
+import { unlinkedFolderHint } from '../lib/link-hint.js';
 
 export interface PreviewCandidateStatus {
   draft_id: string;
@@ -173,7 +174,7 @@ export function registerStatus(program: Command) {
       if (!projectId) {
         const config = loadProjectConfig();
         if (!config) {
-          error('No project specified and no .somewhere.json found. Pass a project ID (positionally or with --project) or run `somewhere init`.');
+          error('No project specified and no .somewhere.json found. Pass a project ID (positionally or with --project).' + unlinkedFolderHint());
           process.exit(1);
         }
         projectId = config.project_id;

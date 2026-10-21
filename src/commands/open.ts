@@ -5,6 +5,7 @@ import { getToken, loadProjectConfig } from '../lib/config.js';
 import { dim, error, info } from '../lib/output.js';
 import { getProjectServingUrl } from '../lib/project-urls.js';
 import { chooseProjectRef, projectRefConflictMessage } from '../lib/project-ref.js';
+import { unlinkedFolderHint } from '../lib/link-hint.js';
 
 export function registerOpen(program: Command) {
   program
@@ -35,7 +36,7 @@ export function registerOpen(program: Command) {
 
       if (!projectRef) {
         error(
-          'No project linked. Pass a project name (positionally or with --project) or run from a linked directory.',
+          'No project linked. Pass a project name (positionally or with --project) or run from a linked directory.' + unlinkedFolderHint(),
         );
         process.exit(1);
       }

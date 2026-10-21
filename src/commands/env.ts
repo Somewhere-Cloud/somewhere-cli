@@ -7,12 +7,13 @@ import { getToken, loadProjectConfig } from '../lib/config.js';
 import { buildEnvTemplate } from '../lib/envfile-write.js';
 import { dim, error, info, printJson, success, teal, warn } from '../lib/output.js';
 import type { EnvKey, EnvScope, EnvSetResult } from '../types.js';
+import { unlinkedFolderHint } from '../lib/link-hint.js';
 
 function resolveProjectId(explicit?: string): string {
   if (explicit) return explicit;
   const config = loadProjectConfig();
   if (!config) {
-    error('No project. Pass --project or run from a linked directory.');
+    error('No project. Pass --project or run from a linked directory.' + unlinkedFolderHint());
     process.exit(1);
   }
   return config.project_id;

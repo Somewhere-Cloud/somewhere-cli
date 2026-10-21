@@ -147,7 +147,8 @@ test('project view with no argument reads the linked project; unlinked it asks f
     assert.deepEqual(JSON.parse(unlinked.stdout), {
       ok: false,
       error: 'CLI_ERROR',
-      message: 'No project. Pass --project <slug-or-id> or run from a linked directory.',
+      message: 'No project. Pass --project <slug-or-id> or run from a linked directory.'
+        + ' Link this folder to a project: `somewhere init --link --project <name-or-id>` (list yours with `somewhere projects`), or create one: `somewhere init --bare --name <name>`.',
     });
     assert.equal(calls.length, 0, 'no request for a project nobody named');
   });

@@ -1022,3 +1022,18 @@ test('--keep-actors: a failing run keeps nothing: every browser is closed and th
   assert.deepEqual(client.calls.filter((call) => call.method === 'DELETE').map((call) => call.body.ids), [['u-a', 'u-b']]);
   assert.deepEqual(result.keep_actors.kept, []);
 });
+
+test('--keep-actors: all or nothing: one actor whose browser ended keeps nothing, closes every browser and deletes every test user', async () => {
+  const client = keepClient((_body, n) => report(n === 2 ? { session_closed: true } : { idle_expires_at: 'x', absolute_expires_at: 'y' }));
+  const result = await createVerifyJourneyRun({ project_id: 'club' }, keepFlow(), client, { runId: 'k4', keep: { key: 'abc123' } }).run();
+  assert.deepEqual(result.keep_actors.kept, []);
+  assert.equal(client.closes().length, 2);
+  assert.equal(result.test_users.cleanup.status, 'deleted');
+});
+
+test('--keep-actors: a first segment without a path still starts each run at a known page', async () => {
+  const client = keepClient();
+  const journey = normalizeVerifyJourney({ actors: { alice: {} }, journey: [{ as: 'alice', actions: [{ click: '#a' }] }] });
+  await createVerifyJourneyRun({ project_id: 'club' }, journey, client, { runId: 'k5', keep: { key: 'abc123' } }).run();
+  assert.deepEqual(client.runs()[0].body.actions[0], { goto: '/' });
+});

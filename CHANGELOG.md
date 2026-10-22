@@ -4,7 +4,7 @@
 
 ### Added
 
-- `somewhere verify --keep-actors`: after a fully passed multi-user run, each actor's signed-in browser and test user are kept for the next run of the same flow (same owner, project, folder and cast), which re-signs in and starts fresh; any stop, failure or unconfirmed call cleans up as before. `--close-actors` closes the browsers and deletes the identities. The project folder's private `.somewhere/test/verify-actors.json` records ids and emails only (#74).
+- `somewhere verify --keep-actors`: after a fully passed multi-user run, each actor's signed-in browser and test user are kept for the next run of the same flow (same owner, project, folder and cast). That run signs each actor in again and starts from each segment's path, but the browser keeps its earlier state, so a pass on a kept browser is a warm re-check; run without `--keep-actors` for a fresh first load. Any stop, failure or unconfirmed call cleans up as before. `--close-actors` closes the browsers and deletes the identities. The project folder's private `.somewhere/test/verify-actors.json` records ids and emails only (#74).
 
 ### Fixed
 

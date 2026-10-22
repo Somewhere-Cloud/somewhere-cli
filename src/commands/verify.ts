@@ -1,3 +1,4 @@
+import { safeCode, safeInvalid, safeStatus } from '../lib/repro-packet.js';
 import { preflightBrowserActions } from '../lib/browser-flow-preflight.js';
 import { randomBytes } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
@@ -12,7 +13,7 @@ import {
   type ExpectedBrowserRequest,
 } from '../lib/browser-actions.js';
 import { isLoopbackUrl, runLocalBrowser } from '../lib/browser-run.js';
-import { dim, error, green, red, teal } from '../lib/output.js';
+import { dim, error, green, noteFailure, red, teal } from '../lib/output.js';
 import { withVerifyProgress } from '../lib/verify-progress.js';
 import { saveVerifyReport, writeVerifyReportTo } from '../lib/verify-report.js';
 import { getProjectServingUrl } from '../lib/project-urls.js';
@@ -751,7 +752,7 @@ function shapeVerificationReport(
   };
 }
 
-async function settleViewportRuns(
+export async function settleViewportRuns(
   viewports: ResolvedViewport[],
   run: (viewport: ResolvedViewport) => Promise<BrowserResult>,
 ): Promise<{ runs: Array<{ viewport: ResolvedViewport; report: BrowserResult }>; refusals: NonNullable<VerifyReport['refusals']> }> {
@@ -763,10 +764,14 @@ async function settleViewportRuns(
     if (result.status === 'fulfilled') runs.push({ viewport, report: result.value });
     else {
       const cause: unknown = result.reason;
+      // The platform's structured refusal detail (#726: data.invalid {path, limit_ms}) rides the
+      // API envelope's `data`; keep only its shape-checked form so start_error_details can name it.
+      const invalid = cause instanceof CliApiError ? safeInvalid(cause.data?.invalid) : undefined;
       refusals.push({ viewport: viewport.label, detail: {
         code: cause instanceof CliApiError ? cause.code : 'BROWSER_REQUEST_FAILED',
         status: cause instanceof CliApiError ? cause.statusCode : 0,
         message: cause instanceof Error ? cause.message : String(cause),
+        ...(invalid ? { invalid } : {}),
       } });
     }
   });
@@ -1754,6 +1759,16 @@ export function summarizeVerifyReport(report: VerifyReport | VerifyJourneyReport
     ...(report.refusals ?? []).map((refusal) => refusal.detail?.code).filter((code): code is string => typeof code === 'string' && code !== ''),
     ...notStarted.map((segment) => segment.error!.code).filter((code) => typeof code === 'string' && code !== ''),
   ])];
+  // Structured, shape-checked detail only (tsk_da2dba3d): the code, status, the path inside the
+  // caller's own flow and a numeric limit. Never the message, which can quote selectors or values.
+  const startErrorDetails = (report.refusals ?? []).flatMap((refusal, index) => {
+    const detail = refusal.detail as { code?: unknown; status?: unknown; invalid?: unknown; data?: { invalid?: unknown } } | undefined;
+    const code = safeCode(detail?.code);
+    const invalid = safeInvalid(detail?.invalid ?? detail?.data?.invalid);
+    if (!code || !invalid) return [];
+    const status = safeStatus(detail?.status);
+    return [{ code, ...(status ? { status } : {}), path: invalid.path, ...(invalid.limit_ms ? { limit_ms: invalid.limit_ms } : {}), refusal_index: index }];
+  });
   return {
     passed: report.passed,
     mode: 'segments' in report ? 'journey' : 'flow',
@@ -1764,6 +1779,7 @@ export function summarizeVerifyReport(report: VerifyReport | VerifyJourneyReport
     refusals: report.refusals?.length ?? 0,
     ...('segments' in report ? { segments_not_started: notStarted.length } : {}),
     ...(startErrors.length ? { start_errors: startErrors } : {}),
+    ...(startErrorDetails.length ? { start_error_details: startErrorDetails } : {}),
     incomplete: report.incomplete?.length ?? 0,
     outcome_unknown: !!report.lifecycle?.some((item) => item.detail.outcome_unknown)
       || ('segments' in report && report.segments.some((segment) => segment.outcome_unknown === true)),
@@ -1775,6 +1791,16 @@ export function summarizeVerifyReport(report: VerifyReport | VerifyJourneyReport
   };
 }
 
+/** A refusal where no browser ran is a failure the summary reports itself; record it for
+ *  `somewhere support packet` from the same validated fields (never text). */
+function noteVerifyRefusal(summary: ReturnType<typeof summarizeVerifyReport>): void {
+  if (summary.passed) return;
+  const first = summary.start_error_details?.[0];
+  const code = first?.code ?? summary.start_errors?.[0];
+  if (!code) return;
+  noteFailure({ name: 'CliApiError', code, statusCode: first?.status, invalid: first ? { path: first.path, limit_ms: first.limit_ms } : undefined });
+}
+
 /** The one-line --out summary. A run in which no browser ran says so first:
  *  "0 failed steps" under FAIL reads as a clean app, and it is not one. */
 export function formatVerifySummaryLine(summary: ReturnType<typeof summarizeVerifyReport>): string {
@@ -1783,9 +1809,14 @@ export function formatVerifySummaryLine(summary: ReturnType<typeof summarizeVeri
   const notStarted = summary.refusals + (summary.segments_not_started ?? 0);
   const noBrowser = !summary.passed && notStarted > 0
     && ('browser_runs' in summary ? summary.browser_runs === 0 : summary.steps === 0);
+  const first = summary.start_error_details?.[0];
+  const where = first
+    ? `; ${first.code} at ${first.path}${first.limit_ms ? ` (max ${first.limit_ms} ms)` : ''}, fix that field before running again; `
+      + `read refusals[${first.refusal_index}].detail.message in your --out report`
+    : '';
   if (noBrowser) {
     return `Verify FAIL: no browser ran${codes}; nothing was checked, so this is not an app result. `
-      + `${notStarted} ${summary.mode === 'journey' ? 'segment' : 'viewport'}${notStarted === 1 ? '' : 's'} refused or not started; ${saved}`;
+      + `${notStarted} ${summary.mode === 'journey' ? 'segment' : 'viewport'}${notStarted === 1 ? '' : 's'} refused or not started${where}; ${saved}`;
   }
   const extra = summary.segments_not_started ? `, ${summary.segments_not_started} segment${summary.segments_not_started === 1 ? '' : 's'} not started${codes}` : (summary.refusals && codes ? codes : '');
   return `Verify ${summary.passed ? 'PASS' : 'FAIL'}: ${summary.failed_steps} failed steps, ${summary.refusals} refusals${extra}, ${summary.step_duration_ms} ms in steps; ${saved}`;
@@ -1948,6 +1979,7 @@ projects: a login approved for "Only these projects" cannot open named browsers
             writeVerifyReportTo(opts.out, report);
             const summary = summarizeVerifyReport(report);
             console.log(opts.json ? JSON.stringify(summary, null, 2) : formatVerifySummaryLine(summary));
+            noteVerifyRefusal(summary);
           } else if (opts.json) console.log(JSON.stringify(report, null, 2));
           else for (const line of formatVerifyOutput(report)) console.log(line);
           process.exit(report.passed ? 0 : 1);
@@ -1968,6 +2000,7 @@ projects: a login approved for "Only these projects" cannot open named browsers
           writeVerifyReportTo(opts.out, report);
           const summary = summarizeVerifyReport(report);
           console.log(opts.json ? JSON.stringify(summary, null, 2) : formatVerifySummaryLine(summary));
+          noteVerifyRefusal(summary);
         } else if (opts.json) console.log(JSON.stringify(report, null, 2));
         else for (const line of formatVerifyOutput(report)) console.log(line);
         process.exit(report.passed ? 0 : 1);

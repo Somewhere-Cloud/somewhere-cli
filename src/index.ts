@@ -41,10 +41,13 @@ import { registerGit } from './commands/git.js';
 import { registerCron } from './commands/cron.js';
 import { registerEmail } from './commands/email.js';
 import { registerTestUsers } from './commands/test-users.js';
+import { registerSupport } from './commands/support.js';
+import { buildRecord, commandPath, writeLastError } from './lib/repro-packet.js';
 import { registerSkills } from './commands/skills.js';
 import { collectNotices } from './lib/notify/index.js';
 import { startupNotice } from './lib/startup-notice.js';
-import { error, info, printJsonError, setJsonOutputMode, stripAnsi } from './lib/output.js';
+import { error, info, printJsonError, setFailureHook, setJsonOutputMode, stripAnsi } from './lib/output.js';
+import { loadProjectConfig } from './lib/config.js';
 import { recordLastRun } from './lib/last-run.js';
 import { recoverClaimHandoff } from './lib/claim-handoff.js';
 import { helpSummary } from './lib/help-summary.js';
@@ -61,6 +64,21 @@ const program = new Command()
 recordLastRun(process.argv.slice(2));
 const jsonOutputRequested = process.argv.includes('--json');
 setJsonOutputMode(jsonOutputRequested);
+
+// Local repro capture (tsk_da2dba3d): typed fields of the failure plus registered command names
+// only. The support group's own failures never replace the record it reports on.
+const startedAt = Date.now();
+let commandNames: string[] = [];
+program.hook('preAction', (_self, action) => {
+  const names: string[] = [];
+  for (let at: Command | null = action; at && at.parent; at = at.parent) names.unshift(at.name());
+  commandNames = names;
+});
+setFailureHook((cause) => {
+  const command = commandPath(commandNames);
+  if (command?.split(' ')[0] === 'support') return;
+  writeLastError(buildRecord(cause, { cliVersion: pkg.version, command, projectId: loadProjectConfig()?.project_id, startedAt }));
+});
 
 // First output of every interactive command — see lib/startup-notice.ts.
 const notice = startupNotice(pkg.version, {
@@ -101,6 +119,7 @@ registerPreview(program);
 registerBrowser(program);
 registerVerify(program);
 registerTestUsers(program);
+registerSupport(program);
 registerCheck(program);
 registerApi(program);
 registerFs(program);

@@ -68,7 +68,14 @@ export function platformErrorEnvelope(
  * `--json` mode a platform refusal keeps its own code, message, hint and
  * request id, and only a failure that began in the CLI says CLI_ERROR.
  */
+let failureHook: ((cause: unknown) => void) | null = null;
+/** index.ts installs the local repro capture here; output.ts stays dependency-free. */
+export function setFailureHook(hook: ((cause: unknown) => void) | null): void { failureHook = hook; }
+/** Record a failure that a command reports in its own output (for example verify's summary) without printing. */
+export function noteFailure(cause: unknown): void { try { failureHook?.(cause); } catch { /* never affects the command */ } }
+
 export function error(msg: string, cause?: unknown) {
+  try { failureHook?.(cause); } catch { /* local diagnostics never change a command's failure */ }
   if (jsonOutputMode) {
     if (jsonErrorWritten) return;
     const platform = platformErrorEnvelope(cause);

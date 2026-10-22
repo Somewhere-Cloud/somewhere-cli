@@ -964,3 +964,89 @@ test('each segment reports the platform timing (numbers only) plus its request w
   assert.equal(result.timing.cleanup_ms, 140, 'two 70 ms closes');
   assert.equal(result.timing.test_users_delete_ms, 40);
 });
+
+function keepClient(answer = () => report({ timing: { browser_reused: false }, idle_expires_at: '2026-10-22T00:10:00Z', absolute_expires_at: '2026-10-22T01:00:00Z', session_expires_at: '2026-10-22T00:10:00Z' })) {
+  const calls = [];
+  return {
+    calls,
+    runs: () => calls.filter((call) => call.path === '/browser/test' && call.body.close !== true),
+    closes: () => calls.filter((call) => call.path === '/browser/test' && call.body.close === true),
+    async call(method, path, body) {
+      calls.push({ method, path, body: structuredClone(body) });
+      if (path === '/auth/test-users' && method === 'POST') return { identities: [{ user: { id: 'u-a', email: 'a@t.test', test: true } }, { user: { id: 'u-b', email: 'b@t.test', test: true } }] };
+      if (path === '/auth/test-users' && method === 'DELETE') return { deleted: body.ids.length };
+      if (body.close === true) return { session_id: body.session_id, closed: true };
+      return answer(body, calls.filter((call) => call.path === '/browser/test' && call.body.close !== true).length);
+    },
+  };
+}
+const keepFlow = () => normalizeVerifyJourney({
+  actors: { alice: { test_user: true }, bob: { test_user: true } },
+  journey: [
+    { as: 'alice', path: '/private', actions: [{ click: '#save' }] },
+    { as: 'bob', path: '/private', actions: [{ click: '#lookup' }], expect_requests: [{ path: '/api/notes/key/k', status: 404 }] },
+  ],
+});
+
+test('--keep-actors: a fully passed run keeps each browser and test user under a stable name, and every run starts from its path', async () => {
+  const client = keepClient();
+  const result = await createVerifyJourneyRun({ project_id: 'club' }, keepFlow(), client, { runId: 'k1', keep: { key: 'abc123' } }).run();
+  assert.equal(result.passed, true);
+  const [alice, bob] = client.runs().map((call) => call.body);
+  assert.equal(alice.session_id, 'vf-kabc123-alice', 'stable across runs, not per run id');
+  assert.equal(bob.session_id, 'vf-kabc123-bob');
+  assert.equal(alice.require_existing_session, undefined, 'a first call may reconnect or start fresh (never refuses)');
+  assert.deepEqual(alice.actions[0], { goto: '/private' }, 'a kept browser is navigated to the segment path before its steps');
+  assert.equal(alice.auth.user_id, 'u-a', 'the identity still signs in on the first call');
+  assert.equal(client.closes().length, 0, 'kept browsers are not closed');
+  assert.equal(client.calls.filter((call) => call.method === 'DELETE').length, 0, 'kept test users are not deleted');
+  assert.deepEqual(result.keep_actors, { kept: ['alice', 'bob'], reconnected: [], reused_identities: false });
+  assert.equal(result.test_users.cleanup.status, 'kept');
+  assert.deepEqual(result.cleanup.map((item) => item.status), ['kept_open', 'kept_open']);
+  assert.equal(result.cleanup_confirmed, true);
+});
+
+test('--keep-actors: the next run reuses the kept identities and reports reconnected browsers', async () => {
+  const client = keepClient(() => report({ timing: { browser_reused: true }, idle_expires_at: 'x', absolute_expires_at: 'y' }));
+  const result = await createVerifyJourneyRun({ project_id: 'club' }, keepFlow(), client, { runId: 'k2', keep: { key: 'abc123', identities: { alice: { user_id: 'u-a', email: 'a@t.test' }, bob: { user_id: 'u-b', email: 'b@t.test' } } } }).run();
+  assert.equal(result.passed, true);
+  assert.equal(client.calls.filter((call) => call.path === '/auth/test-users').length, 0, 'no identity is created or deleted');
+  assert.deepEqual(result.keep_actors, { kept: ['alice', 'bob'], reconnected: ['alice', 'bob'], reused_identities: true });
+});
+
+test('--keep-actors: a failing run keeps nothing: every browser is closed and the test users deleted, as without the flag', async () => {
+  const client = keepClient((_body, n) => n === 2 ? report({ passed: false, steps: [{ step: 0, action: 'click', ok: false, error: 'not found' }] }) : report({ idle_expires_at: 'x', absolute_expires_at: 'y' }));
+  const result = await createVerifyJourneyRun({ project_id: 'club' }, keepFlow(), client, { runId: 'k3', keep: { key: 'abc123', identities: { alice: { user_id: 'u-a', email: 'a@t.test' }, bob: { user_id: 'u-b', email: 'b@t.test' } } } }).run();
+  assert.equal(result.passed, false);
+  assert.deepEqual(client.closes().map((call) => call.body.session_id).sort(), ['vf-kabc123-alice', 'vf-kabc123-bob']);
+  assert.deepEqual(client.calls.filter((call) => call.method === 'DELETE').map((call) => call.body.ids), [['u-a', 'u-b']]);
+  assert.deepEqual(result.keep_actors.kept, []);
+});
+
+test('--keep-actors: all or nothing: one actor whose browser ended keeps nothing, closes every browser and deletes every test user', async () => {
+  const client = keepClient((_body, n) => report(n === 2 ? { session_closed: true } : { idle_expires_at: 'x', absolute_expires_at: 'y' }));
+  const result = await createVerifyJourneyRun({ project_id: 'club' }, keepFlow(), client, { runId: 'k4', keep: { key: 'abc123' } }).run();
+  assert.deepEqual(result.keep_actors.kept, []);
+  assert.equal(client.closes().length, 2);
+  assert.equal(result.test_users.cleanup.status, 'deleted');
+});
+
+test('--keep-actors: a first segment without a path still starts each run at a known page', async () => {
+  const client = keepClient();
+  const journey = normalizeVerifyJourney({ actors: { alice: {} }, journey: [{ as: 'alice', actions: [{ click: '#a' }] }] });
+  await createVerifyJourneyRun({ project_id: 'club' }, journey, client, { runId: 'k5', keep: { key: 'abc123' } }).run();
+  assert.deepEqual(client.runs()[0].body.actions[0], { goto: '/' });
+});
+
+test('--keep-actors: an execution-cap stop keeps its inspection browser but records nothing for reuse and deletes the test users', async () => {
+  const capped = report({ passed: false, incomplete: { reason: 'execution_cap', completed: 1, next_step: 2, budget_ms: 180000, elapsed_ms: 180000 }, steps: [{ step: 0, action: 'goto', ok: true }, { step: 1, action: 'click', ok: true }], idle_expires_at: 'x', absolute_expires_at: 'y' });
+  const flow = normalizeVerifyJourney({ actors: { alice: { test_user: true }, bob: { test_user: true } }, journey: [
+    { as: 'alice', path: '/private', actions: [{ click: '#a' }, { click: '#b' }] },
+    { as: 'bob', path: '/private', actions: [{ click: '#c' }] },
+  ] });
+  const client = keepClient((_body, n) => n === 1 ? capped : report({ idle_expires_at: 'x', absolute_expires_at: 'y' }));
+  const result = await createVerifyJourneyRun({ project_id: 'club' }, flow, client, { runId: 'k6', keep: { key: 'abc123' } }).run();
+  assert.equal(result.segments[0].incomplete?.reason, 'execution_cap');
+  assert.deepEqual(result.keep_actors.kept, [], 'an incomplete run is never recorded for reuse');
+  assert.equal(result.test_users.cleanup.status, 'deleted');
+});

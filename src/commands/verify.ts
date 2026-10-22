@@ -19,6 +19,7 @@ import { saveVerifyReport, writeVerifyReportTo } from '../lib/verify-report.js';
 import { getProjectServingUrl } from '../lib/project-urls.js';
 import { readBrowserIncomplete, readBrowserLifecycle, formatStepDuration, stringifyResult, type BrowserLifecycle, type BrowserResult } from './browser.js';
 import { unlinkedFolderHint } from '../lib/link-hint.js';
+import { closeKept, dropKeep, folderSalt, keepKey, listKeep, lockKeep, readKeep, recordAfterRun, reusableIdentities, writeKeep } from '../lib/verify-keep.js';
 
 /** The local browser's own bound (no platform execution cap applies). */
 const VERIFY_TIMEOUT_MS = 90_000;
@@ -995,8 +996,17 @@ export interface VerifyTestUsers {
   cleanup: { status: 'deleted' | 'kept' | 'unconfirmed'; deleted?: number; reason?: string };
 }
 
+/** --keep-actors: the flow's stable key (owner-local; derived from project and
+ *  actors) and the test identities a previous keeping run left for reuse. */
+export interface VerifyKeepActors {
+  key: string;
+  identities?: Record<string, { user_id: string; email: string }>;
+}
+
 export interface VerifyJourneyReport extends VerifyReport {
   mode: 'journey';
+  /** --keep-actors: browsers kept for the next run, those reconnected this run, and whether identities were reused. */
+  keep_actors?: { kept: string[]; reconnected: string[]; reused_identities: boolean };
   test_users?: VerifyTestUsers;
   actors: string[];
   segments: VerifyJourneySegmentReport[];
@@ -1174,15 +1184,28 @@ export function createVerifyJourneyRun(
   target: VerificationTarget,
   journey: VerifyJourney,
   client: Pick<ApiClient, 'call'>,
-  opts: { runId?: string; now?: () => number; cleanupBudgetMs?: number; recloseAfterAbandonedMs?: number; keepTestUsers?: boolean } = {},
+  opts: { runId?: string; now?: () => number; cleanupBudgetMs?: number; recloseAfterAbandonedMs?: number; keepTestUsers?: boolean; keep?: VerifyKeepActors } = {},
 ): VerifyJourneyRun {
   const now = opts.now ?? Date.now;
   const cleanupBudgetMs = opts.cleanupBudgetMs ?? VERIFY_JOURNEY_LIMITS.cleanup_budget_ms;
   const recloseAfterAbandonedMs = opts.recloseAfterAbandonedMs ?? RECLOSE_AFTER_ABANDONED_MS;
   const runId = opts.runId ?? randomBytes(4).toString('hex');
+  const keep = opts.keep;
+  // --keep-actors: the same owner, project and flow reuse each actor's browser
+  // across runs under a stable session name (the platform's existing kept
+  // session: reconnect if it is alive, a fresh browser if not).
   const sessions: Record<string, string> = Object.fromEntries(
-    Object.keys(journey.actors).map((name) => [name, `vf-${runId}-${name}`]),
+    Object.keys(journey.actors).map((name) => [name, keep ? `vf-k${keep.key}-${name}` : `vf-${runId}-${name}`]),
   );
+  // The last platform report per actor, for a kept browser's expiry.
+  const lastReport = new Map<string, BrowserResult>();
+  // Actors whose first call reconnected to a browser kept by an earlier run.
+  const reconnected = new Set<string>();
+  let reusedIdentities = false;
+  // --keep-actors: actors kept FOR REUSE, filled only after a fully passed run,
+  // all or nothing. Separate from `kept` (an execution-cap stop's inspection
+  // browsers), so an incomplete run never records anything for reuse.
+  const keptForReuse = new Set<string>();
   // Actors a call has been sent for (their browser may exist).
   const opened = new Set<string>();
   // Actors whose last call ended without a platform answer (client timeout or
@@ -1203,6 +1226,12 @@ export function createVerifyJourneyRun(
 
   const createTestUsers = async (): Promise<void> => {
     if (!testActors.length) return;
+    const stored = keep?.identities;
+    if (stored && testActors.every((name) => stored[name]?.user_id && stored[name]?.email)) {
+      for (const name of testActors) testIdentities.set(name, { user_id: stored[name].user_id, email: stored[name].email });
+      reusedIdentities = true;
+      return;
+    }
     let created: { identities?: Array<{ user?: { id?: string; email?: string; test?: boolean } }> };
     try {
       created = await client.call('POST', '/auth/test-users', { project_id: target.project_id, count: testActors.length, label: 'verify' });
@@ -1222,6 +1251,7 @@ export function createVerifyJourneyRun(
 
   const removeTestUsers = async (): Promise<VerifyTestUsers['cleanup']> => {
     if (opts.keepTestUsers) return { status: 'kept', reason: 'kept on request; they expire 24 hours after creation' };
+    if (keep && keptForReuse.size > 0 && testActors.every((name) => keptForReuse.has(name))) return { status: 'kept', reason: 'kept with their browsers for the next --keep-actors run; remove them with --close-actors' };
     try {
       const removed = await client.call<{ deleted?: number }>('DELETE', '/auth/test-users', { project_id: target.project_id, ids: [...testIdentities.values()].map((item) => item.user_id) });
       return { status: 'deleted', deleted: typeof removed?.deleted === 'number' ? removed.deleted : undefined };
@@ -1322,6 +1352,7 @@ export function createVerifyJourneyRun(
     // 'incomplete': the segment reached its execution cap with nothing failed.
     type Stop = { kind: 'report' | 'error' | 'incomplete'; segment: number; as: string; viewport: string; code: string; message: string };
     let stopped: Stop | null = null;
+    let completed = false;
     // The last segment number of the item (a segment, or a parallel group)
     // the journey stopped in: segments after it did not run.
     let stoppedItemEnd = 0;
@@ -1383,8 +1414,11 @@ export function createVerifyJourneyRun(
           const { segment } = entry;
           const actor = journey.actors[segment.as];
           const first = !started.has(segment.as);
-          const offset: 0 | 1 = !first && segment.path ? 1 : 0;
-          const actions = offset ? [{ goto: segment.path } as BrowserSequenceAction, ...segment.actions] : segment.actions;
+          // A kept browser resumes where the last run left it, so a keeping run's
+          // first call also navigates explicitly: every run starts from its path.
+          const keepStart = first && keep ? (segment.path ?? (target.url ? new URL(target.url).pathname + new URL(target.url).search : '/')) : undefined;
+          const offset: 0 | 1 = (!first && segment.path) || keepStart ? 1 : 0;
+          const actions = offset ? [{ goto: keepStart ?? segment.path } as BrowserSequenceAction, ...segment.actions] : segment.actions;
           const hasSeeds = actor.local_storage !== undefined || actor.cookies !== undefined || actor.headers !== undefined;
           const url = first ? (segment.path ?? target.url ?? (hasSeeds ? '/' : undefined)) : undefined;
           const body: Record<string, unknown> = {
@@ -1452,6 +1486,8 @@ export function createVerifyJourneyRun(
             continue;
           }
           runs.push({ viewport: { ...viewport, label }, report, actions, offset });
+          lastReport.set(segment.as, report);
+          if (first && keep && (report as { timing?: { browser_reused?: unknown } }).timing?.browser_reused === true) reconnected.add(segment.as);
           const unknown = readBrowserLifecycle(report);
           if (unknown) {
             if (!abandoned.has(segment.as)) abandoned.set(segment.as, `the platform reported ${unknown.status}; late allocation or cleanup may still settle`);
@@ -1497,8 +1533,29 @@ export function createVerifyJourneyRun(
           stoppedItemEnd = itemEnd;
         }
       }
+      completed = true;
     } finally {
       segmentsEndedAt = now();
+      // --keep-actors keeps each browser only after a fully passed, fully
+      // answered run; any stop, error or unconfirmed call cleans up as usual.
+      const keepable = keep && completed && !stopped && abandoned.size === 0 && kept.size === 0
+        && runs.length === journey.journey.length
+        && testActors.every((name) => opened.has(name))
+        && [...opened].every((actor) => { const report = lastReport.get(actor); return !!report && report.session_closed !== true; });
+      if (keepable) {
+        for (const actor of opened) {
+          const report = lastReport.get(actor)!;
+          keptForReuse.add(actor);
+          kept.set(actor, {
+            actor,
+            session_id: sessions[actor],
+            ...(report.session_expires_at ? { session_expires_at: report.session_expires_at } : {}),
+            ...(report.idle_expires_at ? { idle_expires_at: report.idle_expires_at } : {}),
+            ...(report.absolute_expires_at ? { absolute_expires_at: report.absolute_expires_at } : {}),
+            close: 'somewhere verify --flow <this flow> --close-actors',
+          });
+        }
+      }
       await closeAll();
     }
     const shaped = shapeVerificationReport(target.url ?? target.project_id, { actions: [] }, runs);
@@ -1560,6 +1617,7 @@ export function createVerifyJourneyRun(
       cleanup_confirmed: cleanup.every((item) => item.status !== 'unconfirmed'),
       kept_sessions: [...kept.values()],
       ...(testUsers ? { test_users: testUsers } : {}),
+      ...(keep ? { keep_actors: { kept: [...keptForReuse], reconnected: [...reconnected], reused_identities: reusedIdentities } } : {}),
       timing: {
         ...(testUsersCreateMs !== undefined ? { test_users_create_ms: testUsersCreateMs } : {}),
         segments_ms: segmentsMs,
@@ -1851,6 +1909,8 @@ export function registerVerify(program: Command): void {
     .option('--cookie <name=value>', 'Existing app cookie to seed in every viewport. Repeatable.', collectCookie)
     .option('--json', 'Print the structured verification report as JSON.')
     .option('--out <file>', 'Write the full report to a new private file; print a bounded summary (JSON with --json).')
+    .option('--keep-actors', 'Multi-user flows: after a fully passed run, keep each actor\'s signed-in browser and test user, and reconnect to them on the next run of the same flow file in this project folder. Each run navigates every actor to its starting path and runs the same checks, but cookies, storage and app data the actors created carry over, so checks must not assume an empty account. One run per kept flow at a time. Close with --close-actors; idle browsers close after 10 minutes.')
+    .option('--close-actors', 'Close every browser and delete every test user that --keep-actors kept for this project in this folder, then exit.')
     .option('--keep-test-users', 'Multi-user flows: keep the test users created for "test_user" actors instead of deleting them when the run ends (they expire 24 hours after creation).')
     .option('--schema', 'Print the JSON Schema for --flow files (one user, or several users) and exit.')
     .addHelpText('after', `
@@ -1893,7 +1953,7 @@ Several users need a claimed account and a CLI login approved for all your
 projects: a login approved for "Only these projects" cannot open named browsers
 (SESSION_SCOPE_FORBIDDEN). Print the full flow schema with: somewhere verify --schema
 `)
-    .action(async (target: string | undefined, opts: { project?: string; url?: string; path?: string; flow?: string; session?: string; cookie?: string; json?: boolean; out?: string; schema?: boolean; keepTestUsers?: boolean }) => {
+    .action(async (target: string | undefined, opts: { project?: string; url?: string; path?: string; flow?: string; session?: string; cookie?: string; json?: boolean; out?: string; schema?: boolean; keepTestUsers?: boolean; keepActors?: boolean; closeActors?: boolean }) => {
       if (opts.schema) {
         console.log(JSON.stringify(verifyFlowSchema(), null, 2));
         process.exit(0);
@@ -1954,7 +2014,55 @@ projects: a login approved for "Only these projects" cannot open named browsers
             throw new Error('--session and --cookie seed one browser; in a multi-user flow put each actor\'s seeds on that actor in the flow file.');
           }
           if (!client) client = new ApiClient(getToken());
-          const journeyRun = createVerifyJourneyRun({ ...(project ? { project_id: project } : {}), ...(url ? { url } : {}) }, input.journey, client, { keepTestUsers: opts.keepTestUsers === true });
+          // --keep-actors / --close-actors: state belongs to this linked project folder only.
+          let keepKeyValue: string | undefined;
+          const root = process.cwd();
+          if (opts.keepActors || opts.closeActors) {
+            if (opts.keepActors && opts.closeActors) throw new Error('Pass either --keep-actors or --close-actors, not both.');
+            if (opts.keepTestUsers) throw new Error('--keep-test-users and --keep-actors/--close-actors cannot be combined: --keep-actors already keeps its test users with their browsers.');
+            if (!linkedProjectId || (project && project !== linkedProjectId)) {
+              throw new Error('--keep-actors and --close-actors run from the linked project folder, on that project: what they keep is recorded in its .somewhere/test/.' + unlinkedFolderHint());
+            }
+            project = linkedProjectId;
+            keepKeyValue = keepKey(folderSalt(root), linkedProjectId, resolve(opts.flow as string), input.journey.actors as unknown as Record<string, unknown>);
+          }
+          if (opts.closeActors) {
+            const entries = listKeep(root, linkedProjectId!);
+            if (!entries.length) {
+              if (opts.json) console.log(JSON.stringify({ closed: true, flows: 0, note: 'Nothing kept for this project in this folder.' }, null, 2));
+              else console.log('Nothing kept for this project in this folder.');
+              return;
+            }
+            const results: Array<{ flow_key: string; closed: boolean; note: string } | ({ flow_key: string; closed: boolean } & Awaited<ReturnType<typeof closeKept>>)> = [];
+            let allConfirmed = true;
+            for (const [key, entry] of entries) {
+              let release: () => void;
+              try { release = lockKeep(root, key); }
+              catch { allConfirmed = false; results.push({ flow_key: key, closed: false, note: 'a --keep-actors run of this flow is in progress; skipped' }); continue; }
+              let receipt: Awaited<ReturnType<typeof closeKept>>;
+              try { receipt = await closeKept(client, entry); } finally { release(); }
+              const confirmed = receipt.browsers.every((item) => !item.status.startsWith('unconfirmed')) && !receipt.identities.status.startsWith('unconfirmed');
+              if (confirmed) dropKeep(root, key); else allConfirmed = false;
+              results.push({ flow_key: key, closed: confirmed, ...receipt });
+            }
+            if (opts.json) console.log(JSON.stringify({ closed: allConfirmed, flows: results.length, results }, null, 2));
+            else {
+              for (const result of results) {
+                if (!('browsers' in result)) { console.log(result.note); continue; }
+                for (const item of result.browsers) console.log(`${item.actor}: browser ${item.status}`);
+                console.log(`test users: ${result.identities.status}${result.identities.deleted !== undefined ? ` (${result.identities.deleted})` : ''}`);
+              }
+              if (!allConfirmed) console.log('Some cleanup is unconfirmed; its record is kept so --close-actors can run again.');
+            }
+            if (!allConfirmed) process.exitCode = 1;
+            return;
+          }
+          const releaseKeepLock = keepKeyValue ? lockKeep(root, keepKeyValue) : undefined;
+          const keepEntry = keepKeyValue ? readKeep(root, keepKeyValue) : null;
+          const journeyRun = createVerifyJourneyRun({ ...(project ? { project_id: project } : {}), ...(url ? { url } : {}) }, input.journey, client, {
+            keepTestUsers: opts.keepTestUsers === true,
+            ...(keepKeyValue ? { keep: { key: keepKeyValue, ...(reusableIdentities(keepEntry, Date.now()) ? { identities: reusableIdentities(keepEntry, Date.now()) } : {}) } } : {}),
+          });
           // Ctrl-C or a terminating signal: stop starting segments at once, then
           // close every opened browser within the cleanup budget and say what
           // could not be confirmed.
@@ -1964,16 +2072,26 @@ projects: a login approved for "Only these projects" cannot open named browsers
               .then(({ cleanup, cleanup_ms }) => {
                 for (const line of formatJourneyCleanup(cleanup, cleanup_ms)) process.stderr.write(`${line}\n`);
               })
-              .finally(() => process.exit(signal === 'SIGINT' ? 130 : 143));
+              .finally(() => { releaseKeepLock?.(); process.exit(signal === 'SIGINT' ? 130 : 143); });
           };
           process.once('SIGINT', onSignal);
           process.once('SIGTERM', onSignal);
           let report: VerifyJourneyReport;
           try {
             report = await withVerifyProgress(() => journeyRun.run(), !opts.json);
+          } catch (cause) {
+            releaseKeepLock?.();
+            throw cause;
           } finally {
             process.removeListener('SIGINT', onSignal);
             process.removeListener('SIGTERM', onSignal);
+          }
+          if (keepKeyValue) {
+            try {
+              const decision = recordAfterRun(keepEntry, report, project!, Date.now());
+              if (decision.action === 'write') writeKeep(root, keepKeyValue, decision.entry);
+              else if (decision.action === 'drop') dropKeep(root, keepKeyValue);
+            } finally { releaseKeepLock?.(); }
           }
           if (opts.out !== undefined) {
             writeVerifyReportTo(opts.out, report);

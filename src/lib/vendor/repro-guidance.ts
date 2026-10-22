@@ -174,9 +174,20 @@ interface Guidance { surface: string; investigate: Step[]; recipe: string[] }
 /** Static guidance by surface. Placeholders stay literal (<…>); ids are substituted only into fixed slots. */
 function guidanceFor(record: ReproRecord): Guidance {
   const op = record.operation ?? '';
-  // Every step uses only commands and flags verified to exist; ids go in fixed slots. Trace and
-  // request ids stay in `collected` for support: no log reader filters by them today.
+  // Every step uses only commands and flags verified to exist; ids go in fixed slots. A trace id
+  // is substituted only into `logs --trace`, whose reader filters by exactly that id; request ids
+  // stay in `collected` for support.
   const project = record.project_id ? ['--project', record.project_id] : ['--project', '<PROJECT>'];
+  // A deployed function's uncaught throw (or failed context build) answers FUNCTION_ERROR /
+  // CONTEXT_BUILD_FAILED with the request's trace id; the stack is in the owner's logs under it.
+  if (record.code === 'FUNCTION_ERROR' || record.code === 'CONTEXT_BUILD_FAILED') {
+    const trace = record.trace_id && /^[0-9a-f]{32}$/.test(record.trace_id) ? record.trace_id : '<TRACE_ID>';
+    return { surface: 'function_crash',
+      investigate: [['somewhere', 'logs', ...project, '--trace', trace]],
+      recipe: ['Read the stack first: FUNCTION_ERROR usually means the handler\'s own code threw. Submit a platform bug only if the stack points into the platform.',
+        'Do NOT resend the failed request: the handler may have written data before it threw.',
+        'Reproduce on a disposable test project: send the same method and route a synthetic body of the same shape (<FIELD>: <PLACEHOLDER>), then read it with somewhere logs --project <TEST_PROJECT> --trace <TRACE_ID>'] };
+  }
   if (/^POST \/browser(\/|$)|^tool:browser|^POST \/verify|^tool:verify/.test(op) || /^(browser|verify)\b/.test(record.command ?? '')) {
     return { surface: 'browser_verify',
       investigate: [['somewhere', 'verify', '--schema'], ['somewhere', 'docs', 'browser']],

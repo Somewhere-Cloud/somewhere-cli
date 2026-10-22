@@ -24,6 +24,7 @@ export function registerLogs(program: Command) {
     .option('--function <route>', 'Filter to one function route path (e.g. /api/checkout)')
     .option('--endpoint <path>', 'Filter to one endpoint path (e.g. /api/checkout)')
     .option('--since <duration>', 'Only show logs since a duration or timestamp (e.g. 15m, 1h, 24h)')
+    .option('--trace <id>', "Only one request's lines, with any recorded stack: the 32-character trace_id a failed response returned (also its X-Trace-Id header)")
     .option('--tail <n>', 'Number of lines', '20')
     .option('--follow', 'Keep polling for new logs')
     .option('--json', 'Print logs as newline-delimited JSON objects')
@@ -51,6 +52,7 @@ export function registerLogs(program: Command) {
         process.exit(1);
       }
 
+      const traceId = parseTraceOption(opts.trace);
       const after = parseSinceOption(opts.since);
       const functionRoute = opts.function ?? opts.endpoint;
       const query: Record<string, string | number | undefined> = {
@@ -59,6 +61,7 @@ export function registerLogs(program: Command) {
         level: opts.level,
         source: opts.source,
         function: functionRoute,
+        trace_id: traceId,
         after,
       };
 
@@ -72,7 +75,9 @@ export function registerLogs(program: Command) {
           if (opts.json) {
             console.log('[]');
           } else {
-            console.log(dim('  No matching logs yet.'));
+            console.log(dim(traceId
+              ? '  No lines under that trace id yet. Lines arrive within a few seconds; check the id and the project.'
+              : '  No matching logs yet.'));
           }
           return;
         }
@@ -88,6 +93,7 @@ export function registerLogs(program: Command) {
             const time = new Date(log.created_at).toLocaleTimeString();
             const levelStr = formatLevel(log.level);
             console.log(`  ${dim(`[${levelStr}]`)}  ${dim(time)}  ${log.message}`);
+            if (traceId) printStack(log);
           }
         }
 
@@ -104,6 +110,7 @@ export function registerLogs(program: Command) {
                 level: opts.level,
                 source: opts.source,
                 function: functionRoute,
+                trace_id: traceId,
                 after: lastSeen,
               });
               const freshLogs = fresh.logs ?? [];
@@ -119,6 +126,7 @@ export function registerLogs(program: Command) {
                 console.log(
                   `  ${dim(`[${levelStr}]`)}  ${dim(time)}  ${log.message}`,
                 );
+                if (traceId) printStack(log);
               }
             } catch {}
           };
@@ -131,6 +139,22 @@ export function registerLogs(program: Command) {
         process.exit(1);
       }
     });
+}
+
+/** A trace id is the 32-hex id the platform returns; anything else is refused before any request. */
+function parseTraceOption(value: string | undefined): string | undefined {
+  if (value === undefined) return undefined;
+  const trimmed = String(value).trim();
+  if (/^[0-9a-f]{32}$/i.test(trimmed)) return trimmed.toLowerCase();
+  error('--trace takes the 32-character trace_id from the failed response (or its X-Trace-Id header).');
+  process.exit(1);
+}
+
+/** The stack a crash report recorded for this request (the owner's own logs). */
+function printStack(log: LogRow): void {
+  const stack = log.data && typeof log.data === 'object' ? (log.data as { stack?: unknown }).stack : undefined;
+  if (typeof stack !== 'string' || !stack) return;
+  for (const line of stack.split('\n').slice(0, 30)) console.log(dim(`      ${line}`));
 }
 
 function parseSinceOption(value: string | undefined): string | undefined {

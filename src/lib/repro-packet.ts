@@ -28,19 +28,40 @@ export function buildRecord(cause: unknown, context: { cliVersion: string; comma
   }, { client: { kind: 'cli', version: context.cliVersion }, command: context.command, startedAt: context.startedAt, now: context.now });
 }
 
+/** The CLOSED set of codes the function runtime itself answers or reports for a failure (tsk_fca1267b):
+ *  its own crash codes, the scope rejection and DB_EXPOSED_SERVER_ERROR_CODES. An app's own err.code is
+ *  owner text (it may hold anything, a key included, and still match the CODE shape), so it is never
+ *  copied into a packet: any code outside this set becomes APP_ERROR_CODE. */
+export const RUNTIME_FAILURE_CODES: ReadonlySet<string> = new Set([
+  'FUNCTION_ERROR', 'CONTEXT_BUILD_FAILED', 'FUNCTION_MODULE_LOAD_FAILED', 'RAW_SQL_CANNOT_BE_PLATFORM_SCOPED', 'DRAFT_EGRESS_DENIED',
+  'DB_CONNECTION_NOT_READY', 'DB_COMMITTED_READ_FAILED', 'DB_WRITE_OUTCOME_UNKNOWN', 'IDEMPOTENCY_OUTCOME_UNAVAILABLE',
+  'IDEMPOTENCY_RECEIPT_INVALID', 'IDEMPOTENCY_UNAVAILABLE', 'DRAFT_CONTEXT_INVALID', 'DRAFT_DB_NOT_ISOLATED', 'AUTH_VERIFY_UNAVAILABLE',
+  'VISITOR_IDENTITY_UNAVAILABLE', 'VISITOR_CLAIM_OUTCOME_UNKNOWN', 'VISITOR_SIGN_OUT_UNCONFIRMED',
+]);
+export const APP_ERROR_CODE = 'APP_ERROR_CODE';
+/** The packet code for a crash row: the server-recorded response_code, else the row's code, and only
+ *  when it is in RUNTIME_FAILURE_CODES; otherwise APP_ERROR_CODE. */
+export function runtimeFailureCode(data: Record<string, unknown>): string {
+  for (const candidate of [data.response_code, data.code]) {
+    if (typeof candidate === 'string' && RUNTIME_FAILURE_CODES.has(candidate)) return candidate;
+  }
+  return APP_ERROR_CODE;
+}
+
 /** A function failure the caller hit over HTTP (e.g. 500 FUNCTION_ERROR with its trace_id), rebuilt from the
- *  owner's own log rows for that trace. Reads ONLY data.code, data.status, data.request_id, data.method and
- *  data.path (templated by the shared builder); the message, stack and every other field are never read.
+ *  owner's own log rows for that trace. Reads ONLY data.response_code/data.code (mapped through
+ *  RUNTIME_FAILURE_CODES), data.status, data.request_id, data.method and data.path (templated by the shared
+ *  builder); the message, stack and every other field are never read.
  *  Rows come newest first; the newest reported failure wins. Null when no row reports one. */
 export function buildCrashRecord(rows: unknown, context: { cliVersion: string; traceId: string; projectId?: string }): ReproRecord | null {
   for (const row of Array.isArray(rows) ? rows : []) {
     const r = (row && typeof row === 'object' ? row : {}) as { level?: unknown; created_at?: unknown; data?: unknown };
     const d = (r.data && typeof r.data === 'object' ? r.data : {}) as Record<string, unknown>;
     const status = safeStatus(d.status);
-    if (r.level !== 'error' || !safeCode(d.code) || status === undefined || status < 400) continue;
+    if (r.level !== 'error' || (!safeCode(d.code) && !safeCode(d.response_code)) || status === undefined || status < 400) continue;
     const at = typeof r.created_at === 'string' ? Date.parse(r.created_at) : NaN;
     return buildRecordFromFields({
-      platform: true, code: d.code, status,
+      platform: true, code: runtimeFailureCode(d), status,
       operation: typeof d.method === 'string' && typeof d.path === 'string' ? operationLabel(d.method, d.path) : undefined,
       requestId: d.request_id, traceId: context.traceId, projectId: context.projectId,
     }, { client: { kind: 'cli', version: context.cliVersion }, now: Number.isFinite(at) ? at : undefined });

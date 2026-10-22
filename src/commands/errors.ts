@@ -4,6 +4,7 @@ import { getToken, loadProjectConfig } from '../lib/config.js';
 import { dim, error, red, table, teal, timeAgo, yellow } from '../lib/output.js';
 import { chooseProjectRef, projectRefConflictMessage } from '../lib/project-ref.js';
 import { unlinkedFolderHint } from '../lib/link-hint.js';
+import { terminalSafe } from '../lib/terminal-text.js';
 
 interface ErrorRow {
   endpoint?: string | null;
@@ -121,10 +122,10 @@ export function registerErrors(program: Command) {
       const tableRows = rows.map((r) => {
         const status = r.status_code ?? 0;
         const statusStr = status >= 500 ? red(String(status)) : status >= 400 ? yellow(String(status)) : String(status || '—');
-        const where = `${r.method ? `${r.method} ` : ''}${r.endpoint ?? '—'}`;
+        const where = terminalSafe(`${r.method ? `${r.method} ` : ''}${r.endpoint ?? '—'}`);
         const what = r.error_code && r.error_code !== 'FUNCTION_ERROR'
-          ? `${r.error_code}: ${truncate(r.error_message)}`
-          : truncate(r.error_message);
+          ? `${terminalSafe(r.error_code)}: ${truncate(terminalSafe(r.error_message))}`
+          : truncate(terminalSafe(r.error_message));
         // A 401 your own handler returned is your auth gate working. Calling it
         // an exception is what made this view fill with normal traffic on any
         // app with a login.

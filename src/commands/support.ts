@@ -38,12 +38,13 @@ export function registerSupport(program: Command): void {
     .option('--project <ref>', 'With --trace: the project the function belongs to (default: the linked folder)')
     .addHelpText('after', [
       '',
-      'The packet holds only typed, validated fields: error code, HTTP status, an id-templated operation,',
-      'request/trace/project ids, the platform\'s retry verdict, outcome and timing. It never holds the error',
-      'message, stack, console, request or response bodies, arguments, SQL, URL queries, emails, headers,',
-      'cookies, tokens, passwords, source or environment. Nothing is sent anywhere by this command.',
-      'The error code is any UPPER_SNAKE word the platform or CLI returned; it is not checked against a list.',
-      'With --trace, the request\'s log rows are read for their code, status, request id, method and route only.',
+      'The packet is built only from these fields, each checked against a fixed shape: error code, HTTP',
+      'status, an operation (method plus route, every path segment replaced by :id or :seg), request/trace/',
+      'project ids, the platform\'s retry verdict, outcome and timing. It does not read the error message,',
+      'stack, console output, request or response bodies, arguments, SQL, URL queries, headers or cookies.',
+      'Error code: with --trace it is kept only if it is one of the function runtime\'s own failure codes',
+      '(an app\'s own error code becomes APP_ERROR_CODE); for a failed CLI command it is the code the',
+      'platform API answered. Review the packet before you submit it. Nothing is sent anywhere by this command.',
     ].join('\n'))
     .action(async (opts: PacketOptions) => {
       try {

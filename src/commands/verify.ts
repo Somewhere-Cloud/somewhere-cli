@@ -19,7 +19,7 @@ import { saveVerifyReport, writeVerifyReportTo } from '../lib/verify-report.js';
 import { getProjectServingUrl } from '../lib/project-urls.js';
 import { readBrowserIncomplete, readBrowserLifecycle, formatStepDuration, stringifyResult, type BrowserLifecycle, type BrowserResult } from './browser.js';
 import { unlinkedFolderHint } from '../lib/link-hint.js';
-import { closeKept, dropKeep, folderSalt, keepKey, listKeep, lockKeep, readKeep, recordAfterRun, reusableIdentities, writeKeep } from '../lib/verify-keep.js';
+import { closeKept, dropKeep, folderSalt, keepKey, keepStartNote, listKeep, lockKeep, readKeep, recordAfterRun, reusableIdentities, writeKeep } from '../lib/verify-keep.js';
 
 /** The local browser's own bound (no platform execution cap applies). */
 const VERIFY_TIMEOUT_MS = 90_000;
@@ -2059,6 +2059,10 @@ projects: a login approved for "Only these projects" cannot open named browsers
           }
           const releaseKeepLock = keepKeyValue ? lockKeep(root, keepKeyValue) : undefined;
           const keepEntry = keepKeyValue ? readKeep(root, keepKeyValue) : null;
+          if (keepKeyValue) {
+            const note = keepStartNote(keepEntry, listKeep(root, project!).filter(([key]) => key !== keepKeyValue).length);
+            if (note) process.stderr.write(`${note}\n`);
+          }
           const journeyRun = createVerifyJourneyRun({ ...(project ? { project_id: project } : {}), ...(url ? { url } : {}) }, input.journey, client, {
             keepTestUsers: opts.keepTestUsers === true,
             ...(keepKeyValue ? { keep: { key: keepKeyValue, ...(reusableIdentities(keepEntry, Date.now()) ? { identities: reusableIdentities(keepEntry, Date.now()) } : {}) } } : {}),

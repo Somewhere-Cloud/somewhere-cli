@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-const { keepKey, folderSalt, readKeep, writeKeep, dropKeep, listKeep, reusableIdentities, lockKeep, recordAfterRun, KEEP_IDENTITY_REUSE_MS } = await import('../dist/lib/verify-keep.js');
+const { keepStartNote, keepKey, folderSalt, readKeep, writeKeep, dropKeep, listKeep, reusableIdentities, lockKeep, recordAfterRun, KEEP_IDENTITY_REUSE_MS } = await import('../dist/lib/verify-keep.js');
 
 test('keepKey binds folder salt, project, flow file and the full cast (values hashed), and ignores key order', () => {
   const cast = { alice: { test_user: true }, bob: { auth: { user_id: 'u1' } } };
@@ -56,4 +56,12 @@ test('the record: write what a passed run kept; keep the old record when cleanup
   assert.deepEqual(unconfirmedClose.entry.sessions, prev.sessions);
   assert.deepEqual(recordAfterRun(prev, { keep_actors: { kept: [], reused_identities: true }, kept_sessions: [], cleanup: [{ status: 'closed' }], test_users: { identities: [], cleanup: { status: 'unconfirmed' } } }, 'p', 0), { action: 'keep' });
   assert.deepEqual(recordAfterRun(prev, { keep_actors: { kept: [], reused_identities: true }, kept_sessions: [], cleanup: [{ status: 'closed' }], test_users: { identities: [], cleanup: { status: 'deleted' } } }, 'p', 0), { action: 'drop' });
+});
+
+test('a run that cannot reconnect says why on one line, and names other kept flows that a different flow path leaves unused', () => {
+  const entry = { project_id: 'p', created_at: 'x', actors: ['a'], sessions: { a: 's' } };
+  assert.equal(keepStartNote(entry, 3), null, 'a kept record reconnects silently');
+  assert.match(keepStartNote(null, 0), /nothing is kept yet for this flow file .* starts fresh and keeps them for the next run of the same file\.$/);
+  assert.match(keepStartNote(null, 1), /1 other kept flow in this folder \(another flow file path or cast\) is not reused; --close-actors closes it\./);
+  assert.match(keepStartNote(null, 2), /2 other kept flows .* are not reused; --close-actors closes them\./);
 });

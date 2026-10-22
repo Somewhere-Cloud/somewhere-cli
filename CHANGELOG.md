@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.37.69
+
+### Added
+
+- `somewhere verify --keep-actors --resume-page`: an explicit warm continuation. A kept actor whose first segment starts at exactly the page path the last passed run left it on keeps that page as it was (no reload); any other actor, flow, project or start path, a start path with a query or fragment, or a kept browser that is gone reloads normally. `--resume-page` without `--keep-actors` is refused. The report lists resumed actors under `keep_actors.resumed_pages` with a note that the run does not prove the latest deployed code; run without `--resume-page` for that. The keep record stores the page pathname only (#85).
+- `somewhere logs --trace <trace id>` shows only that request's log lines, with any recorded stack under its line, so the `trace_id` from a `500 FUNCTION_ERROR` leads straight to the crash. Anything but a 32-hex id is refused before any request; plain `somewhere logs` is unchanged.
+- `somewhere support packet --trace <trace id> [--project <ref>]` builds the `somewhere.repro/1` packet for that failed request from the owner's log rows. It keeps only the error code, HTTP status, request and trace ids, method and a templated path (route words become `:id`/`:seg`); never the message, stack, body, query or headers. A failed mutating request is recorded as `unknown` and never rerun. It is written locally and submitted only if you choose (#83).
+
 ## 0.37.68
 
 ### Fixed

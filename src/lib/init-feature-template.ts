@@ -82,14 +82,16 @@ export type { User };
  * unavailable: the server could not confirm a session, and none was confirmed
  * on this page. suspended: a re-check failed for the account confirmed on this
  * page; its pages stay mounted but hidden until the session is confirmed.
+ * checkStatus: the failed session check's HTTP status, or 0 when the server
+ * could not be reached (from the SDK's typed SESSION_CHECK_FAILED error only).
  */
 export type AuthState =
   | { status: 'loading' }
   | { status: 'signing-out' }
   | { status: 'signed-out' }
   | { status: 'signed-in'; user: User }
-  | { status: 'unavailable'; retrying: boolean; retry(): void }
-  | { status: 'suspended'; user: User; retrying: boolean; retry(): void };
+  | { status: 'unavailable'; checkStatus: number; retrying: boolean; retry(): void }
+  | { status: 'suspended'; user: User; checkStatus: number; retrying: boolean; retry(): void };
 
 export type CredentialsMode = 'sign-in' | 'sign-up';
 
@@ -205,9 +207,13 @@ export function useAuthState(): AuthState {
         void session.recheck().finally(() => setRetrying(false));
       };
       const kept = confirmed.current;
+      // Only the SDK's typed status is used: never its message, so nothing the
+      // server said is rendered. 0 means no response (network or unreadable).
+      const failed = session.error && session.error.code === 'SESSION_CHECK_FAILED' ? session.error.status : 0;
+      const checkStatus = Number.isInteger(failed) && failed >= 100 && failed <= 599 ? failed : 0;
       return kept && session.user?.id === kept.id
-        ? { status: 'suspended', user: kept, retrying, retry }
-        : { status: 'unavailable', retrying, retry };
+        ? { status: 'suspended', user: kept, checkStatus, retrying, retry }
+        : { status: 'unavailable', checkStatus, retrying, retry };
     }
   }
 }
@@ -357,12 +363,12 @@ export function App() {
   if (session.status === 'signing-out') return <LoadingScreen label="Signing out…" />;
   if (session.status === 'signed-out') return <SignInPage />;
   if (session.status === 'unavailable') {
-    return <SessionUnavailable keepsWork={false} retrying={session.retrying} onRetry={session.retry} />;
+    return <SessionUnavailable keepsWork={false} checkStatus={session.checkStatus} retrying={session.retrying} onRetry={session.retry} />;
   }
   const suspended = session.status === 'suspended';
   return (
     <>
-      {suspended ? <SessionUnavailable keepsWork retrying={session.retrying} onRetry={session.retry} /> : null}
+      {suspended ? <SessionUnavailable keepsWork checkStatus={session.checkStatus} retrying={session.retrying} onRetry={session.retry} /> : null}
       {/* Keyed by user id: signing out or switching accounts unmounts every
           private page. A failed re-check only hides and disables them, so
           unsaved input survives until the session is confirmed again. */}
@@ -1791,8 +1797,24 @@ export function EmptyState({ title, children }: { title: string; children?: Reac
 
 interface SessionUnavailableProps {
   keepsWork: boolean;
+  /** The failed check's HTTP status, or 0 when the server could not be reached. */
+  checkStatus: number;
   retrying: boolean;
   onRetry(): void;
+}
+
+/** What broke, from the check's status only: no server text is shown. */
+function sessionCheckProblem(checkStatus: number): string {
+  if (!checkStatus) return "We couldn't reach the server to check your sign-in.";
+  if (checkStatus === 429) return 'Too many sign-in checks just now (HTTP 429). Wait a minute before trying again.';
+  if (checkStatus >= 500) return 'The server had a problem checking your sign-in (HTTP ' + checkStatus + ').';
+  if (checkStatus < 400) return "The server's answer to the sign-in check couldn't be read (HTTP " + checkStatus + ').';
+  return 'The server refused the sign-in check (HTTP ' + checkStatus + ').';
+}
+
+/** A short code to quote when reporting it; status only, never a message or token. */
+function sessionCheckReport(checkStatus: number): string {
+  return 'SESSION_CHECK_FAILED, ' + (checkStatus ? 'HTTP ' + checkStatus : 'no response');
 }
 
 export function SignOutUnconfirmed({ pending, onRetry }: { pending: boolean; onRetry(): void }) {
@@ -1806,15 +1828,17 @@ export function SignOutUnconfirmed({ pending, onRetry }: { pending: boolean; onR
   );
 }
 
-export function SessionUnavailable({ keepsWork, retrying, onRetry }: SessionUnavailableProps) {
+export function SessionUnavailable({ keepsWork, checkStatus, retrying, onRetry }: SessionUnavailableProps) {
   return (
     <main className="loading">
       <div className="panel unavailable" role="alert">
         <p className="panel__title">We can't confirm your sign-in</p>
         <p className="muted">
-          The server didn't answer. Check your connection and try again.
+          {sessionCheckProblem(checkStatus)}
+          {' Your sign-in may still be valid: try again before signing in again or asking for a new link.'}
           {keepsWork ? ' Your unsaved changes are kept.' : ''}
         </p>
+        <p className="muted">{'If it keeps happening, report: ' + sessionCheckReport(checkStatus) + '.'}</p>
         <button type="button" className="button" onClick={onRetry} disabled={retrying} aria-busy={retrying}>
           {retrying ? 'Trying…' : 'Try again'}
         </button>
@@ -2009,8 +2033,24 @@ export function EmptyState({ title, children }: { title: string; children?: Reac
 
 interface SessionUnavailableProps {
   keepsWork: boolean;
+  /** The failed check's HTTP status, or 0 when the server could not be reached. */
+  checkStatus: number;
   retrying: boolean;
   onRetry(): void;
+}
+
+/** What broke, from the check's status only: no server text is shown. */
+function sessionCheckProblem(checkStatus: number): string {
+  if (!checkStatus) return "We couldn't reach the server to check your sign-in.";
+  if (checkStatus === 429) return 'Too many sign-in checks just now (HTTP 429). Wait a minute before trying again.';
+  if (checkStatus >= 500) return 'The server had a problem checking your sign-in (HTTP ' + checkStatus + ').';
+  if (checkStatus < 400) return "The server's answer to the sign-in check couldn't be read (HTTP " + checkStatus + ').';
+  return 'The server refused the sign-in check (HTTP ' + checkStatus + ').';
+}
+
+/** A short code to quote when reporting it; status only, never a message or token. */
+function sessionCheckReport(checkStatus: number): string {
+  return 'SESSION_CHECK_FAILED, ' + (checkStatus ? 'HTTP ' + checkStatus : 'no response');
 }
 
 export function SignOutUnconfirmed({ pending, onRetry }: { pending: boolean; onRetry(): void }) {
@@ -2022,10 +2062,11 @@ export function SignOutUnconfirmed({ pending, onRetry }: { pending: boolean; onR
   );
 }
 
-export function SessionUnavailable({ keepsWork, retrying, onRetry }: SessionUnavailableProps) {
+export function SessionUnavailable({ keepsWork, checkStatus, retrying, onRetry }: SessionUnavailableProps) {
   return (
     <main role="alert">
-      <p>We can't confirm your sign-in. Check your connection and try again.{keepsWork ? ' Your unsaved changes are kept.' : ''}</p>
+      <p>We can't confirm your sign-in. {sessionCheckProblem(checkStatus)} Your sign-in may still be valid: try again before signing in again or asking for a new link.{keepsWork ? ' Your unsaved changes are kept.' : ''}</p>
+      <p>{'If it keeps happening, report: ' + sessionCheckReport(checkStatus) + '.'}</p>
       <button type="button" onClick={onRetry} disabled={retrying}>{retrying ? 'Trying…' : 'Try again'}</button>
     </main>
   );

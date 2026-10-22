@@ -20,6 +20,8 @@ export interface KeepEntry {
   actors: string[];
   sessions: Record<string, string>;
   identities?: Record<string, { user_id: string; email: string }>;
+  /** The page path (pathname only, never a query) each kept actor was left on. */
+  pages?: Record<string, string>;
 }
 interface KeepFile { salt?: string; entries?: Record<string, KeepEntry> }
 
@@ -102,7 +104,7 @@ export function lockKeep(root: string, key: string, now = Date.now()): () => voi
  *  record (cleanup unconfirmed, so --close-actors can still find it), or drop it. */
 export function recordAfterRun(
   previous: KeepEntry | null,
-  report: { keep_actors?: { kept: string[]; reused_identities: boolean }; kept_sessions: Array<{ actor: string; session_id: string }>; cleanup: Array<{ status: string }>; test_users?: { identities: Array<{ actor: string; user_id: string; email: string }>; cleanup: { status: string } } },
+  report: { keep_actors?: { kept: string[]; reused_identities: boolean }; kept_sessions: Array<{ actor: string; session_id: string }>; cleanup: Array<{ status: string }>; test_users?: { identities: Array<{ actor: string; user_id: string; email: string }>; cleanup: { status: string } }; segments?: Array<{ as: string; final_url?: string }> },
   projectId: string, now: number,
 ): { action: 'write'; entry: KeepEntry } | { action: 'keep' } | { action: 'drop' } {
   const kept = report.keep_actors?.kept ?? [];
@@ -116,18 +118,21 @@ export function recordAfterRun(
       actors: kept,
       sessions: Object.fromEntries(report.kept_sessions.filter((item) => kept.includes(item.actor)).map((item) => [item.actor, item.session_id])),
       ...(identities ? { identities } : {}),
+      ...(() => { const pages = lastPages(report.segments ?? [], kept); return Object.keys(pages).length ? { pages } : {}; })(),
     } };
   }
   const unconfirmed = report.cleanup.some((item) => item.status === 'unconfirmed')
     || (report.test_users !== undefined && report.test_users.cleanup.status !== 'deleted');
   if (!previous || !unconfirmed) return { action: 'drop' };
   // Keep the record so --close-actors can find what may still be alive, but never
-  // hand a later run identities this run already deleted.
-  if (report.test_users?.cleanup.status === 'deleted' && previous.identities) {
-    const { identities: _deleted, ...rest } = previous;
+  // hand a later run identities this run already deleted, nor page paths an older
+  // run recorded (this failed run may have moved those pages).
+  const { pages: _stalePages, ...base } = previous;
+  if (report.test_users?.cleanup.status === 'deleted' && base.identities) {
+    const { identities: _deleted, ...rest } = base;
     return { action: 'write', entry: rest };
   }
-  return { action: 'keep' };
+  return previous.pages ? { action: 'write', entry: base } : { action: 'keep' };
 }
 
 /** --close-actors: close each kept browser and delete the kept test identities. */
@@ -159,4 +164,22 @@ export function keepStartNote(entry: KeepEntry | null, otherFlowsKept: number): 
     ? ` ${otherFlowsKept} other kept flow${otherFlowsKept === 1 ? '' : 's'} in this folder (another flow file path or cast) ${otherFlowsKept === 1 ? 'is' : 'are'} not reused; --close-actors closes ${otherFlowsKept === 1 ? 'it' : 'them'}.`
     : '';
   return `--keep-actors: nothing is kept yet for this flow file and its actors in this folder, so this run starts fresh and keeps them for the next run of the same file.${others}`;
+}
+
+/** Each kept actor's last page path, from the run's segment reports (pathname
+ *  only: a query or fragment is never stored). */
+export function lastPages(segments: Array<{ as: string; final_url?: string }>, actors: string[]): Record<string, string> {
+  const pages: Record<string, string> = {};
+  for (const segment of segments) {
+    if (!actors.includes(segment.as)) continue;
+    // The LAST segment decides: no final URL, or a page told apart only by its
+    // query or fragment (tabs, hash routes), records nothing, so it reloads.
+    if (!segment.final_url) { delete pages[segment.as]; continue; }
+    try {
+      const url = new URL(segment.final_url);
+      if (url.search || url.hash) delete pages[segment.as];
+      else pages[segment.as] = url.pathname;
+    } catch { delete pages[segment.as]; }
+  }
+  return pages;
 }

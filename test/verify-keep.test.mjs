@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-const { keepStartNote, keepKey, folderSalt, readKeep, writeKeep, dropKeep, listKeep, reusableIdentities, lockKeep, recordAfterRun, KEEP_IDENTITY_REUSE_MS } = await import('../dist/lib/verify-keep.js');
+const { lastPages, keepStartNote, keepKey, folderSalt, readKeep, writeKeep, dropKeep, listKeep, reusableIdentities, lockKeep, recordAfterRun, KEEP_IDENTITY_REUSE_MS } = await import('../dist/lib/verify-keep.js');
 
 test('keepKey binds folder salt, project, flow file and the full cast (values hashed), and ignores key order', () => {
   const cast = { alice: { test_user: true }, bob: { auth: { user_id: 'u1' } } };
@@ -64,4 +64,34 @@ test('a run that cannot reconnect says why on one line, and names other kept flo
   assert.match(keepStartNote(null, 0), /nothing is kept yet for this flow file .* starts fresh and keeps them for the next run of the same file\.$/);
   assert.match(keepStartNote(null, 1), /1 other kept flow in this folder \(another flow file path or cast\) is not reused; --close-actors closes it\./);
   assert.match(keepStartNote(null, 2), /2 other kept flows .* are not reused; --close-actors closes them\./);
+});
+
+test('the recorded page is each kept actor\'s LAST page path, pathname only; a page with a query or fragment records nothing', () => {
+  const pages = lastPages([
+    { as: 'alice', final_url: 'https://club.example/a?token=secret' },
+    { as: 'bob', final_url: 'https://club.example/b' },
+    { as: 'alice', final_url: 'https://club.example/private#x' },
+    { as: 'carol', final_url: 'https://club.example/c' },
+  ], ['alice', 'bob']);
+  assert.deepEqual(pages, { bob: '/b' }, 'alice ended on a page with a fragment: nothing recorded, so she reloads');
+  const write = recordAfterRun(null, { keep_actors: { kept: ['alice'], reused_identities: false }, kept_sessions: [{ actor: 'alice', session_id: 's' }], cleanup: [], segments: [{ as: 'alice', final_url: 'https://club.example/private' }] }, 'p', 0);
+  assert.deepEqual(write.entry.pages, { alice: '/private' });
+  const withQuery = recordAfterRun(null, { keep_actors: { kept: ['alice'], reused_identities: false }, kept_sessions: [{ actor: 'alice', session_id: 's' }], cleanup: [], segments: [{ as: 'alice', final_url: 'https://club.example/private?x=1' }] }, 'p', 0);
+  assert.equal(withQuery.entry.pages, undefined, 'a query is never stored; that page reloads');
+});
+
+test('pages told apart only by query or fragment record nothing (they reload); a last segment without a URL drops the earlier page', () => {
+  assert.deepEqual(lastPages([{ as: 'alice', final_url: 'https://c.example/private?tab=billing' }], ['alice']), {});
+  assert.deepEqual(lastPages([{ as: 'alice', final_url: 'https://c.example/#/admin' }], ['alice']), {});
+  assert.deepEqual(lastPages([{ as: 'alice', final_url: 'https://c.example/a' }, { as: 'alice' }], ['alice']), {}, 'the last segment decides');
+});
+
+test('a failed run that keeps the record for --close-actors drops the recorded pages', () => {
+  const prev = { project_id: 'p', created_at: 'x', actors: ['alice'], sessions: { alice: 's' }, identities: { alice: { user_id: 'u', email: 'e' } }, pages: { alice: '/private' } };
+  const kept = recordAfterRun(prev, { keep_actors: { kept: [], reused_identities: true }, kept_sessions: [], cleanup: [{ status: 'unconfirmed' }], test_users: { identities: [], cleanup: { status: 'unconfirmed' } } }, 'p', 0);
+  assert.equal(kept.action, 'write');
+  assert.equal(kept.entry.pages, undefined, 'no stale page survives a failed run');
+  assert.deepEqual(kept.entry.identities, prev.identities, 'identities not deleted stay findable');
+  const deleted = recordAfterRun(prev, { keep_actors: { kept: [], reused_identities: true }, kept_sessions: [], cleanup: [{ status: 'unconfirmed' }], test_users: { identities: [], cleanup: { status: 'deleted' } } }, 'p', 0);
+  assert.equal(deleted.entry.pages, undefined); assert.equal(deleted.entry.identities, undefined);
 });

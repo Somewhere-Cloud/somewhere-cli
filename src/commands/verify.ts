@@ -1001,12 +1001,16 @@ export interface VerifyTestUsers {
 export interface VerifyKeepActors {
   key: string;
   identities?: Record<string, { user_id: string; email: string }>;
+  /** --resume-page: the page path each kept actor was left on by the last passed
+   *  run. An actor whose first segment starts at exactly this path continues on
+   *  its kept page instead of reloading it (a stateful warm continuation). */
+  resumePages?: Record<string, string>;
 }
 
 export interface VerifyJourneyReport extends VerifyReport {
   mode: 'journey';
   /** --keep-actors: browsers kept for the next run, those reconnected this run, and whether identities were reused. */
-  keep_actors?: { kept: string[]; reconnected: string[]; reused_identities: boolean };
+  keep_actors?: { kept: string[]; reconnected: string[]; reused_identities: boolean; resumed_pages?: string[]; note?: string };
   test_users?: VerifyTestUsers;
   actors: string[];
   segments: VerifyJourneySegmentReport[];
@@ -1201,6 +1205,9 @@ export function createVerifyJourneyRun(
   const lastReport = new Map<string, BrowserResult>();
   // Actors whose first call reconnected to a browser kept by an earlier run.
   const reconnected = new Set<string>();
+  // --resume-page: actors whose first call kept their page (no reload).
+  const resumeCandidates = new Set<string>();
+  const resumed = new Set<string>();
   let reusedIdentities = false;
   // --keep-actors: actors kept FOR REUSE, filled only after a fully passed run,
   // all or nothing. Separate from `kept` (an execution-cap stop's inspection
@@ -1416,7 +1423,13 @@ export function createVerifyJourneyRun(
           const first = !started.has(segment.as);
           // A kept browser resumes where the last run left it, so a keeping run's
           // first call also navigates explicitly: every run starts from its path.
-          const keepStart = first && keep ? (segment.path ?? (target.url ? new URL(target.url).pathname + new URL(target.url).search : '/')) : undefined;
+          let keepStart = first && keep ? (segment.path ?? (target.url ? new URL(target.url).pathname + new URL(target.url).search : '/')) : undefined;
+          // Resume only the SAME actor on the SAME required start path (no query or
+          // fragment), and only when explicitly requested; anything else reloads.
+          if (keepStart !== undefined && keep?.resumePages && !/[?#]/.test(keepStart) && keep.resumePages[segment.as] === keepStart) {
+            resumeCandidates.add(segment.as);
+            keepStart = undefined;
+          }
           const offset: 0 | 1 = (!first && segment.path) || keepStart ? 1 : 0;
           const actions = offset ? [{ goto: keepStart ?? segment.path } as BrowserSequenceAction, ...segment.actions] : segment.actions;
           const hasSeeds = actor.local_storage !== undefined || actor.cookies !== undefined || actor.headers !== undefined;
@@ -1487,7 +1500,10 @@ export function createVerifyJourneyRun(
           }
           runs.push({ viewport: { ...viewport, label }, report, actions, offset });
           lastReport.set(segment.as, report);
-          if (first && keep && (report as { timing?: { browser_reused?: unknown } }).timing?.browser_reused === true) reconnected.add(segment.as);
+          if (first && keep && (report as { timing?: { browser_reused?: unknown } }).timing?.browser_reused === true) {
+            reconnected.add(segment.as);
+            if (resumeCandidates.has(segment.as)) resumed.add(segment.as);
+          }
           const unknown = readBrowserLifecycle(report);
           if (unknown) {
             if (!abandoned.has(segment.as)) abandoned.set(segment.as, `the platform reported ${unknown.status}; late allocation or cleanup may still settle`);
@@ -1617,7 +1633,10 @@ export function createVerifyJourneyRun(
       cleanup_confirmed: cleanup.every((item) => item.status !== 'unconfirmed'),
       kept_sessions: [...kept.values()],
       ...(testUsers ? { test_users: testUsers } : {}),
-      ...(keep ? { keep_actors: { kept: [...keptForReuse], reconnected: [...reconnected], reused_identities: reusedIdentities } } : {}),
+      ...(keep ? { keep_actors: {
+        kept: [...keptForReuse], reconnected: [...reconnected], reused_identities: reusedIdentities,
+        ...(resumed.size ? { resumed_pages: [...resumed], note: `warm continuation: ${[...resumed].join(', ')} continued on the page an earlier run left open, as last observed (no reload), so this run does not prove the latest deployed code; run without --resume-page for that.` } : {}),
+      } } : {}),
       timing: {
         ...(testUsersCreateMs !== undefined ? { test_users_create_ms: testUsersCreateMs } : {}),
         segments_ms: segmentsMs,
@@ -1910,6 +1929,7 @@ export function registerVerify(program: Command): void {
     .option('--json', 'Print the structured verification report as JSON.')
     .option('--out <file>', 'Write the full report to a new private file; print a bounded summary (JSON with --json).')
     .option('--keep-actors', 'Multi-user flows: after a fully passed run, keep each actor\'s signed-in browser and test user, and reconnect to them on the next run of the same flow file in this project folder. Each run navigates every actor to its starting path and runs the same checks, but cookies, storage and app data the actors created carry over, so checks must not assume an empty account. One run per kept flow at a time. Close with --close-actors; idle browsers close after 10 minutes.')
+    .option('--resume-page', 'With --keep-actors: an explicit stateful warm continuation. An actor whose first segment starts at exactly the page path the last passed run left it on keeps that page as it was last observed (no reload, like reusing a Playwright page); if the app moved it afterwards, the run continues from there. A different actor, flow, project or start path, or a page told apart only by its query or fragment, reloads normally. The kept page may run code from before the latest deploy, so a resumed run is not fresh-release evidence; the report lists resumed actors.')
     .option('--close-actors', 'Close every browser and delete every test user that --keep-actors kept for this project in this folder, then exit.')
     .option('--keep-test-users', 'Multi-user flows: keep the test users created for "test_user" actors instead of deleting them when the run ends (they expire 24 hours after creation).')
     .option('--schema', 'Print the JSON Schema for --flow files (one user, or several users) and exit.')
@@ -1953,12 +1973,13 @@ Several users need a claimed account and a CLI login approved for all your
 projects: a login approved for "Only these projects" cannot open named browsers
 (SESSION_SCOPE_FORBIDDEN). Print the full flow schema with: somewhere verify --schema
 `)
-    .action(async (target: string | undefined, opts: { project?: string; url?: string; path?: string; flow?: string; session?: string; cookie?: string; json?: boolean; out?: string; schema?: boolean; keepTestUsers?: boolean; keepActors?: boolean; closeActors?: boolean }) => {
+    .action(async (target: string | undefined, opts: { project?: string; url?: string; path?: string; flow?: string; session?: string; cookie?: string; json?: boolean; out?: string; schema?: boolean; keepTestUsers?: boolean; keepActors?: boolean; closeActors?: boolean; resumePage?: boolean }) => {
       if (opts.schema) {
         console.log(JSON.stringify(verifyFlowSchema(), null, 2));
         process.exit(0);
       }
       try {
+        if (opts.resumePage && !opts.keepActors) throw new Error('--resume-page continues pages kept by --keep-actors in a multi-user flow; pass both.');
         if (opts.out !== undefined && !opts.out.trim()) throw new Error('--out requires a file path.');
         if (opts.out !== undefined && existsSync(opts.out)) throw new Error(outExistsMessage(opts.out));
         let url = opts.url ?? (target && /^https?:\/\//i.test(target) ? target : undefined);
@@ -2065,7 +2086,7 @@ projects: a login approved for "Only these projects" cannot open named browsers
           }
           const journeyRun = createVerifyJourneyRun({ ...(project ? { project_id: project } : {}), ...(url ? { url } : {}) }, input.journey, client, {
             keepTestUsers: opts.keepTestUsers === true,
-            ...(keepKeyValue ? { keep: { key: keepKeyValue, ...(reusableIdentities(keepEntry, Date.now()) ? { identities: reusableIdentities(keepEntry, Date.now()) } : {}) } } : {}),
+            ...(keepKeyValue ? { keep: { key: keepKeyValue, ...(reusableIdentities(keepEntry, Date.now()) ? { identities: reusableIdentities(keepEntry, Date.now()) } : {}), ...(opts.resumePage && keepEntry?.pages ? { resumePages: keepEntry.pages } : {}) } } : {}),
           });
           // Ctrl-C or a terminating signal: stop starting segments at once, then
           // close every opened browser within the cleanup budget and say what

@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.37.65
+
+### Added
+
+- `somewhere support packet [--json] [--out <file>]`: builds a local, redacted repro packet for the last failed command from typed fields only (CLI version, command names, validated error code, HTTP status, an id-templated operation, validated request/trace/project ids, retry verdict, outcome and duration). It never includes the message, hint, data, arguments, bodies, headers, SQL, URL query, emails, tokens, source or env. Nothing is uploaded (#67).
+
+### Fixed
+
+- A refused `somewhere verify` names the invalid field and limit (`start_error_details`: code, status, path such as `actions[2].timeout_ms`, `limit_ms`) instead of echoing the platform message (#67).
+- Text-mode output for a platform failure adds one line with its code and request/trace ids (for example `code PROJECT_NOT_FOUND · request req_… · trace …`). The message stays the platform's own; `--json` is unchanged (#71).
+- `somewhere lint` vendors the platform's source lint at somewhere-tech#714: a file exempted from the request-ownership trace by a genuine verifier call reports `coverage.request_ownership` as `partial` instead of `checked`. Warning metadata only; findings and exit codes are unchanged (#72).
+- `somewhere test-users prepare --help` no longer promises "about 1 hour" sessions or 24-hour identities. It says the session starts with the expiry prepare prints, that a refresh with saved-back state can renew it, and not to rely on expiry: remove the identities with `somewhere test-users cleanup`. A state copied before cleanup may keep working until its access token (JWT) expires (#70).
+
 ## 0.37.64
 
 ### Added

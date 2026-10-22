@@ -28,6 +28,9 @@ export class PlatformToolError extends Error {
     public readonly detail?: string,
     public readonly hint?: string,
     public readonly meta: { requestId?: string; traceId?: string } = {},
+    /** The HTTP status the platform reported for this tool failure (its envelope's
+     *  `http_status`), so a definite refusal is not recorded as an unknown outcome. */
+    public readonly statusCode?: number,
   ) {
     super(message);
     this.name = 'PlatformToolError';
@@ -197,10 +200,19 @@ export function platformToolErrorFromText(name: string, text: string): PlatformT
       typeof parsed[key] === 'string' && parsed[key] ? parsed[key] as string : undefined;
     const code = field('error');
     if (!code) return new PlatformToolError(name, message);
+    // The platform states the HTTP status and ids beside the code: top-level `http_status`
+    // (also canonical_error.http_status) and, for ids, its own `_repro.collected`. Only these
+    // typed scalars are kept; the shared repro validators re-check them (status 100-599, opaque ids).
+    const record = (value: unknown): Record<string, unknown> =>
+      value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+    const collected = record(record(parsed._repro).collected);
+    const str = (value: unknown): string | undefined => (typeof value === 'string' && value ? value : undefined);
+    const status = [parsed.http_status, record(parsed.canonical_error).http_status, collected.http_status]
+      .find((value) => typeof value === 'number' && Number.isInteger(value) && value >= 100 && value <= 599) as number | undefined;
     return new PlatformToolError(name, message, code, field('message') ?? text, field('next_step') ?? field('hint'), {
-      requestId: field('request_id'),
-      traceId: field('trace_id'),
-    });
+      requestId: field('request_id') ?? str(collected.request_id),
+      traceId: field('trace_id') ?? str(collected.trace_id),
+    }, status);
   } catch {
     return new PlatformToolError(name, message);
   }
@@ -235,9 +247,21 @@ export async function callPlatformToolRaw(
   const invocationArgs = ['job_create', 'ingest'].includes(name) && args.idempotency_key === undefined
     ? { ...args, idempotency_key: crypto.randomUUID() }
     : args;
-  const result = await withPlatformClient(options, (client) =>
-    client.callTool({ name, arguments: invocationArgs }, undefined,
-      options.signal ? { signal: options.signal } : undefined));
+  let result: unknown;
+  try {
+    result = await withPlatformClient(options, (client) =>
+      client.callTool({ name, arguments: invocationArgs }, undefined,
+        options.signal ? { signal: options.signal } : undefined));
+  } catch (err) {
+    // No tool result arrived (network, timeout, transport): the call may still have run, so the
+    // local repro record must say "unknown", not a guessed HTTP outcome. Naming the tool operation
+    // lets the shared outcome rule decide that; no status is invented and the error is unchanged.
+    if (err && typeof err === 'object' && !(err instanceof PlatformToolError)
+      && typeof (err as { statusCode?: unknown }).statusCode !== 'number' && !('operation' in err)) {
+      try { Object.defineProperty(err, 'operation', { value: `tool:${name}`, enumerable: false }); } catch { /* frozen: leave as is */ }
+    }
+    throw err;
+  }
   const typed = result as CallToolResult;
   if (typed.isError) {
     throw platformToolErrorFromText(name, textFromResult(typed));

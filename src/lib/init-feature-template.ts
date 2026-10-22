@@ -1806,7 +1806,9 @@ interface SessionUnavailableProps {
 /** What broke, from the check's status only: no server text is shown. */
 function sessionCheckProblem(checkStatus: number): string {
   if (!checkStatus) return "We couldn't reach the server to check your sign-in.";
+  if (checkStatus === 429) return 'Too many sign-in checks just now (HTTP 429). Wait a minute before trying again.';
   if (checkStatus >= 500) return 'The server had a problem checking your sign-in (HTTP ' + checkStatus + ').';
+  if (checkStatus < 400) return "The server's answer to the sign-in check couldn't be read (HTTP " + checkStatus + ').';
   return 'The server refused the sign-in check (HTTP ' + checkStatus + ').';
 }
 
@@ -2040,7 +2042,9 @@ interface SessionUnavailableProps {
 /** What broke, from the check's status only: no server text is shown. */
 function sessionCheckProblem(checkStatus: number): string {
   if (!checkStatus) return "We couldn't reach the server to check your sign-in.";
+  if (checkStatus === 429) return 'Too many sign-in checks just now (HTTP 429). Wait a minute before trying again.';
   if (checkStatus >= 500) return 'The server had a problem checking your sign-in (HTTP ' + checkStatus + ').';
+  if (checkStatus < 400) return "The server's answer to the sign-in check couldn't be read (HTTP " + checkStatus + ').';
   return 'The server refused the sign-in check (HTTP ' + checkStatus + ').';
 }
 

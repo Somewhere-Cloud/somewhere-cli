@@ -76,6 +76,13 @@ for (const ui of ['styled', 'headless']) {
     assert.match(t0, /couldn't reach the server/);
     assert.match(t0, /SESSION_CHECK_FAILED, no response/);
     assert.match(render(403), /refused the sign-in check \(HTTP 403\)/);
+    // Review 3606: a 429 says to wait (not "refused" beside Try again); an unreadable 2xx is not a refusal.
+    const t429 = render(429);
+    assert.match(t429, /Too many sign-in checks just now \(HTTP 429\)\. Wait a minute/);
+    assert.doesNotMatch(t429, /refused/);
+    const t200 = render(200);
+    assert.match(t200, /answer to the sign-in check couldn't be read \(HTTP 200\)/);
+    assert.doesNotMatch(t200, /refused/);
     assert.match(render(503, true), /Your unsaved changes are kept/);
   });
 }

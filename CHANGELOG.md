@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.37.65
+
+### Added
+
+- `somewhere support packet [--json] [--out <file>]`: builds a local, redacted repro packet for the last failed command from typed fields only (CLI version, command names, validated error code, HTTP status, an id-templated operation, validated request/trace/project ids, retry verdict, outcome and duration). It never includes the message, hint, data, arguments, bodies, headers, SQL, URL query, emails, tokens, source or env. Nothing is uploaded (#67).
+
+### Fixed
+
+- A refused `somewhere verify` names the invalid field and limit (`start_error_details`: code, status, path such as `actions[2].timeout_ms`, `limit_ms`) instead of echoing the platform message (#67).
+- Text-mode output for a platform failure adds one line with its code and request/trace ids (for example `code PROJECT_NOT_FOUND · request req_… · trace …`). The message stays the platform's own; `--json` is unchanged (#71).
+
 ## 0.37.64
 
 ### Added

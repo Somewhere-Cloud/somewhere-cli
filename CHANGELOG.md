@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.37.68
+
+### Fixed
+
+- `somewhere verify --keep-actors`: when nothing is kept yet for this flow file and its actors in this folder (a first run, a new or renamed flow file, or a changed cast), one stderr line says the run starts fresh and will keep them for the next run of the same file. If other flows in the folder have kept actors, it also says they are not reused and that `--close-actors` closes them. No behaviour change (#82).
+
 ## 0.37.67
 
 ### Fixed

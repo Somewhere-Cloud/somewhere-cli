@@ -49,3 +49,14 @@ test('a passing run and a refusal without structured detail keep today\'s summar
   assert.equal(codeOnly.start_error_details, undefined);
   assert.match(formatVerifySummaryLine(codeOnly), /no browser ran \(BROWSER_DAILY_LIMIT\); nothing was checked/);
 });
+
+test('live shape (#726): an API refusal carries data.invalid on the envelope, and the refusal detail keeps only its checked form', async () => {
+  const { settleViewportRuns } = await import('../dist/commands/verify.js');
+  const { CliApiError } = await import('../dist/lib/client.js');
+  const refusal = new CliApiError('VALIDATION_ERROR', SECRET_MESSAGE, 400, { invalid: { path: 'actions[1].wait', limit_ms: 45000 }, extra: 'hunter2-CANARY' });
+  const { refusals } = await settleViewportRuns([{ label: 'desktop' }], async () => { throw refusal; });
+  assert.deepEqual(refusals[0].detail.invalid, { path: 'actions[1].wait', limit_ms: 45000 });
+  assert.ok(!('data' in refusals[0].detail), 'the raw data object is never copied');
+  const summary = summarizeVerifyReport({ passed: false, steps: [], refusals, incomplete: [], lifecycle: [] });
+  assert.deepEqual(summary.start_error_details, [{ code: 'VALIDATION_ERROR', status: 400, path: 'actions[1].wait', limit_ms: 45000, refusal_index: 0 }]);
+});

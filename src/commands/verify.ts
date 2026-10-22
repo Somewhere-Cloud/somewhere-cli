@@ -752,7 +752,7 @@ function shapeVerificationReport(
   };
 }
 
-async function settleViewportRuns(
+export async function settleViewportRuns(
   viewports: ResolvedViewport[],
   run: (viewport: ResolvedViewport) => Promise<BrowserResult>,
 ): Promise<{ runs: Array<{ viewport: ResolvedViewport; report: BrowserResult }>; refusals: NonNullable<VerifyReport['refusals']> }> {
@@ -764,10 +764,14 @@ async function settleViewportRuns(
     if (result.status === 'fulfilled') runs.push({ viewport, report: result.value });
     else {
       const cause: unknown = result.reason;
+      // The platform's structured refusal detail (#726: data.invalid {path, limit_ms}) rides the
+      // API envelope's `data`; keep only its shape-checked form so start_error_details can name it.
+      const invalid = cause instanceof CliApiError ? safeInvalid(cause.data?.invalid) : undefined;
       refusals.push({ viewport: viewport.label, detail: {
         code: cause instanceof CliApiError ? cause.code : 'BROWSER_REQUEST_FAILED',
         status: cause instanceof CliApiError ? cause.statusCode : 0,
         message: cause instanceof Error ? cause.message : String(cause),
+        ...(invalid ? { invalid } : {}),
       } });
     }
   });

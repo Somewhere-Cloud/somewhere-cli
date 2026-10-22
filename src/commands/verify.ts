@@ -2033,10 +2033,14 @@ projects: a login approved for "Only these projects" cannot open named browsers
               else console.log('Nothing kept for this project in this folder.');
               return;
             }
-            const results = [];
+            const results: Array<{ flow_key: string; closed: boolean; note: string } | ({ flow_key: string; closed: boolean } & Awaited<ReturnType<typeof closeKept>>)> = [];
             let allConfirmed = true;
             for (const [key, entry] of entries) {
-              const receipt = await closeKept(client, entry);
+              let release: () => void;
+              try { release = lockKeep(root, key); }
+              catch { allConfirmed = false; results.push({ flow_key: key, closed: false, note: 'a --keep-actors run of this flow is in progress; skipped' }); continue; }
+              let receipt: Awaited<ReturnType<typeof closeKept>>;
+              try { receipt = await closeKept(client, entry); } finally { release(); }
               const confirmed = receipt.browsers.every((item) => !item.status.startsWith('unconfirmed')) && !receipt.identities.status.startsWith('unconfirmed');
               if (confirmed) dropKeep(root, key); else allConfirmed = false;
               results.push({ flow_key: key, closed: confirmed, ...receipt });
@@ -2044,6 +2048,7 @@ projects: a login approved for "Only these projects" cannot open named browsers
             if (opts.json) console.log(JSON.stringify({ closed: allConfirmed, flows: results.length, results }, null, 2));
             else {
               for (const result of results) {
+                if (!('browsers' in result)) { console.log(result.note); continue; }
                 for (const item of result.browsers) console.log(`${item.actor}: browser ${item.status}`);
                 console.log(`test users: ${result.identities.status}${result.identities.deleted !== undefined ? ` (${result.identities.deleted})` : ''}`);
               }
@@ -2067,13 +2072,16 @@ projects: a login approved for "Only these projects" cannot open named browsers
               .then(({ cleanup, cleanup_ms }) => {
                 for (const line of formatJourneyCleanup(cleanup, cleanup_ms)) process.stderr.write(`${line}\n`);
               })
-              .finally(() => process.exit(signal === 'SIGINT' ? 130 : 143));
+              .finally(() => { releaseKeepLock?.(); process.exit(signal === 'SIGINT' ? 130 : 143); });
           };
           process.once('SIGINT', onSignal);
           process.once('SIGTERM', onSignal);
           let report: VerifyJourneyReport;
           try {
             report = await withVerifyProgress(() => journeyRun.run(), !opts.json);
+          } catch (cause) {
+            releaseKeepLock?.();
+            throw cause;
           } finally {
             process.removeListener('SIGINT', onSignal);
             process.removeListener('SIGTERM', onSignal);

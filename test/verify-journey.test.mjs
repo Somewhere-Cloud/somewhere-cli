@@ -1037,3 +1037,16 @@ test('--keep-actors: a first segment without a path still starts each run at a k
   await createVerifyJourneyRun({ project_id: 'club' }, journey, client, { runId: 'k5', keep: { key: 'abc123' } }).run();
   assert.deepEqual(client.runs()[0].body.actions[0], { goto: '/' });
 });
+
+test('--keep-actors: an execution-cap stop keeps its inspection browser but records nothing for reuse and deletes the test users', async () => {
+  const capped = report({ passed: false, incomplete: { reason: 'execution_cap', completed: 1, next_step: 2, budget_ms: 180000, elapsed_ms: 180000 }, steps: [{ step: 0, action: 'goto', ok: true }, { step: 1, action: 'click', ok: true }], idle_expires_at: 'x', absolute_expires_at: 'y' });
+  const flow = normalizeVerifyJourney({ actors: { alice: { test_user: true }, bob: { test_user: true } }, journey: [
+    { as: 'alice', path: '/private', actions: [{ click: '#a' }, { click: '#b' }] },
+    { as: 'bob', path: '/private', actions: [{ click: '#c' }] },
+  ] });
+  const client = keepClient((_body, n) => n === 1 ? capped : report({ idle_expires_at: 'x', absolute_expires_at: 'y' }));
+  const result = await createVerifyJourneyRun({ project_id: 'club' }, flow, client, { runId: 'k6', keep: { key: 'abc123' } }).run();
+  assert.equal(result.segments[0].incomplete?.reason, 'execution_cap');
+  assert.deepEqual(result.keep_actors.kept, [], 'an incomplete run is never recorded for reuse');
+  assert.equal(result.test_users.cleanup.status, 'deleted');
+});

@@ -120,7 +120,14 @@ export function recordAfterRun(
   }
   const unconfirmed = report.cleanup.some((item) => item.status === 'unconfirmed')
     || (report.test_users !== undefined && report.test_users.cleanup.status !== 'deleted');
-  return previous && unconfirmed ? { action: 'keep' } : { action: 'drop' };
+  if (!previous || !unconfirmed) return { action: 'drop' };
+  // Keep the record so --close-actors can find what may still be alive, but never
+  // hand a later run identities this run already deleted.
+  if (report.test_users?.cleanup.status === 'deleted' && previous.identities) {
+    const { identities: _deleted, ...rest } = previous;
+    return { action: 'write', entry: rest };
+  }
+  return { action: 'keep' };
 }
 
 /** --close-actors: close each kept browser and delete the kept test identities. */

@@ -50,7 +50,10 @@ test('the record: write what a passed run kept; keep the old record when cleanup
   const prev = { project_id: 'p', created_at: '2026-10-21T00:00:00.000Z', actors: ['alice'], sessions: { alice: 's' }, identities: { alice: { user_id: 'u', email: 'e' } } };
   const kept = recordAfterRun(prev, { keep_actors: { kept: ['alice'], reused_identities: true }, kept_sessions: [{ actor: 'alice', session_id: 's' }], cleanup: [{ status: 'kept_open' }], test_users: { identities: [{ actor: 'alice', user_id: 'u', email: 'e' }], cleanup: { status: 'kept' } } }, 'p', Date.now());
   assert.equal(kept.action, 'write'); assert.equal(kept.entry.created_at, prev.created_at, 'reused identities keep their creation time');
-  assert.deepEqual(recordAfterRun(prev, { keep_actors: { kept: [], reused_identities: true }, kept_sessions: [], cleanup: [{ status: 'unconfirmed' }], test_users: { identities: [], cleanup: { status: 'deleted' } } }, 'p', 0), { action: 'keep' });
+  const unconfirmedClose = recordAfterRun(prev, { keep_actors: { kept: [], reused_identities: true }, kept_sessions: [], cleanup: [{ status: 'unconfirmed' }], test_users: { identities: [], cleanup: { status: 'deleted' } } }, 'p', 0);
+  assert.equal(unconfirmedClose.action, 'write', 'the record stays for --close-actors');
+  assert.equal(unconfirmedClose.entry.identities, undefined, 'but never offers identities this run already deleted');
+  assert.deepEqual(unconfirmedClose.entry.sessions, prev.sessions);
   assert.deepEqual(recordAfterRun(prev, { keep_actors: { kept: [], reused_identities: true }, kept_sessions: [], cleanup: [{ status: 'closed' }], test_users: { identities: [], cleanup: { status: 'unconfirmed' } } }, 'p', 0), { action: 'keep' });
   assert.deepEqual(recordAfterRun(prev, { keep_actors: { kept: [], reused_identities: true }, kept_sessions: [], cleanup: [{ status: 'closed' }], test_users: { identities: [], cleanup: { status: 'deleted' } } }, 'p', 0), { action: 'drop' });
 });

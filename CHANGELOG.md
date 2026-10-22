@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.37.66
+
+### Added
+
+- `somewhere verify --keep-actors`: after a fully passed multi-user run, each actor's signed-in browser and test user are kept for the next run of the same flow (same owner, project, folder and cast). That run signs each actor in again and starts from each segment's path, but the browser keeps its earlier state, so a pass on a kept browser is a warm re-check; run without `--keep-actors` for a fresh first load. Any stop, failure or unconfirmed call cleans up as before. `--close-actors` closes the browsers and deletes the identities. The project folder's private `.somewhere/test/verify-actors.json` records ids and emails only (#74).
+
+### Fixed
+
+- After a failed `somewhere call`, `somewhere support packet` records the platform's HTTP status and trace id, so a definite refusal (for example a 404) is recorded as `refused` with its status, the same as the MCP packet, instead of `unknown` with no status or ids. A call that got no response at all (network or timeout) stays `unknown`, with no status invented. Only validated status and ids are kept (#76).
+
+### Changed
+
+- Internal: the `somewhere support packet` repro record uses the platform's shared `somewhere.repro/1` module (vendored byte-identical, with a checksum check). No behaviour change (#73).
+
 ## 0.37.65
 
 ### Added

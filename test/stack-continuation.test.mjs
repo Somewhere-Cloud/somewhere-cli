@@ -12,7 +12,11 @@ import { fileURLToPath } from 'node:url';
 // so untrusted text can never begin a line or pass as a record at ANY indentation. --json stays exact.
 const here = dirname(fileURLToPath(import.meta.url));
 const distIndex = join(here, '..', 'dist', 'index.js');
-const { CONTINUATION_MARKER, terminalContinuation } = await import(join(here, '..', 'dist', 'lib', 'terminal-text.js'));
+// The fixed marker the CLI must print. Read from the build when it exports it; the literal keeps these tests
+// runnable (and failing for the right reason) against an older build such as 0.37.70, which has no marker.
+const textModule = await import(join(here, '..', 'dist', 'lib', 'terminal-text.js'));
+const CONTINUATION_MARKER = textModule.CONTINUATION_MARKER ?? '      stack | ';
+const terminalContinuation = textModule.terminalContinuation;
 
 let logRows = [];
 let errorRows = [];
@@ -124,6 +128,8 @@ test('errors text: a message carrying a fake row stays one line per record', asy
 });
 
 test('the continuation renderer: one fixed marker on every line, nothing else can start a line', () => {
+  assert.equal(typeof terminalContinuation, 'function', 'the build exports terminalContinuation');
+  assert.equal(textModule.CONTINUATION_MARKER, '      stack | ', 'the exported marker is the fixed literal');
   assert.deepEqual(terminalContinuation(''), []);
   assert.deepEqual(terminalContinuation(null), []);
   const out = terminalContinuation('a\r\nb\n\nc\u2028d', 30);

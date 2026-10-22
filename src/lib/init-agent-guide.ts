@@ -77,7 +77,7 @@ changes }\`; \`where: { a: 1, b: { in: ids }, c: { gte: 2 }, d: null }\` (one
 operator per column). Raw SQL uses a separate raw database, never managed tables.
 For cross-user managed work, authorize the caller and use \`sw.db.server.from\` /
 \`insert\` / \`update\` / \`remove\`; keep \`owner()\`/\`group()\`. Parallel reads: \`Promise.all\`.
-
+One user by email, after authorizing: \`sw.auth.server.listUsers({ emails: [email] })\`, not directory paging (that is for admin lists, exports).
 Unique pair: \`unique: [['org_id','email']]\` in table options.
 
 Test schedules now: \`somewhere cron run <id> --wait\`. Do not wait for it to fire.

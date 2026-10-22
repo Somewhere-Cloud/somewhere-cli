@@ -9,6 +9,10 @@
  *
  * A packet is built ONLY from typed, validated fields of a failure: never its message, hint, data,
  * arguments, request or response. A field that fails its validator is omitted, not cleaned.
+ * OMITTED names the parts of a failure the builder never reads. It is NOT a claim about what the
+ * collected fields can contain: an id field keeps any value that passes its shape validator, and the
+ * secret-shape scrub below refuses only the shapes it lists. So a packet is reviewed before it is
+ * submitted, and nothing here promises that tokens, passwords or emails cannot appear (tsk_da2dba3d).
  * Investigation steps are fixed argv arrays keyed by the validated code/operation; untrusted text
  * is never interpolated into a command. Nothing here uploads anything.
  *
@@ -17,7 +21,7 @@
 export const REPRO_SCHEMA = 'somewhere.repro/1';
 export const LAST_ERROR_FILE = 'last-error.json';
 export const OMITTED = ['message', 'hint_text', 'stack', 'console', 'request_body', 'response_body', 'arguments', 'route_data',
-  'sql', 'url_query', 'emails', 'headers', 'cookies', 'tokens', 'passwords', 'source', 'env'] as const;
+  'sql', 'url_query', 'headers', 'cookies', 'source', 'env'] as const;
 
 const CODE = /^[A-Z][A-Z0-9_]{1,63}$/;
 /** Leading alphanumeric: an id substituted into an investigate argv can never read as a flag. */

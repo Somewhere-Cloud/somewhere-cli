@@ -74,7 +74,10 @@ test('a failure carrying secrets everywhere leaves only typed fields in last-err
   const packet = JSON.parse(json.out);
   assert.equal(packet.recipe.rerun_original, false, 'a mutation with an unknown outcome is never rerun');
   assert.equal(packet.submit.automatic, false);
-  assert.ok(packet.omitted.includes('message') && packet.omitted.includes('tokens'));
+  // omitted names only failure parts the packet never reads; it makes no content guarantee about
+  // tokens, passwords or emails (platform #875, tsk_da2dba3d).
+  assert.ok(packet.omitted.includes('message') && packet.omitted.includes('headers') && packet.omitted.includes('cookies'));
+  for (const claim of ['tokens', 'passwords', 'emails']) assert.equal(packet.omitted.includes(claim), false, `no unproven content claim: ${claim}`);
   for (const step of packet.recipe.investigate) {
     assert.ok(Array.isArray(step) && step.every((part) => typeof part === 'string'), 'argument arrays only');
     assert.ok(step.every((part) => !/[`$;|&]/.test(part)), 'no shell metacharacters in investigate steps');

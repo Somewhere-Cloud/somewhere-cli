@@ -10,6 +10,7 @@
 
 - A refused `somewhere verify` names the invalid field and limit (`start_error_details`: code, status, path such as `actions[2].timeout_ms`, `limit_ms`) instead of echoing the platform message (#67).
 - Text-mode output for a platform failure adds one line with its code and request/trace ids (for example `code PROJECT_NOT_FOUND · request req_… · trace …`). The message stays the platform's own; `--json` is unchanged (#71).
+- `somewhere test-users prepare --help` no longer promises "about 1 hour" sessions or 24-hour identities. It says the session starts with the expiry prepare prints, that a refresh with saved-back state can renew it, and that `somewhere test-users cleanup` is what ends access (#70).
 
 ## 0.37.64
 

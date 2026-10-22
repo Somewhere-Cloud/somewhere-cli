@@ -8,7 +8,7 @@
 import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { cliConfigDir } from './config.js';
-import { buildRecordFromFields, LAST_ERROR_FILE, REPRO_SCHEMA, safeCode, type ReproRecord } from './vendor/repro-guidance.js';
+import { buildRecordFromFields, LAST_ERROR_FILE, operationLabel, REPRO_SCHEMA, safeCode, safeStatus, type ReproRecord } from './vendor/repro-guidance.js';
 
 export * from './vendor/repro-guidance.js';
 
@@ -26,6 +26,26 @@ export function buildRecord(cause: unknown, context: { cliVersion: string; comma
     retry: meta.retry, retryAfterMs: meta.retryAfterMs, responseIncomplete: meta.responseBodyIncomplete,
     invalid: typed.invalid ?? (typed.data as { invalid?: unknown } | undefined)?.invalid,
   }, { client: { kind: 'cli', version: context.cliVersion }, command: context.command, startedAt: context.startedAt, now: context.now });
+}
+
+/** A function failure the caller hit over HTTP (e.g. 500 FUNCTION_ERROR with its trace_id), rebuilt from the
+ *  owner's own log rows for that trace. Reads ONLY data.code, data.status, data.request_id, data.method and
+ *  data.path (templated by the shared builder); the message, stack and every other field are never read.
+ *  Rows come newest first; the newest reported failure wins. Null when no row reports one. */
+export function buildCrashRecord(rows: unknown, context: { cliVersion: string; traceId: string; projectId?: string }): ReproRecord | null {
+  for (const row of Array.isArray(rows) ? rows : []) {
+    const r = (row && typeof row === 'object' ? row : {}) as { level?: unknown; created_at?: unknown; data?: unknown };
+    const d = (r.data && typeof r.data === 'object' ? r.data : {}) as Record<string, unknown>;
+    const status = safeStatus(d.status);
+    if (r.level !== 'error' || !safeCode(d.code) || status === undefined || status < 400) continue;
+    const at = typeof r.created_at === 'string' ? Date.parse(r.created_at) : NaN;
+    return buildRecordFromFields({
+      platform: true, code: d.code, status,
+      operation: typeof d.method === 'string' && typeof d.path === 'string' ? operationLabel(d.method, d.path) : undefined,
+      requestId: d.request_id, traceId: context.traceId, projectId: context.projectId,
+    }, { client: { kind: 'cli', version: context.cliVersion }, now: Number.isFinite(at) ? at : undefined });
+  }
+  return null;
 }
 
 export function writeLastError(record: ReproRecord): void {

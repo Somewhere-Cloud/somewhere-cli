@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.37.67
+
+### Fixed
+
+- Starter apps from `somewhere init`: when the session check fails, the "We can't confirm your sign-in" panel says what broke (couldn't reach the server, the server had a problem (HTTP 5xx), too many checks (HTTP 429, wait a minute), an unreadable answer, or a refused check (HTTP 4xx)), that the sign-in may still be valid so try again before signing in again or asking for a new link, and a status-only code to report (`SESSION_CHECK_FAILED, HTTP n` or `no response`). It used to always blame the connection. Only the SDK's typed status is shown, never server text (#80).
+
 ## 0.37.66
 
 ### Added

@@ -1050,3 +1050,33 @@ test('--keep-actors: an execution-cap stop keeps its inspection browser but reco
   assert.deepEqual(result.keep_actors.kept, [], 'an incomplete run is never recorded for reuse');
   assert.equal(result.test_users.cleanup.status, 'deleted');
 });
+
+test('--resume-page: the same actor on the same start path continues its kept page (no reload) and the report says it is a warm continuation', async () => {
+  const client = keepClient(() => report({ timing: { browser_reused: true }, idle_expires_at: 'x', absolute_expires_at: 'y' }));
+  const result = await createVerifyJourneyRun({ project_id: 'club' }, keepFlow(), client, { runId: 'r1', keep: { key: 'abc123', identities: { alice: { user_id: 'u-a', email: 'a@t.test' }, bob: { user_id: 'u-b', email: 'b@t.test' } }, resumePages: { alice: '/private', bob: '/elsewhere' } } }).run();
+  const [alice, bob] = client.runs().map((call) => call.body);
+  assert.notDeepEqual(alice.actions[0], { goto: '/private' }, 'alice resumes: no reload');
+  assert.deepEqual(alice.actions, [{ click: '#save' }]);
+  assert.equal(alice.url, '/private', 'the start url is still sent, so a browser launched fresh loads it');
+  assert.deepEqual(bob.actions[0], { goto: '/private' }, 'bob was left on another path: he reloads at his required start path');
+  assert.deepEqual(result.keep_actors.resumed_pages, ['alice']);
+  assert.match(result.keep_actors.note, /warm continuation: alice .* does not prove the latest deployed code/);
+});
+
+test('--resume-page: a kept browser that is gone launches fresh (loads the url) and is not reported as resumed', async () => {
+  const client = keepClient(() => report({ timing: { browser_reused: false }, idle_expires_at: 'x', absolute_expires_at: 'y' }));
+  const result = await createVerifyJourneyRun({ project_id: 'club' }, keepFlow(), client, { runId: 'r2', keep: { key: 'abc123', resumePages: { alice: '/private', bob: '/private' } } }).run();
+  assert.equal(client.runs()[0].body.url, '/private');
+  assert.equal(result.keep_actors.resumed_pages, undefined);
+  assert.equal(result.keep_actors.note, undefined);
+});
+
+test('--resume-page: a start path with a query never resumes, and without recorded pages every actor reloads', async () => {
+  const flow = normalizeVerifyJourney({ actors: { alice: { test_user: true }, bob: { test_user: true } }, journey: [
+    { as: 'alice', path: '/private?tab=1', actions: [{ click: '#a' }] }, { as: 'bob', path: '/private', actions: [{ click: '#b' }] } ] });
+  const client = keepClient(() => report({ timing: { browser_reused: true }, idle_expires_at: 'x', absolute_expires_at: 'y' }));
+  await createVerifyJourneyRun({ project_id: 'club' }, flow, client, { runId: 'r3', keep: { key: 'abc123', resumePages: { alice: '/private?tab=1' } } }).run();
+  const [alice, bob] = client.runs().map((call) => call.body);
+  assert.deepEqual(alice.actions[0], { goto: '/private?tab=1' }, 'a query in the start path never resumes');
+  assert.deepEqual(bob.actions[0], { goto: '/private' }, 'no recorded page: reload');
+});

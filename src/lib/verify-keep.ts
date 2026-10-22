@@ -20,6 +20,8 @@ export interface KeepEntry {
   actors: string[];
   sessions: Record<string, string>;
   identities?: Record<string, { user_id: string; email: string }>;
+  /** The page path (pathname only, never a query) each kept actor was left on. */
+  pages?: Record<string, string>;
 }
 interface KeepFile { salt?: string; entries?: Record<string, KeepEntry> }
 
@@ -102,7 +104,7 @@ export function lockKeep(root: string, key: string, now = Date.now()): () => voi
  *  record (cleanup unconfirmed, so --close-actors can still find it), or drop it. */
 export function recordAfterRun(
   previous: KeepEntry | null,
-  report: { keep_actors?: { kept: string[]; reused_identities: boolean }; kept_sessions: Array<{ actor: string; session_id: string }>; cleanup: Array<{ status: string }>; test_users?: { identities: Array<{ actor: string; user_id: string; email: string }>; cleanup: { status: string } } },
+  report: { keep_actors?: { kept: string[]; reused_identities: boolean }; kept_sessions: Array<{ actor: string; session_id: string }>; cleanup: Array<{ status: string }>; test_users?: { identities: Array<{ actor: string; user_id: string; email: string }>; cleanup: { status: string } }; segments?: Array<{ as: string; final_url?: string }> },
   projectId: string, now: number,
 ): { action: 'write'; entry: KeepEntry } | { action: 'keep' } | { action: 'drop' } {
   const kept = report.keep_actors?.kept ?? [];
@@ -116,6 +118,7 @@ export function recordAfterRun(
       actors: kept,
       sessions: Object.fromEntries(report.kept_sessions.filter((item) => kept.includes(item.actor)).map((item) => [item.actor, item.session_id])),
       ...(identities ? { identities } : {}),
+      ...(() => { const pages = lastPages(report.segments ?? [], kept); return Object.keys(pages).length ? { pages } : {}; })(),
     } };
   }
   const unconfirmed = report.cleanup.some((item) => item.status === 'unconfirmed')
@@ -159,4 +162,15 @@ export function keepStartNote(entry: KeepEntry | null, otherFlowsKept: number): 
     ? ` ${otherFlowsKept} other kept flow${otherFlowsKept === 1 ? '' : 's'} in this folder (another flow file path or cast) ${otherFlowsKept === 1 ? 'is' : 'are'} not reused; --close-actors closes ${otherFlowsKept === 1 ? 'it' : 'them'}.`
     : '';
   return `--keep-actors: nothing is kept yet for this flow file and its actors in this folder, so this run starts fresh and keeps them for the next run of the same file.${others}`;
+}
+
+/** Each kept actor's last page path, from the run's segment reports (pathname
+ *  only: a query or fragment is never stored). */
+export function lastPages(segments: Array<{ as: string; final_url?: string }>, actors: string[]): Record<string, string> {
+  const pages: Record<string, string> = {};
+  for (const segment of segments) {
+    if (!actors.includes(segment.as) || !segment.final_url) continue;
+    try { pages[segment.as] = new URL(segment.final_url).pathname; } catch { delete pages[segment.as]; }
+  }
+  return pages;
 }

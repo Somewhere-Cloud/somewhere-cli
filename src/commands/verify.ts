@@ -1635,7 +1635,7 @@ export function createVerifyJourneyRun(
       ...(testUsers ? { test_users: testUsers } : {}),
       ...(keep ? { keep_actors: {
         kept: [...keptForReuse], reconnected: [...reconnected], reused_identities: reusedIdentities,
-        ...(resumed.size ? { resumed_pages: [...resumed], note: `warm continuation: ${[...resumed].join(', ')} continued on the page an earlier run left open (no reload), so this run does not prove the latest deployed code; run without --resume-page for that.` } : {}),
+        ...(resumed.size ? { resumed_pages: [...resumed], note: `warm continuation: ${[...resumed].join(', ')} continued on the page an earlier run left open, as last observed (no reload), so this run does not prove the latest deployed code; run without --resume-page for that.` } : {}),
       } } : {}),
       timing: {
         ...(testUsersCreateMs !== undefined ? { test_users_create_ms: testUsersCreateMs } : {}),
@@ -1929,7 +1929,7 @@ export function registerVerify(program: Command): void {
     .option('--json', 'Print the structured verification report as JSON.')
     .option('--out <file>', 'Write the full report to a new private file; print a bounded summary (JSON with --json).')
     .option('--keep-actors', 'Multi-user flows: after a fully passed run, keep each actor\'s signed-in browser and test user, and reconnect to them on the next run of the same flow file in this project folder. Each run navigates every actor to its starting path and runs the same checks, but cookies, storage and app data the actors created carry over, so checks must not assume an empty account. One run per kept flow at a time. Close with --close-actors; idle browsers close after 10 minutes.')
-    .option('--resume-page', 'With --keep-actors: an explicit stateful warm continuation. An actor whose first segment starts at exactly the page path the last passed run left it on keeps that page (no reload, like reusing a Playwright page). A different actor, flow, project or start path reloads normally. The kept page may run code from before the latest deploy, so a resumed run is not fresh-release evidence; the report lists resumed actors.')
+    .option('--resume-page', 'With --keep-actors: an explicit stateful warm continuation. An actor whose first segment starts at exactly the page path the last passed run left it on keeps that page as it was last observed (no reload, like reusing a Playwright page); if the app moved it afterwards, the run continues from there. A different actor, flow, project or start path, or a page told apart only by its query or fragment, reloads normally. The kept page may run code from before the latest deploy, so a resumed run is not fresh-release evidence; the report lists resumed actors.')
     .option('--close-actors', 'Close every browser and delete every test user that --keep-actors kept for this project in this folder, then exit.')
     .option('--keep-test-users', 'Multi-user flows: keep the test users created for "test_user" actors instead of deleting them when the run ends (they expire 24 hours after creation).')
     .option('--schema', 'Print the JSON Schema for --flow files (one user, or several users) and exit.')

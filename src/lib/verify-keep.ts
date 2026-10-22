@@ -125,12 +125,14 @@ export function recordAfterRun(
     || (report.test_users !== undefined && report.test_users.cleanup.status !== 'deleted');
   if (!previous || !unconfirmed) return { action: 'drop' };
   // Keep the record so --close-actors can find what may still be alive, but never
-  // hand a later run identities this run already deleted.
-  if (report.test_users?.cleanup.status === 'deleted' && previous.identities) {
-    const { identities: _deleted, ...rest } = previous;
+  // hand a later run identities this run already deleted, nor page paths an older
+  // run recorded (this failed run may have moved those pages).
+  const { pages: _stalePages, ...base } = previous;
+  if (report.test_users?.cleanup.status === 'deleted' && base.identities) {
+    const { identities: _deleted, ...rest } = base;
     return { action: 'write', entry: rest };
   }
-  return { action: 'keep' };
+  return previous.pages ? { action: 'write', entry: base } : { action: 'keep' };
 }
 
 /** --close-actors: close each kept browser and delete the kept test identities. */
@@ -169,8 +171,15 @@ export function keepStartNote(entry: KeepEntry | null, otherFlowsKept: number): 
 export function lastPages(segments: Array<{ as: string; final_url?: string }>, actors: string[]): Record<string, string> {
   const pages: Record<string, string> = {};
   for (const segment of segments) {
-    if (!actors.includes(segment.as) || !segment.final_url) continue;
-    try { pages[segment.as] = new URL(segment.final_url).pathname; } catch { delete pages[segment.as]; }
+    if (!actors.includes(segment.as)) continue;
+    // The LAST segment decides: no final URL, or a page told apart only by its
+    // query or fragment (tabs, hash routes), records nothing, so it reloads.
+    if (!segment.final_url) { delete pages[segment.as]; continue; }
+    try {
+      const url = new URL(segment.final_url);
+      if (url.search || url.hash) delete pages[segment.as];
+      else pages[segment.as] = url.pathname;
+    } catch { delete pages[segment.as]; }
   }
   return pages;
 }

@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.37.70
+
+### Fixed
+
+- `somewhere support packet --trace`: the packet keeps a failure code only when it is one of the function runtime's own failure codes (the server-recorded response code first, then the logged code). Any other code, including an app-chosen `err.code`, is recorded as `APP_ERROR_CODE`, so a code-shaped value from your app never enters the packet. Your own logs still show the code as written (#88).
+- `somewhere logs` and `somewhere errors` text output: control characters in stored messages and stack frames (newlines, carriage returns, ESC/ANSI sequences, BEL, C1 controls, line/paragraph separators and bidi overrides) are shown as visible escapes, so each stored row prints as exactly one line and a message cannot fake another row or change the terminal. `--json` output is unchanged (#88).
+- `somewhere support packet --help` names exactly which fields the packet reads and how the code is restricted, instead of a blanket "never holds tokens or passwords" claim (#88).
+- `somewhere verify --keep-actors` help states the real lifetimes: a kept browser closes after 5 minutes idle, and at most 10 minutes after it started (#87).
+
 ## 0.37.69
 
 ### Added

@@ -4,6 +4,7 @@ import { getToken, loadProjectConfig } from '../lib/config.js';
 import { dim, error, printJsonLine, red, teal, yellow } from '../lib/output.js';
 import { chooseProjectRef, projectRefConflictMessage } from '../lib/project-ref.js';
 import { unlinkedFolderHint } from '../lib/link-hint.js';
+import { terminalSafe } from '../lib/terminal-text.js';
 
 interface LogRow {
   id?: string;
@@ -92,7 +93,7 @@ export function registerLogs(program: Command) {
           for (const log of [...initialLogs].reverse()) {
             const time = new Date(log.created_at).toLocaleTimeString();
             const levelStr = formatLevel(log.level);
-            console.log(`  ${dim(`[${levelStr}]`)}  ${dim(time)}  ${log.message}`);
+            console.log(`  ${dim(`[${levelStr}]`)}  ${dim(time)}  ${terminalSafe(log.message)}`);
             if (traceId) printStack(log);
           }
         }
@@ -124,7 +125,7 @@ export function registerLogs(program: Command) {
                 const time = new Date(log.created_at).toLocaleTimeString();
                 const levelStr = formatLevel(log.level);
                 console.log(
-                  `  ${dim(`[${levelStr}]`)}  ${dim(time)}  ${log.message}`,
+                  `  ${dim(`[${levelStr}]`)}  ${dim(time)}  ${terminalSafe(log.message)}`,
                 );
                 if (traceId) printStack(log);
               }
@@ -154,7 +155,8 @@ function parseTraceOption(value: string | undefined): string | undefined {
 function printStack(log: LogRow): void {
   const stack = log.data && typeof log.data === 'object' ? (log.data as { stack?: unknown }).stack : undefined;
   if (typeof stack !== 'string' || !stack) return;
-  for (const line of stack.split('\n').slice(0, 30)) console.log(dim(`      ${line}`));
+  // Each stack frame is its own indented line under the record; its text is escaped like a message.
+  for (const line of stack.split('\n').slice(0, 30)) console.log(dim(`      ${terminalSafe(line)}`));
 }
 
 function parseSinceOption(value: string | undefined): string | undefined {

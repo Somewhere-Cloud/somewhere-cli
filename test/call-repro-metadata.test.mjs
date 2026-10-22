@@ -91,3 +91,17 @@ test('forged or malformed status and ids are dropped, so the outcome falls back 
   assert.equal(c.outcome, 'unknown');
   noCanary(r.packetText, r.raw);
 });
+
+test('a mutating tool error with http_status 500 records outcome unknown (never a retry suggestion) and keeps the status', async () => {
+  const e500 = envelope({ error: 'INTERNAL_ERROR', error_code: 'INTERNAL_ERROR', http_status: 500, canonical_error: { code: 'INTERNAL_ERROR', http_status: 500 },
+    _repro: { collected: { code: 'INTERNAL_ERROR', outcome: 'unknown', http_status: 500, trace_id: TRACE } } });
+  const r = await run((req, res, rpc) => send(res, { jsonrpc: '2.0', id: rpc.id, result: { isError: true, content: [{ type: 'text', text: JSON.stringify(e500) }] } }));
+  const c = collected(r.packet);
+  assert.equal(c.code, 'INTERNAL_ERROR');
+  assert.equal(c.http_status, 500);
+  assert.equal(c.outcome, 'unknown');
+  assert.equal(c.operation, 'tool:support_ticket');
+  const recipe = JSON.stringify((r.packet.data ?? r.packet).recipe ?? (r.packet.data ?? r.packet).packet?.recipe ?? {});
+  assert.doesNotMatch(recipe, /"rerun_original":true/, 'an unknown outcome is never suggested as a rerun');
+  noCanary(r.packetText, r.raw);
+});

@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.37.66
+
+### Fixed
+
+- After a failed `somewhere call`, `somewhere support packet` records the platform's HTTP status and trace id, so a definite refusal (for example a 404) is recorded as `refused` with its status, the same as the MCP packet, instead of `unknown` with no status or ids. A call that got no response at all (network or timeout) stays `unknown`, with no status invented. Only validated status and ids are kept (#76).
+
+### Changed
+
+- Internal: the `somewhere support packet` repro record uses the platform's shared `somewhere.repro/1` module (vendored byte-identical, with a checksum check). No behaviour change (#73).
+
 ## 0.37.65
 
 ### Added

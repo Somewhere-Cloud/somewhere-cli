@@ -149,3 +149,14 @@ export async function closeKept(client: Pick<ApiClient, 'call'>, entry: KeepEntr
     return { browsers, identities: { status: `unconfirmed (${cause instanceof CliApiError ? cause.code : 'delete failed'}); they expire 24 hours after creation` } };
   }
 }
+
+/** The one line --keep-actors prints on stderr when this run cannot reconnect:
+ *  nothing is kept for THIS flow file and cast in this folder (a new or renamed
+ *  flow file, or a changed cast, starts fresh). Null when there is a record. */
+export function keepStartNote(entry: KeepEntry | null, otherFlowsKept: number): string | null {
+  if (entry) return null;
+  const others = otherFlowsKept > 0
+    ? ` ${otherFlowsKept} other kept flow${otherFlowsKept === 1 ? '' : 's'} in this folder (another flow file path or cast) ${otherFlowsKept === 1 ? 'is' : 'are'} not reused; --close-actors closes ${otherFlowsKept === 1 ? 'it' : 'them'}.`
+    : '';
+  return `--keep-actors: nothing is kept yet for this flow file and its actors in this folder, so this run starts fresh and keeps them for the next run of the same file.${others}`;
+}

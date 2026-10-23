@@ -1197,3 +1197,186 @@ test('promote does not advance the folder source base; the next deploy still nam
     assert.match(deployed.stderr, /Changed since then: src\/App\.tsx\./);
   });
 });
+
+// ── Explicit --project binds to the verified live release (founder 2026-10-23, tsk_832371f0) ──
+// An unlinked folder that names its target deploys without --force: the CLI reads the
+// project's live release first and declares it as base_release_id, so the server's
+// stale-overwrite fence still decides. A linked folder's recorded base wins; a link to a
+// DIFFERENT project refuses; a stale answer is never retried or forced.
+
+function explicitProjectServer({ projectId = 'proj_explicit', active = 'rel_live_7', published = true, deployStatus = 200, deployAnswer, statusFails = false, projectFails = false } = {}) {
+  const requests = [];
+  const bodies = [];
+  const handler = (req, res) => {
+    let body = '';
+    req.on('data', (c) => (body += c));
+    req.on('end', () => {
+      requests.push(`${req.method} ${req.url}`);
+      if (req.method === 'GET' && req.url.startsWith('/v1/projects/')) {
+        if (projectFails) { sendJson(res, 404, { ok: false, error: 'PROJECT_NOT_FOUND', message: 'Project not found.' }); return; }
+        sendJson(res, 200, { ok: true, data: { id: projectId, name: 'explicit', subdomain: 'explicit-site', status: published ? 'deployed' : 'created' } });
+        return;
+      }
+      if (req.method === 'GET' && req.url.startsWith('/v1/deploy/status')) {
+        if (statusFails) { sendJson(res, 500, { ok: false, error: 'INTERNAL_ERROR', message: 'status unavailable' }); return; }
+        sendJson(res, 200, { ok: true, data: { published, active_release_id: published ? active : null, prod_version: published ? 7 : null } });
+        return;
+      }
+      if (req.method === 'POST' && req.url === '/v1/deploy') {
+        bodies.push(JSON.parse(body));
+        if (deployAnswer) { sendJson(res, deployStatus, deployAnswer); return; }
+        sendJson(res, 200, { ok: true, data: { version: 8, files: 1, url: 'https://explicit-site.somewhere.site', has_functions: false, release_id: 'rel_live_8', active_release_id: 'rel_live_8' } });
+        return;
+      }
+      sendJson(res, 404, { ok: false, error: 'NOT_FOUND', message: req.url });
+    });
+  };
+  return { handler, requests, bodies };
+}
+
+test('explicit --project from an UNLINKED folder binds to the live release and deploys without --force', async () => {
+  const HOME = mkdtempSync(join(tmpdir(), 'sw-explicit-unlinked-home-'));
+  const fixtureDir = mkdtempSync(join(tmpdir(), 'sw-explicit-unlinked-fixture-'));
+  writeLogin(HOME);
+  writeFixture(fixtureDir);
+  const server = explicitProjectServer();
+  await withServer(server.handler, async (apiUrl) => {
+    const result = await run(['deploy', '--project', 'explicit-site', '--json'], {
+      cwd: fixtureDir,
+      env: { HOME, USERPROFILE: HOME, SOMEWHERE_API_URL: apiUrl },
+    });
+    assert.equal(result.status, 0, `stdout:\n${result.stdout}\nstderr:\n${result.stderr}`);
+    assert.equal(server.bodies.length, 1, 'exactly one deploy request');
+    assert.equal(server.bodies[0].project_id, 'proj_explicit', 'the ref is resolved to the canonical project id');
+    assert.equal(server.bodies[0].base_release_id, 'rel_live_7', 'the live release read moments before is the declared base');
+    assert.equal('force' in server.bodies[0], false, 'never forced');
+    assert.equal('base_version' in server.bodies[0], false);
+    assert.deepEqual(server.requests.filter((r) => r.startsWith('GET') && !r.includes('/notices')), ['GET /v1/projects/explicit-site', 'GET /v1/deploy/status?project_id=proj_explicit'], 'identity resolved, then the live pointer read');
+    assert.equal(existsSync(join(fixtureDir, '.somewhere.json')), false, 'an unlinked folder stays unlinked');
+  });
+});
+
+test('explicit --project: a release that lands between the bind read and the publish is refused, not retried or forced', async () => {
+  const HOME = mkdtempSync(join(tmpdir(), 'sw-explicit-race-home-'));
+  const fixtureDir = mkdtempSync(join(tmpdir(), 'sw-explicit-race-fixture-'));
+  writeLogin(HOME);
+  writeFixture(fixtureDir);
+  const server = explicitProjectServer({
+    deployStatus: 409,
+    deployAnswer: { ok: false, error: 'STALE_RELEASE_BASE', message: 'Another release landed first.', data: { base_release_id: 'rel_live_7', active_release_id: 'rel_live_8', changed_files: ['index.html'] } },
+  });
+  await withServer(server.handler, async (apiUrl) => {
+    const result = await run(['deploy', '--project', 'explicit-site'], {
+      cwd: fixtureDir,
+      env: { HOME, USERPROFILE: HOME, SOMEWHERE_API_URL: apiUrl },
+    });
+    assert.equal(result.status, 1, `stdout:\n${result.stdout}\nstderr:\n${result.stderr}`);
+    assert.match(result.stderr, /another update landed first/);
+    assert.match(result.stderr, /NOT applied/);
+    assert.equal(server.bodies.length, 1, 'one deploy request; the refusal is not retried');
+    assert.equal(server.bodies[0].base_release_id, 'rel_live_7');
+    assert.equal(existsSync(join(fixtureDir, '.somewhere.json')), false);
+  });
+});
+
+test('explicit --project on a LINKED folder with a recorded base sends that base and does not re-read the live pointer', async () => {
+  const HOME = mkdtempSync(join(tmpdir(), 'sw-explicit-linked-home-'));
+  const fixtureDir = mkdtempSync(join(tmpdir(), 'sw-explicit-linked-fixture-'));
+  writeLogin(HOME);
+  writeProject(fixtureDir, {
+    project_id: 'proj_explicit',
+    name: 'explicit',
+    subdomain: 'explicit-site',
+    source_base: { project_id: 'proj_explicit', release_id: 'rel_recorded_5', at: '2026-10-23T10:00:00.000Z' },
+  });
+  writeFixture(fixtureDir);
+  const server = explicitProjectServer();
+  await withServer(server.handler, async (apiUrl) => {
+    const result = await run(['deploy', '--project', 'explicit-site', '--json'], {
+      cwd: fixtureDir,
+      env: { HOME, USERPROFILE: HOME, SOMEWHERE_API_URL: apiUrl },
+    });
+    assert.equal(result.status, 0, `stdout:\n${result.stdout}\nstderr:\n${result.stderr}`);
+    assert.equal(server.bodies[0].base_release_id, 'rel_recorded_5', 'the folder\'s own recorded base is what the server checks');
+    assert.equal(server.requests.includes('GET /v1/deploy/status?project_id=proj_explicit'), false, 'no live-pointer read when the folder already knows its base');
+  });
+});
+
+test('explicit --project naming a DIFFERENT project than the folder link is refused before any upload', async () => {
+  const HOME = mkdtempSync(join(tmpdir(), 'sw-explicit-mismatch-home-'));
+  const fixtureDir = mkdtempSync(join(tmpdir(), 'sw-explicit-mismatch-fixture-'));
+  writeLogin(HOME);
+  writeProject(fixtureDir, { project_id: 'proj_other', name: 'other', subdomain: 'other-site' });
+  writeFixture(fixtureDir);
+  const server = explicitProjectServer();
+  await withServer(server.handler, async (apiUrl) => {
+    const result = await run(['deploy', '--project', 'explicit-site'], {
+      cwd: fixtureDir,
+      env: { HOME, USERPROFILE: HOME, SOMEWHERE_API_URL: apiUrl },
+    });
+    assert.equal(result.status, 1, `stdout:\n${result.stdout}\nstderr:\n${result.stderr}`);
+    assert.match(result.stderr, /linked to project proj_other/);
+    assert.match(result.stderr, /names a different project \(proj_explicit\)/);
+    assert.match(result.stderr, /NOT applied/);
+    assert.equal(server.bodies.length, 0, 'nothing uploaded');
+    assert.equal(readProject(fixtureDir).project_id, 'proj_other', 'the link is untouched');
+  });
+});
+
+test('explicit --project whose live pointer cannot be read: the server decides, and BASE_REQUIRED names a terminating recovery', async () => {
+  const HOME = mkdtempSync(join(tmpdir(), 'sw-explicit-nostatus-home-'));
+  const fixtureDir = mkdtempSync(join(tmpdir(), 'sw-explicit-nostatus-fixture-'));
+  writeLogin(HOME);
+  writeFixture(fixtureDir);
+  const server = explicitProjectServer({
+    statusFails: true,
+    deployStatus: 400,
+    deployAnswer: { ok: false, error: 'BASE_REQUIRED', message: 'A live deploy must say which source it was prepared from.', data: {} },
+  });
+  await withServer(server.handler, async (apiUrl) => {
+    const result = await run(['deploy', '--project', 'explicit-site'], {
+      cwd: fixtureDir,
+      env: { HOME, USERPROFILE: HOME, SOMEWHERE_API_URL: apiUrl },
+    });
+    assert.equal(result.status, 1, `stdout:\n${result.stdout}\nstderr:\n${result.stderr}`);
+    assert.equal(server.bodies.length, 1);
+    assert.equal('base_release_id' in server.bodies[0], false, 'no base is invented when the live pointer is unknown');
+    assert.match(result.stderr, /somewhere init --link --project explicit-site/);
+    assert.match(result.stderr, /somewhere pull/);
+    assert.match(result.stderr, /--force --yes/);
+  });
+});
+
+test('explicit --project on a project with no published source declares the genesis base (null)', async () => {
+  const HOME = mkdtempSync(join(tmpdir(), 'sw-explicit-genesis-home-'));
+  const fixtureDir = mkdtempSync(join(tmpdir(), 'sw-explicit-genesis-fixture-'));
+  writeLogin(HOME);
+  writeFixture(fixtureDir);
+  const server = explicitProjectServer({ published: false });
+  await withServer(server.handler, async (apiUrl) => {
+    const result = await run(['deploy', '--project', 'explicit-site', '--json'], {
+      cwd: fixtureDir,
+      env: { HOME, USERPROFILE: HOME, SOMEWHERE_API_URL: apiUrl },
+    });
+    assert.equal(result.status, 0, `stdout:\n${result.stdout}\nstderr:\n${result.stderr}`);
+    assert.equal('base_release_id' in server.bodies[0], true);
+    assert.equal(server.bodies[0].base_release_id, null, 'an empty project is deployed from genesis, which the server fences too');
+  });
+});
+
+test('explicit --project with --force --yes reads no live pointer and declares no base (unchanged overwrite path)', async () => {
+  const HOME = mkdtempSync(join(tmpdir(), 'sw-explicit-force-home-'));
+  const fixtureDir = mkdtempSync(join(tmpdir(), 'sw-explicit-force-fixture-'));
+  writeLogin(HOME);
+  writeFixture(fixtureDir);
+  const server = explicitProjectServer();
+  await withServer(server.handler, async (apiUrl) => {
+    const result = await run(['deploy', '--project', 'explicit-site', '--force', '--yes', '--json'], {
+      cwd: fixtureDir,
+      env: { HOME, USERPROFILE: HOME, SOMEWHERE_API_URL: apiUrl },
+    });
+    assert.equal(result.status, 0, `stdout:\n${result.stdout}\nstderr:\n${result.stderr}`);
+    assert.equal(server.bodies[0].force, true);
+    assert.equal('base_release_id' in server.bodies[0], false);
+  });
+});

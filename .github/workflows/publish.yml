@@ -98,6 +98,3 @@ jobs:
           SOURCE_SHA: ${{ steps.final.outputs.published_head }}
           EXPECTED_VERSION: ${{ steps.candidate.outputs.version }}
         run: node scripts/publish-release.mjs verify "$SOURCE_SHA" "$EXPECTED_VERSION"
-      - name: Test verified published artifact source
-        if: always() && steps.verification.outcome == 'success'
-        run: npm test

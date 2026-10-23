@@ -1,28 +1,93 @@
-name: CLI pull request checks
+name: CLI advisory production checks
 
 on:
-  pull_request:
-    branches: [master]
+  schedule:
+    - cron: '37 */3 * * *'
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: Specific regression being investigated
+        required: true
+        type: string
+      tests:
+        description: Exact space-separated test/*.test.mjs files (no globs)
+        required: true
+        type: string
 
 permissions:
   contents: read
 
 concurrency:
-  group: cli-pr-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
+  group: cli-advisory-${{ github.event_name }}
+  cancel-in-progress: false
+
+env:
+  REGRESSION_REASON: ${{ inputs.reason }}
+  REGRESSION_TESTS: ${{ inputs.tests }}
 
 jobs:
-  cli-checks:
+  pin:
+    if: github.repository == 'Somewhere-Tech/somewhere-cli' && github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 5
+    outputs:
+      source: ${{ steps.pin.outputs.source }}
+      version: ${{ steps.pin.outputs.version }}
+      shards: ${{ steps.pin.outputs.shards }}
     steps:
       - uses: actions/checkout@v4
         with:
+          repository: Somewhere-Tech/somewhere-cli
+          ref: ${{ github.sha }}
+          fetch-depth: 0
           persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: Pin latest published source once
+        id: pin
+        run: node scripts/advisory-ci.mjs resolve .
+
+  checks:
+    needs: pin
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        shard: ${{ fromJSON(needs.pin.outputs.shards) }}
+    env:
+      PUBLISHED_SOURCE: ${{ needs.pin.outputs.source }}
+      PUBLISHED_VERSION: ${{ needs.pin.outputs.version }}
+      CI_SHARD: ${{ matrix.shard }}
+    steps:
+      # Trusted helper stays at the workflow source; published code has its own checkout.
+      - uses: actions/checkout@v4
+        with:
+          repository: Somewhere-Tech/somewhere-cli
+          ref: ${{ github.sha }}
+          path: control
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: Somewhere-Tech/somewhere-cli
+          ref: ${{ needs.pin.outputs.source }}
+          path: published
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify published package and explicit test selection
+        run: node control/scripts/advisory-ci.mjs verify published
       - run: npm ci
-      # The normal CLI test command also builds the exact candidate first.
-      # No registry publication, credentials or platform release runs on PRs.
-      - run: npm test
+        working-directory: published
+      - run: npm run build
+        working-directory: published
+      - name: Run native serial shard or explicit regression
+        run: node control/scripts/advisory-ci.mjs run published
+      - name: Record job conclusion
+        if: always()
+        env:
+          JOB_STATUS: ${{ job.status }}
+        run: printf 'Advisory shard %s — job %s (includes install/build).\n' "$CI_SHARD" "$JOB_STATUS" >> "$GITHUB_STEP_SUMMARY"

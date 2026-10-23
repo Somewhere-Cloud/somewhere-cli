@@ -395,9 +395,13 @@ export function formatExpiredTemporaryProjectExplanation(expiredAt: string): str
 }
 
 // No record of which published version this folder's source came from (a
-// folder linked to an existing project, or state from an older CLI). The CLI
-// never fills the gap with the current version: that would publish stale files
-// as if they were based on it.
+// folder whose link lost its state, or state from an older CLI). The CLI never
+// fills the gap with the current version for a LINKED folder: that would publish
+// stale files as if they were based on it. An explicit --project target is the
+// one exception (resolveExplicitProjectId + readExplicitProjectLiveBase below):
+// the caller named the project, so the CLI reads its live release first and
+// declares that as the base; the server's own stale check still refuses a
+// release that lands in between.
 export function formatBaseRequiredExplanation(): string {
   return [
     'This folder has no record of which published version its files came from, so the deploy was NOT applied.',
@@ -406,6 +410,67 @@ export function formatBaseRequiredExplanation(): string {
     '  Run `somewhere pull` to start from the current version, re-apply your changes, then deploy again.',
     '  Run `somewhere deploy --force` to replace the current version with this folder intentionally.',
   ].join('\n');
+}
+
+/** `--project <ref>` named a project that is not the one this folder is linked
+ *  to. Deploying would publish this folder over a project it never came from,
+ *  so the CLI refuses instead of silently switching targets (founder 2026-10-23). */
+export function formatLinkedProjectMismatchExplanation(linkedProjectId: string, ref: string, resolvedProjectId: string): string {
+  return [
+    `This folder is linked to project ${linkedProjectId} (in .somewhere.json), but --project ${ref} names a different project (${resolvedProjectId}). Your deploy was NOT applied.`,
+    '',
+    'Next steps:',
+    '  Deploy this folder to its linked project: run `somewhere deploy` (no --project).',
+    `  Move this folder to ${ref} deliberately: delete this folder's .somewhere.json, then run \`somewhere init --link --project ${ref}\`, \`somewhere pull\`, re-apply your changes, and \`somewhere deploy\`.`,
+    `  Deploy a copy elsewhere: copy the files into an unlinked folder and run \`somewhere deploy --project ${ref}\` there.`,
+  ].join('\n');
+}
+
+/** BASE_REQUIRED for an explicit --project target whose live release could not
+ *  be read first (or a legacy project with no release). `somewhere pull` alone
+ *  cannot record a base in an unlinked folder, so the steps must terminate. */
+export function formatExplicitProjectBaseRequiredExplanation(ref: string): string {
+  return [
+    `The live version of project ${ref} could not be read before deploying, and this folder has no record of which published version its files came from, so the deploy was NOT applied.`,
+    '',
+    'Next steps:',
+    `  Link and pull first: \`somewhere init --link --project ${ref}\`, then \`somewhere pull\`, re-apply your changes, then \`somewhere deploy\`.`,
+    `  Or replace the live release deliberately: \`somewhere deploy --project ${ref} --force --yes\`.`,
+  ].join('\n');
+}
+
+/** Resolve an explicit `--project <ref>` (uuid, slug or subdomain) to its
+ *  canonical project id, or null when the ref cannot be resolved (the deploy
+ *  itself then names the real error). Read-only. */
+export async function resolveExplicitProjectId(client: ApiClient, ref: string): Promise<string | null> {
+  try {
+    const project = await client.call<{ id?: unknown }>('GET', `/projects/${encodeURIComponent(ref)}`);
+    return typeof project?.id === 'string' && project.id ? project.id : null;
+  } catch {
+    return null;
+  }
+}
+
+/** The live release an explicit `--project` deploy is prepared against, read
+ *  moments before the upload (founder architecture 2026-10-23): a release id,
+ *  null for a project with no published source (the genesis claim), or
+ *  undefined when unknown (the server's own BASE_REQUIRED then stands). The id is
+ *  declared as base_release_id, so the server's existing stale-overwrite fence
+ *  still refuses a release that lands between this read and the publish. Never
+ *  used for a folder that did not name its target, never with --force. */
+export async function readExplicitProjectLiveBase(client: ApiClient, projectId: string): Promise<string | null | undefined> {
+  try {
+    const status = await client.call<{ active_release_id?: unknown; published?: unknown; prod_version?: unknown }>(
+      'GET',
+      `/deploy/status?project_id=${encodeURIComponent(projectId)}`,
+    );
+    if (typeof status?.active_release_id === 'string' && status.active_release_id) return status.active_release_id;
+    const prodVersion = typeof status?.prod_version === 'number' ? status.prod_version : null;
+    if (status?.published === false && !(prodVersion && prodVersion > 0)) return null;
+    return undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function findProjectConfigEntry(targetDir: string): ProjectConfigEntry | null {
@@ -754,6 +819,27 @@ export function registerDeploy(program: Command) {
         deployStateEntry = linkedProjectEntry;
       }
 
+      // An explicit --project is bound to the VERIFIED current project before
+      // anything is uploaded (founder 2026-10-23). A folder linked to a different
+      // project is refused, never silently redirected. An unresolvable ref falls
+      // through to the deploy itself, which names the real error.
+      let explicitProjectId: string | null = null;
+      if (opts.project && projectId && !tempSession) {
+        explicitProjectId = await resolveExplicitProjectId(client, projectId);
+        if (explicitProjectId) {
+          if (linkedProjectEntry && linkedProjectEntry.config.project_id !== explicitProjectId) {
+            error(formatLinkedProjectMismatchExplanation(linkedProjectEntry.config.project_id, projectId, explicitProjectId));
+            process.exit(1);
+          }
+          if (linkedProjectEntry && linkedProjectEntry.config.project_id === explicitProjectId) {
+            // Same project as the link (the ref was its slug or subdomain): the
+            // folder's own recorded base and deploy state apply, as for `deploy`.
+            deployStateEntry = linkedProjectEntry;
+          }
+          projectId = explicitProjectId;
+        }
+      }
+
       if (tempSession && projectId) {
         if (besideRealLogin) {
           tempSession.handoffReady = false;
@@ -913,7 +999,15 @@ export function registerDeploy(program: Command) {
         // project created empty here). Never fetched from the server: a folder
         // with no record must pull, or overwrite deliberately with --force.
         const sourceBase = readSourceBase(targetProjectConfig, projectId);
-        if (!opts.force && sourceBase) body.base_release_id = sourceBase.releaseId;
+        if (!opts.force && sourceBase) {
+          body.base_release_id = sourceBase.releaseId;
+        } else if (!opts.force && explicitProjectId) {
+          // The folder has no record of a base but the caller named the target:
+          // read its live release now and declare it; the server refuses the
+          // deploy if another release lands first.
+          const liveBase = await readExplicitProjectLiveBase(client, explicitProjectId);
+          if (liveBase !== undefined) body.base_release_id = liveBase;
+        }
         // After a publish, this folder matches the new release: record it where
         // this project's link lives (directory config or the temporary side-car).
         const rememberDeployedBase = (releaseId: string | undefined) => {
@@ -1186,7 +1280,7 @@ export function registerDeploy(program: Command) {
           spinner?.stop();
           const message =
             err.code === 'BASE_REQUIRED'
-              ? formatBaseRequiredExplanation()
+              ? (opts.project ? formatExplicitProjectBaseRequiredExplanation(String(opts.project)) : formatBaseRequiredExplanation())
               : err.code === 'STALE_RELEASE_BASE'
                 ? (deployRetriedAfterTransportFailure(err)
                   ? formatAmbiguousRetryStaleExplanation(deployRetriedAfterTransportFailure(err)!)

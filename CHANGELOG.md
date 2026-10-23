@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.37.77
+
+### Fixed
+
+- `somewhere deploy --project <ref>` from a folder that is not linked to that project no longer fails with `BASE_REQUIRED` on every attempt. The CLI first resolves the ref to its project and reads the project's live release, declares that release as the deploy's base, and lets the platform's existing stale-overwrite check decide: a release that lands between that read and the publish is still refused (`STALE_RELEASE_BASE`), never overwritten, and the CLI never retries or forces. A linked folder keeps sending its own recorded base; a folder linked to a different project than `--project` names is refused with a clear message instead of being redeployed elsewhere; `--force` behaviour is unchanged. When the live release cannot be read, the `BASE_REQUIRED` recovery now names a path that terminates (`init --link`, `pull`, `deploy`) instead of a bare `somewhere pull`.
+
 ## 0.37.76
 
 ### Changed

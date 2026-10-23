@@ -74,8 +74,9 @@ export function setFailureHook(hook: ((cause: unknown) => void) | null): void { 
 /** Record a failure that a command reports in its own output (for example verify's summary) without printing. */
 export function noteFailure(cause: unknown): void { try { failureHook?.(cause); } catch { /* never affects the command */ } }
 
-export function error(msg: string, cause?: unknown) {
-  try { failureHook?.(cause); } catch { /* local diagnostics never change a command's failure */ }
+/** Capture may retain response provenance while the printed error stays unchanged. */
+export function error(msg: string, cause?: unknown, captureCause: unknown = cause) {
+  try { failureHook?.(captureCause); } catch { /* local diagnostics never change a command's failure */ }
   if (jsonOutputMode) {
     if (jsonErrorWritten) return;
     const platform = platformErrorEnvelope(cause);
@@ -99,6 +100,14 @@ export function platformErrorIds(cause: unknown): string | null {
   const id = (value: unknown) => (typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/.test(value) ? value : null);
   const request = id(platform.extra.request_id), trace = id(platform.extra.trace_id);
   return [`code ${platform.code}`, request && `request ${request}`, trace && `trace ${trace}`].filter(Boolean).join(' · ');
+}
+
+/** Recovery is tied to this response's validated handle, never the shared last-error file. */
+export function printSupportPacketRecovery(cause: unknown): void {
+  const value = platformErrorEnvelope(cause)?.extra.request_id;
+  if (typeof value !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/.test(value)
+      || /^(?:smt_|eyJ|sk_live_|sk_test_)/.test(value)) return;
+  console.error(`  Recovery: somewhere support packet --request ${value} --json`);
 }
 
 export function warn(msg: string) {

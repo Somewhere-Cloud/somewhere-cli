@@ -22,7 +22,7 @@ function commandPaths(program: Command): Set<string> {
   return paths;
 }
 
-interface PacketOptions { json?: boolean; out?: string; trace?: string; project?: string }
+interface PacketOptions { json?: boolean; out?: string; trace?: string; project?: string; request?: string }
 
 export function registerSupport(program: Command): void {
   const support = program
@@ -33,6 +33,7 @@ export function registerSupport(program: Command): void {
     .command('packet')
     .description('Build a redacted repro packet for the last failed command, or for one failed function request with --trace (local only; nothing is uploaded)')
     .option('--json', 'Print the packet as JSON')
+    .option('--request <id>', 'Require this exact server request id in the locally recorded failure; refuse if replaced or unavailable')
     .option('--out <file>', 'Write the packet to a private file (0600) in the current folder')
     .option('--trace <id>', "Build it for one failed function request instead: the 32-character trace_id its error response returned (read from this project's own logs)")
     .option('--project <ref>', 'With --trace: the project the function belongs to (default: the linked folder)')
@@ -48,9 +49,17 @@ export function registerSupport(program: Command): void {
     ].join('\n'))
     .action(async (opts: PacketOptions) => {
       try {
+        if (opts.request !== undefined && (!/^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/.test(opts.request) || opts.trace !== undefined)) {
+          printJsonError('INVALID_REQUEST_SELECTOR', '--request takes a server request id and cannot be combined with --trace.');
+          process.exitCode = 1; return;
+        }
         if (opts.trace !== undefined) { await tracePacket(opts); return; }
         if (opts.project !== undefined) throw new Error('--project goes with --trace.');
         const record = readLastError(commandPaths(program));
+        if (opts.request !== undefined && (!record || record.request_id !== opts.request)) {
+          printJsonError(record ? 'REQUEST_FAILURE_MISMATCH' : 'REQUEST_FAILURE_UNAVAILABLE', 'The requested failure is not the locally recorded snapshot. No packet was produced.');
+          process.exitCode = 1; return;
+        }
         if (!record) {
           if (opts.json) printJsonError('NO_FAILURE_RECORDED', 'No failed command is recorded on this machine yet.');
           else info('No failed command is recorded on this machine yet.');
@@ -102,5 +111,7 @@ function emitPacket(packet: ReproPacket, opts: PacketOptions): void {
   for (const step of packet.recipe.steps) info(`  - ${step}`);
   info(`Not collected: ${packet.omitted.join(', ')}.`);
   if (opts.out) success(`Packet written to ${opts.out} (private). Review it before you submit it as a platform bug.`);
-  else info('Nothing was sent. Review the packet (--json or --out <file>) before you submit it as a platform bug.');
+  else if (c.request_id && !opts.trace) info(`Nothing was sent. Review this request's packet with somewhere support packet --request ${c.request_id} --json (or --out <file>); it refuses if the local record has changed.`);
+  else if (opts.trace) info('Nothing was sent. Review this trace packet before you submit it as a platform bug.');
+  else info('Nothing was sent. Review the packet before submitting it. Without --request, the local record is the most recent failure in this config, not pinned to an invocation.');
 }

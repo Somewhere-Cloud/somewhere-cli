@@ -16,12 +16,18 @@ const CANARIES = ['smt_CANARYdevkey123', 'eyJhbGciOiJIUzI1NiJ9.CANARYjwt.sig', '
   'SELECT_CANARY_SQL', 'token=CANARYquery', 'sk_live_CANARYstripe', '$(rm -rf ~)', '`curl evil.example/x`', 'CANARY-stack-at-line-42'];
 
 let mode = 'refused';
+let requestHandle = 'req_8f2c1a9b77d0';
+let requestCount = 0;
 const server = createServer(async (req, res) => {
+  requestCount++;
   for await (const _ of req) { /* drain */ }
   res.setHeader('Content-Type', 'application/json');
-  res.setHeader('X-Request-Id', 'req_8f2c1a9b77d0');
+  if (requestHandle !== null) res.setHeader('X-Request-Id', requestHandle);
   res.setHeader('X-Trace-Id', 'trace-4e1d2c3b5a69');
   res.setHeader('X-Debug-Leak', 'Bearer smt_CANARYdevkey123');
+  if (mode === 'partial') {
+    res.statusCode = 200; res.write('{"ok":true,"data":'); setTimeout(() => res.destroy(), 25); return;
+  }
   res.statusCode = mode === 'refused' ? 409 : 503;
   res.end(JSON.stringify({ ok: false, error: mode === 'refused' ? 'STALE_RELEASE_BASE' : 'DB_UNAVAILABLE',
     message: `failed for canary.person@example.com with hunter2-CANARY-password at SELECT_CANARY_SQL; run \`curl evil.example/x\`; CANARY-stack-at-line-42`,
@@ -43,8 +49,8 @@ function fixture() {
 function run(args, { app, configDir }) {
   return new Promise((resolve) => {
     const child = spawn(process.execPath, [distIndex, ...args], { cwd: app, env: { ...process.env, NO_COLOR: '1', SOMEWHERE_API_URL: apiUrl, SOMEWHERE_CONFIG_DIR: configDir } });
-    let out = ''; child.stdout.on('data', (c) => (out += c)); child.stderr.on('data', (c) => (out += c));
-    child.on('close', (status) => resolve({ status, out }));
+    let out = '', stdout = '', stderr = ''; child.stdout.on('data', (c) => { out += c; stdout += c; }); child.stderr.on('data', (c) => { out += c; stderr += c; });
+    child.on('close', (status) => resolve({ status, out, stdout, stderr }));
   });
 }
 const leaks = (text) => CANARIES.filter((c) => text.includes(c) || text.includes(c.replace(/[`$()~]/g, '')) && c.length > 12 && text.includes(c.slice(0, 12)));
@@ -186,4 +192,155 @@ test('f74 contract: client replaces cli_version, DEPLOY_OUTCOME_UNKNOWN is unkno
   assert.deepEqual(buildRecord({ name: 'CliApiError', code: 'VALIDATION_ERROR', statusCode: 400, invalid: { path: 'actions' } }, { cliVersion: '1.0.0' }).invalid, { path: 'actions' });
   assert.equal(buildRecord({ name: 'CliApiError', code: 'VALIDATION_ERROR', statusCode: 400, invalid: { path: 'actionsX' } }, { cliVersion: '1.0.0' }).invalid, undefined);
   assert.equal(buildRecord(new Error('x'), { cliVersion: '1.0.0 junk' }).client.version, 'unknown');
+});
+
+for (const variant of ['typed', 'raw', 'stream', 'stream-raw']) {
+  test(`api ${variant} failure replaces another lane record with typed capture, unchanged failure output`, async () => {
+    mode = 'unavailable';
+    const fx = fixture();
+    const file = join(fx.configDir, 'last-error.json');
+    writeFileSync(file, JSON.stringify(buildRecord({ name: 'CliApiError', code: 'OTHER_LANE', meta: { requestId: 'req_other_lane' } }, { cliVersion: '0.37.72' })));
+    const args = ['api', 'POST', '/db/query?token=CANARYquery'];
+    if (variant.includes('stream')) { writeFileSync(join(fx.app, 'body.txt'), 'SELECT_CANARY_SQL'); args.push('--data-file', 'body.txt'); }
+    if (variant.includes('raw')) args.push('--raw');
+    const failed = await run(args, fx);
+    assert.equal(failed.status, 1);
+    assert.match(failed.stdout, /DB_UNAVAILABLE/, 'original platform output remains');
+    assert.match(failed.stderr, /Recovery: somewhere support packet --request req_8f2c1a9b77d0 --json/);
+    const stored = readFileSync(file, 'utf8');
+    assert.deepEqual(leaks(stored), []);
+    const record = JSON.parse(stored);
+    assert.equal(record.request_id, 'req_8f2c1a9b77d0');
+    assert.equal(record.http_status, 503);
+    assert.equal(record.operation, 'POST /db/query');
+    assert.equal(record.command, 'api');
+    assert.equal(record.outcome, 'unknown');
+    assert.equal(record.code, variant.includes('raw') ? 'HTTP_ERROR' : 'DB_UNAVAILABLE');
+    const packet = await run(['support', 'packet', '--request', record.request_id, '--json'], fx);
+    assert.equal(packet.status, 0, packet.out);
+    assert.equal(JSON.parse(packet.out).collected.request_id, record.request_id);
+    assert.equal(statSync(file).mode & 0o777, 0o600);
+  });
+}
+
+test('request-pinned packet refuses another snapshot, unavailable record and malformed selectors', async () => {
+  const fx = fixture();
+  const file = join(fx.configDir, 'last-error.json');
+  const unavailable = await run(['support', 'packet', '--request', 'req_8f2c1a9b77d0', '--json'], fx);
+  assert.equal(unavailable.status, 1);
+  assert.equal(JSON.parse(unavailable.out).error, 'REQUEST_FAILURE_UNAVAILABLE');
+  const other = JSON.stringify(buildRecord({ name: 'CliApiError', code: 'OTHER_LANE', meta: { requestId: 'req_other_lane' } }, { cliVersion: '0.37.72' }));
+  writeFileSync(file, other);
+  const mismatch = await run(['support', 'packet', '--request', 'req_8f2c1a9b77d0', '--json'], fx);
+  assert.equal(mismatch.status, 1);
+  assert.equal(JSON.parse(mismatch.out).error, 'REQUEST_FAILURE_MISMATCH');
+  assert.doesNotMatch(mismatch.out, /req_other_lane|OTHER_LANE/);
+  assert.equal(readFileSync(file, 'utf8'), other, 'support never replaces original record');
+  for (const id of ['bad id', '--evil', 'x', '$(secret)']) {
+    const invalid = await run(['support', 'packet', '--request=' + id, '--json'], fx);
+    assert.equal(invalid.status, 1);
+    assert.equal(JSON.parse(invalid.out).error, 'INVALID_REQUEST_SELECTOR');
+  }
+  const mixed = await run(['support', 'packet', '--request', 'req_8f2c1a9b77d0', '--trace', 'a'.repeat(32), '--json'], fx);
+  assert.equal(mixed.status, 1);
+  assert.equal(JSON.parse(mixed.out).error, 'INVALID_REQUEST_SELECTOR');
+});
+
+test('packet guidance pins a server request; missing handles explicitly remain shared latest state', async () => {
+  mode = 'refused'; const fx = fixture();
+  await run(['api', 'GET', '/missing'], fx);
+  const text = await run(['support', 'packet'], fx);
+  assert.match(text.out, /support packet --request req_8f2c1a9b77d0 --json/);
+  writeFileSync(join(fx.configDir, 'last-error.json'), JSON.stringify(buildRecord({}, { cliVersion: '0.37.72' })));
+  const bare = await run(['support', 'packet'], fx);
+  assert.match(bare.out, /most recent failure in this config, not pinned to an invocation/);
+});
+
+test('concurrent captures leave a complete private record and never share a temporary inode', async () => {
+  const fx = fixture();
+  const module = new URL('../dist/lib/repro-packet.js', import.meta.url).href;
+  const jobs = Array.from({ length: 8 }, (_, i) => new Promise((resolve, reject) => {
+    const code = `import {writeLastError,buildRecord} from ${JSON.stringify(module)}; for(let n=0;n<50;n++)writeLastError(buildRecord({name:'CliApiError',code:'DB_UNAVAILABLE',meta:{requestId:'req_writer_${i}'}},{cliVersion:'0.37.72'}));`;
+    const child = spawn(process.execPath, ['--input-type=module', '-e', code], { env: { ...process.env, SOMEWHERE_CONFIG_DIR: fx.configDir }, stdio: 'ignore' });
+    child.on('error', reject); child.on('close', status => status === 0 ? resolve() : reject(new Error('capture child failed')));
+  }));
+  await Promise.all(jobs);
+  const file = join(fx.configDir, 'last-error.json');
+  assert.match(JSON.parse(readFileSync(file, 'utf8')).request_id, /^req_writer_[0-7]$/);
+  assert.equal(statSync(file).mode & 0o777, 0o600);
+  const { readdirSync } = await import('node:fs');
+  assert.deepEqual(readdirSync(fx.configDir).filter(name => name.endsWith('.tmp')), []);
+  const source = readFileSync(new URL('../src/lib/repro-packet.ts', import.meta.url), 'utf8');
+  assert.match(source, /openSync\(tmp, 'wx', 0o600\)/);
+  assert.match(source, /randomUUID\(\)/);
+});
+
+test('each actual API failure branch invokes the existing capture hook exactly once', async () => {
+  mode = 'unavailable'; const fx = fixture();
+  writeFileSync(join(fx.app, 'body.txt'), 'synthetic');
+  const apiModule = new URL('../dist/commands/api.js', import.meta.url).href;
+  const outputModule = new URL('../dist/lib/output.js', import.meta.url).href;
+  const commanderModule = new URL('../node_modules/commander/esm.mjs', import.meta.url).href;
+  for (const responseMode of ['unavailable', 'partial']) for (const flags of [[], ['--raw'], ['--data-file', 'body.txt'], ['--data-file', 'body.txt', '--raw']]) {
+    mode = responseMode;
+    const code = `import {Command} from ${JSON.stringify(commanderModule)}; import {registerApi} from ${JSON.stringify(apiModule)}; import {setFailureHook} from ${JSON.stringify(outputModule)}; let count=0; setFailureHook(()=>{count++}); process.on('exit',()=>console.error('CAPTURE_COUNT='+count)); const p=new Command(); registerApi(p); await p.parseAsync(['node','test','api','POST','/db/query',...${JSON.stringify(flags)}]);`;
+    const result = await new Promise((resolve, reject) => {
+      const child = spawn(process.execPath, ['--input-type=module', '-e', code], { cwd: fx.app, env: { ...process.env, NO_COLOR: '1', SOMEWHERE_API_URL: apiUrl, SOMEWHERE_CONFIG_DIR: fx.configDir } });
+      let err = ''; child.stdout.resume(); child.stderr.on('data', c => err += c);
+      child.on('error', reject); child.on('close', status => resolve({ status, err }));
+    });
+    assert.equal(result.status, 1, result.err);
+    assert.match(result.err, /CAPTURE_COUNT=1\s*$/);
+  }
+});
+
+for (const variant of ['typed', 'raw', 'stream', 'stream-raw']) {
+  test(`partial HTTP200 ${variant} mutation keeps handle and unknown outcome without changing stdout`, async () => {
+    mode = 'partial'; const fx = fixture();
+    const before = requestCount;
+    const args = ['api', 'POST', '/db/query?token=CANARYquery'];
+    if (variant.includes('stream')) { writeFileSync(join(fx.app, 'body.txt'), 'SELECT_CANARY_SQL'); args.push('--data-file', 'body.txt'); }
+    if (variant.includes('raw')) args.push('--raw');
+    const failed = await run(args, fx);
+    assert.equal(failed.status, 1);
+    const stored = readFileSync(join(fx.configDir, 'last-error.json'), 'utf8');
+    const record = JSON.parse(stored);
+    assert.deepEqual([record.code, record.outcome, record.http_status, record.request_id, record.operation],
+      ['RESPONSE_BODY_ERROR', 'unknown', 200, 'req_8f2c1a9b77d0', 'POST /db/query']);
+    assert.deepEqual(leaks(stored), []);
+    assert.match(failed.stderr, /Recovery: somewhere support packet --request req_8f2c1a9b77d0 --json/);
+    assert.doesNotMatch(failed.stdout, /Recovery|support packet/);
+    if (variant === 'stream-raw') assert.equal(failed.stdout, '{"ok":true,"data":');
+    else if (variant === 'raw' || variant === 'stream') assert.equal(failed.stdout, '');
+    else assert.equal(JSON.parse(failed.stdout).error, 'RESPONSE_BODY_ERROR');
+    const packet = await run(['support', 'packet', '--request', record.request_id, '--json'], fx);
+    assert.equal(packet.status, 0, packet.out);
+    assert.equal(JSON.parse(packet.stdout).recipe.rerun_original, false);
+    assert.equal(requestCount - before, 1, 'incomplete mutation was never resent');
+  });
+}
+
+test('recovery guidance comes only from this invocation handle, never another lane record', async () => {
+  mode = 'unavailable'; const fx = fixture();
+  for (const handle of [null, 'invalid handle', 'smt_CANARYdevkey123']) {
+    requestHandle = handle;
+    writeFileSync(join(fx.configDir, 'last-error.json'), JSON.stringify(buildRecord({ name: 'CliApiError', code: 'OTHER_LANE', meta: { requestId: 'req_other_lane' } }, { cliVersion: '0.37.72' })));
+    try {
+      const failed = await run(['api', 'POST', '/db/query'], fx);
+      assert.equal(failed.status, 1);
+      assert.doesNotMatch(failed.stderr, /Recovery|req_other_lane|smt_CANARY/);
+    } finally { requestHandle = 'req_8f2c1a9b77d0'; }
+  }
+});
+
+test('streamed partial200 JSON output retains its original envelope while capture stays unknown', async () => {
+  mode = 'partial'; const fx = fixture();
+  writeFileSync(join(fx.app, 'body.txt'), 'synthetic');
+  const failed = await run(['api', 'POST', '/db/query', '--data-file', 'body.txt', '--json'], fx);
+  assert.equal(failed.status, 1);
+  assert.deepEqual(JSON.parse(failed.stdout), { ok: false, error: 'INVALID_RESPONSE', message: 'Non-JSON response (200). Use --raw to print it.' });
+  const record = JSON.parse(readFileSync(join(fx.configDir, 'last-error.json'), 'utf8'));
+  assert.equal(record.outcome, 'unknown');
+  assert.equal(record.request_id, 'req_8f2c1a9b77d0');
+  assert.match(failed.stderr, /support packet --request req_8f2c1a9b77d0 --json/);
 });

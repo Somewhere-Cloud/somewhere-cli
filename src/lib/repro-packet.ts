@@ -5,8 +5,9 @@
  * scripts/vendor-repro-guidance.mjs). This file only maps the CLI's error types into typed fields and
  * owns the local file; nothing here reads a message, hint, data, argument or body.
  */
-import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { randomUUID } from 'node:crypto';
 import { cliConfigDir } from './config.js';
 import { buildRecordFromFields, LAST_ERROR_FILE, operationLabel, REPRO_SCHEMA, safeCode, safeStatus, type ReproRecord } from './vendor/repro-guidance.js';
 
@@ -70,16 +71,22 @@ export function buildCrashRecord(rows: unknown, context: { cliVersion: string; t
 }
 
 export function writeLastError(record: ReproRecord): void {
+  let tmp: string | undefined;
+  let ownsTemp = false;
   try {
     const dir = cliConfigDir();
     mkdirSync(dir, { recursive: true, mode: 0o700 });
     const path = join(dir, LAST_ERROR_FILE);
-    const tmp = `${path}.tmp`;
-    writeFileSync(tmp, JSON.stringify(record) + '\n', { mode: 0o600 });
-    chmodSync(tmp, 0o600);
+    tmp = `${path}.${randomUUID()}.tmp`;
+    const fd = openSync(tmp, 'wx', 0o600);
+    ownsTemp = true;
+    try { writeFileSync(fd, JSON.stringify(record) + '\n'); } finally { closeSync(fd); }
     renameSync(tmp, path);
+    tmp = undefined;
   } catch {
     // Local diagnostics must never change a command's own failure.
+  } finally {
+    if (tmp && ownsTemp) { try { unlinkSync(tmp); } catch { /* best-effort private temporary cleanup */ } }
   }
 }
 

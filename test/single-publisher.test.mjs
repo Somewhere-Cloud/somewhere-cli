@@ -32,8 +32,14 @@ test('canonical publisher alone publishes, serializes both triggers and pins imm
   assert.doesNotMatch(guard, /npm ci|npm test|npm run build/);
   assert.match(guard, /run: node scripts\/version-guard\.mjs/);
   assert.ok(publisher.indexOf('npm install -g') < publisher.indexOf('npm ci'));
-  assert.match(publisher, /npm test/);
-  assert.ok(publisher.indexOf('npm test') < publisher.indexOf('npm publish --provenance'));
+  const publishAt = publisher.indexOf('run: npm publish --provenance');
+  const verifyAt = publisher.indexOf('run: node scripts/publish-release.mjs verify');
+  const testAt = publisher.indexOf('run: npm test');
+  assert.ok(publishAt >= 0 && verifyAt > publishAt && testAt > verifyAt,
+    'publish, verify registry source/SRI/Sigstore, then run tests');
+  assert.match(publisher, /name: Verify published registry source, SRI and Sigstore\n        id: verification/);
+  assert.match(publisher, /name: Test verified published artifact source\n        if: always\(\) && steps\.verification\.outcome == 'success'\n        run: npm test/);
+  assert.equal((publisher.match(/run: npm test/g) ?? []).length, 1);
   assert.equal((publisher.match(/npm publish --provenance --access public/g) ?? []).length, 1);
   assert.doesNotMatch(publisher, /tags:|cancel-in-progress: true|download-artifact|git push/);
   assert.match(publisher, /group: somewhere-cli-publish\n  cancel-in-progress: false/);

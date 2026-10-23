@@ -250,6 +250,12 @@ test('social sign-in carries the provider to /auth/callback, so GitHub and Disco
     assert.match(callback, /<AuthCallback provider=\{provider\}/, `${ui}: the SDK exchanges with the named provider`);
     assert.match(callback, /\['google', 'github', 'discord'\]/, `${ui}: only a platform provider is accepted`);
     assert.match(callback, /new URLSearchParams\(search\)\.get\('provider'\)/, `${ui}: read from the callback query`);
+    // No generated app file names README.md: the deploy collector publishes a root file that
+    // app code references by name, and the README is a developer file, never served.
+    for (const file of createFeatureTemplate(starter.selection, { appName: 'Fieldbook' })) {
+      if (file.path.endsWith('.md')) continue;
+      assert.doesNotMatch(file.content, /README\.md/, `${ui} ${file.path} names README.md`);
+    }
     // Google is on by default (founder task tsk_bfb12a6d); the platform owns the OAuth client.
     assert.match(starter.read('src/config.ts'), /export const SIGN_IN_PROVIDERS: SignInProvider\[\] = \['google'\];/, `${ui}: Google by default`);
     // With no provider configured the card has no providers slot, so no "or use email" divider.

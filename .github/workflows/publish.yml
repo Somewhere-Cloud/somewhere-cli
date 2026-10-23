@@ -79,7 +79,6 @@ jobs:
         run: node scripts/publish-release.mjs check "$SOURCE_SHA" "$EXPECTED_VERSION"
       - run: npm ci
       - run: npm run build
-      - run: npm test
       - name: Recheck identity immediately before publication
         id: final
         env:
@@ -93,8 +92,12 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
       - name: Verify published registry source, SRI and Sigstore
+        id: verification
         if: always() && steps.final.outcome == 'success' && (steps.final.outputs.mode == 'in-sync' || steps.publication.outcome == 'success' || steps.publication.outcome == 'failure')
         env:
           SOURCE_SHA: ${{ steps.final.outputs.published_head }}
           EXPECTED_VERSION: ${{ steps.candidate.outputs.version }}
         run: node scripts/publish-release.mjs verify "$SOURCE_SHA" "$EXPECTED_VERSION"
+      - name: Test verified published artifact source
+        if: always() && steps.verification.outcome == 'success'
+        run: npm test

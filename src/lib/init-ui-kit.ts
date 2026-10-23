@@ -1052,7 +1052,7 @@ export function ProviderButtons({ providers, signIn }: { providers: ReadonlyArra
 }
 ` },
   { path: 'src/ui/index.ts', content: `// The app's UI kit. Pages import from here; styles live in src/styles/app.css
-// and read src/styles/tokens.css. See .agents/skills/design/SKILL.md.
+// and read src/styles/tokens.css. The rules are in README.md under "Look".
 export { Badge, type Tone } from './Badge';
 export { Button, LinkButton } from './Button';
 export { Card } from './Card';
@@ -1478,7 +1478,7 @@ export function ProviderButtons({ providers, signIn }: { providers: ReadonlyArra
 }
 ` },
   { path: 'src/ui/index.ts', content: `// The app's UI kit. Pages import from here; styles live in src/styles/app.css
-// and read src/styles/tokens.css. See .agents/skills/design/SKILL.md.
+// and read src/styles/tokens.css. The rules are in README.md under "Look".
 export { Badge, type Tone } from './Badge';
 export { Button, LinkButton } from './Button';
 export { Card } from './Card';

@@ -539,8 +539,9 @@ export const APP_NAME = ${JSON.stringify(appName)};
 export const APP_TAGLINE = "Build your app in src/pages/HomePage.tsx.";
 
 // "Continue with …" buttons above the email form, in this order. The platform
-// owns the OAuth clients, so nothing else is needed: add 'google' and deploy.
-export const SIGN_IN_PROVIDERS: SignInProvider[] = [];
+// owns the OAuth clients, so nothing else is needed: Google is on by default;
+// remove it for email-only sign-in, or add 'github' / 'discord' and deploy.
+export const SIGN_IN_PROVIDERS: SignInProvider[] = ['google'];
 `;
 }
 
@@ -2822,9 +2823,10 @@ function readme(selection: InitSelection): string {
     'A password account sees a "Verify your email" panel until it enters the 6-digit',
     'code the platform emails it (`auth.requestEmailVerification` / `auth.verifyEmail`',
     'through the same SDK route; the session cookie decides the account).',
-    'Google, GitHub and Discord sign-in are platform-hosted: list them in',
-    '`SIGN_IN_PROVIDERS` (`src/config.ts`) and the buttons, `auth.<provider>SignInUrl`',
-    'and the `/auth/callback` page (the SDK\'s `AuthCallback`) are already wired.',
+    'Google, GitHub and Discord sign-in are platform-hosted: `SIGN_IN_PROVIDERS`',
+    '(`src/config.ts`) starts as `[\'google\']`; remove it for email-only sign-in or',
+    'add the others. The buttons, `auth.<provider>SignInUrl` and the `/auth/callback`',
+    'page (the SDK\'s `AuthCallback`) are already wired.',
     'Password reset and MFA enrolment are not generated.',
     '',
     '## Sign-in and invitation links',

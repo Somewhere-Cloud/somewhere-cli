@@ -250,6 +250,8 @@ test('social sign-in carries the provider to /auth/callback, so GitHub and Disco
     assert.match(callback, /<AuthCallback provider=\{provider\}/, `${ui}: the SDK exchanges with the named provider`);
     assert.match(callback, /\['google', 'github', 'discord'\]/, `${ui}: only a platform provider is accepted`);
     assert.match(callback, /new URLSearchParams\(search\)\.get\('provider'\)/, `${ui}: read from the callback query`);
+    // Google is on by default (founder task tsk_bfb12a6d); the platform owns the OAuth client.
+    assert.match(starter.read('src/config.ts'), /export const SIGN_IN_PROVIDERS: SignInProvider\[\] = \['google'\];/, `${ui}: Google by default`);
     // With no provider configured the card has no providers slot, so no "or use email" divider.
     const signIn = starter.read('src/pages/SignInPage.tsx');
     assert.match(signIn, /providers=\{SIGN_IN_PROVIDERS\.length > 0 \? <ProviderButtons providers=\{SIGN_IN_PROVIDERS\} signIn=\{providers\} \/> : undefined\}/, `${ui}: providers slot only when configured`);

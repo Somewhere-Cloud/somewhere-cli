@@ -5,7 +5,7 @@
 ### Added
 
 - `somewhere init` auth starters ship a UI kit in `src/ui` (`Button`, `TextField`, `SelectField`, `TextareaField`, `CheckboxField`, `FormRow`, `Card`, `Table`, `Stat`, `Badge`, `Tabs`, `Dialog`, `Notice`, `Skeleton`, `Stack`, `Grid`, `Inline`, `PageHeader`) with styled and headless twins that share props, and `src/pages/HomePage.tsx` is a worked example of them (header, stats, table in a card, dialog form) instead of an empty state. The README gains a "Look" section with the rules that keep generated pages consistent (tokens only, no global tag styles, one primary action, cards for peers).
-- Social sign-in is a config toggle: list `google`, `github` or `discord` in `SIGN_IN_PROVIDERS` (`src/config.ts`) and the "Continue with …" buttons, `src/auth/useProviderSignIn.ts` and the `/auth/callback` page (the SDK's `AuthCallback`) are already wired. `APP_TAGLINE` sets the sign-in page's one-line description.
+- Social sign-in is a config toggle: `SIGN_IN_PROVIDERS` (`src/config.ts`) starts as `['google']`, so a new app shows "Continue with Google" out of the box (the platform owns the OAuth client; nothing to configure); set it to `[]` for email-only sign-in or add `github` / `discord`. The "Continue with …" buttons, `src/auth/useProviderSignIn.ts` and the `/auth/callback` page (the SDK's `AuthCallback`) are already wired. `APP_TAGLINE` sets the sign-in page's one-line description.
 - `src/styles/tokens.css` gets a `prefers-color-scheme: dark` block, semantic tones (success/warning/danger/info), shadows and a cross-platform font stack, so the starter no longer falls back to Arial/Georgia off macOS. `index.html` gets description, `theme-color` and an SVG favicon.
 
 ### Changed

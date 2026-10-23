@@ -418,7 +418,7 @@ export class ApiClient {
     method: string,
     path: string,
     body?: unknown,
-    opts?: { timeoutMs?: number },
+    opts?: { timeoutMs?: number; captureIncompleteBody?: true },
   ): Promise<{ status: number; ok: boolean; body: string; headers: Record<string, string> }> {
     const url = `${API_BASE_URL}${path}`;
     const headers: Record<string, string> = { Authorization: `Bearer ${this.token}` };
@@ -450,10 +450,16 @@ export class ApiClient {
     res.headers.forEach((value, key) => {
       responseHeaders[key.toLowerCase()] = value;
     });
+    let responseText: string;
+    try { responseText = await res.text(); }
+    catch (cause) {
+      if (opts?.captureIncompleteBody) throw incompleteResponseFailure(cause, res.status, name => res.headers.get(name));
+      throw cause;
+    }
     return {
       status: res.status,
       ok: res.status < 400,
-      body: await res.text(),
+      body: responseText,
       headers: responseHeaders,
     };
   }
@@ -481,6 +487,8 @@ export interface CliApiErrorMeta {
 }
 
 export class CliApiError extends Error {
+  /** Original body-reader failure, retained only so raw command output stays unchanged. */
+  originalCause?: unknown;
   constructor(
     public readonly code: string,
     message: string,
@@ -493,6 +501,19 @@ export class CliApiError extends Error {
     super(message);
     this.name = 'CliApiError';
   }
+}
+
+/** Typed capture for interrupted bodies; headers alone never establish a mutation's outcome. */
+export function incompleteResponseFailure(
+  cause: unknown, status: number, header: (name: string) => string | null,
+): CliApiError {
+  const failure = new CliApiError('RESPONSE_BODY_ERROR', '', status, undefined, undefined, {
+    requestId: header('x-request-id') ?? undefined,
+    traceId: header('x-trace-id') ?? undefined,
+    responseBodyIncomplete: true,
+  });
+  failure.originalCause = cause;
+  return failure;
 }
 
 /**

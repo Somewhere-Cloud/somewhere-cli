@@ -2,10 +2,10 @@ import { Command } from 'commander';
 import { createReadStream } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import { extname, resolve } from 'node:path';
-import { ApiClient, CliApiError, LONG_CALL_TIMEOUT_MS } from '../lib/client.js';
+import { ApiClient, CliApiError, incompleteResponseFailure, LONG_CALL_TIMEOUT_MS } from '../lib/client.js';
 import { getToken } from '../lib/config.js';
 import { operationLabel } from '../lib/repro-packet.js';
-import { error, noteFailure, platformErrorEnvelope, printJson } from '../lib/output.js';
+import { error, noteFailure, platformErrorEnvelope, printJson, printSupportPacketRecovery } from '../lib/output.js';
 
 interface ApiCommandOptions {
   data?: string;
@@ -60,6 +60,10 @@ export function registerApi(program: Command) {
         }
         return cause;
       };
+      const capture = (cause: unknown): void => {
+        noteFailure(withOperation(cause));
+        printSupportPacketRecovery(cause);
+      };
       const responseFailure = (status: number, header: (name: string) => string | null | undefined, payload?: ApiEnvelope): CliApiError =>
         withOperation(new CliApiError(
           typeof payload?.error === 'string' ? payload.error : 'HTTP_ERROR', '', status,
@@ -72,6 +76,7 @@ export function registerApi(program: Command) {
         )) as CliApiError;
 
       if (opts.dataFile !== undefined) {
+        let responseCapture: CliApiError | undefined;
         try {
           const stdin = opts.dataFile === '-';
           const source = stdin ? undefined : resolve(opts.dataFile);
@@ -94,10 +99,14 @@ export function registerApi(program: Command) {
 
           if (opts.raw) {
             if (response.body) {
-              for await (const chunk of response.body) process.stdout.write(chunk);
+              try { for await (const chunk of response.body) process.stdout.write(chunk); }
+              catch (cause) {
+                responseCapture = incompleteResponseFailure(cause, response.status, name => response.headers.get(name));
+                throw cause;
+              }
             }
             if (!response.ok) {
-              noteFailure(responseFailure(response.status, name => response.headers.get(name)));
+              capture(responseFailure(response.status, name => response.headers.get(name)));
               process.exitCode = 1;
             }
             return;
@@ -105,15 +114,22 @@ export function registerApi(program: Command) {
 
           let payload: ApiEnvelope;
           try {
-            payload = await response.json() as ApiEnvelope;
+            let text: string;
+            try { text = await response.text(); }
+            catch (cause) {
+              responseCapture = incompleteResponseFailure(cause, response.status, name => response.headers.get(name));
+              throw cause;
+            }
+            payload = JSON.parse(text) as ApiEnvelope;
           } catch {
+            responseCapture ??= new CliApiError('INVALID_RESPONSE', '', response.status, undefined, undefined, {
+              requestId: response.headers.get('x-request-id') ?? undefined,
+              traceId: response.headers.get('x-trace-id') ?? undefined,
+            });
             throw new CliApiError(
               'INVALID_RESPONSE',
               `Non-JSON response (${response.status}). Use --raw to print it.`,
-              response.status, undefined, undefined, {
-                requestId: response.headers.get('x-request-id') ?? undefined,
-                traceId: response.headers.get('x-trace-id') ?? undefined,
-              },
+              response.status,
             );
           }
           if (response.ok && payload.ok === true) {
@@ -126,10 +142,12 @@ export function registerApi(program: Command) {
             message: payload.message ?? 'Unknown error',
             status: response.status,
           });
-          noteFailure(responseFailure(response.status, name => response.headers.get(name), payload));
+          capture(responseFailure(response.status, name => response.headers.get(name), payload));
           process.exit(1);
         } catch (err) {
-          error(err instanceof Error ? err.message : String(err), withOperation(err));
+          const captured = withOperation(responseCapture ?? err);
+          error(err instanceof Error ? err.message : String(err), err, captured);
+          printSupportPacketRecovery(captured);
           process.exit(1);
         }
       }
@@ -138,12 +156,15 @@ export function registerApi(program: Command) {
       // (e.g. /v1/db/dump returns SQL) must NOT be an error (audit #14).
       if (opts.raw) {
         try {
-          const r = await client.callRaw(method.toUpperCase(), apiPath, body);
+          const r = await client.callRaw(method.toUpperCase(), apiPath, body, { captureIncompleteBody: true });
           process.stdout.write(r.body.endsWith('\n') ? r.body : r.body + '\n');
-          if (!r.ok) noteFailure(responseFailure(r.status, name => r.headers[name]));
+          if (!r.ok) capture(responseFailure(r.status, name => r.headers[name]));
           if (!r.ok) process.exitCode = 1;
         } catch (err) {
-          error(String(err), withOperation(err));
+          const captured = withOperation(err);
+          const displayed = err instanceof CliApiError && err.meta.responseBodyIncomplete ? err.originalCause : err;
+          error(String(displayed), displayed, captured);
+          printSupportPacketRecovery(captured);
           process.exit(1);
         }
         return;
@@ -154,7 +175,7 @@ export function registerApi(program: Command) {
         printJson(result);
       } catch (err) {
         if (err instanceof Error && 'code' in err) {
-          noteFailure(withOperation(err));
+          capture(err);
           const apiErr = err as Error & { code: string; statusCode: number };
           const platform = platformErrorEnvelope(err);
           printJson({
@@ -166,6 +187,7 @@ export function registerApi(program: Command) {
           });
         } else {
           error(String(err), withOperation(err));
+          printSupportPacketRecovery(err);
         }
         process.exit(1);
       }

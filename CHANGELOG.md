@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.37.71
+
+### Fixed
+
+- `somewhere logs --trace` text output: every continuation line of a stored stack carries one fixed marker (`      stack | `), each line escaped, so stack text can never pass as a log row of its own (#90).
+- `somewhere support packet`: "Not collected" now lists only the parts of a failure the packet never reads. The unproven blanket token/password/email entries are gone, and redaction is unchanged (vendored from platform #875) (#92).
+
 ## 0.37.70
 
 ### Fixed

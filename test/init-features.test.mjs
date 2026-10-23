@@ -241,6 +241,21 @@ test('every auth starter routes /auth/magic before the gate; magic-link adds onl
   }
 });
 
+test('social sign-in carries the provider to /auth/callback, so GitHub and Discord codes are exchanged with their own provider (reviewer B1)', () => {
+  for (const ui of ['styled', 'headless']) {
+    const starter = generate('auth', ui);
+    const hook = starter.read('src/auth/useProviderSignIn.ts');
+    assert.match(hook, /window\.location\.origin \+ '\/auth\/callback\?provider=' \+ provider/, `${ui}: the redirect URI names the provider`);
+    const callback = starter.read('src/pages/AuthCallbackPage.tsx');
+    assert.match(callback, /<AuthCallback provider=\{provider\}/, `${ui}: the SDK exchanges with the named provider`);
+    assert.match(callback, /\['google', 'github', 'discord'\]/, `${ui}: only a platform provider is accepted`);
+    assert.match(callback, /new URLSearchParams\(search\)\.get\('provider'\)/, `${ui}: read from the callback query`);
+    // With no provider configured the card has no providers slot, so no "or use email" divider.
+    const signIn = starter.read('src/pages/SignInPage.tsx');
+    assert.match(signIn, /providers=\{SIGN_IN_PROVIDERS\.length > 0 \? <ProviderButtons providers=\{SIGN_IN_PROVIDERS\} signIn=\{providers\} \/> : undefined\}/, `${ui}: providers slot only when configured`);
+  }
+});
+
 test('every auth starter verifies email through the packaged route, with no token in page code', () => {
   for (const ui of ['styled', 'headless']) {
     const starter = generate('auth', ui);

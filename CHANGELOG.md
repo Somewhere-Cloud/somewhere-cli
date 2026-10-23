@@ -13,6 +13,7 @@
 - `AuthCard` has permanent `providers` (above the form) and `children` (below it) slots; the magic-link module passes its form as a child instead of patching the card's markup, and nothing else is a sibling of the two-column `.auth` grid.
 - The "Verify your email" panel is a quiet notice with secondary buttons, not the page's loudest call to action. `MfaStep` uses the starter's panel and field classes.
 - Starter stylesheet: the notes status line is `.note-status` (`.notice` is the kit's notice component); `.alert` and `.section-title` live in the base stylesheet, so removing a module leaves no orphaned rules.
+- Social sign-in sends the browser to `/auth/callback?provider=<name>` and the callback page passes that provider to the SDK's `AuthCallback`, so a GitHub or Discord code is exchanged with the provider that issued it (the SDK defaults to Google). An unknown `?provider=` is ignored. With `SIGN_IN_PROVIDERS = []` the sign-in card has no providers slot, so no "or use email" divider is shown.
 
 ## 0.37.72
 

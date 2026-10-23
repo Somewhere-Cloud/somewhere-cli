@@ -180,6 +180,8 @@ import { auth, authErrorMessage } from '../services/auth';
 // Social sign-in. The platform owns the OAuth clients: the SDK returns the
 // provider's URL, the browser goes there, and the provider sends it back to
 // /auth/callback (src/pages/AuthCallbackPage.tsx), which completes sign-in.
+// The provider rides along as ?provider= so the callback exchanges the code
+// with the same provider (the platform appends &code= and &attempt= to it).
 function signInUrl(provider: SignInProvider, redirectUri: string): Promise<string> {
   if (provider === 'google') return auth.googleSignInUrl({ redirectUri });
   if (provider === 'github') return auth.githubSignInUrl({ redirectUri });
@@ -196,7 +198,7 @@ export function useProviderSignIn(): ProviderSignIn {
       setPending(provider);
       setError(null);
       try {
-        window.location.assign(await signInUrl(provider, window.location.origin + '/auth/callback'));
+        window.location.assign(await signInUrl(provider, window.location.origin + '/auth/callback?provider=' + provider));
       } catch (reason) {
         setPending(null);
         setError(authErrorMessage(reason));
@@ -208,16 +210,27 @@ export function useProviderSignIn(): ProviderSignIn {
 
 const AUTH_CALLBACK_PAGE = `import { useState } from 'react';
 import { AuthCallback } from '@somewhere-tech/sdk/react';
+import type { SignInProvider } from '../../types/auth';
 import { LinkButton } from '../ui/Button';
 import { linkTo, ROUTES } from '../routes';
 
 // A social sign-in (src/config.ts SIGN_IN_PROVIDERS) sends the browser back
 // here. The SDK exchanges the ?code= for the cookie session; nothing to write.
+// ?provider= names the provider that issued the code (src/auth/useProviderSignIn.ts);
+// anything else is ignored and the SDK's default (google) applies.
+const PROVIDERS: ReadonlyArray<SignInProvider> = ['google', 'github', 'discord'];
+
+function callbackProvider(search: string): SignInProvider | undefined {
+  const value = new URLSearchParams(search).get('provider');
+  return PROVIDERS.find((provider) => provider === value);
+}
+
 export function AuthCallbackPage() {
   const [error, setError] = useState<string | null>(null);
+  const provider = callbackProvider(window.location.search);
   return (
     <main className="loading">
-      <AuthCallback onDone={() => window.location.replace(ROUTES.home)} onError={setError}>
+      <AuthCallback provider={provider} onDone={() => window.location.replace(ROUTES.home)} onError={setError}>
         {error ? (
           <div className="panel unavailable" role="alert">
             <p className="panel__title">Sign-in didn't complete</p>
@@ -1751,7 +1764,7 @@ export function SignInPage() {
     <>
       {unconfirmed ? <SignOutUnconfirmed pending={unconfirmed.pending} onRetry={unconfirmed.retry} /> : null}
       <AuthCard appName={APP_NAME} tagline={APP_TAGLINE} form={form}
-        providers={<ProviderButtons providers={SIGN_IN_PROVIDERS} signIn={providers} />} />
+        providers={SIGN_IN_PROVIDERS.length > 0 ? <ProviderButtons providers={SIGN_IN_PROVIDERS} signIn={providers} /> : undefined} />
     </>
   );
 }
@@ -2478,7 +2491,7 @@ export function SignInPage() {
     <>
       {unconfirmed ? <SignOutUnconfirmed pending={unconfirmed.pending} onRetry={unconfirmed.retry} /> : null}
       <AuthCard appName={APP_NAME} tagline={APP_TAGLINE} form={form}
-        providers={<ProviderButtons providers={SIGN_IN_PROVIDERS} signIn={providers} />}>
+        providers={SIGN_IN_PROVIDERS.length > 0 ? <ProviderButtons providers={SIGN_IN_PROVIDERS} signIn={providers} /> : undefined}>
         <MagicLinkForm request={magicLink} />
       </AuthCard>
     </>

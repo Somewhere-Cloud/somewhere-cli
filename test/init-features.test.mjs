@@ -264,6 +264,17 @@ test('social sign-in carries the provider to /auth/callback, so GitHub and Disco
   }
 });
 
+test('index.html escapes the app name for text and for the description attribute', () => {
+  for (const ui of ['styled', 'headless']) {
+    const starter = generate('auth', ui, 'Tom & Jerry <b>"quoted"</b>');
+    const html = starter.read('index.html');
+    assert.match(html, /<title>Tom &amp; Jerry &lt;b&gt;&quot;quoted&quot;&lt;\/b&gt;<\/title>/);
+    assert.match(html, /<meta name="description" content="Tom &amp; Jerry &lt;b&gt;&quot;quoted&quot;&lt;\/b&gt;" \/>/);
+    assert.doesNotMatch(html, /<b>|\\"/, `${ui}: no raw markup or JSON escapes in index.html`);
+    assert.match(starter.read('src/config.ts'), /export const APP_NAME = "Tom & Jerry <b>\\"quoted\\"<\/b>";/);
+  }
+});
+
 test('every auth starter verifies email through the packaged route, with no token in page code', () => {
   for (const ui of ['styled', 'headless']) {
     const starter = generate('auth', ui);

@@ -4,7 +4,8 @@ import { stat } from 'node:fs/promises';
 import { extname, resolve } from 'node:path';
 import { ApiClient, CliApiError, LONG_CALL_TIMEOUT_MS } from '../lib/client.js';
 import { getToken } from '../lib/config.js';
-import { error, platformErrorEnvelope, printJson } from '../lib/output.js';
+import { operationLabel } from '../lib/repro-packet.js';
+import { error, noteFailure, platformErrorEnvelope, printJson } from '../lib/output.js';
 
 interface ApiCommandOptions {
   data?: string;
@@ -19,6 +20,8 @@ interface ApiEnvelope {
   data?: unknown;
   error?: string;
   message?: string;
+  retry?: unknown;
+  retry_after_ms?: unknown;
 }
 
 export function registerApi(program: Command) {
@@ -51,6 +54,22 @@ export function registerApi(program: Command) {
       }
 
       const apiPath = path.startsWith('/v1/') ? path.slice(3) : path;
+      const withOperation = (cause: unknown): unknown => {
+        if (cause instanceof CliApiError && !('operation' in cause)) {
+          Object.defineProperty(cause, 'operation', { value: operationLabel(method, apiPath), enumerable: false });
+        }
+        return cause;
+      };
+      const responseFailure = (status: number, header: (name: string) => string | null | undefined, payload?: ApiEnvelope): CliApiError =>
+        withOperation(new CliApiError(
+          typeof payload?.error === 'string' ? payload.error : 'HTTP_ERROR', '', status,
+          undefined, undefined, {
+            requestId: header('x-request-id') ?? undefined,
+            traceId: header('x-trace-id') ?? undefined,
+            ...(typeof payload?.retry === 'boolean' ? { retry: payload.retry } : {}),
+            ...(typeof payload?.retry_after_ms === 'number' ? { retryAfterMs: payload.retry_after_ms } : {}),
+          },
+        )) as CliApiError;
 
       if (opts.dataFile !== undefined) {
         try {
@@ -77,7 +96,10 @@ export function registerApi(program: Command) {
             if (response.body) {
               for await (const chunk of response.body) process.stdout.write(chunk);
             }
-            if (!response.ok) process.exitCode = 1;
+            if (!response.ok) {
+              noteFailure(responseFailure(response.status, name => response.headers.get(name)));
+              process.exitCode = 1;
+            }
             return;
           }
 
@@ -88,7 +110,10 @@ export function registerApi(program: Command) {
             throw new CliApiError(
               'INVALID_RESPONSE',
               `Non-JSON response (${response.status}). Use --raw to print it.`,
-              response.status,
+              response.status, undefined, undefined, {
+                requestId: response.headers.get('x-request-id') ?? undefined,
+                traceId: response.headers.get('x-trace-id') ?? undefined,
+              },
             );
           }
           if (response.ok && payload.ok === true) {
@@ -101,9 +126,10 @@ export function registerApi(program: Command) {
             message: payload.message ?? 'Unknown error',
             status: response.status,
           });
+          noteFailure(responseFailure(response.status, name => response.headers.get(name), payload));
           process.exit(1);
         } catch (err) {
-          error(err instanceof Error ? err.message : String(err), err);
+          error(err instanceof Error ? err.message : String(err), withOperation(err));
           process.exit(1);
         }
       }
@@ -114,9 +140,10 @@ export function registerApi(program: Command) {
         try {
           const r = await client.callRaw(method.toUpperCase(), apiPath, body);
           process.stdout.write(r.body.endsWith('\n') ? r.body : r.body + '\n');
+          if (!r.ok) noteFailure(responseFailure(r.status, name => r.headers[name]));
           if (!r.ok) process.exitCode = 1;
         } catch (err) {
-          error(String(err), err);
+          error(String(err), withOperation(err));
           process.exit(1);
         }
         return;
@@ -127,6 +154,7 @@ export function registerApi(program: Command) {
         printJson(result);
       } catch (err) {
         if (err instanceof Error && 'code' in err) {
+          noteFailure(withOperation(err));
           const apiErr = err as Error & { code: string; statusCode: number };
           const platform = platformErrorEnvelope(err);
           printJson({
@@ -137,7 +165,7 @@ export function registerApi(program: Command) {
             ...(platform?.extra ?? {}),
           });
         } else {
-          error(String(err), err);
+          error(String(err), withOperation(err));
         }
         process.exit(1);
       }

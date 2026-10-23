@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.37.72
+
+### Fixed
+
+- New apps from `somewhere init` use SDK 0.12.6. It keeps session verification outages as an unavailable response instead of reporting that the user signed out, and uses browser keepalive for refresh requests to reduce interruption during navigation. Keepalive is a limited mitigation, not full recovery from a lost refresh response (#96).
+
 ## 0.37.71
 
 ### Fixed

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.37.76
+
+### Changed
+
+- The bundled agent skills pack is refreshed from the platform docs and gains a seventh skill, `design`: the UI kit in `src/ui`, the token rules, the `AuthCard` slots, and the two mistakes that make a generated page look unfinished. New starters install it in `.agents/skills/design`; `somewhere skills update` brings it to an existing project.
+
 ## 0.37.75
 
 ### Fixed

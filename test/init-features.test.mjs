@@ -116,7 +116,11 @@ test('catalog is machine-readable and lists module files from the generator', ()
   ]);
   assert.deepEqual(catalog.ui.map((u) => u.id), ['styled', 'headless']);
   assert.ok(catalog.ui[0].files.includes('src/styles/tokens.css'));
-  assert.deepEqual(catalog.ui[1].files, ['src/ui/AppShell.tsx', 'src/ui/AssistantPanel.tsx', 'src/ui/AuthCard.tsx', 'src/ui/MagicLink.tsx', 'src/ui/NotesBoard.tsx', 'src/ui/VerifyEmail.tsx', 'src/ui/feedback.tsx']);
+  assert.deepEqual(catalog.ui[1].files, [
+    'src/ui/AppShell.tsx', 'src/ui/AssistantPanel.tsx', 'src/ui/AuthCard.tsx', 'src/ui/Badge.tsx', 'src/ui/Button.tsx', 'src/ui/Card.tsx',
+    'src/ui/Dialog.tsx', 'src/ui/Field.tsx', 'src/ui/MagicLink.tsx', 'src/ui/NotesBoard.tsx', 'src/ui/Notice.tsx', 'src/ui/ProviderButtons.tsx',
+    'src/ui/Skeleton.tsx', 'src/ui/Stat.tsx', 'src/ui/Table.tsx', 'src/ui/Tabs.tsx', 'src/ui/VerifyEmail.tsx', 'src/ui/feedback.tsx', 'src/ui/layout.tsx',
+  ]);
   assert.ok(!catalog.ui[0].files.some((path) => path.startsWith('src/pages/')), 'pages are shared by both modes');
   assert.equal(catalog.defaults.ui, 'styled');
   for (const id of ['private-files', 'payments', 'teams', 'public-sharing', 'password-reset', 'oauth', 'mfa', 'agent-durable']) {
@@ -179,8 +183,10 @@ test('views take props only, and both UI modes share pages, hooks and view signa
   }
   const { dir, result } = styled;
   const uiFiles = [...result.created.filter((path) => path.startsWith('src/ui/'))];
-  assert.equal(uiFiles.length, 8);
+  // 8 views plus the 13-file UI kit (12 components and its index.ts barrel).
+  assert.equal(uiFiles.length, 21);
   assert.ok(uiFiles.includes('src/ui/MfaStep.tsx'));
+  assert.ok(uiFiles.includes('src/ui/index.ts'));
   for (const [root, path] of [...uiFiles.map((p) => [dir, p]), ...uiFiles.map((p) => [plain.dir, p])]) {
     const content = readFileSync(join(root, path), 'utf8');
     const imports = [...content.matchAll(/from '([^']+)'/g)].map((m) => m[1]);
@@ -220,12 +226,13 @@ test('every auth starter routes /auth/magic before the gate; magic-link adds onl
 
     // Only magic-link sends links.
     assert.match(magic.read('src/pages/SignInPage.tsx'), /<MagicLinkForm request=\{magicLink\} \/>/);
+    // AuthCard's slots are permanent, so the module adds a child instead of patching markup.
+    assert.equal(plain.read('src/ui/AuthCard.tsx'), magic.read('src/ui/AuthCard.tsx'), `${ui}: one AuthCard`);
     assert.match(magic.read('src/ui/AuthCard.tsx'), /children\?: ReactNode/);
     assert.match(magic.read('src/ui/AuthCard.tsx'), /\{children\}/);
     assert.match(magic.read('src/auth/magic-link.ts'), /auth\.sendMagicLink\(\{ email: address \}\)/);
-    for (const path of ['src/pages/SignInPage.tsx', 'src/ui/AuthCard.tsx']) {
-      assert.doesNotMatch(plain.read(path), /MagicLink|children/, `${ui} ${path}`);
-    }
+    assert.doesNotMatch(plain.read('src/pages/SignInPage.tsx'), /MagicLink/, `${ui} src/pages/SignInPage.tsx`);
+    assert.doesNotMatch(plain.read('src/ui/AuthCard.tsx'), /MagicLink/, `${ui} src/ui/AuthCard.tsx`);
     for (const path of ['src/auth/magic-link.ts', 'src/ui/MagicLink.tsx', 'types/magic-link.ts']) {
       assert.doesNotMatch(plain.read(path), /sendMagicLink|MagicLinkForm|MagicLinkRequest|FormEvent/, `${ui} ${path}`);
     }

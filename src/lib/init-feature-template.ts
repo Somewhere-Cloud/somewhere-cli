@@ -52,7 +52,8 @@ const TSCONFIG = `{
 `;
 
 function indexHtml(appName: string): string {
-  const title = appName.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  // Text and attribute safe: the name is also the description attribute value.
+  const title = appName.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   return `<!doctype html>
 <html lang="en">
   <head>

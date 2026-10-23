@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.37.71
+
+### Fixed
+
+- `somewhere logs` text output: every recorded stack line now starts with a fixed `stack | ` marker under its log row, so stack text can never pass as a log row. A stack longer than 30 lines ends with "… N more lines (--json shows the whole stack)". `--json` is unchanged (#90).
+- `somewhere support packet`: the packet's `omitted` list no longer names `emails`, `tokens` or `passwords`. The list names only the parts of a failure the packet builder never reads; it was never a guarantee that a collected field cannot contain such a value, so review a packet before you submit it (#92).
+
 ## 0.37.70
 
 ### Fixed

@@ -23,7 +23,7 @@ let errorRows = [];
 const server = createServer(async (req, res) => {
   for await (const _ of req) { /* drain */ }
   res.setHeader('Content-Type', 'application/json');
-  if (req.url.startsWith('/v1/errors/recent')) return res.end(JSON.stringify({ ok: true, data: { errors: errorRows } }));
+  if (/^(?:\/v1)?\/errors\/recent\b/.test(req.url)) return res.end(JSON.stringify({ ok: true, data: { errors: errorRows } }));
   res.end(JSON.stringify({ ok: true, data: { logs: logRows } }));
 });
 await new Promise((r) => server.listen(0, '127.0.0.1', r));
@@ -89,7 +89,7 @@ test('B3: logs and errors text render one record per row with no raw control byt
     assert.equal(r.status, 0, r.out);
     for (const byte of [0x1b, 0x07, 0x0d]) assert.equal(r.bytes.includes(byte), false, `${args.join(' ')}: no raw 0x${byte.toString(16)}`);
     assert.equal(/[\u2028\u2029\u202a-\u202e]/.test(r.out), false, `${args.join(' ')}: no raw separators or bidi overrides`);
-    const records = r.out.split('\n').filter((line) => /^  \[\w+\]/.test(line));
+    const records = r.out.split('\n').filter((line) => /^\s*\[\w+\s*\]/.test(line));
     assert.equal(records.length, 2, `${args.join(' ')}: exactly one record line per stored row:\n${r.out}`);
     assert.equal(r.out.includes('\n  [info]  10:00:00 AM  FORGED'), false, 'no forged row');
     assert.match(r.out, /ok\\n  \[info\]  10:00:00 AM  FORGED login succeeded\\r\\x1b\[2J/, 'the forged text is shown escaped, inside its own row');
@@ -102,6 +102,7 @@ test('B3: logs and errors text render one record per row with no raw control byt
   errorRows = [{ endpoint: '/api/x', method: 'POST', status_code: 500, error_code: 'FUNCTION_ERROR', error_message: FORGE, kind: 'exception', source: 'function', created_at: new Date().toISOString() }];
   const errors = await run(['errors'], fx);
   assert.equal(errors.status, 0, errors.out);
+  assert.match(errors.out, /POST \/api\/x/, `the error row is actually rendered (not an empty window):\n${errors.out}`);
   for (const byte of [0x1b, 0x07, 0x0d]) assert.equal(errors.bytes.includes(byte), false, `errors: no raw 0x${byte.toString(16)}`);
   assert.equal(errors.out.includes('\n  [info]'), false, 'errors: no forged row');
 });

@@ -17,3 +17,24 @@ export function terminalSafe(value: unknown): string {
     return code <= 0xff ? `\\x${code.toString(16).padStart(2, '0')}` : `\\u${code.toString(16).padStart(4, '0')}`;
   });
 }
+
+/**
+ * A stored multi-line value (a crash stack) rendered under its record (tsk_da2dba3d). Each line is escaped as
+ * above AND starts with one fixed continuation marker, so no line of untrusted text can begin at the margin
+ * or pass as a record of its own (a stack line written to look like `  [info]  ...` stays visibly inside
+ * the stack). The marker is the ONLY prefix a continuation line ever gets; the text cannot choose another.
+ * Lines past `maxLines` are counted, not silently dropped; --json keeps the whole value.
+ */
+export const CONTINUATION_MARKER = '      stack | ';
+
+export function terminalContinuation(value: unknown, maxLines = 30): string[] {
+  const text = typeof value === 'string' ? value : value == null ? '' : String(value);
+  if (!text) return [];
+  const lines = text.split(/\r?\n/);
+  const shown = lines.slice(0, maxLines).map((line) => CONTINUATION_MARKER + terminalSafe(line));
+  if (lines.length > maxLines) {
+    const more = lines.length - maxLines;
+    shown.push(`${CONTINUATION_MARKER}... ${more} more line${more === 1 ? '' : 's'} (--json shows the whole stack)`);
+  }
+  return shown;
+}

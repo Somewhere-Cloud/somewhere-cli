@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.37.75
+
+### Fixed
+
+- `somewhere init`: the generated `index.html` escapes `"` as `&quot;` in the app name, which is both the `<title>` text and the `description` attribute value, so a quote in a project name no longer ends the attribute.
+
 ## 0.37.74
 
 ### Added

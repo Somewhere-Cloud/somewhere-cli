@@ -1,6 +1,7 @@
 import type { InitScaffoldFile } from './init-scaffold.js';
 import type { InitSelection } from './init-features.js';
 import { INIT_AGENTS_MD, INIT_CLAUDE_MD } from './init-agent-guide.js';
+import { APP_CSS, PLAIN_AUTH_CARD, PLAIN_UI_KIT, STYLED_AUTH_CARD, STYLED_UI_KIT, STYLED_VERIFY_EMAIL, TOKENS_CSS } from './init-ui-kit.js';
 
 // Files for the auth starter (`somewhere init`, `--features ...`). Types,
 // services, hooks, routing and pages are written once. Only the views in
@@ -58,6 +59,10 @@ function indexHtml(appName: string): string {
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>${title}</title>
+    <meta name="description" content="${title}" />
+    <meta name="theme-color" content="#f5f3ee" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#15161a" media="(prefers-color-scheme: dark)" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%231d6b52'/%3E%3Ccircle cx='16' cy='16' r='6' fill='%23fff'/%3E%3C/svg%3E" />
   </head>
   <body>
     <div id="root"></div>
@@ -155,6 +160,92 @@ export interface EmailVerification {
   enterCode(): void;
   submit(): Promise<void>;
   retry(): void;
+}
+
+/** Social sign-in the platform hosts; src/config.ts lists which to show. */
+export type SignInProvider = 'google' | 'github' | 'discord';
+
+/** The "Continue with …" buttons: which provider is opening, and why one failed. */
+export interface ProviderSignIn {
+  pending: SignInProvider | null;
+  error: string | null;
+  start(provider: SignInProvider): Promise<void>;
+}
+`;
+
+const PROVIDER_SIGN_IN_HOOK = `import { useState } from 'react';
+import type { ProviderSignIn, SignInProvider } from '../../types/auth';
+import { auth, authErrorMessage } from '../services/auth';
+
+// Social sign-in. The platform owns the OAuth clients: the SDK returns the
+// provider's URL, the browser goes there, and the provider sends it back to
+// /auth/callback (src/pages/AuthCallbackPage.tsx), which completes sign-in.
+// The provider rides along as ?provider= so the callback exchanges the code
+// with the same provider (the platform appends &code= and &attempt= to it).
+function signInUrl(provider: SignInProvider, redirectUri: string): Promise<string> {
+  if (provider === 'google') return auth.googleSignInUrl({ redirectUri });
+  if (provider === 'github') return auth.githubSignInUrl({ redirectUri });
+  return auth.discordSignInUrl({ redirectUri });
+}
+
+export function useProviderSignIn(): ProviderSignIn {
+  const [pending, setPending] = useState<SignInProvider | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  return {
+    pending,
+    error,
+    async start(provider) {
+      setPending(provider);
+      setError(null);
+      try {
+        window.location.assign(await signInUrl(provider, window.location.origin + '/auth/callback?provider=' + provider));
+      } catch (reason) {
+        setPending(null);
+        setError(authErrorMessage(reason));
+      }
+    },
+  };
+}
+`;
+
+const AUTH_CALLBACK_PAGE = `import { useState } from 'react';
+import { AuthCallback } from '@somewhere-tech/sdk/react';
+import type { SignInProvider } from '../../types/auth';
+import { LinkButton } from '../ui/Button';
+import { linkTo, ROUTES } from '../routes';
+
+// A social sign-in (src/config.ts SIGN_IN_PROVIDERS) sends the browser back
+// here. The SDK exchanges the ?code= for the cookie session; nothing to write.
+// ?provider= names the provider that issued the code (src/auth/useProviderSignIn.ts);
+// anything else is ignored and the SDK's default (google) applies.
+const PROVIDERS: ReadonlyArray<SignInProvider> = ['google', 'github', 'discord'];
+
+function callbackProvider(search: string): SignInProvider | undefined {
+  const value = new URLSearchParams(search).get('provider');
+  return PROVIDERS.find((provider) => provider === value);
+}
+
+export function AuthCallbackPage() {
+  const [error, setError] = useState<string | null>(null);
+  const provider = callbackProvider(window.location.search);
+  return (
+    <main className="loading">
+      <AuthCallback provider={provider} onDone={() => window.location.replace(ROUTES.home)} onError={setError}>
+        {error ? (
+          <div className="panel unavailable" role="alert">
+            <p className="panel__title">Sign-in didn't complete</p>
+            <p className="muted">{error}</p>
+            <LinkButton link={linkTo(ROUTES.home)} variant="primary">Back to sign in</LinkButton>
+          </div>
+        ) : (
+          <>
+            <span className="spinner" aria-hidden="true" />
+            <p role="status">Signing you in…</p>
+          </>
+        )}
+      </AuthCallback>
+    </main>
+  );
 }
 `;
 
@@ -439,8 +530,18 @@ createRoot(document.getElementById('root')!).render(
 }
 
 function configTs(appName: string): string {
-  return `// Shown in the header and on the sign-in page; index.html holds the tab title.
+  return `import type { SignInProvider } from '../types/auth';
+
+// Shown in the header and on the sign-in page; index.html holds the tab title.
 export const APP_NAME = ${JSON.stringify(appName)};
+
+// One line under the sign-in title: what the app is for.
+export const APP_TAGLINE = "Build your app in src/pages/HomePage.tsx.";
+
+// "Continue with …" buttons above the email form, in this order. The platform
+// owns the OAuth clients, so nothing else is needed: Google is on by default;
+// remove it for email-only sign-in, or add 'github' / 'discord' and deploy.
+export const SIGN_IN_PROVIDERS: SignInProvider[] = ['google'];
 `;
 }
 
@@ -1629,35 +1730,42 @@ const MFA_VIEW = `import type { MfaContinuation } from '../../types/auth';
 
 export function MfaStep({ continuation }: { continuation: MfaContinuation }) {
   return (
-    <form className="auth-card" onSubmit={(event) => { event.preventDefault(); void continuation.submit(); }}>
-      <h1>Finish signing in</h1>
-      <label className="auth-field">Authenticator or backup code
-        <input autoComplete="one-time-code" autoFocus value={continuation.code}
-          disabled={continuation.pending} onChange={(event) => continuation.setCode(event.target.value)} />
-      </label>
-      {continuation.error ? <p role="alert">{continuation.error}</p> : null}
-      <button type="submit" disabled={continuation.pending || !continuation.code.trim()}>
-        {continuation.pending ? 'Signing in…' : 'Finish signing in'}
-      </button>
-    </form>
+    <main className="loading">
+      <form className="panel auth__form" onSubmit={(event) => { event.preventDefault(); void continuation.submit(); }}>
+        <h1 className="panel__title">Finish signing in</h1>
+        <div className="field">
+          <label className="field__label" htmlFor="mfa-code"><span>Authenticator or backup code</span></label>
+          <input id="mfa-code" className="control" autoComplete="one-time-code" inputMode="numeric" autoFocus value={continuation.code}
+            disabled={continuation.pending} onChange={(event) => continuation.setCode(event.target.value)} />
+        </div>
+        {continuation.error ? <p className="error" role="alert">{continuation.error}</p> : null}
+        <button type="submit" className="button" disabled={continuation.pending || !continuation.code.trim()} aria-busy={continuation.pending}>
+          {continuation.pending ? 'Signing in…' : 'Finish signing in'}
+        </button>
+      </form>
+    </main>
   );
 }
 `;
 
 const SIGN_IN_PAGE = `import { useCredentialsForm, useUnconfirmedSignOut } from '../auth/hooks';
-import { APP_NAME } from '../config';
+import { useProviderSignIn } from '../auth/useProviderSignIn';
+import { APP_NAME, APP_TAGLINE, SIGN_IN_PROVIDERS } from '../config';
 import { AuthCard } from '../ui/AuthCard';
 import { MfaStep } from '../ui/MfaStep';
+import { ProviderButtons } from '../ui/ProviderButtons';
 import { SignOutUnconfirmed } from '../ui/feedback';
 
 export function SignInPage() {
   const form = useCredentialsForm();
+  const providers = useProviderSignIn();
   const unconfirmed = useUnconfirmedSignOut();
   if (form.mfa.required) return <MfaStep continuation={form.mfa} />;
   return (
     <>
       {unconfirmed ? <SignOutUnconfirmed pending={unconfirmed.pending} onRetry={unconfirmed.retry} /> : null}
-      <AuthCard appName={APP_NAME} form={form} />
+      <AuthCard appName={APP_NAME} tagline={APP_TAGLINE} form={form}
+        providers={SIGN_IN_PROVIDERS.length > 0 ? <ProviderButtons providers={SIGN_IN_PROVIDERS} signIn={providers} /> : undefined} />
     </>
   );
 }
@@ -1730,17 +1838,91 @@ export function HomePage({ user }: { user: User }) {
 }
 `;
   }
-  return `import type { User } from '../../types/auth';
-import { EmptyState } from '../ui/feedback';
+  return `import { useState, type FormEvent } from 'react';
+import type { User } from '../../types/auth';
+import { Badge, type Tone } from '../ui/Badge';
+import { Button } from '../ui/Button';
+import { Card } from '../ui/Card';
+import { Dialog } from '../ui/Dialog';
+import { FormRow, SelectField, TextField } from '../ui/Field';
+import { Grid, PageHeader, Stack } from '../ui/layout';
+import { Stat } from '../ui/Stat';
+import { Table } from '../ui/Table';
 import { SignedInLayout } from './SignedInLayout';
 
-// Your app starts here.
+// Your app starts here. This page is a worked example of the pieces in
+// src/ui: a header with the one main action, a few stats, a table in a card,
+// and a dialog form. Replace the sample data with your tables (db/schema.ts)
+// and keep the shape, or delete it all and start clean.
+
+type Status = 'active' | 'paused' | 'done';
+interface Item { id: string; name: string; assignee: string; status: Status; updated: string; amount: number }
+
+const STATUS_TONE: Record<Status, Tone> = { active: 'success', paused: 'warning', done: 'neutral' };
+const STATUS_OPTIONS = [{ value: 'active', label: 'Active' }, { value: 'paused', label: 'Paused' }, { value: 'done', label: 'Done' }];
+
+const SAMPLE: Item[] = [
+  { id: '1', name: 'Launch checklist', assignee: 'Sam', status: 'active', updated: 'Today', amount: 1240 },
+  { id: '2', name: 'Pricing page copy', assignee: 'Riley', status: 'paused', updated: 'Yesterday', amount: 380 },
+  { id: '3', name: 'Onboarding emails', assignee: 'Sam', status: 'done', updated: '3 days ago', amount: 2150 },
+];
+
 export function HomePage({ user }: { user: User }) {
+  const [items, setItems] = useState(SAMPLE);
+  const [adding, setAdding] = useState(false);
+  const [name, setName] = useState('');
+  const [status, setStatus] = useState<Status>('active');
+
+  const active = items.filter((item) => item.status === 'active').length;
+  const total = items.reduce((sum, item) => sum + item.amount, 0);
+
+  function add(event: FormEvent) {
+    event.preventDefault();
+    if (!name.trim()) return;
+    setItems((rows) => [{ id: String(Date.now()), name: name.trim(), assignee: 'You', status, updated: 'Just now', amount: 0 }, ...rows]);
+    setName('');
+    setAdding(false);
+  }
+
   return (
     <SignedInLayout user={user}>
-      <EmptyState title="You're signed in.">
-        Build your app in src/pages/HomePage.tsx.
-      </EmptyState>
+      <PageHeader eyebrow="Overview" title="Good to see you"
+        description="A worked example of the pieces in src/ui. Replace it with your app."
+        actions={<Button onClick={() => setAdding(true)}>New item</Button>} />
+
+      <Stack gap={6}>
+        <Grid min={200}>
+          <Stat label="Active" value={active} suffix={\`/ \${items.length}\`} detail="items in progress" progress={items.length ? active / items.length : 0} />
+          <Stat label="Total" value={\`$\${total.toLocaleString()}\`} detail="+12% vs last week" detailTone="success" />
+          <Stat label="People" value={new Set(items.map((item) => item.assignee)).size} detail="with items assigned" />
+        </Grid>
+
+        <Card title="Items" description="Everything in one table, newest first." flush
+          actions={<Button variant="secondary" size="sm" onClick={() => setItems(SAMPLE)}>Reset</Button>}>
+          <Table rows={items} rowKey={(item) => item.id} caption="Items" columns={[
+            { key: 'name', header: 'Name', render: (item) => <strong>{item.name}</strong> },
+            { key: 'assignee', header: 'Assignee' },
+            { key: 'status', header: 'Status', render: (item) => <Badge tone={STATUS_TONE[item.status]} dot>{item.status}</Badge> },
+            { key: 'updated', header: 'Updated' },
+            { key: 'amount', header: 'Amount', numeric: true, render: (item) => \`$\${item.amount.toLocaleString()}\` },
+            { key: 'actions', header: <span className="visually-hidden">Actions</span>, numeric: true, width: '1%', render: (item) => (
+              <Button variant="quiet" size="sm" onClick={() => setItems((rows) => rows.filter((row) => row.id !== item.id))}>Remove</Button>
+            ) },
+          ]} />
+        </Card>
+      </Stack>
+
+      <Dialog open={adding} title="New item" onClose={() => setAdding(false)}
+        actions={<Button type="submit" form="new-item" disabled={!name.trim()}>Add item</Button>}>
+        <form id="new-item" onSubmit={add} noValidate>
+          <Stack>
+            <TextField id="item-name" label="Name" autoFocus value={name} onChange={(event) => setName(event.target.value)} placeholder="What is it?" />
+            <FormRow>
+              <SelectField id="item-status" label="Status" options={STATUS_OPTIONS} value={status} onChange={(event) => setStatus(event.target.value as Status)} />
+            </FormRow>
+          </Stack>
+        </form>
+      </Dialog>
     </SignedInLayout>
   );
 }
@@ -1848,55 +2030,6 @@ export function SessionUnavailable({ keepsWork, checkStatus, retrying, onRetry }
 }
 `;
 
-const STYLED_AUTH_CARD = `import type { FormEvent } from 'react';
-import type { CredentialsForm } from '../../types/auth';
-
-export function AuthCard({ appName, form }: { appName: string; form: CredentialsForm }) {
-  const signUp = form.mode === 'sign-up';
-
-  function onSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    void form.submit();
-  }
-
-  return (
-    <main className="auth">
-      <div className="auth__intro">
-        <p className="auth__app">{appName}</p>
-        <h1 className="auth__title">{signUp ? 'Create your account' : 'Welcome back'}</h1>
-        <p className="muted">{signUp ? 'It takes a few seconds.' : 'Sign in to continue.'}</p>
-      </div>
-      <form className="panel auth__form" onSubmit={onSubmit} noValidate aria-label={signUp ? 'Create account' : 'Sign in'}>
-        <div className="field">
-          <label htmlFor="auth-email">Email</label>
-          <input id="auth-email" type="email" name="email" autoComplete="email" inputMode="email" required autoFocus
-            value={form.email} onChange={(event) => form.setEmail(event.target.value)} />
-        </div>
-        <div className="field">
-          <label htmlFor="auth-password">Password</label>
-          <input id="auth-password" type="password" name="password" required
-            autoComplete={signUp ? 'new-password' : 'current-password'}
-            minLength={signUp ? form.passwordMinLength : undefined}
-            aria-describedby={signUp ? 'auth-password-hint' : undefined}
-            value={form.password} onChange={(event) => form.setPassword(event.target.value)} />
-          {signUp ? <p id="auth-password-hint" className="hint">At least {form.passwordMinLength} characters.</p> : null}
-        </div>
-        {form.error ? <p className="error" role="alert">{form.error}</p> : null}
-        <button type="submit" className="button" disabled={!form.canSubmit} aria-busy={form.pending}>
-          {form.pending ? 'Please wait…' : signUp ? 'Create account' : 'Sign in'}
-        </button>
-        <p className="auth__switch">
-          {signUp ? 'Already have an account?' : 'New here?'}{' '}
-          <button type="button" className="link-button" onClick={form.toggleMode} disabled={form.pending}>
-            {signUp ? 'Sign in' : 'Create an account'}
-          </button>
-        </p>
-      </form>
-    </main>
-  );
-}
-`;
-
 const STYLED_APP_SHELL = `import type { ReactNode } from 'react';
 import type { LinkProps } from '../routes';
 
@@ -1973,7 +2106,7 @@ export function NotesBoard({ notes }: { notes: NotesController }) {
           </button>
           {editing ? <button type="button" className="button button--quiet" onClick={notes.cancelEdit} disabled={notes.saving}>Cancel</button> : null}
         </div>
-        <p className={notes.notice?.tone === 'error' ? 'notice error' : 'notice'} role="status">{notes.notice?.text ?? ''}</p>
+        <p className={notes.notice?.tone === 'error' ? 'note-status error' : 'note-status'} role="status">{notes.notice?.text ?? ''}</p>
       </form>
 
       <section aria-labelledby="notes-title" aria-busy={notes.status === 'loading'}>
@@ -2073,48 +2206,6 @@ export function SessionUnavailable({ keepsWork, checkStatus, retrying, onRetry }
 }
 `;
 
-const PLAIN_AUTH_CARD = `import type { FormEvent } from 'react';
-import type { CredentialsForm } from '../../types/auth';
-
-export function AuthCard({ appName, form }: { appName: string; form: CredentialsForm }) {
-  const signUp = form.mode === 'sign-up';
-
-  function onSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    void form.submit();
-  }
-
-  return (
-    <main>
-      <h1>{signUp ? 'Create your account' : 'Sign in'} · {appName}</h1>
-      <form onSubmit={onSubmit} noValidate>
-        <p>
-          <label htmlFor="auth-email">Email</label><br />
-          <input id="auth-email" type="email" name="email" autoComplete="email" required autoFocus
-            value={form.email} onChange={(event) => form.setEmail(event.target.value)} />
-        </p>
-        <p>
-          <label htmlFor="auth-password">Password</label><br />
-          <input id="auth-password" type="password" name="password" required
-            autoComplete={signUp ? 'new-password' : 'current-password'}
-            minLength={signUp ? form.passwordMinLength : undefined}
-            value={form.password} onChange={(event) => form.setPassword(event.target.value)} />
-        </p>
-        {form.error ? <p role="alert">{form.error}</p> : null}
-        <button type="submit" disabled={!form.canSubmit} aria-busy={form.pending}>
-          {form.pending ? 'Please wait…' : signUp ? 'Create account' : 'Sign in'}
-        </button>
-      </form>
-      <p>
-        <button type="button" onClick={form.toggleMode} disabled={form.pending}>
-          {signUp ? 'Sign in' : 'Create an account'}
-        </button>
-      </p>
-    </main>
-  );
-}
-`;
-
 const PLAIN_APP_SHELL = `import type { ReactNode } from 'react';
 import type { LinkProps } from '../routes';
 
@@ -2204,175 +2295,9 @@ export function NotesBoard({ notes }: { notes: NotesController }) {
 
 // --------------------------------------------------------------------- styles
 
-const TOKENS_CSS = `/* Shared design values. app.css reads them; components and app.css can
-   still override locally. Local font stacks only (no network fonts). */
-:root {
-  --font-body: "Avenir Next", "Segoe UI Variable Text", "Segoe UI", "Helvetica Neue", sans-serif;
-  --font-display: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
-
-  --text-sm: 0.875rem;
-  --text-base: 1rem;
-  --text-lg: 1.25rem;
-  --text-display: clamp(2rem, 4.4vw, 3rem);
-
-  --space-1: 4px;
-  --space-2: 8px;
-  --space-3: 12px;
-  --space-4: 16px;
-  --space-6: 24px;
-  --space-8: 32px;
-  --space-12: 48px;
-
-  --radius-control: 8px;
-  --radius-panel: 14px;
-
-  --color-bg: #f5f3ee;
-  --color-surface: #ffffff;
-  --color-text: #1c1b18;
-  --color-muted: #66615a;
-  --color-border: #e0dbd1;
-  --color-accent: #1d6b52;
-  --color-on-accent: #ffffff;
-  --color-danger: #b42318;
-  --color-focus: #1d6b52;
-}
-`;
-
-const APP_CSS = `*, *::before, *::after { box-sizing: border-box; }
-body {
-  margin: 0;
-  min-width: 320px;
-  background: var(--color-bg);
-  color: var(--color-text);
-  font: 400 var(--text-base)/1.55 var(--font-body);
-}
-button, input, textarea { font: inherit; color: inherit; }
-:focus-visible { outline: 3px solid var(--color-focus); outline-offset: 2px; }
-.muted { color: var(--color-muted); }
-.hint { margin: 0; color: var(--color-muted); font-size: var(--text-sm); font-weight: 400; }
-.error { margin: 0; color: var(--color-danger); font-size: var(--text-sm); }
-.skip-link { display: inline-flex; align-items: center; justify-content: center; min-width: 44px; min-height: 44px; position: absolute; left: var(--space-3); top: -60px; padding: var(--space-2) var(--space-3); background: var(--color-text); color: var(--color-bg); }
-.skip-link:focus { top: var(--space-3); }
-
-.panel {
-  display: grid;
-  gap: var(--space-4);
-  padding: var(--space-6);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-panel);
-  background: var(--color-surface);
-  box-shadow: 0 1px 2px rgba(28, 27, 24, 0.05), 0 16px 40px -28px rgba(28, 27, 24, 0.35);
-}
-.panel__title { margin: 0; font: 600 var(--text-lg)/1.2 var(--font-display); }
-
-.field { display: grid; gap: 6px; }
-.field label { display: flex; justify-content: space-between; font-size: var(--text-sm); font-weight: 600; }
-.field input, .field textarea {
-  width: 100%;
-  min-height: 44px;
-  padding: 10px 12px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-control);
-  background: var(--color-surface);
-}
-.field textarea { resize: vertical; }
-.field input:hover, .field textarea:hover { border-color: var(--color-muted); }
-.field [aria-invalid="true"] { border-color: var(--color-danger); }
-
-.button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 44px;
-  padding: 0 var(--space-4);
-  border: 1px solid var(--color-accent);
-  border-radius: var(--radius-control);
-  background: var(--color-accent);
-  color: var(--color-on-accent);
-  font-weight: 600;
-  white-space: nowrap;
-  cursor: pointer;
-}
-.button:hover:not(:disabled) { filter: brightness(1.08); }
-.button:disabled { opacity: 0.5; cursor: not-allowed; }
-.button--quiet { background: transparent; border-color: var(--color-border); color: var(--color-text); }
-.link-button {
-  min-height: 44px;
-  padding: 0 var(--space-2);
-  border: 0;
-  background: none;
-  color: var(--color-accent);
-  font-weight: 600;
-  text-decoration: underline;
-  text-underline-offset: 3px;
-  cursor: pointer;
-}
-.link-button:disabled { opacity: 0.5; cursor: not-allowed; }
-.link-button--danger { color: var(--color-danger); }
-.actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
-
-/* Sign-in: split panel on wide screens, stacked on phones. */
-.auth {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(300px, 400px);
-  gap: var(--space-12);
-  align-items: center;
-  width: min(960px, calc(100% - 2 * var(--space-6)));
-  min-height: 100vh;
-  margin: 0 auto;
-  padding: var(--space-12) 0;
-}
-.auth__app { margin: 0 0 var(--space-3); color: var(--color-accent); font-weight: 600; }
-.auth__title { margin: 0 0 var(--space-3); font: 600 var(--text-display)/1.05 var(--font-display); letter-spacing: -0.02em; }
-.auth__form .button { width: 100%; }
-.auth__switch { margin: 0; text-align: center; color: var(--color-muted); font-size: var(--text-sm); }
-
-.loading { display: grid; place-content: center; justify-items: center; gap: var(--space-3); min-height: 100vh; color: var(--color-muted); }
-.unavailable { max-width: 380px; margin: 0 var(--space-4); color: var(--color-text); }
-.unavailable p { margin: 0; }
-.banner { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: center; justify-content: center; padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--color-danger); background: var(--color-surface); color: var(--color-danger); }
-.banner p { margin: 0; }
-.spinner { width: 24px; height: 24px; border: 3px solid var(--color-border); border-top-color: var(--color-accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
-@keyframes spin { to { transform: rotate(360deg); } }
-
-/* Signed-in frame */
-.topbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-4);
-  width: min(1040px, calc(100% - 2 * var(--space-6)));
-  margin: 0 auto;
-  padding: var(--space-4) 0;
-  border-bottom: 1px solid var(--color-border);
-}
-.topbar__error { width: min(1040px, calc(100% - 2 * var(--space-6))); margin: var(--space-2) auto 0; }
-.brand { display: inline-flex; align-items: center; justify-content: center; min-width: 44px; min-height: 44px; font: 600 var(--text-lg)/1 var(--font-display); color: inherit; text-decoration: none; }
-.account { display: flex; align-items: center; gap: var(--space-3); min-width: 0; }
-.account__label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--color-muted); font-size: var(--text-sm); }
-.content { width: min(1040px, calc(100% - 2 * var(--space-6))); margin: 0 auto; padding: var(--space-8) 0 var(--space-12); outline: none; }
-
-.empty { padding: var(--space-8) var(--space-6); border: 1px dashed var(--color-border); border-radius: var(--radius-panel); text-align: center; }
-.empty__title { margin: 0; font: 600 var(--text-lg)/1.3 var(--font-display); }
-.empty__body { margin: var(--space-2) 0 0; color: var(--color-muted); }
-
-@media (max-width: 760px) {
-  .auth { grid-template-columns: 1fr; gap: var(--space-6); align-content: start; }
-}
-@media (max-width: 480px) {
-  .panel { padding: var(--space-4); }
-}
-@media (prefers-reduced-motion: reduce) {
-  .spinner { animation-duration: 3s; }
-}
-`;
-
 const NOTES_CSS = `/* Notes example: delete with src/ui/NotesBoard.tsx. */
-.alert { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: center; justify-content: space-between; padding: var(--space-3) var(--space-4); border: 1px solid var(--color-danger); border-radius: var(--radius-control); color: var(--color-danger); background: var(--color-surface); }
-.alert p { margin: 0; }
 .notes-board { display: grid; grid-template-columns: minmax(280px, 360px) minmax(0, 1fr); gap: var(--space-8); align-items: start; }
-.notice { min-height: 1.4em; margin: 0; color: var(--color-muted); font-size: var(--text-sm); }
-.section-title { margin: 0 0 var(--space-3); font-size: var(--text-sm); font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--color-muted); }
+.note-status { min-height: 1.4em; margin: 0; color: var(--color-muted); font-size: var(--text-sm); }
 .note-list { margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--color-border); }
 .note { display: flex; gap: var(--space-4); justify-content: space-between; align-items: start; padding: var(--space-4) 0; border-bottom: 1px solid var(--color-border); }
 .note[aria-current="true"] { box-shadow: inset 3px 0 0 var(--color-accent); padding-left: var(--space-3); }
@@ -2388,12 +2313,6 @@ const NOTES_CSS = `/* Notes example: delete with src/ui/NotesBoard.tsx. */
   .note { flex-direction: column; gap: var(--space-1); }
   .note__actions { margin-left: calc(-1 * var(--space-2)); }
 }
-`;
-
-// The notes CSS already defines these; the assistant adds them when notes is absent.
-const ASSISTANT_SHARED_CSS = `.alert { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: center; justify-content: space-between; padding: var(--space-3) var(--space-4); border: 1px solid var(--color-danger); border-radius: var(--radius-control); color: var(--color-danger); background: var(--color-surface); }
-.alert p { margin: 0; }
-.section-title { margin: 0 0 var(--space-3); font-size: var(--text-sm); font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--color-muted); }
 `;
 
 const ASSISTANT_CSS = `/* Assistant example: delete with src/ui/AssistantPanel.tsx. */
@@ -2555,21 +2474,25 @@ export function MagicLinkPage() {
 
 const MAGIC_SIGN_IN_PAGE = `import { useCredentialsForm, useUnconfirmedSignOut } from '../auth/hooks';
 import { useMagicLinkRequest } from '../auth/magic-link';
-import { APP_NAME } from '../config';
+import { useProviderSignIn } from '../auth/useProviderSignIn';
+import { APP_NAME, APP_TAGLINE, SIGN_IN_PROVIDERS } from '../config';
 import { AuthCard } from '../ui/AuthCard';
 import { MfaStep } from '../ui/MfaStep';
+import { ProviderButtons } from '../ui/ProviderButtons';
 import { SignOutUnconfirmed } from '../ui/feedback';
 import { MagicLinkForm } from '../ui/MagicLink';
 
 export function SignInPage() {
   const form = useCredentialsForm();
   const magicLink = useMagicLinkRequest();
+  const providers = useProviderSignIn();
   const unconfirmed = useUnconfirmedSignOut();
   if (form.mfa.required) return <MfaStep continuation={form.mfa} />;
   return (
     <>
       {unconfirmed ? <SignOutUnconfirmed pending={unconfirmed.pending} onRetry={unconfirmed.retry} /> : null}
-      <AuthCard appName={APP_NAME} form={form}>
+      <AuthCard appName={APP_NAME} tagline={APP_TAGLINE} form={form}
+        providers={SIGN_IN_PROVIDERS.length > 0 ? <ProviderButtons providers={SIGN_IN_PROVIDERS} signIn={providers} /> : undefined}>
         <MagicLinkForm request={magicLink} />
       </AuthCard>
     </>
@@ -2660,29 +2583,21 @@ function replaceOnce(text: string, find: string, replacement: string): string {
   return text.slice(0, at) + replacement + text.slice(at + find.length);
 }
 
-/** The sign-in card with room below its form for the sign-in-link form. */
-function authCard(styled: boolean, magicLink: boolean): string {
-  const card = styled ? STYLED_AUTH_CARD : PLAIN_AUTH_CARD;
-  if (!magicLink) return card;
-  let out = replaceOnce(card, "import type { FormEvent } from 'react';", "import type { FormEvent, ReactNode } from 'react';");
-  out = replaceOnce(out, '{ appName, form }: { appName: string; form: CredentialsForm }',
-    '{ appName, form, children }: { appName: string; form: CredentialsForm; children?: ReactNode }');
-  if (styled) {
-    out = replaceOnce(out, '      <form className="panel auth__form"', '      <div className="auth__column">\n      <form className="panel auth__form"');
-    out = replaceOnce(out, '      </form>\n    </main>', '      </form>\n      {children}\n      </div>\n    </main>');
-  } else {
-    out = replaceOnce(out, '      </p>\n    </main>', '      </p>\n      {children}\n    </main>');
-  }
-  return out;
+/** The sign-in card. Its `providers` slot (above the form) and `children`
+ *  slot (below it) are always present, so modules add to it without patching
+ *  its markup: the magic-link form is a child, social buttons are providers. */
+function authCard(styled: boolean): string {
+  return styled ? STYLED_AUTH_CARD : PLAIN_AUTH_CARD;
 }
 
-/** App.tsx with /auth/magic in front of the sign-in gate: the person is not
- *  signed in yet when the emailed sign-in or invitation link opens it. */
+/** App.tsx with /auth/magic and /auth/callback in front of the sign-in gate:
+ *  the person is not signed in yet when an emailed sign-in or invitation
+ *  link, or a social sign-in's return, opens them. */
 function appTsx(): string {
   let out = replaceOnce(APP, "import { HomePage } from './pages/HomePage';\n",
-    "import { HomePage } from './pages/HomePage';\nimport { MagicLinkPage } from './pages/MagicLinkPage';\n");
+    "import { AuthCallbackPage } from './pages/AuthCallbackPage';\nimport { HomePage } from './pages/HomePage';\nimport { MagicLinkPage } from './pages/MagicLinkPage';\n");
   out = replaceOnce(out, '  const session = useAuthState();\n\n',
-    "  const pathname = usePathname();\n  const session = useAuthState();\n\n  // An emailed sign-in or invitation link lands here before a session exists.\n  if (pathname === '/auth/magic') return <MagicLinkPage />;\n");
+    "  const pathname = usePathname();\n  const session = useAuthState();\n\n  // An emailed sign-in or invitation link lands here before a session exists.\n  if (pathname === '/auth/magic') return <MagicLinkPage />;\n  // A social sign-in (src/config.ts SIGN_IN_PROVIDERS) returns here with ?code=.\n  if (pathname === '/auth/callback') return <AuthCallbackPage />;\n");
   return out;
 }
 
@@ -2720,10 +2635,6 @@ function magicLinkViews(styled: boolean, request: boolean): string {
     "import type { MagicLinkLanding } from '../../types/magic-link';");
   return cutBetween(out, 'export function MagicLinkForm', 'export function MagicLinkStatus');
 }
-
-const MAGIC_LINK_CSS = `/* Sign-in links: delete with src/ui/MagicLink.tsx. */
-.auth__column { display: grid; gap: var(--space-4); }
-`;
 
 // --------------------------------------------------------------- verify-email
 
@@ -2786,48 +2697,6 @@ export function useEmailVerification(): EmailVerification {
 }
 `;
 
-const STYLED_VERIFY_EMAIL = `import type { FormEvent } from 'react';
-import type { EmailVerification } from '../../types/auth';
-
-export function VerifyEmailPanel({ verification }: { verification: EmailVerification }) {
-  if (verification.status === 'checking' || verification.status === 'verified') return null;
-  if (verification.status === 'unavailable') {
-    return (
-      <div className="banner" role="alert">
-        <p>Could not check whether your email is verified.</p>
-        <button type="button" className="button button--quiet" onClick={verification.retry}>Try again</button>
-      </div>
-    );
-  }
-  function onSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    void verification.submit();
-  }
-  return (
-    <section className="panel verify-email" aria-label="Verify your email">
-      <p><strong>Verify your email.</strong> {verification.sent ? 'Enter the 6-digit code we emailed you.' : verification.entering ? 'Enter the 6-digit code from the latest email we sent you.' : 'We will email you a 6-digit code.'}</p>
-      {verification.entering ? (
-        <form className="verify-email__form" onSubmit={onSubmit} noValidate>
-          <label htmlFor="verify-code">Code</label>
-          <input id="verify-code" inputMode="numeric" autoComplete="one-time-code" maxLength={6} required
-            value={verification.code} onChange={(event) => verification.setCode(event.target.value)} />
-          <button type="submit" className="button" disabled={!verification.canSubmit} aria-busy={verification.pending}>Verify</button>
-          <button type="button" className="link-button" onClick={() => void verification.sendCode()} disabled={verification.pending}>Send a new code</button>
-        </form>
-      ) : (
-        <div className="verify-email__form">
-          <button type="button" className="button" onClick={() => void verification.sendCode()} disabled={verification.pending} aria-busy={verification.pending}>
-            Email me a code
-          </button>
-          <button type="button" className="link-button" onClick={verification.enterCode} disabled={verification.pending}>I already have a code</button>
-        </div>
-      )}
-      {verification.error ? <p className="error" role="alert">{verification.error}</p> : null}
-    </section>
-  );
-}
-`;
-
 const PLAIN_VERIFY_EMAIL = `import type { FormEvent } from 'react';
 import type { EmailVerification } from '../../types/auth';
 
@@ -2869,13 +2738,6 @@ export function VerifyEmailPanel({ verification }: { verification: EmailVerifica
 }
 `;
 
-const VERIFY_EMAIL_CSS = `/* Email verification panel (src/ui/VerifyEmail.tsx). */
-.verify-email { display: grid; gap: var(--space-3); margin-bottom: var(--space-6); }
-.verify-email p { margin: 0; }
-.verify-email__form { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; }
-.verify-email__form input { width: 8ch; letter-spacing: 0.2em; }
-`;
-
 /** The signed-in frame, with the verify-email panel above every page. */
 function signedInLayout(): string {
   let out = replaceOnce(SIGNED_IN_LAYOUT, "import { useSignOut } from '../auth/hooks';\n",
@@ -2900,9 +2762,10 @@ function readme(selection: InitSelection): string {
     '',
     '- Your app: `src/pages/HomePage.tsx`. Add a page: a path in `src/routes.ts`, a case in `src/App.tsx`, a file in `src/pages/`.',
     styled
-      ? '- Look: `src/styles/tokens.css` (shared values), `src/styles/app.css`, and the views in `src/ui/`. Views take props only; rewrite or replace them freely.'
-      : '- Look: `src/ui/` holds plain semantic views. Replace them with your own components; keep their props, or change the pages that pass them.',
+      ? '- Look: `src/styles/tokens.css` (every colour, font and size), `src/styles/app.css` (the classes), and the UI kit in `src/ui/` (see "Look" below). Views take props only; rewrite or replace them freely.'
+      : '- Look: `src/ui/` holds plain semantic views with the same props as the styled kit. Replace them with your own components; keep their props, or change the pages that pass them.',
     '- Sign-in: `src/auth/hooks.ts` (state and actions) over the SDK client in `src/services/auth.ts` and the SDK route `api/auth/[...path].ts`. Email verification: `src/auth/useEmailVerification.ts` and `src/ui/VerifyEmail.tsx`.',
+    '- Sign-in page copy and social sign-in: `APP_NAME`, `APP_TAGLINE` and `SIGN_IN_PROVIDERS` in `src/config.ts`.',
   ];
   lines.push(magicLink
     ? '- Sign-in links: `src/auth/magic-link.ts` (send and redeem), `src/pages/MagicLinkPage.tsx` (the `/auth/magic` page the email opens), `src/ui/MagicLink.tsx` (views).'
@@ -2912,6 +2775,38 @@ function readme(selection: InitSelection): string {
   }
   if (agent) {
     lines.push('- Assistant: `api/chat.ts` (the agent run and its tools), `api/proposals.ts` (approve/reject), `src/services/assistant.ts`, `src/data/useAssistant.ts`, `src/ui/AssistantPanel.tsx`. Preview states: `src/fixtures/assistant.ts`.');
+  }
+  if (styled) {
+    lines.push(
+      '',
+      '## Look',
+      '',
+      'The starter is a small design system, and pages built with it look finished;',
+      'pages built around it look like a form from 2009. `src/pages/HomePage.tsx` is',
+      'a worked example: copy its shape.',
+      '',
+      '- Build with `src/ui`: `Button`, `TextField`, `SelectField`, `TextareaField`,',
+      '  `CheckboxField`, `FormRow`, `Card`, `Table`, `Stat`, `Badge`, `Tabs`, `Dialog`,',
+      '  `Notice`, `Skeleton`, `EmptyState`, `Stack`, `Grid`, `Inline`, `PageHeader`.',
+      '  A bare `<input>`, `<select>` or `<button>` in a page renders with browser',
+      '  defaults next to styled controls; use the component.',
+      '- Never write a colour, font or size in a page: every value is a token',
+      '  (`var(--color-accent)`, `var(--space-4)`). A missing token goes in',
+      '  `tokens.css`, in both the light and the dark block.',
+      '- Never restyle a tag globally (`select { … }`, `input { … }`). Add a class at',
+      '  the end of `app.css`.',
+      '- One h1 and one primary `Button` per page, both in `PageHeader`; everything',
+      '  else is secondary, quiet or a link.',
+      '- Cards group peers (a list, a form, 2–4 stats in a `Grid`). A page that is',
+      '  nothing but identical cards has no hierarchy: the main number goes in the',
+      '  header, the rest in a `Table`.',
+      '- Empty, loading and error are states to design, not afterthoughts:',
+      '  `EmptyState` with one action, `Skeleton`, `Notice tone="danger"` with retry.',
+      '- Add to the sign-in page through `AuthCard`\'s `providers` and `children`',
+      '  slots, never as a sibling of `.auth` (its grid holds exactly two columns).',
+      '- `somewhere verify` screenshots desktop and phone; read its accessibility',
+      '  line. Contrast, overflow and tap targets under 44px are regressions.',
+    );
   }
   lines.push(
     '',
@@ -2928,7 +2823,11 @@ function readme(selection: InitSelection): string {
     'A password account sees a "Verify your email" panel until it enters the 6-digit',
     'code the platform emails it (`auth.requestEmailVerification` / `auth.verifyEmail`',
     'through the same SDK route; the session cookie decides the account).',
-    'Password reset, OAuth and MFA are not generated.',
+    'Google, GitHub and Discord sign-in are platform-hosted: `SIGN_IN_PROVIDERS`',
+    '(`src/config.ts`) starts as `[\'google\']`; remove it for email-only sign-in or',
+    'add the others. The buttons, `auth.<provider>SignInUrl` and the `/auth/callback`',
+    'page (the SDK\'s `AuthCallback`) are already wired.',
+    'Password reset and MFA enrolment are not generated.',
     '',
     '## Sign-in and invitation links',
     '',
@@ -3067,6 +2966,8 @@ export function createFeatureTemplate(
     { path: 'src/auth/hooks.ts', content: AUTH_HOOKS },
     { path: 'src/auth/useMfaContinuation.ts', content: MFA_HOOK },
     { path: 'src/ui/MfaStep.tsx', content: MFA_VIEW },
+    { path: 'src/auth/useProviderSignIn.ts', content: PROVIDER_SIGN_IN_HOOK },
+    { path: 'src/pages/AuthCallbackPage.tsx', content: AUTH_CALLBACK_PAGE },
     { path: 'src/pages/SignInPage.tsx', content: magicLink ? MAGIC_SIGN_IN_PAGE : SIGN_IN_PAGE },
     { path: 'src/pages/SignedInLayout.tsx', content: signedInLayout() },
     { path: 'src/auth/useEmailVerification.ts', content: VERIFY_EMAIL_HOOK },
@@ -3074,8 +2975,9 @@ export function createFeatureTemplate(
     { path: 'src/pages/HomePage.tsx', content: homePage(privateData, agent) },
     { path: 'src/pages/NotFoundPage.tsx', content: NOT_FOUND_PAGE },
     { path: 'src/ui/feedback.tsx', content: styled ? STYLED_FEEDBACK : PLAIN_FEEDBACK },
-    { path: 'src/ui/AuthCard.tsx', content: authCard(styled, magicLink) },
+    { path: 'src/ui/AuthCard.tsx', content: authCard(styled) },
     { path: 'src/ui/AppShell.tsx', content: styled ? STYLED_APP_SHELL : PLAIN_APP_SHELL },
+    ...(styled ? STYLED_UI_KIT : PLAIN_UI_KIT),
     { path: 'types/magic-link.ts', content: magicLinkTypes(magicLink) },
     { path: 'src/auth/magic-link.ts', content: magicLinkHooks(magicLink) },
     { path: 'src/pages/MagicLinkPage.tsx', content: MAGIC_LINK_PAGE },
@@ -3084,7 +2986,7 @@ export function createFeatureTemplate(
   if (styled) {
     files.push(
       { path: 'src/styles/tokens.css', content: TOKENS_CSS },
-      { path: 'src/styles/app.css', content: [APP_CSS, VERIFY_EMAIL_CSS, ...(magicLink ? [MAGIC_LINK_CSS] : []), ...(privateData ? [NOTES_CSS] : []), ...(agent ? [privateData ? ASSISTANT_CSS : ASSISTANT_SHARED_CSS + ASSISTANT_CSS] : [])].join('\n') },
+      { path: 'src/styles/app.css', content: [APP_CSS, ...(privateData ? [NOTES_CSS] : []), ...(agent ? [ASSISTANT_CSS] : [])].join('\n') },
     );
   }
   if (privateData || agent) files.push({ path: 'db/schema.ts', content: schemaTs(privateData, agent) });

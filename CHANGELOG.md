@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.37.74
+
+### Added
+
+- `somewhere init` auth starters ship a UI kit in `src/ui` (`Button`, `TextField`, `SelectField`, `TextareaField`, `CheckboxField`, `FormRow`, `Card`, `Table`, `Stat`, `Badge`, `Tabs`, `Dialog`, `Notice`, `Skeleton`, `Stack`, `Grid`, `Inline`, `PageHeader`) with styled and headless twins that share props, and `src/pages/HomePage.tsx` is a worked example of them (header, stats, table in a card, dialog form) instead of an empty state. The README gains a "Look" section with the rules that keep generated pages consistent (tokens only, no global tag styles, one primary action, cards for peers).
+- Social sign-in is a config toggle: `SIGN_IN_PROVIDERS` (`src/config.ts`) starts as `['google']`, so a new app shows "Continue with Google" out of the box (the platform owns the OAuth client; nothing to configure); set it to `[]` for email-only sign-in or add `github` / `discord`. The "Continue with …" buttons, `src/auth/useProviderSignIn.ts` and the `/auth/callback` page (the SDK's `AuthCallback`) are already wired. `APP_TAGLINE` sets the sign-in page's one-line description.
+- `src/styles/tokens.css` gets a `prefers-color-scheme: dark` block, semantic tones (success/warning/danger/info), shadows and a cross-platform font stack, so the starter no longer falls back to Arial/Georgia off macOS. `index.html` gets description, `theme-color` and an SVG favicon.
+
+### Changed
+
+- `AuthCard` has permanent `providers` (above the form) and `children` (below it) slots; the magic-link module passes its form as a child instead of patching the card's markup, and nothing else is a sibling of the two-column `.auth` grid.
+- The "Verify your email" panel is a quiet notice with secondary buttons, not the page's loudest call to action. `MfaStep` uses the starter's panel and field classes.
+- Starter stylesheet: the notes status line is `.note-status` (`.notice` is the kit's notice component); `.alert` and `.section-title` live in the base stylesheet, so removing a module leaves no orphaned rules.
+- Social sign-in sends the browser to `/auth/callback?provider=<name>` and the callback page passes that provider to the SDK's `AuthCallback`, so a GitHub or Discord code is exchanged with the provider that issued it (the SDK defaults to Google). An unknown `?provider=` is ignored. With `SIGN_IN_PROVIDERS = []` the sign-in card has no providers slot, so no "or use email" divider is shown.
+
 ## 0.37.72
 
 ### Fixed

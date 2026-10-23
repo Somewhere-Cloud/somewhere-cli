@@ -46,7 +46,7 @@ const UI_MODES: readonly { id: InitUiMode; summary: string }[] = [
 const NOT_OFFERED: readonly { id: string; reason: string }[] = [
   { id: 'private-files', reason: 'Not offered by init yet; see `somewhere docs declared-files`.' },
   { id: 'password-reset', reason: 'Not generated. Build it on the documented auth contract (`somewhere docs sw.auth`).' },
-  { id: 'oauth', reason: 'Not generated. See `somewhere docs auth-client`.' },
+  { id: 'oauth', reason: 'Not a module: every auth starter has it. List `google`, `github` or `discord` in `SIGN_IN_PROVIDERS` (src/config.ts); the buttons and `/auth/callback` page are already wired. See `somewhere docs auth-client`.' },
   { id: 'mfa', reason: 'Not generated.' },
   { id: 'payments', reason: 'Not generated. See `somewhere docs payments`.' },
   { id: 'teams', reason: 'Not generated. See member() scopes in `somewhere docs declared-data`.' },

@@ -192,7 +192,7 @@ function guidanceFor(record: ReproRecord): Guidance {
         'Do NOT resend the failed request: the handler may have written data before it threw.',
         'Reproduce on a disposable test project: send the same method and route a synthetic body of the same shape (<FIELD>: <PLACEHOLDER>), then read it with somewhere logs --project <TEST_PROJECT> --trace <TRACE_ID>'] };
   }
-  if (/^POST \/browser(\/|$)|^tool:browser|^POST \/verify|^tool:verify/.test(op) || /^(browser|verify)\b/.test(record.command ?? '')) {
+  if (op === 'tool:site_verify' || /^POST \/browser(\/|$)|^tool:browser|^POST \/verify|^tool:verify/.test(op) || /^(browser|verify)\b/.test(record.command ?? '')) {
     return { surface: 'browser_verify',
       investigate: [['somewhere', 'verify', '--schema'], ['somewhere', 'docs', 'browser']],
       recipe: ['Create a disposable test project: somewhere init --bare --name <TEST_PROJECT>',

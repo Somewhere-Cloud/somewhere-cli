@@ -29,7 +29,7 @@ const envelope = (over = {}) => ({
 
 function send(res, payload) { res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify(payload)); }
 
-async function run(onToolsCall) {
+async function run(onToolsCall, tool = 'support_ticket') {
   const home = mkdtempSync(join(tmpdir(), 'call-repro-'));
   mkdirSync(join(home, '.somewhere'), { recursive: true });
   writeFileSync(join(home, '.somewhere', 'config.json'), JSON.stringify({ token: 'smt_call_repro_test', user: { email: 't@example.com' } }));
@@ -50,7 +50,7 @@ async function run(onToolsCall) {
     child.on('close', (code) => resolve({ code, out, err }));
   });
   try {
-    const call = await cli(['call', 'support_ticket', '{"ticket_id":"pfb_000000000000"}']);
+    const call = await cli(['call', tool, tool === 'support_ticket' ? '{"ticket_id":"pfb_000000000000"}' : '{"url":"https://example.invalid","actions":[{"wait":90000}]}', '--json']);
     const packet = await cli(['support', 'packet', '--json']);
     const raw = readFileSync(join(home, '.somewhere', 'last-error.json'), 'utf8');
     return { call, packet: JSON.parse(packet.out), packetText: packet.out, raw };
@@ -103,5 +103,40 @@ test('a mutating tool error with http_status 500 records outcome unknown (never 
   assert.equal(c.operation, 'tool:support_ticket');
   const recipe = JSON.stringify((r.packet.data ?? r.packet).recipe ?? (r.packet.data ?? r.packet).packet?.recipe ?? {});
   assert.doesNotMatch(recipe, /"rerun_original":true/, 'an unknown outcome is never suggested as a rerun');
+  noCanary(r.packetText, r.raw);
+});
+
+// The live browser/site_verify admission envelope carries data.invalid and retry:false.
+// Both must survive MCP → CLI output and the local packet without arbitrary data.
+for (const tool of ['browser', 'site_verify']) test(`${tool} admission keeps validated field/bound and retry:false through call and support packet`, async () => {
+  const refusal = envelope({ error: 'VALIDATION_ERROR', http_status: 400, canonical_error: { http_status: 400 }, retry: false,
+    data: { invalid: { path: 'actions[0].wait', limit_ms: 45000, ignored: plant }, private: plant } });
+  const r = await run((req, res, rpc) => send(res, { jsonrpc: '2.0', id: rpc.id, result: { isError: true, content: [{ type: 'text', text: JSON.stringify(refusal) }] } }), tool);
+  assert.equal(r.call.code, 1);
+  const stdout = JSON.parse(r.call.out);
+  assert.equal(stdout.error, 'VALIDATION_ERROR');
+  assert.equal(stdout.retry, false);
+  assert.deepEqual(stdout.data, { invalid: { path: 'actions[0].wait', limit_ms: 45000 } });
+  const c = collected(r.packet);
+  assert.equal(c.http_status, 400);
+  assert.equal(c.outcome, 'refused');
+  assert.equal(c.retry, false);
+  assert.equal(c.operation, `tool:${tool}`);
+  assert.deepEqual(c.invalid, { path: 'actions[0].wait', limit_ms: 45000 });
+  noCanary(r.packetText, r.raw, JSON.stringify(stdout.data));
+});
+
+test('malformed admission fields and retry metadata cannot become trusted CLI data or packet fields', async () => {
+  const refusal = envelope({ error: 'VALIDATION_ERROR', http_status: 400, retry: 'false', retry_after_ms: -1,
+    data: { invalid: { path: `actions[0].${plant}`, limit_ms: '45000' }, private: plant } });
+  const r = await run((req, res, rpc) => send(res, { jsonrpc: '2.0', id: rpc.id, result: { isError: true, content: [{ type: 'text', text: JSON.stringify(refusal) }] } }), 'browser');
+  const stdout = JSON.parse(r.call.out);
+  assert.equal(stdout.data, undefined);
+  assert.equal(stdout.retry, undefined);
+  assert.equal(stdout.retry_after_ms, undefined);
+  const c = collected(r.packet);
+  assert.equal(c.invalid, undefined);
+  assert.equal(c.retry, undefined);
+  assert.equal(c.retry_after_ms, undefined);
   noCanary(r.packetText, r.raw);
 });

@@ -7,6 +7,7 @@ import type { FetchLike } from '@modelcontextprotocol/sdk/shared/transport.js';
 import { fetchWithProxy } from './http.js';
 import { ApiClient } from './client.js';
 import { getToken, loadConfig } from './config.js';
+import { safeInvalid, type InvalidDetail } from './vendor/repro-guidance.js';
 
 const MCP_BASE_URL =
   process.env.SOMEWHERE_MCP_URL?.replace(/\/$/, '') || 'https://mcp.somewhere.tech/mcp';
@@ -27,10 +28,12 @@ export class PlatformToolError extends Error {
     public readonly code?: string,
     public readonly detail?: string,
     public readonly hint?: string,
-    public readonly meta: { requestId?: string; traceId?: string } = {},
+    public readonly meta: { requestId?: string; traceId?: string; retry?: boolean; retryAfterMs?: number } = {},
     /** The HTTP status the platform reported for this tool failure (its envelope's
      *  `http_status`), so a definite refusal is not recorded as an unknown outcome. */
     public readonly statusCode?: number,
+    /** Only the canonical validated input location; never copy arbitrary tool data. */
+    public readonly data?: { invalid: InvalidDetail },
   ) {
     super(message);
     this.name = 'PlatformToolError';
@@ -209,10 +212,14 @@ export function platformToolErrorFromText(name: string, text: string): PlatformT
     const str = (value: unknown): string | undefined => (typeof value === 'string' && value ? value : undefined);
     const status = [parsed.http_status, record(parsed.canonical_error).http_status, collected.http_status]
       .find((value) => typeof value === 'number' && Number.isInteger(value) && value >= 100 && value <= 599) as number | undefined;
+    const invalid = safeInvalid(record(parsed.data).invalid);
     return new PlatformToolError(name, message, code, field('message') ?? text, field('next_step') ?? field('hint'), {
       requestId: field('request_id') ?? str(collected.request_id),
       traceId: field('trace_id') ?? str(collected.trace_id),
-    }, status);
+      ...(typeof parsed.retry === 'boolean' ? { retry: parsed.retry } : {}),
+      ...(typeof parsed.retry_after_ms === 'number' && Number.isSafeInteger(parsed.retry_after_ms) && parsed.retry_after_ms >= 0
+        ? { retryAfterMs: parsed.retry_after_ms } : {}),
+    }, status, invalid ? { invalid } : undefined);
   } catch {
     return new PlatformToolError(name, message);
   }

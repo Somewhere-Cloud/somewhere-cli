@@ -582,6 +582,10 @@ export function registerDeploy(program: Command) {
       // start-up cost (runtime boot + module load) before the command ran.
       const startupMs = performance.now();
       const targetDir = resolveTargetDir(dir);
+      // A bad local flow must not publish source or mint a temporary account.
+      const verifyFlow = opts.verify && !opts.dryRun
+        ? loadVerifyFlow(typeof opts.verify === 'string' ? opts.verify : undefined, targetDir)
+        : undefined;
 
       // Reject an empty deploy before authentication, temporary-account minting,
       // project provisioning, notices, or upload. The API's generic object-shape
@@ -1063,6 +1067,19 @@ export function registerDeploy(program: Command) {
         await settleNotices();
         const functionErrors = result.function_errors ?? [];
         const hasFunctionErrors = functionErrors.length > 0;
+        // The platform confirmed this release before optional verification.
+        // Keep its source anchor even when a later check fails (tsk_da2dba3d).
+        if (!hasFunctionErrors) {
+          if (!tempSession && typeof result.version === 'number' && deployStateEntry) {
+            saveProjectDeployState(
+              deployStateEntry.dir,
+              deployStateEntry.config.project_id,
+              result.version,
+              result.active_release_id ?? result.release_id,
+            );
+          }
+          rememberDeployedBase(result.active_release_id ?? result.release_id);
+        }
         const formatted = formatDeploySuccess(result, {
           scope,
           functionCount: countFunctionRoutes(functions),
@@ -1074,13 +1091,30 @@ export function registerDeploy(program: Command) {
           printDeployTiming({ startupMs, collectionMs, preparationMs, requestMs, stageTimingMs: result.stage_timing_ms });
         }
         let verification: VerifyReport | undefined;
-        if (opts.verify && !hasFunctionErrors) {
-          const flow = loadVerifyFlow(typeof opts.verify === 'string' ? opts.verify : undefined, targetDir);
-          verification = await withVerifyProgress(() => runVerification({
-            project_id: projectId,
-            ...(formatted.liveUrl ? { url: formatted.liveUrl } : {}),
-          }, flow, client), !opts.json);
+        let verificationError: { code: string; message: string } | undefined;
+        if (verifyFlow && !hasFunctionErrors) {
+          try {
+            verification = await withVerifyProgress(() => runVerification({
+              project_id: projectId,
+              ...(formatted.liveUrl ? { url: formatted.liveUrl } : {}),
+            }, verifyFlow, client), !opts.json);
+          } catch (cause: unknown) {
+            const envelope = platformErrorEnvelope(cause);
+            // Keep the existing public error scalars, never arbitrary error data.
+            verificationError = {
+              code: envelope?.code ?? 'CLI_ERROR',
+              message: envelope?.message ?? (cause instanceof Error ? cause.message : 'Verification could not finish.'),
+            };
+          }
         }
+        const verificationFailed = verification?.passed === false || Boolean(verificationError);
+        const verificationNextSteps = besideRealLogin ? [
+          'Inspect the live URL; keep this project and its claim URL.',
+          'After claiming and connecting this project, run: somewhere verify --project <PROJECT>',
+        ] : [
+          'Read the live release: somewhere status --project <PROJECT>',
+          'Run verification without deploying: somewhere verify --project <PROJECT>',
+        ];
         if (opts.json) {
           // A temporary session adds the claim fields to the server's result;
           // it never replaces it, so version, release_id, warnings,
@@ -1096,19 +1130,16 @@ export function registerDeploy(program: Command) {
                 claim_connects_agent: tempSession.handoffReady === true,
               }
             : result;
-          printJson(verification ? { ...output, verification } : output);
-          if (hasFunctionErrors || verification?.passed === false) {
+          printJson(verification || verificationError ? {
+            ...output,
+            deployment_outcome: 'live',
+            ...(verification ? { verification } : {}),
+            ...(verificationError ? { verification_error: verificationError } : {}),
+            ...(verificationFailed ? { next_steps: verificationNextSteps } : {}),
+          } : output);
+          if (hasFunctionErrors || verificationFailed) {
             process.exit(1);
           }
-          if (!tempSession && typeof result.version === 'number' && deployStateEntry) {
-            saveProjectDeployState(
-              deployStateEntry.dir,
-              deployStateEntry.config.project_id,
-              result.version,
-              result.active_release_id ?? result.release_id,
-            );
-          }
-          rememberDeployedBase(result.active_release_id ?? result.release_id);
           return;
         }
 
@@ -1186,7 +1217,7 @@ export function registerDeploy(program: Command) {
           // `.somewhere.json`, so a bare `somewhere browser` would open the
           // developer's own app. Temporary credentials carry the `browser`
           // scope, so the URL form works on both temporary paths.
-          if (!hasFunctionErrors) {
+          if (!hasFunctionErrors && !verificationFailed) {
             for (const line of formatNextActions(
               nextActions({
                 stage: 'deploy',
@@ -1215,7 +1246,7 @@ export function registerDeploy(program: Command) {
           } else {
             success(formatted.liveMessage);
           }
-          if (!hasFunctionErrors) {
+          if (!hasFunctionErrors && !verificationFailed) {
             // Would a bare `somewhere browser` from HERE reach what was just
             // deployed? It resolves the link from the current directory only
             // (commands/browser.ts → loadProjectConfig()), which is not always
@@ -1260,16 +1291,13 @@ export function registerDeploy(program: Command) {
         if (hasFunctionErrors) {
           process.exit(1);
         }
-        if (!tempSession && typeof result.version === 'number' && deployStateEntry) {
-          saveProjectDeployState(
-            deployStateEntry.dir,
-            deployStateEntry.config.project_id,
-            result.version,
-            result.active_release_id ?? result.release_id,
-          );
+        if (verificationFailed) {
+          warn(verificationError
+            ? `The deploy is live, but verification could not finish: ${verificationError.message} [${verificationError.code}]`
+            : 'The deploy is live, but verification did not pass.');
+          for (const step of verificationNextSteps) info(step);
+          process.exit(1);
         }
-        rememberDeployedBase(result.active_release_id ?? result.release_id);
-        if (verification?.passed === false) process.exit(1);
       } catch (err) {
         spinner?.stop();
         await settleNotices();

@@ -1,16 +1,17 @@
 import { Command } from 'commander';
-import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join, relative, resolve } from 'node:path';
 import ora from '../lib/spinner.js';
 import { ApiClient, CliApiError, LONG_CALL_TIMEOUT_MS } from '../lib/client.js';
 import {
   getToken,
   loadProjectConfigEntry,
+  saveProjectConfig,
   saveProjectDeployState,
   saveSourceBase,
   type ProjectConfigEntry,
 } from '../lib/config.js';
-import { IGNORE } from '../lib/files.js';
+import { IGNORE, isFunctionPath } from '../lib/files.js';
 import { dim, error, info, printJson, success, teal, warn } from '../lib/output.js';
 import {
   SCAFFOLD_PACKAGE_FILENAME,
@@ -28,6 +29,8 @@ interface SourceResponse {
   env: 'dev' | 'prod';
   version: number;
   active_release_id?: string;
+  source_release_id?: string;
+  base_release_id?: string | null;
   static_files: Record<string, string>;
   binary_files: Record<string, string>;
   functions: Record<string, string>;
@@ -93,13 +96,59 @@ export function registerPull(program: Command) {
       }
       spinner?.stop();
 
+      const deployStateEntry: ProjectConfigEntry | null = loadProjectConfigEntry(outDir);
+      const configStat = lstatSync(join(outDir, '.somewhere.json'), { throwIfNoEntry: false });
+      if (configStat && (configStat.isSymbolicLink() || !configStat.isFile() || !deployStateEntry)) {
+        error('Cannot read the destination .somewhere.json. Pull into a fresh folder or repair the link first.');
+        process.exit(1);
+      }
+      if (deployStateEntry && deployStateEntry.config.project_id !== body.project_id) {
+        error('The output folder is linked to a different project. Pull into a fresh folder.');
+        process.exit(1);
+      }
+
+      // Preflight the entire export before touching local source or its base.
+      const source = new Map<string, Buffer>();
+      const addSource = (path: string, content: Buffer | string) => {
+        const normalized = normalizeRelPath(path);
+        if (!normalized || normalized.startsWith('/') || normalized.split('/').some(part => !part || part === '.' || part === '..') || normalized.includes(':') || normalized.split('/').some(part => part.startsWith('.'))) {
+          throw new Error(`Unsafe exported source path: ${path}`);
+        }
+        if (source.has(normalized)) throw new Error(`Conflicting exported source path: ${normalized}`);
+        source.set(normalized, Buffer.isBuffer(content) ? content : Buffer.from(content));
+      };
+      try {
+        for (const [path, content] of Object.entries(body.static_files)) addSource(path, content);
+        for (const [path, content] of Object.entries(body.binary_files)) addSource(path, Buffer.from(content, 'base64'));
+        for (const [path, content] of Object.entries(body.functions)) addSource(functionSourcePath(path), content);
+        for (const [path, contents] of source) {
+          const parts = path.split('/');
+          for (let i = 1; i <= parts.length; i++) {
+            if (i < parts.length && source.has(parts.slice(0, i).join('/'))) {
+              throw new Error(`Conflicting exported source path: ${path}`);
+            }
+            const target = join(outDir, ...parts.slice(0, i));
+            const stat = lstatSync(target, { throwIfNoEntry: false });
+            if (!stat) continue;
+            if (stat.isSymbolicLink() || (i < parts.length ? !stat.isDirectory() : !stat.isFile())) {
+              throw new Error(`Pull would conflict with local path ${path}. Pull into a fresh folder.`);
+            }
+          }
+          const target = join(outDir, path);
+          if (existsSync(target) && !opts.force && !readFileSync(target).equals(contents)) {
+            throw new Error(`Pull would overwrite local file ${path}. Pull into a fresh folder or use --force intentionally.`);
+          }
+        }
+      } catch (err) {
+        error(err instanceof Error ? err.message : String(err));
+        process.exit(1);
+      }
+
       const written: string[] = [];
-      const skipped: string[] = [];
 
       const writeOne = (relPath: string, contents: Buffer | string) => {
         const target = join(outDir, relPath);
         if (existsSync(target) && !opts.force) {
-          skipped.push(relPath);
           return;
         }
         mkdirSync(dirname(target), { recursive: true });
@@ -107,35 +156,37 @@ export function registerPull(program: Command) {
         written.push(relPath);
       };
 
-      for (const [path, content] of Object.entries(body.static_files)) {
-        writeOne(path, content);
-      }
-      for (const [path, b64] of Object.entries(body.binary_files)) {
-        writeOne(path, Buffer.from(b64, 'base64'));
-      }
-      for (const [path, content] of Object.entries(body.functions)) {
-        writeOne(join('functions', path), content);
-      }
+      for (const [path, contents] of source) writeOne(path, contents);
 
-      const removed = reconcileRemovedFiles(outDir, expectedPulledPaths(body), Boolean(opts.force));
-      const deployStateEntry: ProjectConfigEntry | null = loadProjectConfigEntry(outDir);
+      const removed = reconcileRemovedFiles(outDir, new Set(source.keys()), Boolean(opts.force));
+      if (!deployStateEntry && removed.skipped.length === 0) {
+        saveProjectConfig(outDir, { project_id: body.project_id, name: body.project_id, subdomain: '' });
+      }
+      const linkedOutput = loadProjectConfigEntry(outDir);
       if (
-        skipped.length === 0 &&
         removed.skipped.length === 0 &&
-        deployStateEntry?.config.project_id === body.project_id &&
+        linkedOutput?.config.project_id === body.project_id &&
+        body.source_release_id &&
+        (typeof body.base_release_id === 'string' || body.base_release_id === null)
+      ) {
+        saveSourceBase(linkedOutput.dir, body.project_id, body.base_release_id);
+      } else if (
+        removed.skipped.length === 0 &&
+        linkedOutput?.config.project_id === body.project_id &&
+        !body.source_release_id &&
         Number.isInteger(body.version) &&
         body.version >= 1
       ) {
-        saveProjectDeployState(deployStateEntry.dir, body.project_id, body.version, body.active_release_id);
+        saveProjectDeployState(linkedOutput.dir, body.project_id, body.version, body.active_release_id);
       } else if (
-        skipped.length === 0 &&
         removed.skipped.length === 0 &&
-        deployStateEntry?.config.project_id === body.project_id &&
+        linkedOutput?.config.project_id === body.project_id &&
+        !body.source_release_id &&
         !body.active_release_id &&
         body.counts.static_files + body.counts.binary_files + body.counts.functions === 0
       ) {
         // An empty project with no published version: this folder starts from genesis.
-        saveSourceBase(deployStateEntry.dir, body.project_id, null);
+        saveSourceBase(linkedOutput.dir, body.project_id, null);
       }
 
       const total = body.counts.static_files + body.counts.binary_files + body.counts.functions;
@@ -144,11 +195,6 @@ export function registerPull(program: Command) {
       }
       if (!opts.json) {
         success(`Pulled ${written.length} file${written.length === 1 ? '' : 's'} from ${teal(envSlot)} (v${body.version}) to ${teal(outDir)}`);
-      }
-      if (skipped.length > 0 && !opts.json) {
-        warn(`Skipped ${skipped.length} existing file${skipped.length === 1 ? '' : 's'} (use --force to overwrite):`);
-        for (const p of skipped.slice(0, 10)) info(dim(`  ${p}`));
-        if (skipped.length > 10) info(dim(`  ...and ${skipped.length - 10} more`));
       }
       if (removed.removed.length > 0 && !opts.json) {
         info(dim(`Removed ${removed.removed.length} file${removed.removed.length === 1 ? '' : 's'} deleted remotely.`));
@@ -215,14 +261,11 @@ function scaffoldTypecheckFiles(
   return added;
 }
 
-function expectedPulledPaths(body: SourceResponse): Set<string> {
-  const expected = new Set<string>();
-  for (const path of Object.keys(body.static_files)) expected.add(normalizeRelPath(path));
-  for (const path of Object.keys(body.binary_files)) expected.add(normalizeRelPath(path));
-  for (const path of Object.keys(body.functions)) {
-    expected.add(normalizeRelPath(join('functions', path)));
-  }
-  return expected;
+// Current exports already carry their canonical api/ and _lib/ paths. Only
+// legacy bare function keys need the collector's functions/ compatibility root.
+function functionSourcePath(path: string): string {
+  const normalized = normalizeRelPath(path);
+  return isFunctionPath(normalized) ? normalized : `functions/${normalized}`;
 }
 
 function normalizeRelPath(path: string): string {

@@ -12,10 +12,11 @@ function parseArguments(value: string | undefined): Record<string, unknown> {
   try {
     parsed = JSON.parse(value) as unknown;
   } catch (err) {
-    throw new Error(`Arguments must be valid JSON. ${err instanceof Error ? err.message : String(err)}`);
+    throw new Error(`Arguments must be valid JSON. ${err instanceof Error ? err.message : String(err)}. `
+      + 'The requested tool was not called. Pass one JSON object as a single argument, with double-quoted property names and string values; run `somewhere call --help` for usage.');
   }
   if (!isRecord(parsed)) {
-    throw new Error('Arguments must be a JSON object, for example: \'{"project_id":"default"}\'.');
+    throw new Error('Arguments must be a JSON object, for example: \'{"project_id":"default"}\'. The requested tool was not called.');
   }
   return parsed;
 }
@@ -42,7 +43,7 @@ export function chooseCallScope(
   tool: Tool | undefined,
 ): CallScope {
   if ('project_id' in args) {
-    if (allProjects) throw new Error('Pass "project_id" in the JSON or --all-projects, not both.');
+    if (allProjects) throw new Error('Pass "project_id" in the JSON or --all-projects, not both. The requested tool was not called. Remove --all-projects to keep the explicit project, or remove "project_id" to use the tool\'s own scope.');
     return { kind: 'explicit' };
   }
   if (allProjects) return { kind: 'account', reason: 'all-projects' };
@@ -73,7 +74,7 @@ export function registerCall(program: Command): void {
     ) => {
       try {
         if (opts.list) {
-          if (tool || jsonArgs) throw new Error('Do not pass a tool name with --list.');
+          if (tool || jsonArgs) throw new Error('Do not pass a tool name with --list. The requested tool was not called. Run `somewhere call --list` without a tool name or JSON arguments.');
           const tools = await listPlatformTools({ allTools: true });
           if (opts.json) {
             printJson({ tools, count: tools.length });
@@ -87,7 +88,7 @@ export function registerCall(program: Command): void {
         }
 
         if (!tool) {
-          throw new Error('Missing tool name. Run `somewhere call --list` to discover tools.');
+          throw new Error('Missing tool name. The requested tool was not called. Run `somewhere call --list` to discover tools.');
         }
         let args = parseArguments(jsonArgs);
         const linked = loadProjectConfig();

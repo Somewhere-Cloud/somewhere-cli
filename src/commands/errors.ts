@@ -109,13 +109,12 @@ export function registerErrors(program: Command) {
       }
 
       if (!rows.length) {
-        // A window with nothing but refusals is a healthy window — say what is
-        // actually there rather than reporting a bare zero.
+        // The endpoint returns a limited row set, not a complete health assessment.
         if (refusals && opts.exceptions) {
-          console.log(dim(`  Nothing broke in the recent window. 🎉 (${refusals} request${refusals === 1 ? '' : 's'} your app refused on purpose — drop --exceptions to see them.)`));
+          console.log(dim(`  No exceptions in the returned error rows. (${refusals} request${refusals === 1 ? '' : 's'} your app refused on purpose — drop --exceptions to see them.)`));
           return;
         }
-        console.log(dim('  No errors in the recent window. 🎉'));
+        console.log(dim('  No error rows returned for this recent window.'));
         return;
       }
 
@@ -142,7 +141,7 @@ export function registerErrors(program: Command) {
         : `${exceptions} exception${exceptions === 1 ? '' : 's'}, ${rows.filter(isRefusal).length} refused on purpose`;
       const diagnosticCount = platformDiagnostics
         ? `, ${platformDiagnostics} platform diagnostic${platformDiagnostics === 1 ? '' : 's'}` : '';
-      console.log(dim(`\n  ${counts}${diagnosticCount} — ${teal('somewhere logs --level error')} for full detail.`));
+      console.log(dim(`\n  Returned rows: ${counts}${diagnosticCount} — ${teal('somewhere logs --level error')} for full detail.`));
       if (disconnected) console.log(dim(`  ${disconnectedNotice}`));
     });
 }

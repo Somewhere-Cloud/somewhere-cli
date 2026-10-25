@@ -50,7 +50,7 @@ test('errors labels generated diagnostics while preserving real app and API fail
     assert.equal(out.status, 0, out.stderr);
     assert.match(out.stdout, /platform diagnostic\s+500\s+POST \/v1\/db\/query-observations/);
     assert.match(out.stdout, /exception\s+500\s+POST \/api\/save/);
-    assert.match(out.stdout, /5 exceptions, 1 refused on purpose, 1 platform diagnostic/);
+    assert.match(out.stdout, /Returned rows: 5 exceptions, 1 refused on purpose, 1 platform diagnostic/);
     assert.match(out.stdout, /DATABASE_ERROR: Network connection lost/);
 
     out = await run(['--json']);
@@ -70,8 +70,19 @@ test('errors labels generated diagnostics while preserving real app and API fail
     rows = [refused];
     out = await run(['--exceptions']);
     assert.equal(out.status, 0, out.stderr);
-    assert.match(out.stdout, /Nothing broke.*1 request.*refused on purpose/);
-    assert.equal(requests.length, 5);
+    assert.match(out.stdout, /No exceptions in the returned error rows.*1 request.*refused on purpose.*drop --exceptions/);
+    assert.doesNotMatch(out.stdout, /Nothing broke|🎉/);
+
+    rows = [];
+    out = await run([]);
+    assert.equal(out.status, 0, out.stderr);
+    assert.match(out.stdout, /No error rows returned for this recent window/);
+    assert.doesNotMatch(out.stdout, /No errors in|Nothing broke|🎉/);
+
+    out = await run(['--json']);
+    assert.equal(out.status, 0, out.stderr);
+    assert.deepEqual(JSON.parse(out.stdout), []);
+    assert.equal(requests.length, 7);
   } finally {
     await new Promise(resolve => server.close(resolve));
     rmSync(config, { recursive: true, force: true });

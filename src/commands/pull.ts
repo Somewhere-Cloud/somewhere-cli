@@ -111,7 +111,7 @@ export function registerPull(program: Command) {
       const source = new Map<string, Buffer>();
       const addSource = (path: string, content: Buffer | string) => {
         const normalized = normalizeRelPath(path);
-        if (!normalized || normalized.startsWith('/') || normalized.split('/').some(part => !part || part === '.' || part === '..') || normalized.includes(':') || normalized.split('/').some(part => part.startsWith('.'))) {
+        if (!normalized || normalized.startsWith('/') || normalized.split('/').some(part => !part || part === '.' || part === '..') || normalized.includes(':') || normalized.split('/').some(part => part.startsWith('.') && part !== '.well-known')) {
           throw new Error(`Unsafe exported source path: ${path}`);
         }
         if (source.has(normalized)) throw new Error(`Conflicting exported source path: ${normalized}`);
@@ -250,8 +250,7 @@ function scaffoldTypecheckFiles(
     added.push(SCAFFOLD_PACKAGE_FILENAME);
   }
 
-  // Deploys never carry dotfiles, so a pulled app has no .gitignore of its
-  // own unless this folder already had one; an existing one is left as is.
+  // The collector excludes .gitignore; keep an existing local one as is.
   const gitignorePath = join(outDir, SCAFFOLD_GITIGNORE_FILENAME);
   if (!existsSync(gitignorePath)) {
     writeFileSync(gitignorePath, buildScaffoldGitignore());
@@ -282,7 +281,7 @@ function reconcileRemovedFiles(
 
   const walk = (dir: string) => {
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
-      if (IGNORE.has(entry.name) || entry.name.startsWith('.')) continue;
+      if (IGNORE.has(entry.name) || (entry.name.startsWith('.') && entry.name !== '.well-known')) continue;
       const fullPath = join(dir, entry.name);
       if (entry.isDirectory()) {
         walk(fullPath);

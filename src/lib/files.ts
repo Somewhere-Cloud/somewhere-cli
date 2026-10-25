@@ -133,7 +133,7 @@ function walk(
     const relPath = toDeployPath(relative(baseDir, fullPath));
     if (
       IGNORE.has(entry.name) ||
-      entry.name.startsWith('.') ||
+      (entry.name.startsWith('.') && entry.name !== '.well-known') ||
       ignore.ignores(relPath, entry.isDirectory())
     ) {
       continue;

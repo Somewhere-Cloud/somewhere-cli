@@ -14,10 +14,11 @@ const source = {
     'index.html': '<html><body>roundtrip</body></html>',
     'src/value.ts': 'export const value = 7;\n',
     'db/schema.ts': 'export const tables = {};\n',
+    '.well-known/security.txt': 'Contact: mailto:security@example.com\n',
   },
-  binary_files: { 'logo.png': Buffer.from([137, 80, 78, 71]).toString('base64') },
+  binary_files: { 'logo.png': Buffer.from([137, 80, 78, 71]).toString('base64'), '.well-known/mark.png': Buffer.from([137, 80, 78, 71, 1]).toString('base64') },
   functions: { 'api/read.ts': "import { value } from '../src/value'; export default () => Response.json({ value });\n", '_lib/helper.ts': 'export const helper = 1;\n' },
-  counts: { static_files: 3, binary_files: 1, functions: 2 },
+  counts: { static_files: 4, binary_files: 2, functions: 2 },
 };
 function run(args, cwd, env) {
   return new Promise(resolve => {
@@ -54,7 +55,12 @@ async function fixture(fn, exported = source) {
 
 test('fresh pull restores normal paths, exact source/assets/schema, and ordinary deploy uses the exported project/base', async () => {
   await fixture(async ({ app, env, uploads }) => {
-    let result = await run(['pull', 'named-project'], app, env);
+    mkdirSync(join(app, '.well-known'));
+    writeFileSync(join(app, '.well-known/obsolete.txt'), 'deleted remotely');
+    writeFileSync(join(app, '.env'), 'LOCAL_SECRET=preserved');
+    let result = await run(['pull', 'named-project', '--force'], app, env);
+    assert.equal(existsSync(join(app, '.well-known/obsolete.txt')), false);
+    assert.equal(readFileSync(join(app, '.env'), 'utf8'), 'LOCAL_SECRET=preserved');
     assert.equal(result.status, 0, result.output);
     assert.equal(existsSync(join(app, 'functions')), false);
     for (const [path, contents] of Object.entries({ ...source.static_files, ...source.functions })) assert.equal(readFileSync(join(app, path), 'utf8'), contents);
@@ -69,7 +75,9 @@ test('fresh pull restores normal paths, exact source/assets/schema, and ordinary
     assert.equal(uploads[0].base_release_id, source.active_release_id);
     assert.deepEqual(uploads[0].functions, source.functions);
     assert.equal(uploads[0].files['db/schema.ts'], source.static_files['db/schema.ts']);
+    assert.equal(uploads[0].files['.well-known/security.txt'], source.static_files['.well-known/security.txt']);
     assert.equal(uploads[0].binary_files['logo.png'], source.binary_files['logo.png']);
+    assert.equal(uploads[0].binary_files['.well-known/mark.png'], source.binary_files['.well-known/mark.png']);
   });
 });
 
@@ -130,4 +138,16 @@ test('pull --out links only the output directory and keeps its confirmed exporte
     assert.equal(config.project_id, source.project_id);
     assert.equal(config.source_base.release_id, source.active_release_id);
   });
+});
+
+
+test('reserved hidden exports and traversal remain rejected before any source or link writes', async () => {
+  for (const path of ['.somewhere.json', '.env', '.well-known/../escape.txt', '.well-known/.env']) {
+    await fixture(async ({ app, env }) => {
+      const result = await run(['pull', 'named-project', '--force'], app, env);
+      assert.equal(result.status, 1, result.output);
+      assert.equal(existsSync(join(app, 'index.html')), false);
+      assert.equal(existsSync(join(app, '.somewhere.json')), false);
+    }, { ...source, static_files: { ...source.static_files, [path]: 'untrusted' } });
+  }
 });

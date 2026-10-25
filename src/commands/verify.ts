@@ -424,16 +424,27 @@ export function normalizeVerifyFlow(raw: unknown, baseDir = process.cwd()): Veri
   return flow;
 }
 
+function readVerifyFlowFile(absolute: string, flag: '--flow' | '--verify'): unknown {
+  let source: string;
+  try {
+    source = readFileSync(absolute, 'utf8');
+  } catch (cause) {
+    if (cause instanceof Error && 'code' in cause && cause.code === 'ENOENT') {
+      throw new Error(`Flow file not found. Pass ${flag} <path> with an existing JSON file. Run \`somewhere verify --schema\` for the flow format.`);
+    }
+    throw new Error(`Flow file could not be read. Pass ${flag} <path> with a readable JSON file; check its file permissions. Run \`somewhere verify --schema\` for the flow format.`);
+  }
+  try {
+    return JSON.parse(source) as unknown;
+  } catch {
+    throw new Error(`Flow file is not valid JSON. Fix the JSON in the file passed to ${flag}, then rerun. Run \`somewhere verify --schema\` for the flow format.`);
+  }
+}
+
 export function loadVerifyFlow(path?: string, cwd = process.cwd()): VerifyFlow {
   if (!path) return normalizeVerifyFlow(undefined);
   const absolute = resolve(cwd, path);
-  if (!existsSync(absolute)) throw new Error(`Flow file not found: ${absolute}`);
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(readFileSync(absolute, 'utf8')) as unknown;
-  } catch (cause) {
-    throw new Error(`Flow file is not valid JSON: ${absolute} — ${cause instanceof Error ? cause.message : String(cause)}`);
-  }
+  const parsed = readVerifyFlowFile(absolute, '--verify');
   return normalizeVerifyFlow(parsed, dirname(absolute));
 }
 
@@ -1148,13 +1159,7 @@ export function loadVerifyInput(path?: string, cwd = process.cwd()):
   | { kind: 'journey'; journey: VerifyJourney } {
   if (!path) return { kind: 'single', flow: normalizeVerifyFlow(undefined) };
   const absolute = resolve(cwd, path);
-  if (!existsSync(absolute)) throw new Error(`Flow file not found: ${absolute}`);
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(readFileSync(absolute, 'utf8')) as unknown;
-  } catch (cause) {
-    throw new Error(`Flow file is not valid JSON: ${absolute} — ${cause instanceof Error ? cause.message : String(cause)}`);
-  }
+  const parsed = readVerifyFlowFile(absolute, '--flow');
   return isVerifyJourneyInput(parsed)
     ? { kind: 'journey', journey: normalizeVerifyJourney(parsed, dirname(absolute)) }
     : { kind: 'single', flow: normalizeVerifyFlow(parsed, dirname(absolute)) };

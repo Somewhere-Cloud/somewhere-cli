@@ -358,8 +358,8 @@ test('pull with skipped files does not advance last_deploy', async () => {
       env: { HOME, USERPROFILE: HOME, SOMEWHERE_API_URL: apiUrl },
     });
 
-    assert.equal(result.status, 0, `stdout:\n${result.stdout}\nstderr:\n${result.stderr}`);
-    assert.match(result.stdout, /Skipped 1 existing file/);
+    assert.equal(result.status, 1, `stdout:\n${result.stdout}\nstderr:\n${result.stderr}`);
+    assert.match(result.stderr, /Pull would overwrite local file/);
     assert.equal(readProject(fixtureDir).last_deploy.last_deployed_version, 7);
     assert.equal(readFileSync(join(fixtureDir, 'index.html'), 'utf8'), '<html><body>stale base</body></html>\n');
   });

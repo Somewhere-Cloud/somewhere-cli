@@ -49,11 +49,11 @@ function generateGreen() {
   return { dir, result };
 }
 
-test('auth template SDK defaults adopt 0.12.8 identity-only auth with explicit billing observations and preserve exact versus caret policy', () => {
+test('auth template SDK defaults adopt 0.12.10 identity-only auth with explicit billing observations and preserve exact versus caret policy', () => {
   const selection = { requested: ['auth'], added: [], modules: ['auth'], ui: 'styled' };
   for (const [files, expected] of [
-    [createFeatureTemplate(selection, { appName: 'Starter' }), '0.12.8'],
-    [createHappyPathTemplate(), '^0.12.8'],
+    [createFeatureTemplate(selection, { appName: 'Starter' }), '0.12.10'],
+    [createHappyPathTemplate(), '^0.12.10'],
   ]) {
     const manifest = JSON.parse(files.find((file) => file.path === 'package.json').content);
     assert.equal(manifest.dependencies['@somewhere-tech/sdk'], expected);
@@ -114,7 +114,7 @@ test('minimal starter is a small typed frontend, function, and schema', () => {
 
   const pkg = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'));
   assert.deepEqual(pkg.dependencies, {
-    '@somewhere-tech/sdk': '0.12.8',
+    '@somewhere-tech/sdk': '0.12.10',
     react: '19.2.7',
     'react-dom': '19.2.7',
   });
@@ -248,7 +248,7 @@ test('default starter is the auth module: SDK client, packaged handler, hooks, r
   assert.doesNotMatch(app, /fetch\(/, 'components never fetch; services do');
   assert.match(app, /Checking your session/, 'a visible loading state, never a blank gate');
   const pkg = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'));
-  assert.equal(pkg.dependencies['@somewhere-tech/sdk'], '0.12.8');
+  assert.equal(pkg.dependencies['@somewhere-tech/sdk'], '0.12.10');
   for (const version of [...Object.values(pkg.dependencies), ...Object.values(pkg.devDependencies)]) {
     assert.match(version, /^\d+\.\d+\.\d+$/, `dependency is not pinned: ${version}`);
   }
@@ -405,7 +405,7 @@ test('one generated template consumes the SDK auth adapter and server data/files
   assert.match('JWT rotation remains SDK-owned.', authMechanicsTerms);
 
   const packageJson = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'));
-  assert.equal(packageJson.dependencies['@somewhere-tech/sdk'], '^0.12.8');
+  assert.equal(packageJson.dependencies['@somewhere-tech/sdk'], '^0.12.10');
   assert.equal(packageJson.scripts.build, undefined);
 
   const approvedAuthGuidance =

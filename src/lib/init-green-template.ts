@@ -11,6 +11,7 @@ const PACKAGE_JSON = `{
     "typecheck": "somewhere typecheck"
   },
   "dependencies": {
+    "@somewhere-tech/sdk": "0.12.8",
     "react": "19.2.7",
     "react-dom": "19.2.7"
   },
@@ -35,7 +36,7 @@ const TSCONFIG = `{
     "isolatedModules": true,
     "jsx": "react-jsx"
   },
-  "include": ["src", "api", "db", "types"]
+  "include": ["src", "api", "db", "types", "*.ts"]
 }
 `;
 
@@ -134,6 +135,14 @@ This project starts green: a typed React page calls a typed public greeting
 function. It reads the server-only table declared in \`db/schema.ts\` and
 shows a fallback message while the table is empty. The endpoint exposes only
 the greeting message; add caller authorization before serving private data.
+The SDK and \`api/auth/[...path].ts\` are included; add your sign-in UI or use
+\`somewhere init --template auth\` for the complete sign-in screens.
+
+When replacing the greeting, remove its page/service files and mark its
+already-deployed table with \`greetings: removedTable()\` in the schema (import
+\`removedTable\` from \`somewhere/db\`). A deploy retires it with the normal
+30-day retention; deleting the declaration alone is refused. Remove an unused
+\`types/app.ts\` too. A missing optional include directory is harmless.
 
 \`\`\`sh
 somewhere typecheck
@@ -163,6 +172,7 @@ export function createGreenTemplate(): InitScaffoldFile[] {
     { path: 'src/services/greeting.ts', content: SERVICE },
     { path: 'src/styles.css', content: STYLES },
     { path: 'api/greeting.ts', content: API },
+    { path: 'api/auth/[...path].ts', content: "export { somewhereAuth as default } from '@somewhere-tech/sdk/server';\n" },
     { path: 'db/schema.ts', content: SCHEMA },
     { path: 'types/app.ts', content: APP_TYPES },
   ];

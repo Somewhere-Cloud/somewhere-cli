@@ -47,7 +47,7 @@ const TSCONFIG = `{
     "isolatedModules": true,
     "jsx": "react-jsx"
   },
-  "include": ["src", "api", "db", "types"]
+  "include": ["src", "api", "db", "types", "*.ts"]
 }
 `;
 

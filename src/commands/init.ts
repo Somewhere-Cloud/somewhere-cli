@@ -76,7 +76,7 @@ export function registerInit(program: Command) {
     .option('--link', 'Link to an existing project instead of creating one')
     .option('--project <ref>', 'Existing project ID, name, slug, or subdomain (requires --link)')
     .option('--bare', 'Create and link only: no starter source or dependencies (AGENTS.md/CLAUDE.md are still added when absent)')
-    .option('--template <name>', 'Starter to write: auth (default, cookie sign-in) or minimal (no sign-in)', 'auth')
+    .option('--template <name>', 'Starter to write: auth (default, cookie sign-in) or minimal (auth route, no sign-in UI)', 'auth')
     .option('--features <ids>', 'Generate selected modules into an empty directory, comma-separated: auth, magic-link, private-data, agent (see --catalog)')
     .option('--ui <mode>', 'With --features: styled (default; src/ui + design tokens) or headless (hooks and plain markup)')
     .option('--catalog', 'Print the module catalog for --features and exit; no login, project or files')
@@ -91,7 +91,7 @@ export function registerInit(program: Command) {
         + 'replaceable views in src/ui/ and styles in src/styles/, plus an AGENTS.md workflow\n'
         + '(typecheck, deploy, verify). Sign-in and invitation links (sw.auth.invite) open\n'
         + '/auth/magic, which the starter routes before the sign-in gate.\n'
-        + '`--template minimal` writes an app without sign-in.\n'
+        + '`--template minimal` includes the SDK and auth route without sign-in screens.\n'
         + 'New starters and --bare also install six agent skills in .agents/skills, pinned by skills-lock.json.\n'
         + '\nA directory that already holds an app (package.json, index.html, src/, …) is\n'
         + 'linked and left untouched. A directory holding only other files (notes, a stray\n'

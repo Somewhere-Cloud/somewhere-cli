@@ -6,7 +6,7 @@ import { SKILLS_DIR, skillNames } from './skills-pack.js';
 export const AGENT_WORKFLOW = `## Getting started — build, deploy, verify
 
 \`somewhere init --name <slug>\` creates a React + TypeScript app; no login needed.
-Sign-in is included except in minimal/bare. See README for the file map. \`init --catalog --json\` lists \`--features\` modules.
+Default: sign-in UI. Minimal: SDK and auth route. Bare: neither. \`init --catalog --json\` lists \`--features\` modules.
 \`npx @somewhere-tech/cli deploy\` publishes a temporary app and prints its live
 URL, claim URL and expiry. Login is needed for account-owned operations,
 the email test inbox and cron. On a hosted VM, \`somewhere login\` uses browser approval and keeps you signed in.
@@ -77,7 +77,7 @@ changes }\`; \`where: { a: 1, b: { in: ids }, c: { gte: 2 }, d: null }\` (one
 operator per column). Raw SQL uses a separate raw database, never managed tables.
 For cross-user managed work, authorize the caller and use \`sw.db.server.from\` /
 \`insert\` / \`update\` / \`remove\`; keep \`owner()\`/\`group()\`. Parallel reads: \`Promise.all\`.
-One user by email, after authorizing: \`sw.auth.server.listUsers({ emails: [email] })\`, not directory paging (that is for admin lists, exports).
+
 Unique pair: \`unique: [['org_id','email']]\` in table options.
 
 Test schedules now: \`somewhere cron run <id> --wait\`. Do not wait for it to fire.

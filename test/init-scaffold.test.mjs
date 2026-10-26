@@ -49,11 +49,11 @@ function generateGreen() {
   return { dir, result };
 }
 
-test('auth template SDK defaults adopt 0.12.8 identity-only auth with explicit billing observations and preserve exact versus caret policy', () => {
+test('auth template SDK defaults adopt 0.12.10 identity-only auth with explicit billing observations and preserve exact versus caret policy', () => {
   const selection = { requested: ['auth'], added: [], modules: ['auth'], ui: 'styled' };
   for (const [files, expected] of [
-    [createFeatureTemplate(selection, { appName: 'Starter' }), '0.12.8'],
-    [createHappyPathTemplate(), '^0.12.8'],
+    [createFeatureTemplate(selection, { appName: 'Starter' }), '0.12.10'],
+    [createHappyPathTemplate(), '^0.12.10'],
   ]) {
     const manifest = JSON.parse(files.find((file) => file.path === 'package.json').content);
     assert.equal(manifest.dependencies['@somewhere-tech/sdk'], expected);
@@ -99,6 +99,7 @@ test('minimal starter is a small typed frontend, function, and schema', () => {
     'AGENTS.md',
     'CLAUDE.md',
     'README.md',
+    'api/auth/[...path].ts',
     'api/greeting.ts',
     'db/schema.ts',
     'index.html',
@@ -113,6 +114,7 @@ test('minimal starter is a small typed frontend, function, and schema', () => {
 
   const pkg = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'));
   assert.deepEqual(pkg.dependencies, {
+    '@somewhere-tech/sdk': '0.12.10',
     react: '19.2.7',
     'react-dom': '19.2.7',
   });
@@ -133,6 +135,8 @@ test('minimal starter is a small typed frontend, function, and schema', () => {
     assert.match(version, /^\d+\.\d+\.\d+$/, `dependency is not pinned: ${version}`);
   }
 
+  assert.equal(readFileSync(join(dir, 'api/auth/[...path].ts'), 'utf8'), "export { somewhereAuth as default } from '@somewhere-tech/sdk/server';\n");
+  assert.ok(JSON.parse(readFileSync(join(dir, 'tsconfig.json'), 'utf8')).include.includes('*.ts'));
   assert.match(readFileSync(join(dir, 'api/greeting.ts'), 'utf8'), /export default sw\.endpoint\(\{/);
   assert.match(readFileSync(join(dir, 'api/greeting.ts'), 'utf8'), /sw\.db\.from\('greetings'/);
   assert.doesNotMatch(readFileSync(join(dir, 'api/greeting.ts'), 'utf8'), /sw\.db\.server/);
@@ -150,8 +154,7 @@ test('minimal starter is a small typed frontend, function, and schema', () => {
 
   const workflowOrder = [
     'somewhere init --name <slug>',
-    'Sign-in is included except in minimal/bare.',
-    'See README for the file map.',
+    'Default: sign-in UI. Minimal: SDK and auth route. Bare: neither.',
     'npx @somewhere-tech/cli deploy',
     'somewhere docs recipe-signed-in-app --full',
     'somewhere typecheck',
@@ -212,6 +215,7 @@ declare module 'react/jsx-runtime' {
   export function jsxs(type: unknown, props: unknown): JSX.Element;
   export const Fragment: unknown;
 }
+declare module '@somewhere-tech/sdk/server' { export const somewhereAuth: (request: Request) => Promise<Response>; }
 declare module 'react-dom/client' {
   export function createRoot(node: Element): { render(value: unknown): void };
 }
@@ -244,7 +248,7 @@ test('default starter is the auth module: SDK client, packaged handler, hooks, r
   assert.doesNotMatch(app, /fetch\(/, 'components never fetch; services do');
   assert.match(app, /Checking your session/, 'a visible loading state, never a blank gate');
   const pkg = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'));
-  assert.equal(pkg.dependencies['@somewhere-tech/sdk'], '0.12.8');
+  assert.equal(pkg.dependencies['@somewhere-tech/sdk'], '0.12.10');
   for (const version of [...Object.values(pkg.dependencies), ...Object.values(pkg.devDependencies)]) {
     assert.match(version, /^\d+\.\d+\.\d+$/, `dependency is not pinned: ${version}`);
   }
@@ -401,7 +405,7 @@ test('one generated template consumes the SDK auth adapter and server data/files
   assert.match('JWT rotation remains SDK-owned.', authMechanicsTerms);
 
   const packageJson = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'));
-  assert.equal(packageJson.dependencies['@somewhere-tech/sdk'], '^0.12.8');
+  assert.equal(packageJson.dependencies['@somewhere-tech/sdk'], '^0.12.10');
   assert.equal(packageJson.scripts.build, undefined);
 
   const approvedAuthGuidance =

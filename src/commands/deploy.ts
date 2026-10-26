@@ -93,8 +93,8 @@ const NEXT_DEPENDENCY_SECTIONS = [
   'optionalDependencies',
 ] as const;
 const NEXT_APP_WARNING =
-  "somewhere.tech serves static files + serverless functions, not SSR — Next.js apps don't run here. " +
-  'Port API routes to functions/ handlers, or start from a Vite React app; the platform compiles raw JSX/TSX on deploy.';
+  "Next.js apps do not run here. Somewhere supports HTML responses from ordinary server functions. " +
+  'Port API routes to api/ handlers and HTML pages to root routes such as [...path].ts, or start from a Vite React app. Read somewhere docs functions; deploy raw JSX/TSX.';
 const DEPLOY_HEARTBEAT_MS = 30_000;
 const DEPLOY_MAX_ATTEMPTS = 2;
 // The CLI's OWN verdicts — transport failures it detected itself, where no

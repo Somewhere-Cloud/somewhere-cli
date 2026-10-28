@@ -10,7 +10,7 @@ import { getToken, loadConfig } from './config.js';
 import { safeInvalid, type InvalidDetail } from './vendor/repro-guidance.js';
 
 const MCP_BASE_URL =
-  process.env.SOMEWHERE_MCP_URL?.replace(/\/$/, '') || 'https://mcp.somewhere.tech/mcp';
+  process.env.SOMEWHERE_MCP_URL?.replace(/\/$/, '') || 'https://mcp.somewhere.cloud/mcp';
 
 let isSdkAuthError: (err: unknown) => boolean = () => false;
 

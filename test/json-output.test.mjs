@@ -484,7 +484,7 @@ test('rollback replaces stale snapshot wording while preserving JSON', async () 
  * path — it needs no live platform, and must never touch one.
  *
  * It used to run with no SOMEWHERE_API_URL at all, so `deploy`, `deploy-check`
- * and `browser` ran logged-out against api.somewhere.tech. `somewhere deploy`
+ * and `browser` ran logged-out against api.somewhere.cloud. `somewhere deploy`
  * is anonymous-when-logged-out, so every `npm test` minted a real temporary
  * account and a real project named after the mkdtemp working directory
  * (sw-json-contract-cwd-*). 14+ landed on production on 2026-09-01 alone, and

@@ -69,7 +69,7 @@ test('mintTempAccount — GET challenge then POST create with {nonce, suffix}, e
             expires_at: '2026-07-02T16:00:00.000Z',
             ttl_seconds: 10800,
             claim_token: 'swtc_xyz',
-            claim_url: 'https://somewhere.tech/claim?token=swtc_xyz',
+            claim_url: 'https://somewhere.cloud/claim?token=swtc_xyz',
           },
         }),
       };
@@ -88,7 +88,7 @@ test('mintTempAccount — GET challenge then POST create with {nonce, suffix}, e
 
   // `key` is preferred over `access_token` when both are present.
   assert.equal(account.key, 'smt_temp_123');
-  assert.equal(account.claim_url, 'https://somewhere.tech/claim?token=swtc_xyz');
+  assert.equal(account.claim_url, 'https://somewhere.cloud/claim?token=swtc_xyz');
   assert.equal(account.ttl_seconds, 10800);
 });
 
@@ -113,7 +113,7 @@ test('mintTempAccount — falls back to access_token when key is absent', async 
           expires_at: 'x',
           ttl_seconds: 10800,
           claim_token: 'swtc_1',
-          claim_url: 'https://somewhere.tech/claim?token=swtc_1',
+          claim_url: 'https://somewhere.cloud/claim?token=swtc_1',
         },
       }),
     };

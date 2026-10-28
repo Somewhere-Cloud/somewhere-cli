@@ -291,7 +291,7 @@ export function registerPreview(program: Command) {
         + 'change production rows. Nothing your users see changes — production keeps serving what you last '
         + 'promoted, until you run `somewhere promote`. Reach for this when you want the real hosted app in '
         + 'front of you, or when your agent reaches the platform over MCP and cannot serve on localhost. '
-        + 'The plans that include it are listed at https://somewhere.tech/pricing; '
+        + 'The plans that include it are listed at https://somewhere.cloud/pricing; '
         + '`somewhere dev` provides frontend hot reload against the deployed backend.',
     )
     .option('--project <id>', 'Override project ID')
@@ -391,7 +391,7 @@ export function registerDev(program: Command) {
 
 export const CLOUD_DEV_UNAVAILABLE_MESSAGE =
   '`somewhere preview` is not included in this account\'s plan. '
-  + 'Plans that include hosted previews are listed at https://somewhere.tech/pricing.';
+  + 'Plans that include hosted previews are listed at https://somewhere.cloud/pricing.';
 
 /**
  * Does this account have private previews?
@@ -456,7 +456,7 @@ export function cloudDevUnavailableMessage(planNames: string[] | null): string {
     ? planNames[0]
     : `${planNames.slice(0, -1).join(', ')} and ${planNames[planNames.length - 1]}`;
   return '`somewhere preview` is not included in this account\'s plan. '
-    + `It is included on the ${list} plan${planNames.length === 1 ? '' : 's'}: https://somewhere.tech/pricing.`;
+    + `It is included on the ${list} plan${planNames.length === 1 ? '' : 's'}: https://somewhere.cloud/pricing.`;
 }
 
 export class CloudDevUnavailableError extends Error {

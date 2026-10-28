@@ -1,7 +1,7 @@
 // `deploy --temporary` beside a real login keeps one throwaway per project
 // root (pfb_29428f76480e). Before, one account-global throwaway was reused for
 // every directory, so a deploy from an unrelated directory silently replaced
-// the first directory's app. Local stub server only; never api.somewhere.tech.
+// the first directory's app. Local stub server only; never api.somewhere.cloud.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
@@ -54,7 +54,7 @@ const server = createServer((req, res) => {
       return send(201, {
         access_token: `smt_temp_${mints}`, key: `smt_temp_${mints}`, key_prefix: 'smt_temp', key_id: `key_${mints}`,
         scopes: ['projects', 'deploy', 'browser'], expires_at: new Date(Date.now() + 10_800_000).toISOString(), ttl_seconds: 10800,
-        claim_token: `swtc_${mints}`, claim_url: `https://somewhere.tech/claim?token=swtc_${mints}`,
+        claim_token: `swtc_${mints}`, claim_url: `https://somewhere.cloud/claim?token=swtc_${mints}`,
       });
     }
     if (req.method === 'POST' && req.url === '/v1/projects') {
@@ -163,7 +163,7 @@ test('an unscoped throwaway recorded by an older CLI is never adopted', async ()
   const HOME = realLoginHome();
   const work = realpathSync(mkdtempSync(join(tmpdir(), 'sw-temp-root-work-')));
   const a = app(work, 'alpha');
-  const legacy = { token: 'smt_temp_legacy', temp_expires_at: new Date(Date.now() + 3_600_000).toISOString(), claim_url: 'https://somewhere.tech/claim?token=legacy', project: { project_id: 'proj_legacy', name: 'old', subdomain: 'old' } };
+  const legacy = { token: 'smt_temp_legacy', temp_expires_at: new Date(Date.now() + 3_600_000).toISOString(), claim_url: 'https://somewhere.cloud/claim?token=legacy', project: { project_id: 'proj_legacy', name: 'old', subdomain: 'old' } };
   writeFileSync(join(HOME, '.somewhere', 'temp-session.json'), JSON.stringify(legacy));
   const mintsBefore = mints;
 
@@ -182,7 +182,7 @@ test('an expired temporary session mints a new one and never targets the old thr
   const work = realpathSync(mkdtempSync(join(tmpdir(), 'sw-temp-root-work-')));
   const a = app(work, 'alpha');
   writeFileSync(join(HOME, '.somewhere', 'temp-session.json'), JSON.stringify({
-    token: 'smt_temp_expired', temp_expires_at: new Date(Date.now() - 60_000).toISOString(), claim_url: 'https://somewhere.tech/claim?token=old',
+    token: 'smt_temp_expired', temp_expires_at: new Date(Date.now() - 60_000).toISOString(), claim_url: 'https://somewhere.cloud/claim?token=old',
     projects: { [a]: { project_id: 'proj_expired', name: 'old', subdomain: 'old' } },
   }));
   const mintsBefore = mints;

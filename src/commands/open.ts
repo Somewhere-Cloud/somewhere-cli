@@ -15,8 +15,8 @@ export function registerOpen(program: Command) {
     .option('--dashboard', 'Open the dashboard instead')
     .action(async (project: string | undefined, opts) => {
       if (opts.dashboard) {
-        info(`Opening ${dim('https://somewhere.tech/dashboard')}...`);
-        await _open('https://somewhere.tech/dashboard');
+        info(`Opening ${dim('https://somewhere.cloud/dashboard')}...`);
+        await _open('https://somewhere.cloud/dashboard');
         return;
       }
 

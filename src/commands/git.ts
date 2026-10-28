@@ -49,7 +49,7 @@ interface RepoChoice {
   repo: GitHubRepo;
 }
 
-const DASHBOARD = 'https://somewhere.tech/dashboard';
+const DASHBOARD = 'https://somewhere.cloud/dashboard';
 const INSTALL_TIMEOUT_MS = 5 * 60_000;
 const DEPLOY_POLL_MS = 1500;
 

@@ -122,7 +122,7 @@ test('git connect deploys repository HEAD and reports commit, logs, and live URL
     const output = JSON.parse(result.stdout);
     assert.equal(output.commit_sha, 'abcdef1234567890');
     assert.equal(output.status, 'deployed');
-    assert.equal(output.logs_url, 'https://somewhere.tech/dashboard/projects/proj-1?tab=logs');
+    assert.equal(output.logs_url, 'https://somewhere.cloud/dashboard/projects/proj-1?tab=logs');
     assert.equal(output.live_url, 'https://throwaway-github.somewhere.site');
     assert.equal(result.stderr, '');
 

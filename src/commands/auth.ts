@@ -96,7 +96,7 @@ function createProtectedOutput(path: string): number {
  *  device flow, which offers no way to create an account — a stranger with no
  *  Google or GitHub account had no front door from the CLI at all
  *  (tsk_0e9e13b8). This URL is the one that does. */
-export const SIGNUP_URL = 'https://somewhere.tech/auth?intent=signup';
+export const SIGNUP_URL = 'https://somewhere.cloud/auth?intent=signup';
 
 /** The one line `login` prints so a new user is never stranded, and the line
  *  `signup` is built around. Kept as data so it can be pinned by a test

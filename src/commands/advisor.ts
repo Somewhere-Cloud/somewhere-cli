@@ -13,7 +13,7 @@ export { callPlatformHelpTool };
 
 const ADVISOR_TIMEOUT_MS = 60_000;
 const MCP_BASE_URL =
-  process.env.SOMEWHERE_MCP_URL?.replace(/\/$/, '') || 'https://mcp.somewhere.tech/mcp';
+  process.env.SOMEWHERE_MCP_URL?.replace(/\/$/, '') || 'https://mcp.somewhere.cloud/mcp';
 
 function publicAdvisorUrl(): string {
   const url = new URL(MCP_BASE_URL);

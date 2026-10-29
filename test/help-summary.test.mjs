@@ -9,7 +9,7 @@ import { Command } from 'commander';
 import { helpSummary } from '../dist/lib/help-summary.js';
 
 test('summary keeps complete sentences, dotted contracts and URLs', () => {
-  assert.equal(helpSummary('Read sw.db and https://somewhere.tech/docs. Full details.'), 'Read sw.db and https://somewhere.tech/docs.');
+  assert.equal(helpSummary('Read sw.db and https://somewhere.cloud/docs. Full details.'), 'Read sw.db and https://somewhere.cloud/docs.');
   assert.equal(helpSummary('First line\nExamples follow'), 'First line');
   assert.equal(helpSummary('Single description'), 'Single description');
   assert.equal(helpSummary(''), '');

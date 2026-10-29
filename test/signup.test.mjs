@@ -7,7 +7,7 @@
  * had no front door from the CLI.
  *
  * `somewhere signup` and `somewhere login --signup` both point at
- * https://somewhere.tech/auth?intent=signup, and `login` names that path in its
+ * https://somewhere.cloud/auth?intent=signup, and `login` names that path in its
  * own output so a new user is never stranded mid-flow.
  *
  * The login intro is asserted through the exported line builder rather than by
@@ -53,8 +53,8 @@ function emptyHome() {
 }
 
 test('signup resolves the account-creation URL', () => {
-  assert.equal(SIGNUP_URL, 'https://somewhere.tech/auth?intent=signup');
-  assert.match(SIGNUP_HINT, /Create an account: https:\/\/somewhere\.tech\/auth\?intent=signup/);
+  assert.equal(SIGNUP_URL, 'https://somewhere.cloud/auth?intent=signup');
+  assert.match(SIGNUP_HINT, /Create an account: https:\/\/somewhere\.cloud\/auth\?intent=signup/);
 });
 
 test('`somewhere signup` is a registered command that prints the URL as text', async () => {
@@ -62,7 +62,7 @@ test('`somewhere signup` is a registered command that prints the URL as text', a
   const result = await run(['signup'], { HOME: home, USERPROFILE: home });
   assert.equal(result.status, 0, `stdout:\n${result.stdout}\nstderr:\n${result.stderr}`);
   assert.ok(
-    result.stdout.includes('https://somewhere.tech/auth?intent=signup'),
+    result.stdout.includes('https://somewhere.cloud/auth?intent=signup'),
     `the URL must be printed as text for a headless agent to relay:\n${result.stdout}`,
   );
   assert.match(result.stdout, /Create your somewhere\.tech account/);
@@ -73,13 +73,13 @@ test('`somewhere login --signup` reaches the same page', async () => {
   const home = emptyHome();
   const result = await run(['login', '--signup'], { HOME: home, USERPROFILE: home });
   assert.equal(result.status, 0, `stdout:\n${result.stdout}\nstderr:\n${result.stderr}`);
-  assert.ok(result.stdout.includes('https://somewhere.tech/auth?intent=signup'));
+  assert.ok(result.stdout.includes('https://somewhere.cloud/auth?intent=signup'));
 });
 
 test("login's own output carries an account-creation line", () => {
   const printed = loginIntroLines().join('\n');
   assert.match(printed, /create an account/i);
-  assert.ok(printed.includes('https://somewhere.tech/auth?intent=signup'));
+  assert.ok(printed.includes('https://somewhere.cloud/auth?intent=signup'));
 });
 
 test('help mentions signup at the top level and on login', async () => {

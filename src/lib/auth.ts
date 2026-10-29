@@ -4,12 +4,12 @@ import { getDeviceKeyName } from './device.js';
 import open from './open.js';
 import { cyan } from './output.js';
 
-const AUTH_URL = 'https://api.somewhere.tech/v1/auth/cli';
+const AUTH_URL = 'https://api.somewhere.cloud/v1/auth/cli';
 
 /**
  * Browser-based OAuth login flow:
  * 1. Start local HTTP server on a random port
- * 2. Open browser to api.somewhere.tech/v1/auth/cli?redirect=http://localhost:PORT/callback
+ * 2. Open browser to api.somewhere.cloud/v1/auth/cli?redirect=http://localhost:PORT/callback
  * 3. User authenticates via Google OAuth
  * 4. Platform redirects to localhost with ?token=smt_...&email=...&username=...
  * 5. Return the received credentials

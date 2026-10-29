@@ -65,7 +65,7 @@ const server = createServer((req, res) => {
         send(201, {
           access_token: `smt_temp_${mints}`, key: `smt_temp_${mints}`, key_prefix: 'smt_temp', key_id: `key_${mints}`,
           scopes: ['projects', 'deploy'], expires_at: new Date(Date.now() + 10_800_000).toISOString(), ttl_seconds: 10800,
-          claim_token: `swtc_${mints}`, claim_url: `https://somewhere.tech/claim?token=swtc_${mints}`,
+          claim_token: `swtc_${mints}`, claim_url: `https://somewhere.cloud/claim?token=swtc_${mints}`,
         });
       };
       if (mintGate) return mintGate.hold({ answer });
@@ -124,7 +124,7 @@ test('both processes load the sidecar, then save in turn: neither root mapping i
   const work = realpathSync(mkdtempSync(join(tmpdir(), 'sw-temp-conc-work-')));
   const [alpha, beta] = [app(work, 'alpha'), app(work, 'beta')];
   // A live shared credential already exists; both processes reuse it.
-  writeFileSync(sidecarPath(HOME), JSON.stringify({ token: 'smt_temp_shared', temp_expires_at: new Date(Date.now() + 3_600_000).toISOString(), claim_url: 'https://somewhere.tech/claim?token=shared' }));
+  writeFileSync(sidecarPath(HOME), JSON.stringify({ token: 'smt_temp_shared', temp_expires_at: new Date(Date.now() + 3_600_000).toISOString(), claim_url: 'https://somewhere.cloud/claim?token=shared' }));
   projectsGate = gate(2);
   const a = start(['deploy', '--temporary'], alpha, HOME);
   const b = start(['deploy', '--temporary'], beta, HOME);
@@ -172,7 +172,7 @@ test('many processes recording different roots at once lose none of them', async
   const work = realpathSync(mkdtempSync(join(tmpdir(), 'sw-temp-conc-work-')));
   const names = ['a1', 'a2', 'a3', 'a4', 'a5', 'a6'];
   const roots = names.map((n) => app(work, n));
-  writeFileSync(sidecarPath(HOME), JSON.stringify({ token: 'smt_temp_shared', temp_expires_at: new Date(Date.now() + 3_600_000).toISOString(), claim_url: 'https://somewhere.tech/claim?token=shared' }));
+  writeFileSync(sidecarPath(HOME), JSON.stringify({ token: 'smt_temp_shared', temp_expires_at: new Date(Date.now() + 3_600_000).toISOString(), claim_url: 'https://somewhere.cloud/claim?token=shared' }));
   projectsGate = gate(names.length);
   const runs = roots.map((root) => start(['deploy', '--temporary'], root, HOME));
   const held = await projectsGate.allArrived;
@@ -210,7 +210,7 @@ test('a crashed writer leaves an intact sidecar and a recoverable lock; a live o
   const HOME = realLoginHome();
   const work = realpathSync(mkdtempSync(join(tmpdir(), 'sw-temp-conc-work-')));
   const [alpha, beta] = [app(work, 'alpha'), app(work, 'beta')];
-  writeFileSync(sidecarPath(HOME), JSON.stringify({ token: 'smt_temp_shared', temp_expires_at: new Date(Date.now() + 3_600_000).toISOString(), claim_url: 'https://somewhere.tech/claim?token=shared' }));
+  writeFileSync(sidecarPath(HOME), JSON.stringify({ token: 'smt_temp_shared', temp_expires_at: new Date(Date.now() + 3_600_000).toISOString(), claim_url: 'https://somewhere.cloud/claim?token=shared' }));
   const lock = `${sidecarPath(HOME)}.lock`;
 
   const crashed = holdSidecarLock(join(HOME, '.somewhere'), join(work, 'crashed-ready'));

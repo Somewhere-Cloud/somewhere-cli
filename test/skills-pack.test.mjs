@@ -164,7 +164,7 @@ test('`skills status` and `skills update` end to end against a docs host', async
   await withHost(newerPack(), async (base) => {
     const out = await cli(['skills', 'update', '--json'], dir, { SOMEWHERE_DOCS_BASE: base });
     assert.equal(out.status, 1);
-    assert.match(JSON.parse(out.stdout).message, /trusted https:\/\/somewhere.tech origin/);
+    assert.match(JSON.parse(out.stdout).message, /trusted https:\/\/somewhere.cloud origin/);
   });
   assert.equal(readFileSync(join(dir, 'skills-lock.json'), 'utf8'), before);
 });
@@ -219,7 +219,7 @@ test('trusted HTTPS fetch verifies integrity and refuses redirects/tampering', a
   const previous = process.env.SOMEWHERE_DOCS_BASE;
   delete process.env.SOMEWHERE_DOCS_BASE;
   try {
-    globalThis.fetch = async (url, options) => { assert.equal(url, 'https://somewhere.tech/skills/pack.json'); assert.equal(options.redirect, 'manual'); return Response.json(newerPack()); };
+    globalThis.fetch = async (url, options) => { assert.equal(url, 'https://somewhere.cloud/skills/pack.json'); assert.equal(options.redirect, 'manual'); return Response.json(newerPack()); };
     assert.equal((await fetchLatestPack()).version, newerPack().version);
     globalThis.fetch = async () => new Response(null, { status: 302, headers: { location: 'http://evil.example/pack' } });
     await assert.rejects(fetchLatestPack(), /answered 302/);

@@ -284,7 +284,7 @@ export function skillsStatus(
   };
 }
 
-export const DOCS_BASE = 'https://somewhere.tech';
+export const DOCS_BASE = 'https://somewhere.cloud';
 
 /**
  * The pack the docs host serves now, hash-verified. null when the host is
@@ -294,7 +294,7 @@ export const DOCS_BASE = 'https://somewhere.tech';
 export async function fetchLatestPack(timeoutMs = 5000): Promise<SkillsPack | null> {
   const configured = process.env.SOMEWHERE_DOCS_BASE;
   if (configured && configured.replace(/\/$/, '') !== DOCS_BASE) {
-    throw new Error('Skills updates require the trusted https://somewhere.tech origin. Checksums verify integrity, not publisher authenticity.');
+    throw new Error('Skills updates require the trusted https://somewhere.cloud origin. Checksums verify integrity, not publisher authenticity.');
   }
   let res: Response;
   try {

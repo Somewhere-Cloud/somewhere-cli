@@ -9,7 +9,7 @@ import { loadConfig, updateTokens } from './config.js';
  *  suffix or a host the route paths can hang off of. Exported so other
  *  modules that need the same base (e.g. lib/temp-auth.ts's unauthenticated
  *  PoW endpoints) reuse this one env-resolution instead of duplicating it. */
-export const API_BASE_URL = process.env.SOMEWHERE_API_URL?.replace(/\/$/, '') || 'https://api.somewhere.tech/v1';
+export const API_BASE_URL = process.env.SOMEWHERE_API_URL?.replace(/\/$/, '') || 'https://api.somewhere.cloud/v1';
 
 /** The dedicated run_code runner worker (somewhere-tech-runner). `somewhere run`
  *  MUST hit this host, NOT the /v1 API: the runner is the request ROOT — it
@@ -19,7 +19,7 @@ export const API_BASE_URL = process.env.SOMEWHERE_API_URL?.replace(/\/$/, '') ||
  *  developer key the rest of the CLI uses. Override for staging via
  *  SOMEWHERE_RUNNER_URL. */
 const RUNNER_BASE_URL =
-  process.env.SOMEWHERE_RUNNER_URL?.replace(/\/$/, '') || 'https://runner.somewhere.tech';
+  process.env.SOMEWHERE_RUNNER_URL?.replace(/\/$/, '') || 'https://runner.somewhere.cloud';
 
 /** Default request timeout. Long-running calls (deploy compiles, pulls)
  *  pass an explicit budget via opts.timeoutMs instead. */

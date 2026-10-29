@@ -22,7 +22,7 @@ async function fixture({ mode = 'failed', json = true, flow, temporary = false }
   const configDir = join(scratch, 'config');
   mkdirSync(dir); mkdirSync(configDir);
   const config = { token: 'smt_synthetic_outcome', user: { email: 'synthetic@example.test', username: 'synthetic' },
-    ...(temporary ? { temporary: true, claim_url: 'https://somewhere.tech/claim?token=synthetic' } : {}) };
+    ...(temporary ? { temporary: true, claim_url: 'https://somewhere.cloud/claim?token=synthetic' } : {}) };
   writeFileSync(join(configDir, 'config.json'), JSON.stringify(config));
   const initial = { project_id: live.project_id, name: 'verification-outcome', subdomain: 'verify-outcome',
     source_base: { project_id: live.project_id, release_id: 'rel_before', at: '2026-10-24T00:00:00.000Z' } };
@@ -111,7 +111,7 @@ test('existing temporary session keeps claim fields and ownership while failed c
   const result = await fixture({ temporary: true });
   assert.equal(result.status, 1, result.stdout + result.stderr);
   const output = JSON.parse(result.stdout);
-  assert.equal(output.claim_url, 'https://somewhere.tech/claim?token=synthetic');
+  assert.equal(output.claim_url, 'https://somewhere.cloud/claim?token=synthetic');
   assert.equal(output.version, live.version); assert.equal(output.deployment_outcome, 'live');
   assert.equal(result.state.source_base.release_id, live.release_id);
   assert.equal(result.state.last_deploy, undefined, 'temporary sessions retain their existing deploy-state policy');

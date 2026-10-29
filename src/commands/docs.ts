@@ -13,7 +13,7 @@ import { callPlatformHelpTool } from './advisor.js';
 // can run without logging in: `somewhere docs start`. Deliberately a plain
 // fetch-and-print (no auth, no spinner, raw text to stdout) — the consumer is
 // usually a coding agent piping this into context.
-const DOCS_BASE = process.env.SOMEWHERE_DOCS_BASE?.replace(/\/$/, '') || 'https://somewhere.tech';
+const DOCS_BASE = process.env.SOMEWHERE_DOCS_BASE?.replace(/\/$/, '') || 'https://somewhere.cloud';
 
 const TOPICS: Record<string, { path: string; blurb: string }> = {
   start: {

@@ -197,7 +197,7 @@ async function withStubTempPlatform(fn) {
             expires_at: new Date(Date.now() + 10_800_000).toISOString(),
             ttl_seconds: 10800,
             claim_token: 'swtc_temp_out',
-            claim_url: 'https://somewhere.tech/claim?token=swtc_temp_out',
+            claim_url: 'https://somewhere.cloud/claim?token=swtc_temp_out',
           },
         });
         return;
@@ -259,7 +259,7 @@ test('an anonymous temporary deploy gets the same browser guidance, addressed by
     assert.equal(result.status, 0, `stdout:\n${result.stdout}\nstderr:\n${result.stderr}`);
     // The claim and expiry lines are the point of this path — they survive.
     assert.match(result.stdout, /Live URL:/);
-    assert.match(result.stdout, /Claim URL: https:\/\/somewhere\.tech\/claim\?token=swtc_temp_out/);
+    assert.match(result.stdout, /Claim URL: https:\/\/somewhere\.cloud\/claim\?token=swtc_temp_out/);
     assert.match(result.stdout, /Expires at:/);
     assert.match(result.stdout, /"Save project and connect agent".*signs in on its next command/i);
 

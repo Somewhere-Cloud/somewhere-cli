@@ -43,7 +43,7 @@ function writeTempLogin(home) {
   writeFileSync(join(home, '.somewhere', 'config.json'), JSON.stringify({
     token: 'smt_temp_stale_base',
     temporary: true,
-    claim_url: 'https://somewhere.tech/claim?token=swtc_stale_base',
+    claim_url: 'https://somewhere.cloud/claim?token=swtc_stale_base',
     user: { email: '', username: '' },
   }) + '\n');
 }

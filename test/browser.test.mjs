@@ -272,13 +272,13 @@ test('formatBrowserReport: a stored screenshot prints a link that opens it', () 
       {
         label: 'page',
         fs_path: '/_browser_tests/run-1/00-step-1.jpg',
-        url: 'https://api.somewhere.tech/v1/fs-signed/tok',
+        url: 'https://api.somewhere.cloud/v1/fs-signed/tok',
         url_expires_at: '2026-09-02T09:00:00.000Z',
       },
     ],
   });
   const shot = lines.find((l) => l.startsWith('screenshot:'));
-  assert.match(shot, /https:\/\/api\.somewhere\.tech\/v1\/fs-signed\/tok/);
+  assert.match(shot, /https:\/\/api\.somewhere\.cloud\/v1\/fs-signed\/tok/);
   assert.match(shot, /link expires 2026-09-02T09:00:00\.000Z/);
   assert.ok(
     lines.some((l) => l === 'screenshot_file: page — /_browser_tests/run-1/00-step-1.jpg'),

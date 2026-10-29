@@ -54,7 +54,7 @@ const expiredTemp = {
   token: 'smt_expired_temp',
   temporary: true,
   temp_expires_at: expiredAt,
-  claim_url: 'https://somewhere.tech/claim?token=swtc_old',
+  claim_url: 'https://somewhere.cloud/claim?token=swtc_old',
   user: { email: '', username: '' },
 };
 const link = { project_id: 'proj_old_temp', name: 'old-temp', subdomain: 'old-temp' };

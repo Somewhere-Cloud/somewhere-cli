@@ -21,7 +21,7 @@ name works too: `npx @somewhere-tech/cli deploy`.
 ## Quick start
 
 ```bash
-somewhere login          # OAuth in browser, stores API key
+somewhere login          # Optional: OAuth in browser, stores API key (init/deploy work without it)
 somewhere init           # Create project, write .somewhere.json
 somewhere dev            # Serve your app on localhost, compiled by the platform
 somewhere deploy         # Deploy current directory

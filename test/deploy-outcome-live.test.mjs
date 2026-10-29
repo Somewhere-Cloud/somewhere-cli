@@ -42,7 +42,7 @@ import { liveDeployCredential } from '../scripts/live-test-gate.mjs';
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 const distIndex = join(repoRoot, 'dist', 'index.js');
-const API = (process.env.SOMEWHERE_API_URL || 'https://api.somewhere.tech/v1').replace(/\/$/, '');
+const API = (process.env.SOMEWHERE_API_URL || 'https://api.somewhere.cloud/v1').replace(/\/$/, '');
 
 // Both an explicit opt-in and an explicit test credential, from the
 // environment only; the signed-in ~/.somewhere/config.json is never read

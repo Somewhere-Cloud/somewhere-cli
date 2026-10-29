@@ -308,7 +308,7 @@ test('preview help names no hand-typed plan list and points at pricing', async (
   assert.equal(help.status, 0, help.stderr);
   const text = help.stdout.replace(/\s+/g, ' ');
   assert.doesNotMatch(text, /Pro and Scale|Pro\/Scale/);
-  assert.match(text, /https:\/\/somewhere\.tech\/pricing/);
+  assert.match(text, /https:\/\/somewhere\.cloud\/pricing/);
 });
 
 test('email send help makes --from optional', async () => {

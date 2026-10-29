@@ -28,7 +28,7 @@ import {
 } from '../lib/platform-tools.js';
 
 const UPSTREAM_URL =
-  process.env.SOMEWHERE_MCP_URL?.replace(/\/$/, '') || 'https://mcp.somewhere.tech/mcp';
+  process.env.SOMEWHERE_MCP_URL?.replace(/\/$/, '') || 'https://mcp.somewhere.cloud/mcp';
 
 const INSTALL_HOSTS = ['codex', 'claude-code', 'cursor'] as const;
 type InstallHost = (typeof INSTALL_HOSTS)[number];
@@ -51,7 +51,7 @@ function emitFatalError(message: string): void {
 export function registerMcp(program: Command) {
   const mcp = program
     .command('mcp')
-    .description('Run somewhere.tech MCP server over stdio (proxies to mcp.somewhere.tech)')
+    .description('Run somewhere.tech MCP server over stdio (proxies to mcp.somewhere.cloud)')
     .action(runStdioBridge);
 
   // Hidden alias: docs/llms-full.md taught `somewhere mcp stdio` — keep it
@@ -196,7 +196,7 @@ async function runStdioBridge(): Promise<void> {
   try {
     await httpTransport.start();
   } catch (err) {
-    emitFatalError(`Failed to connect to mcp.somewhere.tech: ${String(err)}`);
+    emitFatalError(`Failed to connect to mcp.somewhere.cloud: ${String(err)}`);
     process.exit(1);
   }
 
@@ -330,7 +330,7 @@ async function runDoctor(version: string): Promise<void> {
       success(`Token valid (${me.user?.email ?? config.user.email ?? 'unknown account'})`);
     } catch (err) {
       fail(
-        `Token rejected by api.somewhere.tech: ${err instanceof Error ? err.message : String(err)}`,
+        `Token rejected by api.somewhere.cloud: ${err instanceof Error ? err.message : String(err)}`,
         'somewhere login',
       );
     }
@@ -359,7 +359,7 @@ async function runDoctor(version: string): Promise<void> {
       signal: AbortSignal.timeout(10_000),
     });
     if (res.ok) {
-      success('MCP server reachable — initialize accepted (mcp.somewhere.tech)');
+      success('MCP server reachable — initialize accepted (mcp.somewhere.cloud)');
     } else if (res.status === 401 && !config?.token) {
       success('MCP server reachable (responded 401 — expected without a login)');
     } else if (res.status === 401) {

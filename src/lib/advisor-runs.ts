@@ -21,7 +21,7 @@ function prune(record:LocalRun):void {
 }
 function expiredResult(record:LocalRun):AdvisorRunResult {return {run_id:record.run_id,request_id:record.request_id,status:record.provider_settled?'settled':'delivery_expired',payload_expired:true,payload_expires_at:payloadDeadline(record),error:'ADVISOR_PAYLOAD_EXPIRED',incomplete:true,next_step:record.provider_settled?'none':'status'};}
 function load(id:string):LocalRun {if(!existsSync(path(id)))throw Error('Advisor request was not found in this CLI configuration.');const record=JSON.parse(readFileSync(path(id),'utf8')) as LocalRun;prune(record);save(record);return record;}
-function url(suffix:string):string {const result=new URL(process.env.SOMEWHERE_MCP_URL||'https://mcp.somewhere.tech/mcp');result.pathname='/advisor/runs'+suffix;result.search='';result.hash='';return result.toString();}
+function url(suffix:string):string {const result=new URL(process.env.SOMEWHERE_MCP_URL||'https://mcp.somewhere.cloud/mcp');result.pathname='/advisor/runs'+suffix;result.search='';result.hash='';return result.toString();}
 async function request(record:LocalRun,operation:'start'|'status'|'resume'|'cancel'):Promise<AdvisorRunResult>{
   const config=loadConfig(),token=record.owner_mode==='account'&&config?.temporary!==true?config?.token:undefined;
   if(record.owner_mode==='account'&&!token)throw Error('Sign in to the account that owns this saved request.');

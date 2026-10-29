@@ -1,92 +1,222 @@
 [
   {
     "name": "credential in browser source",
-    "files": {"index.html":"<script type=\"module\" src=\"/src/main.ts\"></script>","src/main.ts":"// synthetic fixture\nconst key = 'sk_live_Fx7Qm2Lp9Rz4Kd8Wn3Ty6Hv1Bc5';"},
+    "files": {
+      "index.html": "<script type=\"module\" src=\"/src/main.ts\"></script>",
+      "src/main.ts": "// synthetic fixture\nconst key = 'sk_live_Fx7Qm2Lp9Rz4Kd8Wn3Ty6Hv1Bc5';"
+    },
     "functions": {},
-    "expected": [{"rule":"somewhere/source-secret","file":"src/main.ts","line":2}]
+    "expected": [
+      {
+        "rule": "somewhere/source-secret",
+        "file": "src/main.ts",
+        "line": 2
+      }
+    ]
   },
   {
     "name": "server env read and public placeholder are legitimate",
-    "files": {"index.html":"<script type=\"module\" src=\"/src/main.ts\"></script>","src/main.ts":"const key = 'pk_test_Fx7Qm2Lp9Rz4Kd8Wn3Ty6Hv1Bc5'; const example = 'sk_live_xxxxxxxxxxxxxxxxxxxxxxxx';"},
-    "functions": {"api/pay.ts":"export default async function(req, sw) { return Response.json({ configured: Boolean(sw.env.STRIPE_SECRET_KEY) }); }"},
+    "files": {
+      "index.html": "<script type=\"module\" src=\"/src/main.ts\"></script>",
+      "src/main.ts": "const key = 'pk_test_Fx7Qm2Lp9Rz4Kd8Wn3Ty6Hv1Bc5'; const example = 'sk_live_xxxxxxxxxxxxxxxxxxxxxxxx';"
+    },
+    "functions": {
+      "api/pay.ts": "export default async function(req, sw) { return Response.json({ configured: Boolean(sw.env.STRIPE_SECRET_KEY) }); }"
+    },
     "expected": []
   },
   {
     "name": "schema column typo",
-    "files": {"db/schema.ts":"export default schema({\n notes: table({ id: id(), title: text() }, { scope: owner(), indexes: [['titel']] })\n});"},
+    "files": {
+      "db/schema.ts": "export default schema({\n notes: table({ id: id(), title: text() }, { scope: owner(), indexes: [['titel']] })\n});"
+    },
     "functions": {},
-    "expected": [{"rule":"somewhere/schema-declaration","file":"db/schema.ts","line":2}]
+    "expected": [
+      {
+        "rule": "somewhere/schema-declaration",
+        "file": "db/schema.ts",
+        "line": 2
+      }
+    ]
   },
   {
     "name": "declared private table is legitimate without browser client access",
-    "files": {"db/schema.ts":"import { schema, table, id, text, owner } from 'somewhere/db';\nexport default schema({ notes: table({ id: id(), title: text() }, { scope: owner() }) });"},
+    "files": {
+      "db/schema.ts": "import { schema, table, id, text, owner } from 'somewhere/db';\nexport default schema({ notes: table({ id: id(), title: text() }, { scope: owner() }) });"
+    },
     "functions": {},
     "expected": []
   },
   {
     "name": "directory index handler from DocQA race",
     "files": {},
-    "functions": {"api/docs/index.ts":"export default async function(req, sw) { return Response.json({ ok: true }); }"},
-    "expected": [{"rule":"somewhere/index-route","file":"api/docs/index.ts","line":1}]
+    "functions": {
+      "api/docs/index.ts": "export default async function(req, sw) { return Response.json({ ok: true }); }"
+    },
+    "expected": [
+      {
+        "rule": "somewhere/index-route",
+        "file": "api/docs/index.ts",
+        "line": 1
+      }
+    ]
   },
   {
     "name": "renamed parent handler and library index are legitimate",
     "files": {},
-    "functions": {"api/docs.ts":"export default async function(req, sw) { return Response.json({ ok: true }); }", "_lib/index.ts":"export const value = 1;"},
+    "functions": {
+      "api/docs.ts": "export default async function(req, sw) { return Response.json({ ok: true }); }",
+      "_lib/index.ts": "export const value = 1;"
+    },
     "expected": []
   },
   {
     "name": "request body chooses the owner of an owner() row (server write)",
-    "files": {"db/schema.ts": "import { schema, table, id, text, owner, serverOnly } from 'somewhere/db';\nexport default schema({\n notes: table({ id: id(), body: text() }, { scope: owner() }),\n cards: table({ id: id(), title: text(), created_by: text() }, { scope: serverOnly() }),\n team_members: table({ id: id(), team_id: text(), user_id: text() }, { scope: serverOnly() })\n});"},
-    "functions": {"api/notes.ts": "export default async function(req, sw) {\n  const b = await req.json();\n  await sw.db.server.insert('notes', {\n    body: b.body,\n    user_id: b.user_id,\n  });\n  return Response.json({ ok: true });\n}"},
-    "expected": [{"rule": "somewhere/request-ownership", "file": "api/notes.ts", "line": 5}]
+    "files": {
+      "db/schema.ts": "import { schema, table, id, text, owner, serverOnly } from 'somewhere/db';\nexport default schema({\n notes: table({ id: id(), body: text() }, { scope: owner() }),\n cards: table({ id: id(), title: text(), created_by: text() }, { scope: serverOnly() }),\n team_members: table({ id: id(), team_id: text(), user_id: text() }, { scope: serverOnly() })\n});"
+    },
+    "functions": {
+      "api/notes.ts": "export default async function(req, sw) {\n  const b = await req.json();\n  await sw.db.server.insert('notes', {\n    body: b.body,\n    user_id: b.user_id,\n  });\n  return Response.json({ ok: true });\n}"
+    },
+    "expected": [
+      {
+        "rule": "somewhere/request-ownership",
+        "file": "api/notes.ts",
+        "line": 5
+      }
+    ]
   },
   {
     "name": "request body sets created_by that the same handler trusts for edits",
-    "files": {"db/schema.ts": "import { schema, table, id, text, owner, serverOnly } from 'somewhere/db';\nexport default schema({\n notes: table({ id: id(), body: text() }, { scope: owner() }),\n cards: table({ id: id(), title: text(), created_by: text() }, { scope: serverOnly() }),\n team_members: table({ id: id(), team_id: text(), user_id: text() }, { scope: serverOnly() })\n});"},
-    "functions": {"api/cards.ts": "export default async function(req, sw) {\n  const user = await sw.auth.requireUser(req);\n  const { title, created_by } = await req.json();\n  if (req.method === 'POST') await sw.db.server.insert('cards', { title, created_by });\n  const card = await sw.db.server.get('cards', 'c1');\n  if (card.created_by !== user.id) return new Response('forbidden', { status: 403 });\n  return Response.json(card);\n}"},
-    "expected": [{"rule": "somewhere/request-ownership", "file": "api/cards.ts", "line": 4}]
+    "files": {
+      "db/schema.ts": "import { schema, table, id, text, owner, serverOnly } from 'somewhere/db';\nexport default schema({\n notes: table({ id: id(), body: text() }, { scope: owner() }),\n cards: table({ id: id(), title: text(), created_by: text() }, { scope: serverOnly() }),\n team_members: table({ id: id(), team_id: text(), user_id: text() }, { scope: serverOnly() })\n});"
+    },
+    "functions": {
+      "api/cards.ts": "export default async function(req, sw) {\n  const user = await sw.auth.requireUser(req);\n  const { title, created_by } = await req.json();\n  if (req.method === 'POST') await sw.db.server.insert('cards', { title, created_by });\n  const card = await sw.db.server.get('cards', 'c1');\n  if (card.created_by !== user.id) return new Response('forbidden', { status: 403 });\n  return Response.json(card);\n}"
+    },
+    "expected": [
+      {
+        "rule": "somewhere/request-ownership",
+        "file": "api/cards.ts",
+        "line": 4
+      }
+    ]
   },
   {
     "name": "ownership from the signed-in user, user-mode writes and display-only created_by are legitimate",
-    "files": {"db/schema.ts": "import { schema, table, id, text, owner, serverOnly } from 'somewhere/db';\nexport default schema({\n notes: table({ id: id(), body: text() }, { scope: owner() }),\n cards: table({ id: id(), title: text(), created_by: text() }, { scope: serverOnly() }),\n team_members: table({ id: id(), team_id: text(), user_id: text() }, { scope: serverOnly() })\n});"},
-    "functions": {"api/cards.ts": "export default async function(req, sw) {\n  const user = await sw.auth.requireUser(req);\n  const b = await req.json();\n  await sw.db.server.insert('cards', { title: b.title, created_by: user.id });\n  const card = await sw.db.server.get('cards', 'c1');\n  if (card.created_by !== user.id) return new Response('forbidden', { status: 403 });\n  return Response.json(card);\n}", "api/notes.ts": "export default async function(req, sw) {\n  const b = await req.json();\n  // sw.db.server.insert('notes', { user_id: b.user_id }) was removed\n  await sw.db.insert('notes', { body: b.body, user_id: b.user_id });\n  return Response.json({ ok: true });\n}", "api/log.ts": "export default async function(req, sw) {\n  const b = await req.json();\n  await sw.db.server.insert('events', { created_by: b.created_by });\n  return Response.json({ ok: true });\n}"},
+    "files": {
+      "db/schema.ts": "import { schema, table, id, text, owner, serverOnly } from 'somewhere/db';\nexport default schema({\n notes: table({ id: id(), body: text() }, { scope: owner() }),\n cards: table({ id: id(), title: text(), created_by: text() }, { scope: serverOnly() }),\n team_members: table({ id: id(), team_id: text(), user_id: text() }, { scope: serverOnly() })\n});"
+    },
+    "functions": {
+      "api/cards.ts": "export default async function(req, sw) {\n  const user = await sw.auth.requireUser(req);\n  const b = await req.json();\n  await sw.db.server.insert('cards', { title: b.title, created_by: user.id });\n  const card = await sw.db.server.get('cards', 'c1');\n  if (card.created_by !== user.id) return new Response('forbidden', { status: 403 });\n  return Response.json(card);\n}",
+      "api/notes.ts": "export default async function(req, sw) {\n  const b = await req.json();\n  // sw.db.server.insert('notes', { user_id: b.user_id }) was removed\n  await sw.db.insert('notes', { body: b.body, user_id: b.user_id });\n  return Response.json({ ok: true });\n}",
+      "api/log.ts": "export default async function(req, sw) {\n  const b = await req.json();\n  await sw.db.server.insert('events', { created_by: b.created_by });\n  return Response.json({ ok: true });\n}"
+    },
     "expected": []
   },
   {
     "name": "signed job payload and admin adding a target member are legitimate",
-    "files": {"db/schema.ts": "import { schema, table, id, text, owner, serverOnly } from 'somewhere/db';\nexport default schema({\n notes: table({ id: id(), body: text() }, { scope: owner() }),\n cards: table({ id: id(), title: text(), created_by: text() }, { scope: serverOnly() }),\n team_members: table({ id: id(), team_id: text(), user_id: text() }, { scope: serverOnly() })\n});"},
-    "functions": {"api/jobs/ingest.ts": "export default async function(req, sw) {\n  if (!(await sw.jobs.verifyInvocation(req))) return new Response('denied', { status: 401 });\n  const p = await req.json();\n  await sw.db.server.insert('notes', { body: p.body, user_id: p.user_id });\n  return Response.json({ ok: true });\n}", "api/teams.ts": "export default async function(req, sw) {\n  const admin = await sw.auth.requireUser(req);\n  const b = await req.json();\n  const db = sw.db.server;\n  await db.insert('team_members', { team_id: b.teamId, user_id: b.userId });\n  return Response.json({ ok: true, by: admin.id });\n}"},
+    "files": {
+      "db/schema.ts": "import { schema, table, id, text, owner, serverOnly } from 'somewhere/db';\nexport default schema({\n notes: table({ id: id(), body: text() }, { scope: owner() }),\n cards: table({ id: id(), title: text(), created_by: text() }, { scope: serverOnly() }),\n team_members: table({ id: id(), team_id: text(), user_id: text() }, { scope: serverOnly() })\n});"
+    },
+    "functions": {
+      "api/jobs/ingest.ts": "export default async function(req, sw) {\n  if (!(await sw.jobs.verifyInvocation(req))) return new Response('denied', { status: 401 });\n  const p = await req.json();\n  await sw.db.server.insert('notes', { body: p.body, user_id: p.user_id });\n  return Response.json({ ok: true });\n}",
+      "api/teams.ts": "export default async function(req, sw) {\n  const admin = await sw.auth.requireUser(req);\n  const b = await req.json();\n  const db = sw.db.server;\n  await db.insert('team_members', { team_id: b.teamId, user_id: b.userId });\n  return Response.json({ ok: true, by: admin.id });\n}"
+    },
     "expected": []
   },
   {
     "name": "whole request body, spread body, formData and camelCase owner column choose ownership",
-    "files": {"db/schema.ts": "import { schema, table, id, text, owner, serverOnly } from 'somewhere/db';\nexport default schema({\n notes: table({ id: id(), body: text() }, { scope: owner() }),\n posts: table({ id: id(), body: text() }, { scope: owner({ column: 'authorId' }) }),\n cards: table({ id: id(), title: text(), list_id: text(), created_by: text() }, { scope: serverOnly() })\n});"},
-    "functions": {"api/bare.ts": "export default async function(req, sw) {\n  const b = await req.json();\n  await sw.db.server.insert('notes', b);\n}", "api/spread.ts": "export default async function(req, sw) {\n  const b = await req.json();\n  await sw.db.server.insert('notes', { ...b, body: 'x' });\n}", "api/form.ts": "export default async function(req, sw) {\n  const f = await req.formData();\n  await sw.db.server.insert('notes', { body: 'x', user_id: f.get('user_id') });\n}", "api/posts.ts": "export default async function(req, sw) {\n  const b = await req.json();\n  await sw.db.server.update('posts', { set: { body: b.body }, where: { authorId: String(b.authorId) } });\n}"},
-    "expected": [{"rule": "somewhere/request-ownership", "file": "api/bare.ts", "line": 3}, {"rule": "somewhere/request-ownership", "file": "api/form.ts", "line": 3}, {"rule": "somewhere/request-ownership", "file": "api/posts.ts", "line": 3}, {"rule": "somewhere/request-ownership", "file": "api/spread.ts", "line": 3}]
+    "files": {
+      "db/schema.ts": "import { schema, table, id, text, owner, serverOnly } from 'somewhere/db';\nexport default schema({\n notes: table({ id: id(), body: text() }, { scope: owner() }),\n posts: table({ id: id(), body: text() }, { scope: owner({ column: 'authorId' }) }),\n cards: table({ id: id(), title: text(), list_id: text(), created_by: text() }, { scope: serverOnly() })\n});"
+    },
+    "functions": {
+      "api/bare.ts": "export default async function(req, sw) {\n  const b = await req.json();\n  await sw.db.server.insert('notes', b);\n}",
+      "api/spread.ts": "export default async function(req, sw) {\n  const b = await req.json();\n  await sw.db.server.insert('notes', { ...b, body: 'x' });\n}",
+      "api/form.ts": "export default async function(req, sw) {\n  const f = await req.formData();\n  await sw.db.server.insert('notes', { body: 'x', user_id: f.get('user_id') });\n}",
+      "api/posts.ts": "export default async function(req, sw) {\n  const b = await req.json();\n  await sw.db.server.update('posts', { set: { body: b.body }, where: { authorId: String(b.authorId) } });\n}"
+    },
+    "expected": [
+      {
+        "rule": "somewhere/request-ownership",
+        "file": "api/bare.ts",
+        "line": 3
+      },
+      {
+        "rule": "somewhere/request-ownership",
+        "file": "api/form.ts",
+        "line": 3
+      },
+      {
+        "rule": "somewhere/request-ownership",
+        "file": "api/posts.ts",
+        "line": 3
+      },
+      {
+        "rule": "somewhere/request-ownership",
+        "file": "api/spread.ts",
+        "line": 3
+      }
+    ]
   },
   {
     "name": "owner set after a spread, user-mode write beside a server alias, foreign-key comparison and comment-like strings are legitimate",
-    "files": {"db/schema.ts": "import { schema, table, id, text, owner, serverOnly } from 'somewhere/db';\nexport default schema({\n notes: table({ id: id(), body: text() }, { scope: owner() }),\n posts: table({ id: id(), body: text() }, { scope: owner({ column: 'authorId' }) }),\n cards: table({ id: id(), title: text(), list_id: text(), created_by: text() }, { scope: serverOnly() })\n});"},
-    "functions": {"api/override.ts": "export default async function(req, sw) {\n  const user = await sw.auth.requireUser(req);\n  const b = await req.json();\n  await sw.db.server.insert('notes', { ...b, user_id: user.id });\n}", "api/alias.ts": "export default async function(req, sw) {\n  const db = sw.db.server;\n  const b = await req.json();\n  await sw.db.insert('notes', { body: b.body, user_id: b.user_id });\n}", "api/lists.ts": "export default async function(req, sw) {\n  const user = await sw.auth.requireUser(req);\n  const b = await req.json();\n  const list = await sw.db.server.get('lists', b.list_id);\n  const rows = (await sw.db.server.from('cards')).data.filter(r => r.list_id === list.id);\n  await sw.db.server.insert('cards', { title: b.title, list_id: b.list_id, created_by: user.id });\n  return Response.json({ rows, by: user.id });\n}", "api/accept.ts": "export default async function(req, sw) {\n  const user = await sw.auth.requireUser(req);\n  const b = await req.json();\n  const res = await fetch('https://example.com/api/*', { headers: { accept: '*/*' } });\n  await sw.db.server.insert('cards', { title: b.title, created_by: user.id });\n  if (b.card.created_by !== user.id) return new Response('no', { status: 403 });\n  return res;\n}"},
+    "files": {
+      "db/schema.ts": "import { schema, table, id, text, owner, serverOnly } from 'somewhere/db';\nexport default schema({\n notes: table({ id: id(), body: text() }, { scope: owner() }),\n posts: table({ id: id(), body: text() }, { scope: owner({ column: 'authorId' }) }),\n cards: table({ id: id(), title: text(), list_id: text(), created_by: text() }, { scope: serverOnly() })\n});"
+    },
+    "functions": {
+      "api/override.ts": "export default async function(req, sw) {\n  const user = await sw.auth.requireUser(req);\n  const b = await req.json();\n  await sw.db.server.insert('notes', { ...b, user_id: user.id });\n}",
+      "api/alias.ts": "export default async function(req, sw) {\n  const db = sw.db.server;\n  const b = await req.json();\n  await sw.db.insert('notes', { body: b.body, user_id: b.user_id });\n}",
+      "api/lists.ts": "export default async function(req, sw) {\n  const user = await sw.auth.requireUser(req);\n  const b = await req.json();\n  const list = await sw.db.server.get('lists', b.list_id);\n  const rows = (await sw.db.server.from('cards')).data.filter(r => r.list_id === list.id);\n  await sw.db.server.insert('cards', { title: b.title, list_id: b.list_id, created_by: user.id });\n  return Response.json({ rows, by: user.id });\n}",
+      "api/accept.ts": "export default async function(req, sw) {\n  const user = await sw.auth.requireUser(req);\n  const b = await req.json();\n  const res = await fetch('https://example.com/api/*', { headers: { accept: '*/*' } });\n  await sw.db.server.insert('cards', { title: b.title, created_by: user.id });\n  if (b.card.created_by !== user.id) return new Response('no', { status: 403 });\n  return res;\n}"
+    },
     "expected": []
   },
   {
     "name": "a row id is not ownership just because the handler compares another column to user.id",
-    "files": {"db/schema.ts": "export default schema({ cards: table({ id: id(), title: text(), created_by: text() }, { scope: serverOnly() }) });"},
-    "functions": {"api/cards.ts": "export default async function(req, sw) {\n  const user = await sw.auth.requireUser(req);\n  const b = await req.json();\n  const card = await sw.db.server.get('cards', b.id);\n  if (card.created_by !== user.id) return new Response('no', { status: 403 });\n  await sw.db.server.update('cards', { set: { title: b.title }, where: { id: b.id } });\n  return Response.json({ ok: true });\n}"},
+    "files": {
+      "db/schema.ts": "export default schema({ cards: table({ id: id(), title: text(), created_by: text() }, { scope: serverOnly() }) });"
+    },
+    "functions": {
+      "api/cards.ts": "export default async function(req, sw) {\n  const user = await sw.auth.requireUser(req);\n  const b = await req.json();\n  const card = await sw.db.server.get('cards', b.id);\n  if (card.created_by !== user.id) return new Response('no', { status: 403 });\n  await sw.db.server.update('cards', { set: { title: b.title }, where: { id: b.id } });\n  return Response.json({ ok: true });\n}"
+    },
     "expected": []
   },
   {
     "name": "an awaited sw.email.send in a for\u2026of, a braceless for and a while loop waits for each delivery",
     "files": {},
-    "functions": {"api/close.ts": "export default async function(req, sw) {\n  const { data: members } = await sw.db.server.from('members');\n  for (const m of members) {\n    await sw.email.send({ to: m.email, subject: 'Round closed', text: 'Thanks' });\n  }\n  return Response.json({ ok: true });\n}", "api/remind.ts": "export default async function(req, sw) {\n  const due = await sw.db.server.from('requests');\n  for (const r of due.data) await sw.email.send({ to: r.email, subject: 'Reminder', text: 'Due soon' });\n  return Response.json({ ok: true });\n}", "api/queue.ts": "export default async function(req, sw) {\n  let next = await sw.db.server.get('outbox', 'head');\n  while (next) {\n    await sw.email.send({ to: next.to, subject: next.subject, text: next.text });\n    next = await sw.db.server.get('outbox', next.after);\n  }\n  return Response.json({ ok: true });\n}"},
-    "expected": [{"rule": "somewhere/sequential-email", "file": "api/close.ts", "line": 4}, {"rule": "somewhere/sequential-email", "file": "api/queue.ts", "line": 4}, {"rule": "somewhere/sequential-email", "file": "api/remind.ts", "line": 3}]
+    "functions": {
+      "api/close.ts": "export default async function(req, sw) {\n  const { data: members } = await sw.db.server.from('members');\n  for (const m of members) {\n    await sw.email.send({ to: m.email, subject: 'Round closed', text: 'Thanks' });\n  }\n  return Response.json({ ok: true });\n}",
+      "api/remind.ts": "export default async function(req, sw) {\n  const due = await sw.db.server.from('requests');\n  for (const r of due.data) await sw.email.send({ to: r.email, subject: 'Reminder', text: 'Due soon' });\n  return Response.json({ ok: true });\n}",
+      "api/queue.ts": "export default async function(req, sw) {\n  let next = await sw.db.server.get('outbox', 'head');\n  while (next) {\n    await sw.email.send({ to: next.to, subject: next.subject, text: next.text });\n    next = await sw.db.server.get('outbox', next.after);\n  }\n  return Response.json({ ok: true });\n}"
+    },
+    "expected": [
+      {
+        "rule": "somewhere/sequential-email",
+        "file": "api/close.ts",
+        "line": 4
+      },
+      {
+        "rule": "somewhere/sequential-email",
+        "file": "api/queue.ts",
+        "line": 4
+      },
+      {
+        "rule": "somewhere/sequential-email",
+        "file": "api/remind.ts",
+        "line": 3
+      }
+    ]
   },
   {
     "name": "forEach callbacks, bounded batches, dependent back-to-back sends, nested functions and comments are not sequential-send warnings",
     "files": {},
-    "functions": {"api/each.ts": "export default async function(req, sw) {\n  const { data: members } = await sw.db.server.from('members');\n  members.forEach(async (m) => { await sw.email.send({ to: m.email, subject: 'Hi', text: 'x' }); });\n  return Response.json({ ok: true });\n}", "api/batch.ts": "export default async function(req, sw) {\n  const { data: ms } = await sw.db.server.from('members');\n  for (let i = 0; i < ms.length; i += 5) {\n    await Promise.allSettled(ms.slice(i, i + 5).map(async (m) => await sw.email.send({ to: m.email, subject: 'Hi', text: 'x' })));\n  }\n  return Response.json({ ok: true });\n}", "api/pair.ts": "export default async function(req, sw) {\n  const first = await sw.email.send({ to: 'a@example.com', subject: 'Confirm', text: 'x' });\n  await sw.email.send({ to: 'b@example.com', subject: 'Receipt', text: String(first.data?.id) });\n  return Response.json({ ok: true });\n}", "api/nested.ts": "export default async function(req, sw) {\n  const jobs = [];\n  for (const m of [1, 2]) {\n    const send = async () => await sw.email.send({ to: 'x@example.com', subject: String(m), text: 'x' });\n    jobs.push(send);\n    jobs.push(async function later() { await sw.email.send({ to: 'y@example.com', subject: 'y', text: 'y' }); });\n  }\n  // for (const m of list) await sw.email.send(m)\n  const note = 'for (const m of list) await sw.email.send(m)';\n  return Response.json({ n: jobs.length, note });\n}"},
+    "functions": {
+      "api/each.ts": "export default async function(req, sw) {\n  const { data: members } = await sw.db.server.from('members');\n  members.forEach(async (m) => { await sw.email.send({ to: m.email, subject: 'Hi', text: 'x' }); });\n  return Response.json({ ok: true });\n}",
+      "api/batch.ts": "export default async function(req, sw) {\n  const { data: ms } = await sw.db.server.from('members');\n  for (let i = 0; i < ms.length; i += 5) {\n    await Promise.allSettled(ms.slice(i, i + 5).map(async (m) => await sw.email.send({ to: m.email, subject: 'Hi', text: 'x' })));\n  }\n  return Response.json({ ok: true });\n}",
+      "api/pair.ts": "export default async function(req, sw) {\n  const first = await sw.email.send({ to: 'a@example.com', subject: 'Confirm', text: 'x' });\n  await sw.email.send({ to: 'b@example.com', subject: 'Receipt', text: String(first.data?.id) });\n  return Response.json({ ok: true });\n}",
+      "api/nested.ts": "export default async function(req, sw) {\n  const jobs = [];\n  for (const m of [1, 2]) {\n    const send = async () => await sw.email.send({ to: 'x@example.com', subject: String(m), text: 'x' });\n    jobs.push(send);\n    jobs.push(async function later() { await sw.email.send({ to: 'y@example.com', subject: 'y', text: 'y' }); });\n  }\n  // for (const m of list) await sw.email.send(m)\n  const note = 'for (const m of list) await sw.email.send(m)';\n  return Response.json({ n: jobs.length, note });\n}"
+    },
     "expected": []
   },
   {
@@ -162,6 +292,80 @@
       "api/job.ts": "await sw.jobs /* member */ . verifyInvocation /* call */ (req);\nexport default async function(req, sw) {\n  const b = await req.json();\n  await sw.db.server.insert('notes', { body: b.body, user_id: b.user_id });\n}",
       "api/webhook.ts": "const event = stripe.webhooks.constructEvent(raw, signature, secret);\nexport default async function(req, sw) {\n  const b = await req.json();\n  await sw.db.server.insert('notes', { body: b.body, user_id: b.user_id });\n}",
       "api/template-call.ts": "const receipt = `job ${await sw.jobs.verifyInvocation(req)}`;\nexport default async function(req, sw) {\n  const b = await req.json();\n  await sw.db.server.insert('notes', { body: b.body, user_id: b.user_id });\n}"
+    },
+    "expected": []
+  },
+  {
+    "name": "user-email-scan: paging listUsers then an exact-email find (benchmark team app, original)",
+    "files": {},
+    "functions": {
+      "api/_lib/team.ts": "import type { SomewhereRuntimeContext } from '@somewhere-tech/sdk/server';\n\n/** Find an existing app user by email (pages the directory; no search-by-email API exists). */\nexport async function findUserByEmail(sw: SomewhereRuntimeContext, email: string) {\n  const want = email.trim().toLowerCase();\n  let cursor: string | undefined;\n  for (let i = 0; i < 50; i++) {\n    const page = await sw.auth.server.listUsers({ limit: 200, cursor });\n    const hit = page.users.find((u: { email?: string | null }) => (u.email ?? '').toLowerCase() === want);\n    if (hit) return hit as { id: string; email: string };\n    if (!page.next_cursor) return null;\n    cursor = page.next_cursor;\n  }\n  return null;\n}\n"
+    },
+    "expected": [
+      {
+        "rule": "somewhere/user-email-scan",
+        "file": "api/_lib/team.ts",
+        "line": 8
+      }
+    ]
+  },
+  {
+    "name": "user-email-scan: the supported listUsers({ emails }) lookup passes (benchmark team app, updated)",
+    "files": {},
+    "functions": {
+      "api/_lib/team.ts": "import type { SomewhereRuntimeContext } from '@somewhere-tech/sdk/server';\n\n/** Find an existing app user by exact email (sw.auth.server.listUsers({ emails }), see docs sw.auth). */\nexport async function findUserByEmail(sw: SomewhereRuntimeContext, email: string) {\n  const { users } = await sw.auth.server.listUsers({ emails: [email.trim()] });\n  const hit = users[0] as { id: string; email: string } | undefined;\n  return hit ?? null;\n}\n"
+    },
+    "expected": []
+  },
+  {
+    "name": "user-email-scan: bulk administration passes (export paging, role filter, substring search, find by id)",
+    "files": {},
+    "functions": {
+      "api/admin/users.ts": "export default async function (req, sw) {\n  // Admin export: every user, with their role. Paging the whole directory is the point here.\n  const all = [];\n  let cursor;\n  do {\n    const page = await sw.auth.server.listUsers({ limit: 200, cursor });\n    for (const u of page.users) all.push({ id: u.id, email: u.email, role: u.role });\n    cursor = page.next_cursor;\n  } while (cursor);\n  const admins = all.filter((u) => u.role === 'admin');\n  const search = new URL(req.url).searchParams.get('q') ?? '';\n  const matches = all.filter((u) => (u.email ?? '').includes(search));\n  const byId = all.find((u) => u.id === req.headers.get('x-user-id'));\n  return Response.json({ total: all.length, admins: admins.length, matches, byId });\n}\n"
+    },
+    "expected": []
+  },
+  {
+    "name": "user-email-scan: listUsers({ emails }) shorthand passes",
+    "files": {},
+    "functions": {
+      "api/lookup.ts": "export default async function (req, sw) {\n  const emails = [(await req.json()).email];\n  const { users } = await sw.auth.server.listUsers({ emails });\n  return Response.json({ found: users.length === 1 });\n}\n"
+    },
+    "expected": []
+  },
+  {
+    "name": "user-email-scan: a destructured users alias filtered by exact email is flagged",
+    "files": {},
+    "functions": {
+      "api/invite.ts": "export default async function (req, sw) {\n  const { email } = await req.json();\n  const { users: everyone } = await sw.auth.server.listUsers({ limit: 100 });\n  const match = everyone.filter((u) => u.email === email);\n  return Response.json({ found: match.length > 0 });\n}\n"
+    },
+    "expected": [
+      {
+        "rule": "somewhere/user-email-scan",
+        "file": "api/invite.ts",
+        "line": 3
+      }
+    ]
+  },
+  {
+    "name": "user-email-scan: the call itself searched by email (== and toLowerCase) is flagged",
+    "files": {},
+    "functions": {
+      "api/find.ts": "export default async function (req, sw) {\n  const { email } = await req.json();\n  const user = (await sw.auth.server.listUsers({ limit: 100 })).users.find((u) => u.email?.toLowerCase() == email.toLowerCase());\n  return Response.json({ id: user?.id ?? null });\n}\n"
+    },
+    "expected": [
+      {
+        "rule": "somewhere/user-email-scan",
+        "file": "api/find.ts",
+        "line": 3
+      }
+    ]
+  },
+  {
+    "name": "user-email-scan: the exact lookup plus a defensive email check on its result passes",
+    "files": {},
+    "functions": {
+      "api/member.ts": "export default async function (req, sw) {\n  const { email } = await req.json();\n  const { users } = await sw.auth.server.listUsers({ emails: [email] });\n  const exact = users.find((u) => (u.email ?? '').toLowerCase() === email.toLowerCase());\n  return Response.json({ id: exact?.id ?? null });\n}\n"
     },
     "expected": []
   }

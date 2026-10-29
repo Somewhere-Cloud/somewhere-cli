@@ -114,6 +114,7 @@ test('lint --help names every vendored source-lint rule', () => {
     'somewhere/index-route': 'directory index routes',
     'somewhere/request-ownership': 'row ownership',
     'somewhere/sequential-email': 'awaited inside a loop',
+    'somewhere/user-email-scan': 'scanned for one email',
   };
   assert.deepEqual(rules, Object.keys(words).sort(), 'a new vendored rule needs a help phrase');
   for (const [rule, phrase] of Object.entries(words)) assert.ok(help.includes(phrase), `help mentions ${rule}`);

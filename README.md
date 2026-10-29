@@ -1,22 +1,24 @@
-# @somewhere-tech/cli
+# @somewhere-cloud/cli
 
-CLI for [somewhere.tech](https://somewhere.tech). Like `gh` for GitHub, `vercel` for Vercel.
+CLI for [Somewhere Cloud](https://somewhere.cloud). Like `gh` for GitHub, `vercel` for Vercel.
 
 ## Install
 
 ```bash
-npm install -g @somewhere-tech/cli
+npm install -g @somewhere-cloud/cli
 ```
 
 Or run directly:
 
 ```bash
-npx somewhere-cli deploy
+npx @somewhere-cloud/cli deploy
 ```
 
 From a project folder, that single command deploys anonymously when no account
-is configured and prints the live URL, claim URL, and expiry. The scoped package
-name works too: `npx @somewhere-tech/cli deploy`.
+is configured and prints the live URL, claim URL, and expiry.
+
+This package was published as `@somewhere-tech/cli` through 0.37.85; those
+versions stay installable.
 
 ## Quick start
 
@@ -76,7 +78,7 @@ For optional after-edit checking, explicitly run `somewhere hooks install --host
 | `somewhere advisor "<question>"` | Ask the platform advisor anonymously; login adds linked-project context (`--json` for automation) |
 | `somewhere docs [topic]` | Read public text docs or an MCP manual topic such as `sw.db` (`--json` supported) |
 | `somewhere catalog` | Browse the live platform tool catalog (`--json` for the raw catalog) |
-| `somewhere mcp` | Run MCP server over stdio (proxies to mcp.somewhere.tech) |
+| `somewhere mcp` | Run MCP server over stdio (proxies to mcp.somewhere.cloud) |
 | `somewhere mcp install <host>` | Configure an MCP host (`codex`, `claude-code`, `cursor`) |
 | `somewhere mcp doctor` | Check MCP setup: login, token, server reachability, host configs |
 
@@ -99,7 +101,7 @@ After init, `claude "build me a booking app"` works immediately.
 
 ## Deploy
 
-`somewhere deploy` reads all files in the current directory (skipping `node_modules`, `.git`, `.env`, etc.), sends them to the platform, and they're live at `{subdomain}.somewhere.tech`. Deploy **raw source** — the platform compiles JSX/TSX, resolves npm imports, and bundles for you. Don't run a build step first.
+`somewhere deploy` reads all files in the current directory (skipping `node_modules`, `.git`, `.env`, etc.), sends them to the platform, and they're live at `{subdomain}.somewhere.site`. Deploy **raw source** — the platform compiles JSX/TSX, resolves npm imports, and bundles for you. Don't run a build step first.
 
 Files under `functions/` (and root-level `api/` and `_lib/`) are deployed as server-side functions.
 
@@ -227,11 +229,11 @@ environment variables injected — for example `somewhere dev npm run dev`.
 The CLI deploys and manages projects. For **client-side code** (browser / Node app talking to your backend), install the SDK — a familiar `{ data, error }` client:
 
 ```bash
-npm i @somewhere-tech/sdk
+npm i @somewhere-cloud/sdk
 ```
 
 ```js
-import { createClient } from '@somewhere-tech/sdk';
+import { createClient } from '@somewhere-cloud/sdk';
 const db = createClient(URL, KEY);
 const { data, error } = await db.from('todos').select('*');
 ```

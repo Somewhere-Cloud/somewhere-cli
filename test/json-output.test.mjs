@@ -102,7 +102,7 @@ test('deploy --json emits only the raw deploy response object', async () => {
 
   const deployData = {
     files: 1,
-    url: 'https://json-deploy.somewhere.tech',
+    url: 'https://json-deploy.somewhere.cloud',
     has_functions: false,
     build_log: ['compiled'],
   };
@@ -433,7 +433,7 @@ test('project list --json emits the raw projects response object', async () => {
 
     assert.equal(result.status, 0, `stdout:\n${result.stdout}\nstderr:\n${result.stderr}`);
     assert.deepEqual(JSON.parse(result.stdout), projectsData);
-    assert.doesNotMatch(result.stdout, /alpha\.somewhere\.tech/);
+    assert.doesNotMatch(result.stdout, /alpha\.somewhere\.cloud/);
   });
 });
 
@@ -635,7 +635,7 @@ test('init --link --project links an exact existing project non-interactively', 
     });
 
     assert.equal(result.status, 0, `stdout:\n${result.stdout}\nstderr:\n${result.stderr}`);
-    assert.deepEqual(JSON.parse(result.stdout), project);
+    assert.deepEqual(JSON.parse(result.stdout), { ...project, app_url: null });
     assert.deepEqual(
       JSON.parse(readFileSync(join(cwd, '.somewhere.json'), 'utf8')),
       { project_id: project.id, name: project.name, subdomain: project.subdomain },
@@ -683,7 +683,7 @@ test('init creates the green starter, --bare keeps only the workflow guide, and 
     });
     assert.equal(created.status, 0, `stdout:\n${created.stdout}\nstderr:\n${created.stderr}`);
     const { hooks: createdHooks, ...createdProject } = JSON.parse(created.stdout);
-    assert.deepEqual(createdProject, project);
+    assert.deepEqual(createdProject, { ...project, app_url: null });
     assert.equal(createdHooks, undefined);
     for (const file of ['.claude/settings.json', '.codex/hooks.json', '.mcp.json']) assert.equal(existsSync(join(empty, file)), false);
     assert.match(readFileSync(join(empty, 'src/auth/hooks.ts'), 'utf8'), /useAuthState as useSdkAuthState/);
@@ -704,7 +704,7 @@ test('init creates the green starter, --bare keeps only the workflow guide, and 
     assert.ok(deployCheckBody.files['src/ui/AuthCard.tsx']);
     assert.equal(
       readFileSync(join(empty, 'api/auth/[...path].ts'), 'utf8'),
-      "export { somewhereAuth as default } from '@somewhere-tech/sdk/server';\n",
+      "export { somewhereAuth as default } from '@somewhere-cloud/sdk/server';\n",
       'the default starter signs users in with the packaged handler',
     );
     assert.ok(deployCheckBody.functions['api/auth/[...path].ts']);
@@ -726,7 +726,7 @@ test('init creates the green starter, --bare keeps only the workflow guide, and 
     });
     assert.equal(bareResult.status, 0, `stdout:\n${bareResult.stdout}\nstderr:\n${bareResult.stderr}`);
     const { hooks: bareHooks, ...bareProject } = JSON.parse(bareResult.stdout);
-    assert.deepEqual(bareProject, project);
+    assert.deepEqual(bareProject, { ...project, app_url: null });
     assert.equal(bareHooks, undefined);
     for (const file of ['.claude/settings.json', '.codex/hooks.json', '.mcp.json']) assert.equal(existsSync(join(bare, file)), false);
     assert.throws(() => readFileSync(join(bare, 'package.json')), /ENOENT/);
@@ -781,7 +781,7 @@ test('deploy prints a warning once when it also appears in the build log', async
       ok: true,
       data: {
         files: 1,
-        url: 'https://warning.somewhere.tech',
+        url: 'https://warning.somewhere.cloud',
         has_functions: false,
         build_log: [`warning: ${warning}`],
         warnings: [warning],

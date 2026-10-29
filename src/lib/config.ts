@@ -311,6 +311,15 @@ export function saveProjectConfig(dir: string, config: ProjectConfig): void {
   writeFileSync(join(dir, PROJECT_FILE), JSON.stringify(config, null, 2) + '\n');
 }
 
+/** Record the platform-reported app URL for the folder's linked project. */
+export function saveProjectAppUrl(dir: string, projectId: string, appUrl: string | null): ProjectConfig | null {
+  const config = loadProjectConfig(dir);
+  if (!appUrl || !config || config.project_id !== projectId || config.app_url === appUrl) return config;
+  const next: ProjectConfig = { ...config, app_url: appUrl };
+  saveProjectConfig(dir, next);
+  return next;
+}
+
 export interface ProjectConfigEntry {
   dir: string;
   config: ProjectConfig;

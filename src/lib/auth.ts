@@ -45,7 +45,7 @@ export async function browserLogin(): Promise<CliConfig> {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>somewhere.tech — Logged in</title>
+  <title>somewhere.cloud — Logged in</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
   <style>
@@ -121,7 +121,7 @@ export async function browserLogin(): Promise<CliConfig> {
 <body>
   <div class="glow"></div>
   <div class="card">
-    <div class="brand">somewhere.tech</div>
+    <div class="brand">somewhere.cloud</div>
     <div class="check">✓</div>
     <h1>You're logged in</h1>
     <p class="sub">Return to your terminal. This tab can be closed.</p>

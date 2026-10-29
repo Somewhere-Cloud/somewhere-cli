@@ -1,6 +1,7 @@
 import { ApiClient } from './client.js';
 
 interface ProjectUrlsResponse {
+  prod?: string | null;
   prod_fallback?: string | null;
   active_release_id?: string | null;
   prod_version?: number | null;
@@ -38,9 +39,35 @@ export async function getDeployedProjectServingUrl(client: ApiClient, projectRef
   return urls.prod_fallback.trim();
 }
 
+/** The app URL to hand to SDK clients, exactly as the platform reports it:
+ *  the attached custom domain, else the platform-issued tenant origin. */
+export async function getAuthoritativeAppUrl(
+  client: Pick<ApiClient, 'call'>,
+  projectRef: string,
+): Promise<string | null> {
+  const urls = await client.call<ProjectUrlsResponse>(
+    'GET',
+    `/projects/${encodeURIComponent(projectRef)}/urls`,
+  );
+  return httpsOrigin(urls.prod) ?? httpsOrigin(urls.prod_fallback);
+}
+
+/** An https origin without credentials, or null. */
+export function httpsOrigin(value: unknown): string | null {
+  if (typeof value !== 'string' || !value.trim()) return null;
+  try {
+    const url = new URL(value.trim());
+    return url.protocol === 'https:' && !url.username && !url.password ? url.origin : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Display-only fallback from the globally unique subdomain. A slug is unique
+ *  only per owner and can be another customer's subdomain, so it is never a host. */
 export function fallbackProjectServingUrl(project: ProjectServingUrlFields): string | null {
-  const slug = cleanProjectSlug(project.slug) ?? cleanProjectSlug(project.subdomain);
-  return slug ? `https://${slug}.${PROJECT_SITE_DOMAIN}` : null;
+  const subdomain = cleanProjectSlug(project.subdomain);
+  return subdomain ? `https://${subdomain}.${PROJECT_SITE_DOMAIN}` : null;
 }
 
 function cleanProjectSlug(value: string | null | undefined): string | null {

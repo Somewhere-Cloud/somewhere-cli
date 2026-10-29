@@ -33,7 +33,7 @@ import {
 } from '../lib/update-security.js';
 import { NPM_UPDATE_COMMAND } from '../lib/notify/providers/update.js';
 
-const PACKUMENT_URL = `${OFFICIAL_NPM_REGISTRY}/@somewhere-tech%2Fcli`;
+const PACKUMENT_URL = `${OFFICIAL_NPM_REGISTRY}/@somewhere-cloud%2Fcli`;
 
 interface FetchResponse {
   ok: boolean;
@@ -132,7 +132,7 @@ async function runPinnedNpm(
     '--package-lock=true',
     '--legacy-peer-deps=false',
     `--registry=${registry}`,
-    `--@somewhere-tech:registry=${registry}`,
+    `--@somewhere-cloud:registry=${registry}`,
     `--userconfig=${userConfigPath}`,
     `--globalconfig=${globalConfigPath}`,
   ];

@@ -1,5 +1,5 @@
 /**
- * The first `npx @somewhere-tech/cli …` on a cold cache can sit silent for a
+ * The first `npx @somewhere-cloud/cli …` on a cold cache can sit silent for a
  * minute. That silence is npm's, not ours: npm downloads and installs the
  * package BEFORE it runs the entrypoint, so no JavaScript we ship can print
  * during it — there is nothing running yet to print.

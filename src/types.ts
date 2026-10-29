@@ -46,6 +46,10 @@ export interface ProjectConfig {
   project_id: string;
   name: string;
   subdomain: string;
+  /** The app's URL exactly as the platform reported it (deploy response or
+   *  GET /projects/:id/urls), for createClient(appUrl, key). Never built from
+   *  a slug. Absent when the platform has not reported one. */
+  app_url?: string;
   last_deploy?: ProjectDeployState;
   /** The published version this folder's source came from: null for a project
    *  created empty here (genesis), else the release that was pulled or last

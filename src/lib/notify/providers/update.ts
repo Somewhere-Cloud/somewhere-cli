@@ -5,7 +5,7 @@ import { dim, teal } from '../../output.js';
 import type { NoticeProvider } from '../types.js';
 import { cliConfigDir } from '../../config.js';
 
-const PACKAGE = '@somewhere-tech/cli';
+const PACKAGE = '@somewhere-cloud/cli';
 const CACHE_PATH = join(cliConfigDir(), 'update-check.json');
 const REGISTRY = `https://registry.npmjs.org/${PACKAGE.replace('/', '%2F')}/latest`;
 const ONE_DAY = 24 * 60 * 60 * 1000;
@@ -175,7 +175,7 @@ async function fetchLatest(): Promise<string | null> {
   }
 }
 
-/** Notice provider: a newer @somewhere-tech/cli is published. Self-throttled to one
+/** Notice provider: a newer @somewhere-cloud/cli is published. Self-throttled to one
  *  npm check per day (cached in ~/.somewhere/update-check.json). The pipeline's
  *  central gate already ensured this only runs on interactive, non-CI, non-pass-
  *  through commands, so this provider just answers "is there an update?". */

@@ -142,7 +142,7 @@ async function chooseRepo(
 ): Promise<RepoChoice> {
   const app = await listInstallations(client);
   if (!app.app_configured) {
-    throw new Error('GitHub App connect is not configured on this somewhere.tech environment.');
+    throw new Error('GitHub App connect is not configured on this somewhere.cloud environment.');
   }
 
   const inferredRepo = requestedRepo || inferGitHubRepo();

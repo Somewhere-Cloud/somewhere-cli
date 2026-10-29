@@ -14,7 +14,7 @@ import { join } from 'node:path';
 
 /**
  * The agent skills pack: short SKILL.md files generated on the platform side
- * from the docs topics (somewhere.tech scripts/skills/generate.mjs) and
+ * from the docs topics (somewhere.cloud scripts/skills/generate.mjs) and
  * shipped inside this release as skills-pack.generated.ts, so `somewhere init`
  * works offline and the pack is pinned to the CLI version.
  *

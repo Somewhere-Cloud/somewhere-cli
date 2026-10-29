@@ -7,7 +7,7 @@ import { validateCandidate } from './publish-release.mjs';
 import { readPublishedVersion } from './version-guard.mjs';
 
 export const OFFICIAL = 'Somewhere-Cloud/somewhere-cli';
-const NAME = '@somewhere-tech/cli';
+const NAME = '@somewhere-cloud/cli';
 const git = (cwd, ...args) => execFileSync('git', args, { cwd, encoding: 'utf8' }).trim();
 export function validateTrigger(env) {
   if (env.GITHUB_REPOSITORY !== OFFICIAL || env.GITHUB_REF !== 'refs/heads/master' ||
@@ -34,7 +34,7 @@ export function validateManifest(value) {
 }
 export async function resolvePublished(fetcher = fetch) {
   const fixedFetch = (url, options) => fetcher(url, { ...options, redirect: 'error', signal: AbortSignal.timeout(15_000) });
-  const r = await fixedFetch('https://registry.npmjs.org/@somewhere-tech%2Fcli/latest');
+  const r = await fixedFetch('https://registry.npmjs.org/@somewhere-cloud%2Fcli/latest');
   if (!r.ok) throw new Error('latest registry identity unavailable');
   const latest = validateManifest(await r.json());
   const exact = validateManifest(await readPublishedVersion(NAME, latest.version, fixedFetch));

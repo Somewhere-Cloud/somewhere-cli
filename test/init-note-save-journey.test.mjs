@@ -58,7 +58,7 @@ async function prepare(ui) {
   writeFileSync(join(dir, 'react.mjs'), 'export const useState=v=>globalThis.__notesHost.useState(v); export const useRef=v=>globalThis.__notesHost.useRef(v); export const useEffect=(f,d)=>globalThis.__notesHost.useEffect(f,d);');
   writeFileSync(join(dir, 'auth.mjs'), 'export const useAuth=()=>globalThis.__notesAuth;');
   writeFileSync(join(dir, 'hook.mjs'), transpile(readFileSync(join(dir, 'src/data/useNotes.ts'), 'utf8'))
-    .replace("'react'", "'./react.mjs'").replace("'@somewhere-tech/sdk/react'", "'./auth.mjs'").replace("'../services/notes'", "'./notes.mjs'"));
+    .replace("'react'", "'./react.mjs'").replace("'@somewhere-cloud/sdk/react'", "'./auth.mjs'").replace("'../services/notes'", "'./notes.mjs'"));
   const { useNotes } = await import(pathToFileURL(join(dir, 'hook.mjs')).href);
   assert.match(files.find(f => f.path === 'src/ui/NotesBoard.tsx').content, /Retry original save/);
   if (starterDependencies) {

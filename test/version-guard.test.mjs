@@ -31,15 +31,15 @@ test('version guard accepts unrelated descendants and rejects release-input drif
     git(root, 'config', 'commit.gpgsign', 'false');
     mkdirSync(join(root, 'src'));
     mkdirSync(join(root, 'server'));
-    writeFileSync(join(root, 'package.json'), '{"name":"@somewhere-tech/cli","version":"1.0.0"}\n');
-    writeFileSync(join(root, 'npm-shrinkwrap.json'), '{"name":"@somewhere-tech/cli","version":"1.0.0","packages":{"":{"name":"@somewhere-tech/cli","version":"1.0.0"}}}\n');
+    writeFileSync(join(root, 'package.json'), '{"name":"@somewhere-cloud/cli","version":"1.0.0"}\n');
+    writeFileSync(join(root, 'npm-shrinkwrap.json'), '{"name":"@somewhere-cloud/cli","version":"1.0.0","packages":{"":{"name":"@somewhere-cloud/cli","version":"1.0.0"}}}\n');
     writeFileSync(join(root, 'src', 'index.ts'), 'export const value = 1;\n');
     writeFileSync(join(root, 'server', 'index.mjs'), 'export const server = 1;\n');
     git(root, 'add', '.');
     git(root, 'commit', '-m', 'published release');
     const publishedHead = git(root, 'rev-parse', 'HEAD');
 
-    globalThis.fetch = async () => ({ status: 200, ok: true, json: async () => ({ name: '@somewhere-tech/cli', version: '1.0.0', gitHead: publishedHead }) });
+    globalThis.fetch = async () => ({ status: 200, ok: true, json: async () => ({ name: '@somewhere-cloud/cli', version: '1.0.0', gitHead: publishedHead }) });
     assert.equal((await inspectVersion(root, '1.0.0')).mode, 'in-sync');
     await assert.rejects(inspectVersion(root, '2.0.0'), /identity mismatch/);
 
@@ -76,12 +76,12 @@ test('version guard releases an unpublished version and accepts its exact publis
 });
 
 test('version guard rejects a stale authenticated shrinkwrap before release', () => {
-  const manifest = { name: '@somewhere-tech/cli', version: '0.27.6' };
+  const manifest = { name: '@somewhere-cloud/cli', version: '0.27.6' };
   const matching = {
-    name: '@somewhere-tech/cli',
+    name: '@somewhere-cloud/cli',
     version: '0.27.6',
     packages: {
-      '': { name: '@somewhere-tech/cli', version: '0.27.6' },
+      '': { name: '@somewhere-cloud/cli', version: '0.27.6' },
     },
   };
   assert.doesNotThrow(() => validateReleaseShrinkwrap(manifest, matching));
@@ -91,7 +91,7 @@ test('version guard rejects a stale authenticated shrinkwrap before release', ()
       ...matching,
       version: '0.27.5',
     }),
-    /does not authenticate @somewhere-tech\/cli@0\.27\.6: top-level version is "0\.27\.5"/,
+    /does not authenticate @somewhere-cloud\/cli@0\.27\.6: top-level version is "0\.27\.5"/,
   );
 
   assert.throws(
@@ -101,7 +101,7 @@ test('version guard rejects a stale authenticated shrinkwrap before release', ()
         '': { ...matching.packages[''], version: '0.27.5' },
       },
     }),
-    /does not authenticate @somewhere-tech\/cli@0\.27\.6: packages\[""\]\.version is "0\.27\.5"/,
+    /does not authenticate @somewhere-cloud\/cli@0\.27\.6: packages\[""\]\.version is "0\.27\.5"/,
   );
 });
 
@@ -110,11 +110,11 @@ test('standalone version guard fails on a stale shrinkwrap before git or npm', (
   try {
     writeFileSync(
       join(root, 'package.json'),
-      '{"name":"@somewhere-tech/cli","version":"0.27.6"}\n',
+      '{"name":"@somewhere-cloud/cli","version":"0.27.6"}\n',
     );
     writeFileSync(
       join(root, 'npm-shrinkwrap.json'),
-      '{"name":"@somewhere-tech/cli","version":"0.27.5","packages":{"":{"name":"@somewhere-tech/cli","version":"0.27.5"}}}\n',
+      '{"name":"@somewhere-cloud/cli","version":"0.27.5","packages":{"":{"name":"@somewhere-cloud/cli","version":"0.27.5"}}}\n',
     );
     const script = fileURLToPath(new URL('../scripts/version-guard.mjs', import.meta.url));
     const result = spawnSync(process.execPath, [script], {
@@ -124,7 +124,7 @@ test('standalone version guard fails on a stale shrinkwrap before git or npm', (
     assert.equal(result.status, 1);
     assert.match(
       result.stderr,
-      /npm-shrinkwrap\.json does not authenticate @somewhere-tech\/cli@0\.27\.6/,
+      /npm-shrinkwrap\.json does not authenticate @somewhere-cloud\/cli@0\.27\.6/,
     );
     assert.doesNotMatch(result.stderr, /not a git repository|npm ERR/);
   } finally {

@@ -11,10 +11,10 @@ import { runUpdate } from '../dist/commands/update.js';
 import { getOutdatedWarning, isMinorBehind } from '../dist/lib/notify/providers/update.js';
 import { collectNotices } from '../dist/lib/notify/index.js';
 
-const PACKAGE = '@somewhere-tech/cli';
+const PACKAGE = '@somewhere-cloud/cli';
 const REGISTRY = 'https://registry.npmjs.org';
-const PACKUMENT_URL = `${REGISTRY}/@somewhere-tech%2Fcli`;
-const FALLBACK = /To install the latest release with npm instead, run: npm i -g @somewhere-tech\/cli@latest/;
+const PACKUMENT_URL = `${REGISTRY}/@somewhere-cloud%2Fcli`;
+const FALLBACK = /To install the latest release with npm instead, run: npm i -g @somewhere-cloud\/cli@latest/;
 
 const integrity = (bytes) => `sha512-${createHash('sha512').update(bytes).digest('base64')}`;
 function metadata(version, bytes) {
@@ -27,9 +27,9 @@ function metadata(version, bytes) {
         version,
         dist: {
           integrity: integrity(bytes),
-          tarball: `${REGISTRY}/@somewhere-tech/cli/-/cli-${version}.tgz`,
+          tarball: `${REGISTRY}/@somewhere-cloud/cli/-/cli-${version}.tgz`,
           attestations: {
-            url: `${REGISTRY}/-/npm/v1/attestations/@somewhere-tech%2fcli@${version}`,
+            url: `${REGISTRY}/-/npm/v1/attestations/@somewhere-cloud%2fcli@${version}`,
             provenance: { predicateType: 'https://slsa.dev/provenance/v1' },
           },
         },
@@ -118,7 +118,7 @@ test('outdated warning: minor gap warns once a day; patch gap and current stay q
 
   const first = await getOutdatedWarning('0.33.10', options(now));
   assert.match(first, /somewhere CLI 0\.33\.10 is behind the latest release 0\.37\.6/);
-  assert.match(first, /npm i -g @somewhere-tech\/cli@latest/);
+  assert.match(first, /npm i -g @somewhere-cloud\/cli@latest/);
   assert.doesNotMatch(first, /\n/);
   assert.equal(await getOutdatedWarning('0.33.10', options(now + 60_000)), null, 'once a day');
   assert.deepEqual(JSON.parse(readFileSync(warnedPath, 'utf8')), { warnedAt: now });

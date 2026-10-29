@@ -30,9 +30,9 @@ import {
   verifyPublishedProvenance,
 } from '../dist/lib/update-security.js';
 
-const PACKAGE = '@somewhere-tech/cli';
+const PACKAGE = '@somewhere-cloud/cli';
 const REGISTRY = 'https://registry.npmjs.org';
-const PACKUMENT_URL = `${REGISTRY}/@somewhere-tech%2Fcli`;
+const PACKUMENT_URL = `${REGISTRY}/@somewhere-cloud%2Fcli`;
 const SLSA_PROVENANCE = 'https://slsa.dev/provenance/v1';
 
 function integrity(bytes) {
@@ -49,9 +49,9 @@ function metadata(version, bytes) {
         version,
         dist: {
           integrity: integrity(bytes),
-          tarball: `${REGISTRY}/@somewhere-tech/cli/-/cli-${version}.tgz`,
+          tarball: `${REGISTRY}/@somewhere-cloud/cli/-/cli-${version}.tgz`,
           attestations: {
-            url: `${REGISTRY}/-/npm/v1/attestations/@somewhere-tech%2fcli@${version}`,
+            url: `${REGISTRY}/-/npm/v1/attestations/@somewhere-cloud%2fcli@${version}`,
             provenance: { predicateType: SLSA_PROVENANCE },
           },
         },
@@ -64,7 +64,7 @@ function unsignedProvenance(version, bytes) {
   const statement = {
     _type: 'https://in-toto.io/Statement/v1',
     subject: [{
-      name: `pkg:npm/%40somewhere-tech/cli@${version}`,
+      name: `pkg:npm/%40somewhere-cloud/cli@${version}`,
       digest: { sha512: createHash('sha512').update(bytes).digest('hex') },
     }],
     predicateType: SLSA_PROVENANCE,
@@ -261,8 +261,8 @@ test('authenticated dependency closure rejects unpinned and non-official package
   const release = {
     version,
     integrity: integrity(Buffer.from('release')),
-    tarballUrl: `${REGISTRY}/@somewhere-tech/cli/-/cli-${version}.tgz`,
-    attestationUrl: `${REGISTRY}/-/npm/v1/attestations/@somewhere-tech%2fcli@${version}`,
+    tarballUrl: `${REGISTRY}/@somewhere-cloud/cli/-/cli-${version}.tgz`,
+    attestationUrl: `${REGISTRY}/-/npm/v1/attestations/@somewhere-cloud%2fcli@${version}`,
   };
   const manifest = {
     name: PACKAGE,
@@ -336,8 +336,8 @@ test('the release artifact bundles its complete authenticated dependency lock', 
     await installVerifiedTarball(tarballPath, operationDir, {
       version: manifest.version,
       integrity: integrity(readFileSync(tarballPath)),
-      tarballUrl: `${REGISTRY}/@somewhere-tech/cli/-/cli-${manifest.version}.tgz`,
-      attestationUrl: `${REGISTRY}/-/npm/v1/attestations/@somewhere-tech%2fcli@${manifest.version}`,
+      tarballUrl: `${REGISTRY}/@somewhere-cloud/cli/-/cli-${manifest.version}.tgz`,
+      attestationUrl: `${REGISTRY}/-/npm/v1/attestations/@somewhere-cloud%2fcli@${manifest.version}`,
     });
     const installedManifest = JSON.parse(readFileSync(
       join(prefix, 'lib', 'node_modules', PACKAGE, 'package.json'),
@@ -455,8 +455,8 @@ test('real isolated install survives post-verification path and writable-fd swap
     const release = {
       version,
       integrity: integrity(readFileSync(tarballPath)),
-      tarballUrl: `${REGISTRY}/@somewhere-tech/cli/-/cli-${version}.tgz`,
-      attestationUrl: `${REGISTRY}/-/npm/v1/attestations/@somewhere-tech%2fcli@${version}`,
+      tarballUrl: `${REGISTRY}/@somewhere-cloud/cli/-/cli-${version}.tgz`,
+      attestationUrl: `${REGISTRY}/-/npm/v1/attestations/@somewhere-cloud%2fcli@${version}`,
     };
 
     writeFileSync(binPath, '#!/usr/bin/env node\nconsole.log("malicious swapped artifact executed");\n');
@@ -552,7 +552,7 @@ test('real isolated install survives post-verification path and writable-fd swap
     assert.deepEqual(readFileSync(tarballPath), readFileSync(substitutedPath));
 
     const installedManifest = JSON.parse(readFileSync(
-      join(prefix, 'lib', 'node_modules', '@somewhere-tech', 'cli', 'package.json'),
+      join(prefix, 'lib', 'node_modules', '@somewhere-cloud', 'cli', 'package.json'),
       'utf8',
     ));
     assert.equal(installedManifest.version, version);
@@ -589,8 +589,8 @@ test('live official release satisfies the pinned Sigstore identity policy', {
   const release = {
     version,
     integrity: 'sha512-Nh2K94A9Q3K+6zVygtQD/EVCC71i7EGvDzw0Kaq/6xP5Tq/aQREdl4gVkN1P6LUdPjZHywbqFJRdUFC1+ICk/A==',
-    tarballUrl: `${REGISTRY}/@somewhere-tech/cli/-/cli-${version}.tgz`,
-    attestationUrl: `${REGISTRY}/-/npm/v1/attestations/@somewhere-tech%2fcli@${version}`,
+    tarballUrl: `${REGISTRY}/@somewhere-cloud/cli/-/cli-${version}.tgz`,
+    attestationUrl: `${REGISTRY}/-/npm/v1/attestations/@somewhere-cloud%2fcli@${version}`,
   };
   const response = await fetch(release.attestationUrl);
   assert.equal(response.ok, true);

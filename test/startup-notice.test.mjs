@@ -1,4 +1,4 @@
-// tsk_1df39001 — a first `npx @somewhere-tech/cli …` on a cold cache sat silent
+// tsk_1df39001 — a first `npx @somewhere-cloud/cli …` on a cold cache sat silent
 // for more than a minute. That silence belongs to npm: it installs the package
 // before running the entrypoint, so nothing we ship can print during it. What
 // the CLI owns is speaking the moment it IS running. These fixtures pin both

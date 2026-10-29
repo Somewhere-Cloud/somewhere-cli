@@ -100,7 +100,7 @@ export async function inspectVersion(cwd = process.cwd(), expectedVersion) {
   const manifest = JSON.parse(readFileSync(resolve(cwd, 'package.json'), 'utf8'));
   const shrinkwrap = JSON.parse(readFileSync(resolve(cwd, 'npm-shrinkwrap.json'), 'utf8'));
   validateReleaseShrinkwrap(manifest, shrinkwrap);
-  if (manifest.name !== '@somewhere-tech/cli' || (expectedVersion && manifest.version !== expectedVersion)) {
+  if (manifest.name !== '@somewhere-cloud/cli' || (expectedVersion && manifest.version !== expectedVersion)) {
     throw new Error('candidate package/version identity mismatch');
   }
   const currentHead = execFileSync('git', ['rev-parse', 'HEAD'], { cwd, encoding: 'utf8' }).trim();

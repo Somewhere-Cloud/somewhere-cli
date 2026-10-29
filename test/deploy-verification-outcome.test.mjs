@@ -13,7 +13,7 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const live = {
   project_id: 'proj_verify_outcome', version: 73,
   release_id: 'rel_live_73', active_release_id: 'rel_live_73',
-  files: 1, has_functions: false, url: 'https://verify-outcome.somewhere.tech',
+  files: 1, has_functions: false, url: 'https://verify-outcome.somewhere.cloud',
   reference_check: { status: 'pending' }, warnings: ['existing advisory'],
 };
 async function fixture({ mode = 'failed', json = true, flow, temporary = false } = {}) {
@@ -93,7 +93,7 @@ for (const mode of ['failed', 'transport', 'malformed']) for (const json of [fal
       assert.match(output.next_steps.join('\n'), /somewhere status --project <PROJECT>/);
       assert.match(output.next_steps.join('\n'), /somewhere verify --project <PROJECT>/);
     } else {
-      assert.match(result.stdout, /Live at https:\/\/verify-outcome.somewhere.tech/);
+      assert.match(result.stdout, /Live at https:\/\/verify-outcome.somewhere.cloud/);
       assert.match(result.stdout, /The deploy is live, but verification/);
       assert.match(result.stdout, /somewhere verify --project <PROJECT>/);
     }

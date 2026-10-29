@@ -58,7 +58,7 @@ const pkg = JSON.parse(
 
 const program = new Command()
   .name('somewhere')
-  .description('CLI for somewhere.tech')
+  .description('CLI for somewhere.cloud')
   .version(pkg.version);
 
 recordLastRun(process.argv.slice(2));

@@ -98,7 +98,7 @@ export function pathCliIsThisCli(pathEnv = process.env.PATH, entry = process.arg
 export function agentHookCommand(host: AgentHost, options: { usePathCli?: boolean; version?: string } = {}): string {
   const cli = options.usePathCli ?? pathCliIsThisCli()
     ? 'somewhere'
-    : `npx --yes --prefer-offline --package=@somewhere-tech/cli@${options.version ?? CLI_VERSION} somewhere`;
+    : `npx --yes --prefer-offline --package=@somewhere-cloud/cli@${options.version ?? CLI_VERSION} somewhere`;
   return `${cli} typecheck --deploy --hook ${host}`;
 }
 

@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { OFFICIAL, validateTrigger, parseSelection, validateManifest, resolvePublished, assertAncestry, assertCheckout, testArguments } from '../scripts/advisory-ci.mjs';
 const sha = 'a'.repeat(40);
-const manifest = { name:'@somewhere-tech/cli', version:'1.2.3', gitHead:sha, repository:{ type:'git',url:`git+https://github.com/${OFFICIAL}.git` } };
+const manifest = { name:'@somewhere-cloud/cli', version:'1.2.3', gitHead:sha, repository:{ type:'git',url:`git+https://github.com/${OFFICIAL}.git` } };
 const env = { GITHUB_REPOSITORY:OFFICIAL, GITHUB_REF:'refs/heads/master', GITHUB_EVENT_NAME:'schedule', GITHUB_SHA:sha };
 
 test('schedule/manual only, official master, bounded explicit manual reason and selection', () => {
@@ -31,7 +31,7 @@ function repo() {
   const p=mkdtempSync(join(tmpdir(),'cli-advisory-'));
   const git=(...a)=>execFileSync('git',a,{cwd:p,encoding:'utf8'}).trim();
   git('init','-q');git('config','user.name','Fixture');git('config','user.email','fixture@example.invalid');
-  writeFileSync(join(p,'package.json'),JSON.stringify({name:'@somewhere-tech/cli',version:'1.2.3'}));git('add','.');git('commit','-qm','published');const first=git('rev-parse','HEAD');
+  writeFileSync(join(p,'package.json'),JSON.stringify({name:'@somewhere-cloud/cli',version:'1.2.3'}));git('add','.');git('commit','-qm','published');const first=git('rev-parse','HEAD');
   writeFileSync(join(p,'later'),'master advanced');git('add','.');git('commit','-qm','later');const next=git('rev-parse','HEAD');
   return {p,git,first,next};
 }

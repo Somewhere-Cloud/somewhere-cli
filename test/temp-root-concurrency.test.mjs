@@ -83,7 +83,7 @@ const server = createServer((req, res) => {
     if (req.method === 'POST' && req.url === '/v1/deploy') {
       const parsed = JSON.parse(body);
       deploys.push(parsed.project_id);
-      return send(200, { files: 1, url: `https://${parsed.project_id}.somewhere.tech`, has_functions: false });
+      return send(200, { files: 1, url: `https://${parsed.project_id}.somewhere.cloud`, has_functions: false });
     }
     if (req.method === 'POST' && req.url === '/v1/auth/temp-handoff/register') {
       return send(201, { handoff_id: 'cch', expires_at: new Date(Date.now() + 10_800_000).toISOString() });

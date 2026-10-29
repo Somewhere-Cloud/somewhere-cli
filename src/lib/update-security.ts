@@ -7,7 +7,7 @@ import semver from 'semver';
 import { x as extractTar } from 'tar';
 import type { Bundle as SigstoreBundle } from 'sigstore';
 
-export const CLI_PACKAGE = '@somewhere-tech/cli';
+export const CLI_PACKAGE = '@somewhere-cloud/cli';
 export const OFFICIAL_NPM_REGISTRY = 'https://registry.npmjs.org';
 export const OFFICIAL_REPOSITORY = 'https://github.com/Somewhere-Cloud/somewhere-cli';
 const SLSA_PROVENANCE = 'https://slsa.dev/provenance/v1';
@@ -48,15 +48,15 @@ const message = (value: unknown): string =>
   value instanceof Error ? value.message : String(value);
 
 function expectedTarballUrl(version: string): string {
-  return `${OFFICIAL_NPM_REGISTRY}/@somewhere-tech/cli/-/cli-${encodeURIComponent(version)}.tgz`;
+  return `${OFFICIAL_NPM_REGISTRY}/@somewhere-cloud/cli/-/cli-${encodeURIComponent(version)}.tgz`;
 }
 
 function expectedAttestationUrl(version: string): string {
-  return `${OFFICIAL_NPM_REGISTRY}/-/npm/v1/attestations/@somewhere-tech%2fcli@${encodeURIComponent(version)}`;
+  return `${OFFICIAL_NPM_REGISTRY}/-/npm/v1/attestations/@somewhere-cloud%2fcli@${encodeURIComponent(version)}`;
 }
 
 function expectedPackageUrl(version: string): string {
-  return `pkg:npm/%40somewhere-tech/cli@${version}`;
+  return `pkg:npm/%40somewhere-cloud/cli@${version}`;
 }
 
 function escapeRegex(value: string): string {

@@ -11,7 +11,7 @@ const PACKAGE_JSON = `{
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@somewhere-tech/sdk": "^0.12.10",
+    "@somewhere-cloud/sdk": "^0.13.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-router-dom": "^7.9.5"
@@ -90,7 +90,7 @@ export interface Runtime {
 const AUTH_FUNCTION = `import {
   somewhereAuth,
   type SwAuthNamespace,
-} from '@somewhere-tech/sdk/server';
+} from '@somewhere-cloud/sdk/server';
 
 export default function auth(req: Request, sw: SwAuthNamespace): Promise<Response> {
   return somewhereAuth(req, sw);
@@ -159,7 +159,7 @@ export interface UploadResult {
 const AUTH_SERVICE = `import {
   createSomewhereAuth,
   type SomewhereAuth,
-} from '@somewhere-tech/sdk/auth';
+} from '@somewhere-cloud/sdk/auth';
 import type { ServerGreeting, UploadResult } from '../types/app';
 
 export const authClient = createSomewhereAuth();
@@ -229,7 +229,7 @@ import {
   SignedOut,
   useAuth,
   useUser,
-} from '@somewhere-tech/sdk/react';
+} from '@somewhere-cloud/sdk/react';
 import {
   loadServerGreeting,
   signIn,
@@ -243,7 +243,7 @@ export function HomePage() {
   return (
     <main>
       <header>
-        <p className="eyebrow">somewhere.tech happy path</p>
+        <p className="eyebrow">somewhere.cloud happy path</p>
         <h1>One secure app, already wired.</h1>
         <p>SDK auth, server-side data, private file uploads, and raw-source deploy.</p>
       </header>
@@ -314,7 +314,7 @@ function Workspace() {
 }
 `;
 
-const APP = `import { AuthCallback } from '@somewhere-tech/sdk/react';
+const APP = `import { AuthCallback } from '@somewhere-cloud/sdk/react';
 import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import { HomePage } from './pages/HomePage';
 
@@ -332,7 +332,7 @@ export function App() {
 
 const MAIN = `import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { SomewhereAuthProvider } from '@somewhere-tech/sdk/react';
+import { SomewhereAuthProvider } from '@somewhere-cloud/sdk/react';
 import { App } from './App';
 import { authClient } from './services/app';
 import './styles.css';
@@ -371,13 +371,13 @@ button, .upload { padding: 12px 16px; border: 0; border-radius: 999px; backgroun
 .message { margin-top: 20px; color: #385548; }
 `;
 
-const README = `# somewhere.tech starter
+const README = `# somewhere.cloud starter
 
 One narrow production architecture is already wired:
 
 ## Auth
 
-Auth is handled by \`@somewhere-tech/sdk\` — use its client and hooks.
+Auth is handled by \`@somewhere-cloud/sdk\` — use its client and hooks.
 
 ## Data and files
 
@@ -411,7 +411,7 @@ export function createHappyPathTemplate(): InitScaffoldFile[] {
     },
     {
       path: 'index.html',
-      content: `<!doctype html>\n<html lang="en">\n  <head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><title>somewhere.tech starter</title></head>\n  <body><div id="root"></div><script type="module" src="/src/main.tsx"></script></body>\n</html>\n`,
+      content: `<!doctype html>\n<html lang="en">\n  <head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><title>somewhere.cloud starter</title></head>\n  <body><div id="root"></div><script type="module" src="/src/main.tsx"></script></body>\n</html>\n`,
     },
     { path: 'api/_lib/runtime.ts', content: RUNTIME_TYPES },
     { path: 'api/auth/[...path].ts', content: AUTH_FUNCTION },

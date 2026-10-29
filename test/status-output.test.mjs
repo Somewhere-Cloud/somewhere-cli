@@ -176,7 +176,7 @@ test('status prints the canonical serving host returned as prod_fallback', async
 
     assert.equal(result.status, 0, `stdout:\n${result.stdout}\nstderr:\n${result.stderr}`);
     assert.match(result.stdout, /URL: https:\/\/canonical-serving\.somewhere\.site/);
-    assert.doesNotMatch(result.stdout, /stale-slug\.somewhere\.tech/);
+    assert.doesNotMatch(result.stdout, /stale-slug\.somewhere\.cloud/);
     assert.match(result.stdout, /Preview candidate: draft-current/);
     assert.match(result.stdout, /Candidate release: rel-current/);
     assert.match(result.stdout, /Preview host: https:\/\/canonical-serving-dev\.somewhere\.site/);
@@ -270,7 +270,7 @@ test('status falls back to the project .site host when URL lookup fails', async 
 
     assert.equal(result.status, 0, `stdout:\n${result.stdout}\nstderr:\n${result.stderr}`);
     assert.match(result.stdout, /URL: https:\/\/fallback-slug\.somewhere\.site/);
-    assert.doesNotMatch(result.stdout, /fallback-slug\.somewhere\.tech/);
+    assert.doesNotMatch(result.stdout, /fallback-slug\.somewhere\.cloud/);
     assert.doesNotMatch(result.stdout, /Promoted from candidate|Content hash:/);
   } finally {
     await new Promise((resolvePromise) => server.close(resolvePromise));

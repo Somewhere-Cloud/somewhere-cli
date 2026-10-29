@@ -129,7 +129,7 @@ test('docs warn when they describe a newer minor CLI, and stay quiet for a patch
       assert.equal(result.status, 0, result.stderr);
       if (warns) {
         assert.match(result.stderr, new RegExp(`These docs describe somewhere CLI ${latest.replace(/\./g, '\\.')}; this CLI is ${installed.replace(/\./g, '\\.')}`));
-        assert.match(result.stderr, /npm i -g @somewhere-tech\/cli@latest/);
+        assert.match(result.stderr, /npm i -g @somewhere-cloud\/cli@latest/);
       } else {
         assert.doesNotMatch(result.stderr, /These docs describe/);
       }

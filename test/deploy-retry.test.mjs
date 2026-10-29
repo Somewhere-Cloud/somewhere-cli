@@ -80,7 +80,7 @@ test('deploy retries once after a timeout-class upload failure', async () => {
         setTimeout(() => {
           sendJson(res, 200, {
             ok: true,
-            data: { files: 1, url: 'https://retry.somewhere.tech', has_functions: false },
+            data: { files: 1, url: 'https://retry.somewhere.cloud', has_functions: false },
           });
         }, 250);
         return;
@@ -88,7 +88,7 @@ test('deploy retries once after a timeout-class upload failure', async () => {
 
       sendJson(res, 200, {
         ok: true,
-        data: { files: 1, url: 'https://retry.somewhere.tech', has_functions: false },
+        data: { files: 1, url: 'https://retry.somewhere.cloud', has_functions: false },
       });
     });
   }, async (apiUrl) => {
@@ -105,7 +105,7 @@ test('deploy retries once after a timeout-class upload failure', async () => {
     assert.equal(result.status, 0, `stdout:\n${result.stdout}\nstderr:\n${result.stderr}`);
     assert.equal(deployCalls, 2);
     assert.match(result.stdout, /Deploy timed out after 1s; retrying once\./);
-    assert.match(result.stdout, /Live at https:\/\/retry\.somewhere\.tech/);
+    assert.match(result.stdout, /Live at https:\/\/retry\.somewhere\.cloud/);
   });
 });
 
@@ -128,7 +128,7 @@ test('deploy prints determinate progress while a healthy upload is still running
     if (req.method === 'POST' && req.url === '/v1/deploy') {
       setTimeout(() => sendJson(res, 200, {
         ok: true,
-        data: { files: 1, url: 'https://progress.somewhere.tech', has_functions: false },
+        data: { files: 1, url: 'https://progress.somewhere.cloud', has_functions: false },
       }), 140);
       return;
     }
@@ -147,7 +147,7 @@ test('deploy prints determinate progress while a healthy upload is still running
 
     assert.equal(result.status, 0, `stdout:\n${result.stdout}\nstderr:\n${result.stderr}`);
     assert.match(result.stderr, /Deploy still running after 1s/);
-    assert.match(result.stdout, /Live at https:\/\/progress\.somewhere\.tech/);
+    assert.match(result.stdout, /Live at https:\/\/progress\.somewhere\.cloud/);
   });
 });
 

@@ -97,7 +97,7 @@ const server = createServer((req, res) => {
       deployCalls++;
       send(200, {
         ok: true,
-        data: { files: 1, url: `https://${createdSubdomain}.somewhere.tech`, has_functions: false, ...SERVER_DEPLOY_FIELDS },
+        data: { files: 1, url: `https://${createdSubdomain}.somewhere.cloud`, has_functions: false, ...SERVER_DEPLOY_FIELDS },
       });
       return;
     }
@@ -240,7 +240,7 @@ test('deploy --json with no stored credential deploys and emits the anonymous co
     files: 1,
     has_functions: false,
     ...SERVER_DEPLOY_FIELDS,
-    url: `https://${project.subdomain}.somewhere.tech`,
+    url: `https://${project.subdomain}.somewhere.cloud`,
     claim_url: 'https://somewhere.cloud/claim?token=swtc_e2e',
     expires_at: config.temp_expires_at,
     claim_connects_agent: true,

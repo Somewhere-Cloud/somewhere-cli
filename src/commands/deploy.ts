@@ -20,6 +20,7 @@ import {
   markPublishNoticeSeen,
   publishNoticeSeen,
   saveProjectDeployState,
+  saveProjectAppUrl,
   loadTempSession,
   updateTempSession,
   canonicalProjectRoot,
@@ -28,6 +29,7 @@ import {
   type ProjectConfigEntry,
   type StoredTempSession,
 } from '../lib/config.js';
+import { httpsOrigin } from '../lib/project-urls.js';
 import { collectFiles, formatBytes } from '../lib/files.js';
 import { mintTempAccount } from '../lib/temp-auth.js';
 import { ensureClaimHandoff } from '../lib/claim-handoff.js';
@@ -927,7 +929,7 @@ export function registerDeploy(program: Command) {
         if (isNextAppShapeSignal(serverSignal)) {
           warn(NEXT_APP_WARNING);
         } else {
-          warn(`This looks like a Node server app (${serverSignal}) — somewhere.tech does not run server processes.`);
+          warn(`This looks like a Node server app (${serverSignal}) — somewhere.cloud does not run server processes.`);
           warn('It will deploy as static files only: your routes will NOT run, and the');
           warn('server source will be publicly readable at its file path.');
           warn('The platform shape: static files at the root + API handlers under functions/');
@@ -1079,6 +1081,9 @@ export function registerDeploy(program: Command) {
             );
           }
           rememberDeployedBase(result.active_release_id ?? result.release_id);
+          if (!tempSession && deployStateEntry && result.project_id === deployStateEntry.config.project_id) {
+            saveProjectAppUrl(deployStateEntry.dir, deployStateEntry.config.project_id, httpsOrigin(result.url));
+          }
         }
         const formatted = formatDeploySuccess(result, {
           scope,

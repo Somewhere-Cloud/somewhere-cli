@@ -4,7 +4,7 @@ import { getToken, loadProjectConfig } from '../lib/config.js';
 import { dim, error, info, printJson, statusDot, teal, timeAgo } from '../lib/output.js';
 import { callPlatformTool } from '../lib/platform-tools.js';
 import { isRecord, unwrapPlatformData } from '../lib/platform-command.js';
-import { fallbackProjectServingUrl, getProjectServingUrl } from '../lib/project-urls.js';
+import { fallbackProjectServingUrl, getAuthoritativeAppUrl, getProjectServingUrl } from '../lib/project-urls.js';
 import { chooseProjectRef, projectRefConflictMessage } from '../lib/project-ref.js';
 import { promoteCommands } from '../lib/promote-handoff.js';
 import { unlinkedFolderHint } from '../lib/link-hint.js';
@@ -308,8 +308,18 @@ export function registerStatus(program: Command) {
       }
 
       if (opts.json) {
+        let appUrl: string | null = null;
+        let appUrlError: { code: string; message: string } | null = null;
+        try {
+          appUrl = await getAuthoritativeAppUrl(client, projectId);
+          if (!appUrl) appUrlError = { code: 'APP_URL_NOT_REPORTED', message: 'The platform reported no https app URL for this project. Deploy it, then run this again.' };
+        } catch (err) {
+          appUrlError = { code: 'APP_URL_UNAVAILABLE', message: `Could not read the project's URLs: ${err instanceof Error ? err.message : String(err)}` };
+        }
         printJson({
           project: projectStatus,
+          app_url: appUrl,
+          app_url_error: appUrlError,
           deployment: deploymentStatus,
           workspace: workspaceStatus,
           project_error: projectError,

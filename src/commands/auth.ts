@@ -114,7 +114,7 @@ export function describeScope(scope: DeviceSessionScope | null | undefined): str
 export function loginIntroLines(): string[] {
   return [
     '',
-    '  Login to somewhere.tech',
+    '  Login to somewhere.cloud',
     `  ${SIGNUP_HINT}`,
     '',
   ];
@@ -122,7 +122,7 @@ export function loginIntroLines(): string[] {
 
 async function signupAction(): Promise<void> {
   console.log('');
-  console.log('  Create your somewhere.tech account');
+  console.log('  Create your somewhere.cloud account');
   console.log('');
   // Printed as plain text before anything is opened: a headless agent can only
   // relay a URL it can read.
@@ -196,14 +196,14 @@ export async function describeProjectCount(client: ApiClient, owned: number): Pr
 export function registerAuth(program: Command) {
   program
     .command('login')
-    .description('Authenticate with somewhere.tech (no account yet? run `somewhere signup`)')
+    .description('Authenticate with somewhere.cloud (no account yet? run `somewhere signup`)')
     .option('--legacy', 'Use the localhost-callback flow instead of device code')
     .option('--signup', 'Create a new account instead — opens the sign-up page')
     .action(loginAction);
 
   program
     .command('signup')
-    .description('Create a somewhere.tech account — opens the sign-up page and prints its URL')
+    .description('Create a somewhere.cloud account — opens the sign-up page and prints its URL')
     .action(signupAction);
 
   program
@@ -312,7 +312,7 @@ export function registerAuth(program: Command) {
   // memory both expect `somewhere auth login` to work.
   auth
     .command('login')
-    .description('Authenticate with somewhere.tech (alias of `somewhere login`)')
+    .description('Authenticate with somewhere.cloud (alias of `somewhere login`)')
     .option('--legacy', 'Use the localhost-callback flow instead of device code')
     .option('--signup', 'Create a new account instead — opens the sign-up page')
     .action(loginAction);

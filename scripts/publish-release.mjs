@@ -59,7 +59,7 @@ async function verifyRegistry(source, version) {
     return response;
   };
   await pollVerification(async () => {
-    const manifest = await readPublishedVersion('@somewhere-tech/cli', version);
+    const manifest = await readPublishedVersion('@somewhere-cloud/cli', version);
     if (!manifest || manifest.gitHead !== source) throw new Error('registry source identity mismatch or pending publication');
     const release = parseOfficialRelease({ 'dist-tags': { latest: version }, versions: { [version]: manifest } });
     verifyTarballIntegrity(new Uint8Array(await (await get(release.tarballUrl)).arrayBuffer()), release.integrity);

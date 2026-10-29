@@ -27,7 +27,7 @@ const CMD = (host) => `somewhere typecheck --deploy --hook ${host}`;
 test('the hook runs `somewhere` only when PATH holds this same CLI, else this exact version from the npm cache', () => {
   assert.equal(agentHookCommand('claude-code', { usePathCli: true }), 'somewhere typecheck --deploy --hook claude-code');
   assert.equal(agentHookCommand('codex', { usePathCli: false, version: '0.37.27' }),
-    'npx --yes --prefer-offline --package=@somewhere-tech/cli@0.37.27 somewhere typecheck --deploy --hook codex');
+    'npx --yes --prefer-offline --package=@somewhere-cloud/cli@0.37.27 somewhere typecheck --deploy --hook codex');
   const bin = fileURLToPath(new URL('../bin/somewhere.js', import.meta.url));
   const pathDir = mkdtempSync(join(tmpdir(), 'sw-path-'));
   symlinkSync(bin, join(pathDir, 'somewhere'));
@@ -71,7 +71,7 @@ test('claude-code: merges into existing settings and hooks without replacing the
 
 test('an installed check with another command (e.g. a new CLI version) is updated in place', () => {
   const dir = project();
-  installAgentHooks({ projectDir: dir, hosts: ['claude-code'], command: () => 'npx --yes --prefer-offline --package=@somewhere-tech/cli@0.37.26 somewhere typecheck --deploy --hook claude-code' });
+  installAgentHooks({ projectDir: dir, hosts: ['claude-code'], command: () => 'npx --yes --prefer-offline --package=@somewhere-cloud/cli@0.37.26 somewhere typecheck --deploy --hook claude-code' });
   const [result] = installAgentHooks({ projectDir: dir, hosts: ['claude-code'], command: CMD });
   assert.equal(result.status, 'updated');
   const entries = read(dir, '.claude/settings.json').hooks.PostToolUse;
@@ -313,7 +313,7 @@ test('end to end: the installed Claude Code command reports a real finding, then
   const installed = read(dir, '.claude/settings.json').hooks.PostToolUse[0].hooks[0].command;
   assert.match(installed, /typecheck --deploy --hook claude-code$/);
   // The test runs bin/somewhere.js directly, so PATH's `somewhere` (if any) is not this CLI: pinned npx form.
-  assert.match(installed, /^npx --yes --prefer-offline --package=@somewhere-tech\/cli@\d+\.\d+\.\d+ somewhere typecheck/);
+  assert.match(installed, /^npx --yes --prefer-offline --package=@somewhere-cloud\/cli@\d+\.\d+\.\d+ somewhere typecheck/);
   const event = JSON.stringify({ hook_event_name: 'PostToolUse', cwd: dir, tool_name: 'Write', tool_input: { file_path: join(dir, 'src/a.ts') } });
   const run = () => spawnSync(process.execPath, [bin, 'typecheck', '--deploy', '--hook', 'claude-code'], { input: event, encoding: 'utf8', cwd: dir, env: { ...process.env, NO_COLOR: '1' } });
   const failing = run();

@@ -13,6 +13,7 @@ import {
   sourceBaseState,
 } from '../lib/config.js';
 import { installInitDependencies } from '../lib/init-install.js';
+import { getAuthoritativeAppUrl } from '../lib/project-urls.js';
 import { basename, join } from 'node:path';
 import { existsSync } from 'node:fs';
 import {
@@ -282,6 +283,8 @@ export function registerInit(program: Command) {
           subdomain: string;
           slug: string;
         }>('POST', '/projects', { name, subdomain });
+        // The platform's answer, never a host built from the name or slug.
+        const appUrl = await getAuthoritativeAppUrl(client, project.id).catch(() => null);
 
         spinner?.stop();
         if (opts.json) {
@@ -289,6 +292,7 @@ export function registerInit(program: Command) {
             project_id: project.id,
             name: project.name,
             subdomain: project.subdomain ?? subdomain,
+            ...(appUrl ? { app_url: appUrl } : {}),
             source_base: sourceBaseState(project.id, null),
           });
           if (shouldScaffold) {
@@ -299,7 +303,7 @@ export function registerInit(program: Command) {
             writeBareGuide(dir);
             writeInitSkills(dir);
           }
-          printJson({ ...project,
+          printJson({ ...project, app_url: appUrl,
             ...(plan ? { selection: plan.selection, extension_points: extensionPoints(plan.selection) } : {}),
           });
           return;
@@ -310,6 +314,7 @@ export function registerInit(program: Command) {
           project_id: project.id,
           name: project.name,
           subdomain: project.subdomain ?? subdomain,
+          ...(appUrl ? { app_url: appUrl } : {}),
           source_base: sourceBaseState(project.id, null),
         });
         success('.somewhere.json written');
@@ -477,10 +482,12 @@ export async function linkExisting(
   if (!projectId) return;
 
   const project = result.projects.find((p) => p.id === projectId)!;
+  const appUrl = await getAuthoritativeAppUrl(client, project.id).catch(() => null);
   saveProjectConfig(dir, {
     project_id: project.id,
     name: project.name,
     subdomain: project.subdomain,
+    ...(appUrl ? { app_url: appUrl } : {}),
   });
   if (!json) success(`.somewhere.json linked to ${teal(project.name)}`);
 
@@ -494,7 +501,7 @@ export async function linkExisting(
   }
 
   if (json) {
-    printJson(project);
+    printJson({ ...project, app_url: appUrl });
     return;
   }
 

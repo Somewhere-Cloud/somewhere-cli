@@ -70,7 +70,7 @@ export async function callAnonymousAdvisor(
 export function registerAdvisor(program: Command): void {
   program
     .command('advisor [question]')
-    .description('Ask the somewhere.tech platform advisor; local context is attached only with --file')
+    .description('Ask the somewhere.cloud platform advisor; local context is attached only with --file')
     .option('--async', 'Use the durable Advisor candidate when enabled by the server')
     .option('--resume <request-id>', 'Reconnect to the same saved Advisor request')
     .option('--status <request-id>', 'Read one saved Advisor request status')

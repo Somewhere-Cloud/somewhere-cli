@@ -22,7 +22,7 @@ const PACKAGE_JSON = `{
     "typecheck": "somewhere typecheck"
   },
   "dependencies": {
-    "@somewhere-tech/sdk": "0.12.10",
+    "@somewhere-cloud/sdk": "0.13.0",
     "react": "19.2.7",
     "react-dom": "19.2.7"
   },
@@ -75,10 +75,10 @@ function indexHtml(appName: string): string {
 
 // ------------------------------------------------------------------ behaviour
 
-const AUTH_API = `export { somewhereAuth as default } from '@somewhere-tech/sdk/server';
+const AUTH_API = `export { somewhereAuth as default } from '@somewhere-cloud/sdk/server';
 `;
 
-const AUTH_TYPES = `import type { User } from '@somewhere-tech/sdk/auth';
+const AUTH_TYPES = `import type { User } from '@somewhere-cloud/sdk/auth';
 
 export type { User };
 
@@ -210,7 +210,7 @@ export function useProviderSignIn(): ProviderSignIn {
 `;
 
 const AUTH_CALLBACK_PAGE = `import { useState } from 'react';
-import { AuthCallback } from '@somewhere-tech/sdk/react';
+import { AuthCallback } from '@somewhere-cloud/sdk/react';
 import type { SignInProvider } from '../../types/auth';
 import { LinkButton } from '../ui/Button';
 import { linkTo, ROUTES } from '../routes';
@@ -250,7 +250,7 @@ export function AuthCallbackPage() {
 }
 `;
 
-const AUTH_SERVICE = `import { AuthError, createSomewhereAuth } from '@somewhere-tech/sdk/auth';
+const AUTH_SERVICE = `import { AuthError, createSomewhereAuth } from '@somewhere-cloud/sdk/auth';
 
 // The app's auth client (SDK). It talks to api/auth/[...path].ts. The session
 // is an httpOnly cookie the browser keeps; app code never handles a token.
@@ -267,7 +267,7 @@ export function authErrorMessage(reason: unknown): string {
 `;
 
 const AUTH_HOOKS = `import { useRef, useState } from 'react';
-import { useAuth, useAuthState as useSdkAuthState } from '@somewhere-tech/sdk/react';
+import { useAuth, useAuthState as useSdkAuthState } from '@somewhere-cloud/sdk/react';
 import type { AuthState, CredentialsForm, CredentialsMode, SignOutAction, UnconfirmedSignOut, User } from '../../types/auth';
 import { authErrorMessage, PASSWORD_MIN_LENGTH } from '../services/auth';
 import { useMfaContinuation } from './useMfaContinuation';
@@ -487,7 +487,7 @@ function mainTsx(styled: boolean, agent: boolean): string {
   if (agent) return mainTsxWithFixtures(styles);
   return `import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { SomewhereAuthProvider } from '@somewhere-tech/sdk/react';
+import { SomewhereAuthProvider } from '@somewhere-cloud/sdk/react';
 import { App } from './App';
 import { auth } from './services/auth';
 ${styles}
@@ -506,7 +506,7 @@ createRoot(document.getElementById('root')!).render(
 function mainTsxWithFixtures(styles: string): string {
   return `import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { SomewhereAuthProvider } from '@somewhere-tech/sdk/react';
+import { SomewhereAuthProvider } from '@somewhere-cloud/sdk/react';
 import { App } from './App';
 import { FIXTURES_PATH } from './fixtures/assistant';
 import { AssistantFixturesPage } from './pages/AssistantFixturesPage';
@@ -741,7 +741,7 @@ export function notesErrorMessage(reason: unknown): string {
 `;
 
 const USE_NOTES = `import { useEffect, useRef, useState } from 'react';
-import { useAuth } from '@somewhere-tech/sdk/react';
+import { useAuth } from '@somewhere-cloud/sdk/react';
 import type { Note, NoteDraft, NoteDraftErrors, NoteId, NotesController, NotesStatus } from '../../types/notes';
 import {
   createNote,
@@ -1277,7 +1277,7 @@ export function assistantErrorMessage(reason: unknown): string {
 `;
 
 const USE_ASSISTANT = `import { useEffect, useRef, useState } from 'react';
-import { useAuth } from '@somewhere-tech/sdk/react';
+import { useAuth } from '@somewhere-cloud/sdk/react';
 import type { AssistantController, AssistantView, Proposal, ProposalDecision } from '../../types/assistant';
 import {
   AssistantRequestError,
@@ -1688,8 +1688,8 @@ export function AssistantPanel({ assistant }: { assistant: AssistantController }
 // One set of pages for both UI modes: hooks in, typed values and callbacks out.
 
 const MFA_HOOK = `import { useState } from 'react';
-import { AuthError } from '@somewhere-tech/sdk/auth';
-import { useAuth } from '@somewhere-tech/sdk/react';
+import { AuthError } from '@somewhere-cloud/sdk/auth';
+import { useAuth } from '@somewhere-cloud/sdk/react';
 import type { MfaContinuation } from '../../types/auth';
 import { authErrorMessage } from '../services/auth';
 
@@ -2368,7 +2368,7 @@ export type MagicLinkLanding =
 `;
 
 const MAGIC_LINK_HOOKS = `import { useEffect, useRef, useState } from 'react';
-import { useAuth } from '@somewhere-tech/sdk/react';
+import { useAuth } from '@somewhere-cloud/sdk/react';
 import type { MagicLinkLanding, MagicLinkRequest } from '../../types/magic-link';
 import { authErrorMessage } from '../services/auth';
 import { useMfaContinuation } from './useMfaContinuation';
@@ -2640,7 +2640,7 @@ function magicLinkViews(styled: boolean, request: boolean): string {
 // --------------------------------------------------------------- verify-email
 
 const VERIFY_EMAIL_HOOK = `import { useEffect, useState } from 'react';
-import { useAuth } from '@somewhere-tech/sdk/react';
+import { useAuth } from '@somewhere-cloud/sdk/react';
 import type { EmailVerification } from '../../types/auth';
 import { authErrorMessage } from '../services/auth';
 
@@ -2757,7 +2757,7 @@ function readme(selection: InitSelection): string {
   const agent = selection.modules.includes('agent');
   const magicLink = selection.modules.includes('magic-link');
   const lines = [
-    '# somewhere.tech app',
+    '# somewhere.cloud app',
     '',
     '## Where things go',
     '',
@@ -2813,7 +2813,7 @@ function readme(selection: InitSelection): string {
     '',
     '## Auth',
     '',
-    'Auth is handled by `@somewhere-tech/sdk`. The session is an httpOnly cookie;',
+    'Auth is handled by `@somewhere-cloud/sdk`. The session is an httpOnly cookie;',
     'app code does not store or send a token. `src/App.tsx` shows private pages only',
     'for an account the server confirmed: a loading screen until the first check',
     'answers, and a "try again" screen when the server cannot be reached (pages',

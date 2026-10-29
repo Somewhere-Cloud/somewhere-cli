@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.38.0
+
+### Changed
+
+- The CLI is now published as `@somewhere-cloud/cli` (install with
+  `npm i -g @somewhere-cloud/cli`, or run `npx @somewhere-cloud/cli <command>`).
+  `@somewhere-tech/cli` stays installable at its existing versions. The command
+  name is still `somewhere`.
+- Defaults target somewhere.cloud: the API at `https://api.somewhere.cloud` and
+  MCP at `https://mcp.somewhere.cloud`.
+- An app's function URL comes from the platform (`app_url` in `.somewhere.json`,
+  printed by `somewhere status --json`), never from a project slug.
+- `somewhere init` writes the project contract (`AGENTS.md`, "somewhere.cloud
+  project contract") and the bundled skills pack from the current platform docs.
+  They name `@somewhere-cloud/cli` and `@somewhere-cloud/sdk`. Starters depend on
+  `@somewhere-cloud/sdk` 0.13.0.
+
 ## 0.37.86
 
 ### Fixed

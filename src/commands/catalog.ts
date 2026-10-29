@@ -124,7 +124,7 @@ function printCatalogTool(tool: CatalogToolDefinition): void {
 export function registerCatalog(program: Command): void {
   program
     .command('catalog [tool]')
-    .description('Browse the live somewhere.tech platform tool catalog; pass a tool for its input schema or a category such as email')
+    .description('Browse the live somewhere.cloud platform tool catalog; pass a tool for its input schema or a category such as email')
     .option('--json', 'Print the catalog and complete input schemas as JSON')
     .action(async (tool: string | undefined, opts: { json?: boolean }) => {
       try {

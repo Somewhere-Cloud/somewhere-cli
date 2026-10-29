@@ -51,7 +51,7 @@ function emitFatalError(message: string): void {
 export function registerMcp(program: Command) {
   const mcp = program
     .command('mcp')
-    .description('Run somewhere.tech MCP server over stdio (proxies to mcp.somewhere.cloud)')
+    .description('Run somewhere.cloud MCP server over stdio (proxies to mcp.somewhere.cloud)')
     .action(runStdioBridge);
 
   // Hidden alias: docs/llms-full.md taught `somewhere mcp stdio` — keep it
@@ -63,7 +63,7 @@ export function registerMcp(program: Command) {
 
   mcp
     .command('install <host>')
-    .description(`Configure an MCP host to use somewhere.tech (${INSTALL_HOSTS.join(', ')})`)
+    .description(`Configure an MCP host to use somewhere.cloud (${INSTALL_HOSTS.join(', ')})`)
     .action(runInstall);
 
   mcp
@@ -176,7 +176,7 @@ async function runStdioBridge(): Promise<void> {
     if (fatalInFlight || shuttingDown) return;
     fatalInFlight = true;
     const detail = err instanceof Error ? err.message : String(err);
-    emitFatalError(`somewhere.tech session could not be renewed. ${detail}`);
+    emitFatalError(`somewhere.cloud session could not be renewed. ${detail}`);
     await shutdown();
     process.exit(1);
   };

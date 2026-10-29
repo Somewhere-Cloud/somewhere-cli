@@ -22,7 +22,7 @@ async function trigger(ctx, master = source) {
   return outputs;
 }
 
-test('canonical publisher alone publishes, serializes both triggers and pins immutable checkout', () => {
+test('canonical publisher alone publishes, serializes manual bootstrap and pins immutable checkout', () => {
   assert.doesNotMatch(guard, /npm publish|id-token:|contents: write|git push/);
   assert.match(guard, /contents: read/);
   for (const workflow of [guard, publisher]) {
@@ -32,7 +32,10 @@ test('canonical publisher alone publishes, serializes both triggers and pins imm
   assert.doesNotMatch(guard, /npm ci|npm test|npm run build/);
   assert.match(guard, /run: node scripts\/version-guard\.mjs/);
   assert.ok(publisher.indexOf('npm install -g') < publisher.indexOf('npm ci'));
-  const publishAt = publisher.indexOf('run: npm publish --provenance');
+  const publishAt = publisher.indexOf('npm publish --provenance --access public');
+  assert.match(publisher, /FIRST_VERSION_STAGE: \$\{\{ vars\.NPM_FIRST_VERSION_STAGE \}\}/);
+  assert.equal((publisher.match(/npm stage publish --provenance --access public/g) ?? []).length, 1);
+  assert.match(publisher, /steps\.publication\.outputs\.staged != 'true'/);
   const verifyAt = publisher.indexOf('run: node scripts/publish-release.mjs verify');
   assert.ok(publishAt >= 0 && verifyAt > publishAt, 'publish then verify registry source/SRI/Sigstore');
   assert.match(publisher, /name: Verify published registry source, SRI and Sigstore\n        id: verification/);
@@ -47,22 +50,19 @@ test('canonical publisher alone publishes, serializes both triggers and pins imm
   assert.match(publisher, /SOURCE_SHA: \$\{\{ steps.final.outputs.published_head \}\}/);
 });
 
-test('exact trusted successful master guard accepted; untrusted states fail before checkout', async () => {
-  assert.deepEqual(await trigger(context()), { source, version: '' });
-  for (const run of [
-    { conclusion: 'failure' }, { event: 'pull_request' }, { head_branch: 'feature' },
-    { head_repository: { full_name: 'fork/cli' } }, { repository: { full_name: 'fork/cli' } },
-    { path: '.github/workflows/other.yml' }, { head_sha: 'bad' },
-  ]) await assert.rejects(trigger(context(run)));
-  await assert.rejects(trigger(context(), 'b'.repeat(40)), /stale source/);
-  await assert.rejects(trigger({ ...context(), sha: 'b'.repeat(40) }), /OIDC source/);
-  const fork = context(); fork.repo.owner = 'fork';
-  await assert.rejects(trigger(fork), /untrusted repository/);
+test('automatic guard events cannot publish during scoped bootstrap', async () => {
+  assert.doesNotMatch(publisher, /^  (workflow_run|push):/m);
+  assert.match(publisher, /secrets\.NPM_CLOUD_BOOTSTRAP_TOKEN/);
+  assert.doesNotMatch(publisher, /secrets\.NPM_TOKEN/);
+  await assert.rejects(trigger(context()), /untrusted trigger/);
 });
 
 test('dispatch validates exact inputs without interpolation and requires master workflow ref', async () => {
   const dispatch = { ...context(), eventName: 'workflow_dispatch', payload: { inputs: { source_sha: source, expected_version: '1.2.3' } } };
   assert.deepEqual(await trigger(dispatch), { source, version: '1.2.3' });
+  await assert.rejects(trigger(dispatch, 'b'.repeat(40)), /stale source/);
+  await assert.rejects(trigger({ ...dispatch, sha: 'b'.repeat(40) }), /OIDC source/);
+  await assert.rejects(trigger({ ...dispatch, repo: { owner: 'fork', repo: 'somewhere-cli' } }), /untrusted repository/);
   for (const version of ['$(touch /tmp/injected)', '1.2', '01.2.3', '1.2.3-01', '1.2.3\nfoo', '1.2.3\n']) {
     await assert.rejects(trigger({ ...dispatch, payload: { inputs: { source_sha: source, expected_version: version } } }));
     assert.throws(() => validateCandidate(source, version));
@@ -81,9 +81,9 @@ test('identity accepts exact current source and rejects either stale checkout or
 });
 
 test('only explicit 404 is absent; valid registry identity accepted; ambiguity/errors refuse', async () => {
-  const read = (status, body) => readPublishedVersion('@somewhere-tech/cli', '1.2.3', async () => ({ status, ok: status === 200, json: async () => body }));
+  const read = (status, body) => readPublishedVersion('@somewhere-cloud/cli', '1.2.3', async () => ({ status, ok: status === 200, json: async () => body }));
   assert.equal(await read(404), undefined);
-  const manifest = { name: '@somewhere-tech/cli', version: '1.2.3', gitHead: source };
+  const manifest = { name: '@somewhere-cloud/cli', version: '1.2.3', gitHead: source };
   assert.deepEqual(await read(200, manifest), manifest);
   for (const status of [401, 403, 429, 500]) await assert.rejects(read(status), /registry lookup failed/);
   for (const body of [{ ...manifest, gitHead: undefined }, { ...manifest, name: 'other' }, { ...manifest, version: '2.0.0' }]) await assert.rejects(read(200, body), /ambiguous/);

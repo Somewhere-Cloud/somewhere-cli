@@ -49,14 +49,14 @@ function generateGreen() {
   return { dir, result };
 }
 
-test('auth template SDK defaults adopt 0.12.10 identity-only auth with explicit billing observations and preserve exact versus caret policy', () => {
+test('auth template SDK defaults adopt 0.13.0 identity-only auth with explicit billing observations and preserve exact versus caret policy', () => {
   const selection = { requested: ['auth'], added: [], modules: ['auth'], ui: 'styled' };
   for (const [files, expected] of [
-    [createFeatureTemplate(selection, { appName: 'Starter' }), '0.12.10'],
-    [createHappyPathTemplate(), '^0.12.10'],
+    [createFeatureTemplate(selection, { appName: 'Starter' }), '0.13.0'],
+    [createHappyPathTemplate(), '^0.13.0'],
   ]) {
     const manifest = JSON.parse(files.find((file) => file.path === 'package.json').content);
-    assert.equal(manifest.dependencies['@somewhere-tech/sdk'], expected);
+    assert.equal(manifest.dependencies['@somewhere-cloud/sdk'], expected);
   }
 });
 
@@ -114,7 +114,7 @@ test('minimal starter is a small typed frontend, function, and schema', () => {
 
   const pkg = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'));
   assert.deepEqual(pkg.dependencies, {
-    '@somewhere-tech/sdk': '0.12.10',
+    '@somewhere-cloud/sdk': '0.13.0',
     react: '19.2.7',
     'react-dom': '19.2.7',
   });
@@ -135,7 +135,7 @@ test('minimal starter is a small typed frontend, function, and schema', () => {
     assert.match(version, /^\d+\.\d+\.\d+$/, `dependency is not pinned: ${version}`);
   }
 
-  assert.equal(readFileSync(join(dir, 'api/auth/[...path].ts'), 'utf8'), "export { somewhereAuth as default } from '@somewhere-tech/sdk/server';\n");
+  assert.equal(readFileSync(join(dir, 'api/auth/[...path].ts'), 'utf8'), "export { somewhereAuth as default } from '@somewhere-cloud/sdk/server';\n");
   assert.ok(JSON.parse(readFileSync(join(dir, 'tsconfig.json'), 'utf8')).include.includes('*.ts'));
   assert.match(readFileSync(join(dir, 'api/greeting.ts'), 'utf8'), /export default sw\.endpoint\(\{/);
   assert.match(readFileSync(join(dir, 'api/greeting.ts'), 'utf8'), /sw\.db\.from\('greetings'/);
@@ -146,7 +146,7 @@ test('minimal starter is a small typed frontend, function, and schema', () => {
 
   const agents = readFileSync(join(dir, 'AGENTS.md'), 'utf8');
   const claude = readFileSync(join(dir, 'CLAUDE.md'), 'utf8');
-  assert.equal(agents, `# somewhere.tech project contract\n${SKILLS_POINTER}\n${AGENT_WORKFLOW}\n`);
+  assert.equal(agents, `# somewhere.cloud project contract\n${SKILLS_POINTER}\n${AGENT_WORKFLOW}\n`);
   // 81 since tsk_c8e60ff7 added the data mixing rule and its validated ownership step.
   assert.ok(agents.trimEnd().split('\n').length <= 81, 'AGENTS.md must stay within 81 lines');
   assert.equal(claude, 'Read AGENTS.md for project instructions.\n');
@@ -155,7 +155,7 @@ test('minimal starter is a small typed frontend, function, and schema', () => {
   const workflowOrder = [
     'somewhere init --name <slug>',
     'Default: sign-in UI. Minimal: SDK and auth route. Bare: neither.',
-    'npx @somewhere-tech/cli deploy',
+    'npx @somewhere-cloud/cli deploy',
     'somewhere docs recipe-signed-in-app --full',
     'somewhere typecheck',
     'focused local/browser tests',
@@ -169,8 +169,8 @@ test('minimal starter is a small typed frontend, function, and schema', () => {
     'somewhere email test-inbox <addr>',
     'verification_code',
     'serves `index.html`',
-    "export { somewhereAuth as default } from '@somewhere-tech/sdk/server'",
-    "createSomewhereAuth()` from `@somewhere-tech/sdk/auth",
+    "export { somewhereAuth as default } from '@somewhere-cloud/sdk/server'",
+    "createSomewhereAuth()` from `@somewhere-cloud/sdk/auth",
     'email_verified: false',
     'sw.auth.requireUser(req)',
     'sw.endpoint({',
@@ -215,7 +215,7 @@ declare module 'react/jsx-runtime' {
   export function jsxs(type: unknown, props: unknown): JSX.Element;
   export const Fragment: unknown;
 }
-declare module '@somewhere-tech/sdk/server' { export const somewhereAuth: (request: Request) => Promise<Response>; }
+declare module '@somewhere-cloud/sdk/server' { export const somewhereAuth: (request: Request) => Promise<Response>; }
 declare module 'react-dom/client' {
   export function createRoot(node: Element): { render(value: unknown): void };
 }
@@ -238,7 +238,7 @@ test('default starter is the auth module: SDK client, packaged handler, hooks, r
   // The auth route is ONE line: the SDK's maintained handler, no pasted logic.
   assert.equal(
     readFileSync(join(dir, 'api/auth/[...path].ts'), 'utf8'),
-    "export { somewhereAuth as default } from '@somewhere-tech/sdk/server';\n",
+    "export { somewhereAuth as default } from '@somewhere-cloud/sdk/server';\n",
   );
   assert.match(readFileSync(join(dir, 'src/services/auth.ts'), 'utf8'), /createSomewhereAuth\(\)/);
   const hooks = readFileSync(join(dir, 'src/auth/hooks.ts'), 'utf8');
@@ -248,7 +248,7 @@ test('default starter is the auth module: SDK client, packaged handler, hooks, r
   assert.doesNotMatch(app, /fetch\(/, 'components never fetch; services do');
   assert.match(app, /Checking your session/, 'a visible loading state, never a blank gate');
   const pkg = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'));
-  assert.equal(pkg.dependencies['@somewhere-tech/sdk'], '0.12.10');
+  assert.equal(pkg.dependencies['@somewhere-cloud/sdk'], '0.13.0');
   for (const version of [...Object.values(pkg.dependencies), ...Object.values(pkg.devDependencies)]) {
     assert.match(version, /^\d+\.\d+\.\d+$/, `dependency is not pinned: ${version}`);
   }
@@ -368,7 +368,7 @@ test('one generated template consumes the SDK auth adapter and server data/files
   );
 
   const auth = readFileSync(join(dir, 'api/auth/[...path].ts'), 'utf8');
-  assert.match(auth, /from '@somewhere-tech\/sdk\/server'/);
+  assert.match(auth, /from '@somewhere-cloud\/sdk\/server'/);
   assert.match(auth, /return somewhereAuth\(req, sw\)/);
   assert.doesNotMatch(
     auth,
@@ -386,7 +386,7 @@ test('one generated template consumes the SDK auth adapter and server data/files
   assert.doesNotMatch(upload, /image\/\*/);
 
   const service = readFileSync(join(dir, 'src/services/app.ts'), 'utf8');
-  assert.match(service, /@somewhere-tech\/sdk\/auth/);
+  assert.match(service, /@somewhere-cloud\/sdk\/auth/);
   assert.match(service, /createSomewhereAuth\(\)/);
   assert.doesNotMatch(service, /authPath|mode:\s*['"]cookie['"]/);
   assert.doesNotMatch(service, /Authorization|Bearer|accessToken|refreshToken|smt_/);
@@ -405,11 +405,11 @@ test('one generated template consumes the SDK auth adapter and server data/files
   assert.match('JWT rotation remains SDK-owned.', authMechanicsTerms);
 
   const packageJson = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'));
-  assert.equal(packageJson.dependencies['@somewhere-tech/sdk'], '^0.12.10');
+  assert.equal(packageJson.dependencies['@somewhere-cloud/sdk'], '^0.13.0');
   assert.equal(packageJson.scripts.build, undefined);
 
   const approvedAuthGuidance =
-    'Auth is handled by `@somewhere-tech/sdk` — use its client and hooks.';
+    'Auth is handled by `@somewhere-cloud/sdk` — use its client and hooks.';
   const extractAuthSection = (doc, docName) => {
     const heading = '## Auth\n\n';
     const sectionStart = doc.indexOf(heading);
@@ -475,7 +475,7 @@ declare module 'react-router-dom' {
   export const Routes: (props: { children?: unknown }) => JSX.Element;
   export const Route: (props: { path: string; element: unknown }) => JSX.Element;
 }
-declare module '@somewhere-tech/sdk/auth' {
+declare module '@somewhere-cloud/sdk/auth' {
   export interface User { id: string; email: string | null }
   export interface SomewhereAuth {
     signIn(input: { email: string; password: string }): Promise<User>;
@@ -486,15 +486,15 @@ declare module '@somewhere-tech/sdk/auth' {
   }
   export function createSomewhereAuth(): SomewhereAuth;
 }
-declare module '@somewhere-tech/sdk/server' {
+declare module '@somewhere-cloud/sdk/server' {
   export interface SwAuthNamespace { auth: Record<string, unknown> }
   export function somewhereAuth(
     req: Request,
     sw: SwAuthNamespace,
   ): Promise<Response>;
 }
-declare module '@somewhere-tech/sdk/react' {
-  import type { SomewhereAuth, User } from '@somewhere-tech/sdk/auth';
+declare module '@somewhere-cloud/sdk/react' {
+  import type { SomewhereAuth, User } from '@somewhere-cloud/sdk/auth';
   export const SomewhereAuthProvider: (props: {
     client: SomewhereAuth;
     children?: unknown;

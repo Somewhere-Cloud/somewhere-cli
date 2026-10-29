@@ -2,10 +2,6 @@
 name: Publish to npm
 
 on:
-  workflow_run:
-    workflows: ['Version guard']
-    types: [completed]
-    branches: [master]
   workflow_dispatch:
     inputs:
       source_sha:
@@ -19,7 +15,7 @@ on:
 
 permissions:
   contents: read
-  id-token: write # Existing canonical npm provenance identity.
+  id-token: write # npm trusted publishing: @somewhere-cloud/cli <- Somewhere-Cloud/somewhere-cli publish.yml, no environment.
 
 concurrency:
   group: somewhere-cli-publish
@@ -39,13 +35,7 @@ jobs:
             if (`${context.repo.owner}/${context.repo.repo}` !== official) throw new Error('untrusted repository');
             let source;
             let version = '';
-            if (context.eventName === 'workflow_run') {
-              const run = context.payload.workflow_run;
-              if (run.conclusion !== 'success' || run.event !== 'push' || run.head_branch !== 'master' ||
-                  run.head_repository?.full_name !== official || run.repository?.full_name !== official ||
-                  run.path !== '.github/workflows/version-guard.yml') throw new Error('untrusted or unsuccessful guard run');
-              source = run.head_sha;
-            } else if (context.eventName === 'workflow_dispatch' && context.ref === 'refs/heads/master') {
+            if (context.eventName === 'workflow_dispatch' && context.ref === 'refs/heads/master') {
               source = context.payload.inputs.source_sha;
               version = context.payload.inputs.expected_version;
               if (!/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?![\s\S])/.test(version)) throw new Error('invalid expected version');
@@ -88,12 +78,25 @@ jobs:
       - name: Publish once with provenance
         id: publication
         if: steps.final.outputs.mode == 'release'
-        run: npm publish --provenance --access public
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          # First-version bootstrap only (npm cannot trust a package that does not exist).
+          # Remove this bootstrap credential requirement when trusted publishing is configured.
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_CLOUD_BOOTSTRAP_TOKEN }}
+          # Repository variable, unset by default. 1 = stage the first version for a
+          # maintainer 2FA approval instead of publishing it (stage-only token).
+          FIRST_VERSION_STAGE: ${{ vars.NPM_FIRST_VERSION_STAGE }}
+        run: |
+          if [ -z "$NODE_AUTH_TOKEN" ]; then echo "NPM_CLOUD_BOOTSTRAP_TOKEN is required for bootstrap" >&2; exit 1; fi
+          if [ "$FIRST_VERSION_STAGE" = "1" ]; then
+            npm stage publish --provenance --access public
+            echo "staged=true" >> "$GITHUB_OUTPUT"
+            echo "Staged, not published: approve with npm stage approve (2FA), then dispatch this workflow to verify." >> "$GITHUB_STEP_SUMMARY"
+          else
+            npm publish --provenance --access public
+          fi
       - name: Verify published registry source, SRI and Sigstore
         id: verification
-        if: always() && steps.final.outcome == 'success' && (steps.final.outputs.mode == 'in-sync' || steps.publication.outcome == 'success' || steps.publication.outcome == 'failure')
+        if: always() && steps.final.outcome == 'success' && steps.publication.outputs.staged != 'true' && (steps.final.outputs.mode == 'in-sync' || steps.publication.outcome == 'success' || steps.publication.outcome == 'failure')
         env:
           SOURCE_SHA: ${{ steps.final.outputs.published_head }}
           EXPECTED_VERSION: ${{ steps.candidate.outputs.version }}

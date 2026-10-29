@@ -495,8 +495,10 @@ async function intake(table, reference, values, extra) {
   export interface InsertRequest<T> { readonly key: string; readonly createdAt: number; retry(): Promise<T>; }
   export type InsertResult<T> = T & { readonly idempotency: InsertReceipt; readonly request: InsertRequest<InsertResult<T>> };
 `;
-    var CLIENT_GENERATION = 2;
-    var ACCEPTED_CLIENT_GENERATIONS = Object.freeze([2, 1]);
+    var CLIENT_GENERATION = 3;
+    var ACCEPTED_CLIENT_GENERATIONS = Object.freeze([3, 2, 1]);
+    var PUBLIC_BOOTSTRAP_CLIENT_RUNTIME = 'const swCanon=(v,d)=>{if(v===null||typeof v==="string"||typeof v==="boolean"||(typeof v==="number"&&Number.isFinite(v)))return JSON.stringify(v);if(d===0||typeof v!=="object"||Array.isArray(v))return null;const parts=[];for(const k of Object.keys(v).sort()){if(v[k]===undefined)continue;const e=swCanon(v[k],d-1);if(e===null)return null;parts.push(JSON.stringify(k)+":"+e)}return"{"+parts.join(",")+"}"};let swBoot;const swBootTake=body=>{try{if(swBoot===undefined){swBoot=null;const el=typeof document!=="undefined"&&document.getElementById?document.getElementById("__sw_public_data"):null;if(el&&el.type==="application/json"&&(el.parentNode===document.head||el.parentNode===document.body)){const p=JSON.parse(el.textContent||"null");if(p&&p.v===1&&p.contract===contract&&Number.isSafeInteger(p.validated_at)&&p.validated_at<=Date.now()&&Number.isInteger(p.max_age)&&p.max_age>0&&p.max_age<=120&&p.entries&&typeof p.entries==="object"&&!Array.isArray(p.entries)&&typeof p.path==="string"&&typeof location!=="undefined")swBoot={until:p.validated_at+p.max_age*1000,path:p.path,entries:new Map(Object.entries(p.entries))}}if(el&&el.parentNode)el.parentNode.removeChild(el)}if(!swBoot)return undefined;if(Date.now()>=swBoot.until||location.pathname!==swBoot.path){swBoot=null;return undefined}const key=swCanon(body,2);if(key===null||!swBoot.entries.has(key))return undefined;const value=swBoot.entries.get(key);swBoot.entries.delete(key);return value}catch(error){swBoot=null;return undefined}};';
+    var PUBLIC_BOOTSTRAP_INVOKE = 'if(operation==="list"||operation==="get"||operation==="aggregate"||operation==="relation_list"){const booted=swBootTake({...input,contract,table,operation});if(booted!==undefined)return booted}else swBoot=null;';
     function describeDataClient(authority, contract_digest, insertReceiptCapability, localTypes = false, generation = CLIENT_GENERATION) {
       if (!ACCEPTED_CLIENT_GENERATIONS.includes(generation)) throw new Error(`Unknown data client generation ${generation}.`);
       const canonical = authority ? canonicalize2(authority.schema, authority.intents, authority.scopes, insertReceiptCapability) : canonicalize2({}, {}, {}, insertReceiptCapability);
@@ -668,7 +670,7 @@ ${generation >= 2 ? ROW_CAN_DECLARATION : ""}${receiptCapable ? localTypes ? INS
       const runtime = `const contract=${JSON.stringify(contract_digest)};
 class DataError extends Error{constructor(status,payload){super(payload&&typeof payload.message==="string"?payload.message:payload&&typeof payload.error==="string"?payload.error:"Data operation failed");this.name="DataError";this.status=status;this.code=payload&&typeof payload.error==="string"?payload.error:null}}
 const validateListLimit=input=>{if(input.limit!==undefined&&(!Number.isInteger(input.limit)||input.limit<1||input.limit>100))throw new DataError(400,{error:"DATA_INPUT_INVALID",message:"limit must be an integer from 1 to 100"})};
-let swReadSession=null,swInFlight=0,swStarts=0;const swReadSessionVoid=()=>{swReadSession=null;swStarts++};const invoke=async(table,operation,input)=>{if(operation==="list"||operation==="relation_list")validateListLimit(input);const alone=swInFlight===0,start=++swStarts,isRead=operation==="list"||operation==="get"||operation==="aggregate"||operation==="relation_list";swInFlight++;let response;try{response=await fetch("/__sw/data",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json",...(swReadSession?{"X-Sw-Read-Session":swReadSession}:{})},body:JSON.stringify({...input,contract,table,operation})})}catch(error){if(!isRead)swReadSession=null;throw error}finally{swInFlight--}const next=response.headers&&typeof response.headers.get==="function"?response.headers.get("X-Sw-Read-Session"):null;if(!alone||swStarts!==start||swInFlight!==0)swReadSession=null;else if(next&&/^swrs1[.][A-Za-z0-9_-]+[.][A-Za-z0-9_-]+$/.test(next))swReadSession=next;else if(!isRead||!response.ok)swReadSession=null;const payload=await response.json().catch(()=>{throw new DataError(response.status,{error:"INVALID_DATA_RESPONSE",message:"Data operation returned an invalid response"})});if(!response.ok)throw new DataError(response.status,payload);return payload};
+let swReadSession=null,swInFlight=0,swStarts=0;const swReadSessionVoid=()=>{swReadSession=null;swStarts++};${generation >= 3 ? PUBLIC_BOOTSTRAP_CLIENT_RUNTIME : ""}const invoke=async(table,operation,input)=>{if(operation==="list"||operation==="relation_list")validateListLimit(input);${generation >= 3 ? PUBLIC_BOOTSTRAP_INVOKE : ""}const alone=swInFlight===0,start=++swStarts,isRead=operation==="list"||operation==="get"||operation==="aggregate"||operation==="relation_list";swInFlight++;let response;try{response=await fetch("/__sw/data",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json",...(swReadSession?{"X-Sw-Read-Session":swReadSession}:{})},body:JSON.stringify({...input,contract,table,operation})})}catch(error){if(!isRead)swReadSession=null;throw error}finally{swInFlight--}const next=response.headers&&typeof response.headers.get==="function"?response.headers.get("X-Sw-Read-Session"):null;if(!alone||swStarts!==start||swInFlight!==0)swReadSession=null;else if(next&&/^swrs1[.][A-Za-z0-9_-]+[.][A-Za-z0-9_-]+$/.test(next))swReadSession=next;else if(!isRead||!response.ok)swReadSession=null;const payload=await response.json().catch(()=>{throw new DataError(response.status,{error:"INVALID_DATA_RESPONSE",message:"Data operation returned an invalid response"})});if(!response.ok)throw new DataError(response.status,payload);return payload};
 ${receiptCapable ? INSERT_CLIENT_RUNTIME + "const receiptTables=" + JSON.stringify(receiptTables) + ";\n" : ""}${anonymousTables.length ? ANONYMOUS_CLIENT_RUNTIME + CREATOR_CLIENT_RUNTIME : ""}${intakeTables.length ? INTAKE_CLIENT_RUNTIME : ""}${linkedSpec.length ? LINK_CLIENT_RUNTIME : ""}const data=Object.freeze(Object.fromEntries(${JSON.stringify(runtimeTables)}.map(([table,operations,relations])=>{const entries=operations.map(operation=>[operation,operation==="list"||operation==="aggregate"?(options={})=>invoke(table,operation,options):operation==="create"?${receiptCapable ? "(values,...extra)=>createWithReceipt(table,values,extra,receiptTables.includes(table))" : "values=>invoke(table,operation,{values})"}:${anonymousTables.length ? 'operation==="createAnonymous"?(values,...extra)=>createAnonymous(table,values,extra):' : ""}${intakeTables.length ? 'operation==="intake"?(reference,values,...extra)=>intake(table,reference,values,extra):' : ""}operation==="update"?(id,values)=>invoke(table,operation,{id,values}):operation==="createLink"?(id,options)=>createLink(table,id,options):operation==="links"?id=>invoke(table,"link_list",{id}):operation==="revokeLink"?(id,link_id)=>invoke(table,"link_revoke",{id,link_id}):${generation >= 2 ? 'operation==="get"?(id,options={})=>invoke(table,operation,options&&options.can===true?{id,can:true}:{id}):' : ""}id=>invoke(table,operation,{id})]);if(relations.length)entries.push(["relations",Object.freeze(Object.fromEntries(relations.map(relation=>[relation,Object.freeze({list:(parent_id,options={})=>invoke(table,"relation_list",{...options,relation,parent_id})})])))]);return[table,Object.freeze(Object.fromEntries(entries))];}).concat(${linkedSpec.length ? `[["links",links],["linked",linkedView(${JSON.stringify(linkedSpec)})]]` : "[]"})${creatorSpec.length ? `.concat([["creators",creators],["creator",creatorView(${JSON.stringify(creatorSpec)})]])` : ""}));
 export{data,DataError};
 `;
@@ -1188,6 +1190,9 @@ function scanSourceForSecrets(files, functions) {
   return findings;
 }
 
+// worker/src/runtime/verify-signup.ts
+var VERIFY_SIGNUP_FETCH_PROLOGUE = "    const verifySignup = await __sw_captureVerifySignup(request); request = verifySignup.request;";
+
 // worker/src/utils/log-sanitize.ts
 var SENSITIVE_PARAMS = [
   "access_token",
@@ -1287,7 +1292,7 @@ function __sw_platformFetch(input, init) {
     // Split storage: the structured managed endpoints. Each one requires this
     // exact draft identity and the artifact's signed release, and resolves the
     // ready clone of that draft and candidate itself (readManagedExecution).
-    ((url.pathname === '/v1/db/managed/user' || url.pathname === '/v1/db/managed/server' || url.pathname === '/v1/db/managed/public'
+    ((url.pathname === '/v1/db/managed/user-memory' || url.pathname === '/v1/db/managed/user' || url.pathname === '/v1/db/managed/server' || url.pathname === '/v1/db/managed/public'
       || url.pathname === '/v1/db/managed/visitor' || url.pathname === '/v1/db/managed/visitor-session') && method === 'POST') ||
     (url.pathname === '/v1/logs' && (method === 'GET' || method === 'POST')) ||
     (url.pathname === '/v1/traces' && method === 'POST') ||
@@ -1307,6 +1312,33 @@ function __sw_hasExactDraftIdentity(request) {
   const candidate = request.headers.get('X-Sw-Draft-Candidate');
   return !!(draftId && candidate);
 }`;
+
+// worker/src/utils/function-bundle-transport.ts
+var NATIVE_RUNTIME_SERVICE_BINDING = "RUNTIME_PLATFORM_API";
+var MANAGED_RUNTIME_SERVICE_BINDING = "RUNTIME_MANAGED_DATA";
+var OUTBOUND_BRIDGE_HANDLER_PREFIX = "async fetch(request, env, ctx) {\n" + VERIFY_SIGNUP_FETCH_PROLOGUE + "\n    // Establish artifact-owned data authority before any environment read.\n    __sw_assertBridgeRuntime(env);\n    env = __sw_declaredDataEnv(env);";
+var NATIVE_CAPTURE_STATEMENT = `    try { __sw_captureNativeRuntime(env); } catch (__sw_prologueError) {
+      if (__sw_nativePathname(new __sw_nativeURL(__sw_nativeRequestURL(request))) !== '/__sw/fn-meta') throw __sw_prologueError;
+      const __sw_nb = env && env.${NATIVE_RUNTIME_SERVICE_BINDING}, __sw_mb = env && env.${MANAGED_RUNTIME_SERVICE_BINDING};
+      const __sw_fault = !__sw_nb || typeof __sw_nb.fetch !== 'function' || !__sw_mb || typeof __sw_mb.fetch !== 'function' ? 'NATIVE_RUNTIME_BINDING_MISSING'
+        : env.PROJECT_ID !== __sw_nativeRuntimeProject || env.PROJECT_ENV !== 'prod'
+          || (env.PLATFORM_API_BASE !== undefined && env.PLATFORM_API_BASE !== __sw_nativePlatformOrigin) ? 'NATIVE_RUNTIME_IDENTITY_MISMATCH'
+        : __sw_nativeRuntimeBinding ? 'NATIVE_RUNTIME_TRANSPORT_CHANGED' : 'NATIVE_RUNTIME_UNAVAILABLE';
+      return new Response(JSON.stringify({ ok: false, error: __sw_fault }), { status: 500, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } });
+    }
+`;
+var BINDING_META_BEFORE_CAPTURE = `    // Reserved candidate proof: checked against this request's own bindings, before configuration,
+    // telemetry or customer imports, and never seeding the isolate's captured transport.
+    if (__sw_nativePathname(new __sw_nativeURL(__sw_nativeRequestURL(request))) === '/__sw/native-binding-meta') {
+      const __sw_pb = env && env.${NATIVE_RUNTIME_SERVICE_BINDING}, __sw_pm = env && env.${MANAGED_RUNTIME_SERVICE_BINDING};
+      if (!__sw_pb || typeof __sw_pb.fetch !== 'function' || !__sw_pm || typeof __sw_pm.fetch !== 'function' || env.PROJECT_ID !== __sw_nativeRuntimeProject || env.PROJECT_ENV !== 'prod'
+        || (env.PLATFORM_API_BASE !== undefined && env.PLATFORM_API_BASE !== __sw_nativePlatformOrigin)) return new Response('Native binding identity mismatch', { status: 503 });
+      const [project, managedProject] = await Promise.all([__sw_pb.bindingProject(), __sw_pm.bindingProject()]);
+      if (project !== __sw_nativeRuntimeProject || managedProject !== __sw_nativeRuntimeProject) return new Response('Native binding identity mismatch', { status: 503 });
+      return Response.json({ project_id: project, release_id: env.SW_RELEASE_ID, function_digest: env.SW_ARTIFACT_DIGEST },
+        { headers: { 'cache-control': 'no-store' } });
+    }
+`;
 
 // worker/src/utils/db-schema-deploy/retention-naming.ts
 var RETAINED_PREFIX = "_sw_retained__";
@@ -1845,8 +1877,8 @@ function __sw_createConsoleScope(env, request) {
           const flush = Promise.resolve().then(function () {
             return __sw_consoleStore.exit(function () { return scope.sink(entries); });
           });
-          platformCtx.__sw_pendingBackground.push(Promise.resolve(flush).then(function () {}, function () {
-            __sw_nativeConsole.warn('Console log delivery could not be confirmed.');
+          platformCtx.__sw_pendingBackground.push(Promise.resolve(flush).then(function () {}, function (error) {
+            __sw_nativeConsole.warn(error && error.__swConsoleDelivery ? error.message : 'Console log delivery could not be confirmed.');
           }));
         }
         } catch (_) { __sw_nativeConsole.warn('Console log delivery could not be scheduled.'); }
@@ -1861,6 +1893,11 @@ var RUNTIME_LOG_LIFECYCLE_JS = String.raw`
 function drainPendingBackground(platformCtx, ctx) {
   const pending = (platformCtx && platformCtx.__sw_pendingBackground) || [];
   for (const promise of pending) ctx.waitUntil(Promise.resolve(promise));
+  // A success response's trace post waits (bounded) for this same work, so its
+  // platform calls reach the trace (pfb_f4c8b92c8fa3). Kept on the trace, a
+  // draft-safe object, so no new context name is read.
+  const trace = platformCtx && platformCtx.__sw_trace;
+  if (trace && typeof trace === 'object') trace.background = pending.slice();
   pending.length = 0;
   // Every pending promise is on waitUntil now, so a sink that waited for the
   // response can start without the request ending under it (tsk_5037f8f1).
@@ -1868,6 +1905,63 @@ function drainPendingBackground(platformCtx, ctx) {
   if (typeof release === 'function') release();
 }
 
+`;
+
+// worker/src/runtime/hot-config-runtime.ts
+var RUNTIME_HOT_CONFIG_PATH = "/v1/runtime/hot-config";
+var RUNTIME_HOT_CONFIG_REPLY_MAX_BYTES = 64 * 1024;
+var HOT_CONFIG_PULL_JS = `
+const __sw_hotPull = { snapshot: null, inflight: null };
+function __sw_hotConfigFresh(readAt, at) {
+  return Number.isSafeInteger(readAt) && at - readAt >= 0 && at - readAt < 5000;
+}
+// One GET over the project-pinned binding. Returns { readAt, values } for a valid, fresh reply;
+// 'stale' for a reply that is VALID but whose read_at is already outside the freshness window at
+// receipt (the platform served a near-expiry cache hit and the hop crossed the boundary); null for
+// anything else (invalid, non-200, non-JSON, oversize, thrown, no binding, no attestation).
+async function __sw_hotConfigGet(env) {
+  if (typeof __sw_nativeRuntimeFetch !== 'function' || !__sw_nativeRuntimeFetch) return null;
+  const attestation = env.SW_EXECUTION_ATTESTATION;
+  if (typeof attestation !== 'string' || !attestation) return null;
+  let res;
+  try {
+    res = await __sw_nativeRuntimeFetch(new Request(__sw_nativePlatformOrigin + ${JSON.stringify(RUNTIME_HOT_CONFIG_PATH)}, {
+      method: 'GET', headers: { 'accept': 'application/json', 'x-sw-execution-attestation': attestation } }));
+  } catch (_) { return null; }
+  if (!res || res.status !== 200) { try { if (res && res.body) await res.body.cancel(); } catch (_) {} return null; }
+  let text;
+  try { text = await res.text(); } catch (_) { return null; }
+  if (typeof text !== 'string' || text.length > ${RUNTIME_HOT_CONFIG_REPLY_MAX_BYTES}) return null;
+  let body;
+  try { body = JSON.parse(text); } catch (_) { return null; }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return null;
+  const values = __sw_hotConfigValues(env, { projectId: body.project_id, slot: body.slot, revision: body.revision, values: body.values });
+  if (!values) return null;
+  if (!__sw_hotConfigFresh(body.read_at, Date.now())) return 'stale';
+  return { readAt: body.read_at, values: values };
+}
+// A valid-but-stale reply gets exactly ONE more GET: by then the platform's own cache for that
+// snapshot has aged past the same 5 s bound, so the second answer comes from a fresh read (a new
+// read_at) or fails closed again. The freshness rule itself is never relaxed, no age is reset, and
+// the stale reply is never used; two stale answers in a row mean this request fails closed.
+async function __sw_hotConfigPullOnce(env) {
+  const first = await __sw_hotConfigGet(env);
+  if (first !== 'stale') return first;
+  const second = await __sw_hotConfigGet(env);
+  return second === 'stale' ? null : second;
+}
+async function __sw_hotConfigPull(env) {
+  const held = __sw_hotPull.snapshot;
+  if (held && __sw_hotConfigFresh(held.readAt, Date.now())) return held.values;
+  if (!__sw_hotPull.inflight) {
+    __sw_hotPull.inflight = __sw_hotConfigPullOnce(env).then(function (snap) {
+      if (snap) __sw_hotPull.snapshot = snap;
+      return snap;
+    }, function () { return null; }).finally(function () { __sw_hotPull.inflight = null; });
+  }
+  const snap = await __sw_hotPull.inflight;
+  return snap && __sw_hotConfigFresh(snap.readAt, Date.now()) ? snap.values : null;
+}
 `;
 
 // worker/src/runtime/access-token.ts
@@ -1897,6 +1991,22 @@ async function __sw_verifyAccessToken(binding, token, audience) {
   } catch (_) { return null; }
 }
 
+`;
+
+// worker/src/runtime/app-mcp.ts
+var APP_MCP_CONTEXT_JS = `
+  const __sw_mcpRequest = __sw_signedDelivery && __sw_signedDelivery.source === 'mcp'
+    ? new Request(request.clone(), { headers: { 'content-type': 'application/json' } }) : null;
+  async function __sw_mcpPrincipal() {
+    const verified = await __sw_verifySignedDelivery();
+    if (verified.state !== 'valid') throw __sw_signedAuthorityError(verified.state);
+    const data = verified.data;
+    if (data.project_id !== projectId || data.subject_type !== 'app_user' || !data.user
+        || data.user.id !== data.subject_id || typeof data.user.email !== 'string') throw __sw_signedAuthorityError('invalid');
+    __sw_verifiedSubjectProof = data.subject_proof;
+    const role = data.user.role === 'admin' ? 'admin' : 'user';
+    return { id: data.subject_id, role, user: { id: data.user.id, email: data.user.email, role } };
+  }
 `;
 
 // worker/src/runtime/context-head.ts
@@ -1949,7 +2059,7 @@ function __sw_shadowAccessor(proto, key, value, enumerable) {
     set: function (next) {
       var isObj = this !== null && this !== undefined && (typeof this === 'object' || typeof this === 'function');
       if (this === proto || !isObj) {
-        throw new TypeError("Cannot assign to '" + String(key) + "' on a built-in prototype. somewhere.tech seals the core JavaScript prototypes so platform security checks cannot be replaced; set the property on your own object instead.");
+        throw new TypeError("Cannot assign to '" + String(key) + "' on a built-in prototype. somewhere.cloud seals the core JavaScript prototypes so platform security checks cannot be replaced; set the property on your own object instead.");
       }
       Object.defineProperty(this, key, { value: next, writable: true, enumerable: true, configurable: true });
     },
@@ -2236,25 +2346,33 @@ function __sw_initTrace(request) {
   try {
     const inbound = __sw_parseTraceparent(request.headers.get('traceparent'));
     return {
-      traceId: inbound ? inbound.traceId : __sw_randHex(16),
+      // The trace id is SERVER-minted for every request (tsk_20a32059): it is the key that logs
+      // --trace, errors and support packets look up, so a caller-supplied traceparent must never
+      // merge its request into another one's. An inbound trace id is kept only as callerTraceId,
+      // recorded on the root span as a link, and its sampling flag is not inherited.
+      traceId: __sw_randHex(16),
       spanId: __sw_randHex(8),
-      parentSpanId: inbound ? inbound.parentSpanId : null,
-      // A function has no sampling policy of its own. An inbound decision to
-      // DROP is honored; otherwise this is "no opinion", not "store this" --
-      // the platform applies TRACE_SAMPLE_RATE deterministically on the trace
-      // id, both on its own hops and when these spans are posted to
-      // /v1/traces, so the whole chain is kept or dropped together
-      // (tsk_07a7465a). Before that this true was load-bearing and exempted
-      // every runtime-originated request from sampling entirely.
-      sampled: inbound ? inbound.sampled : true,
+      parentSpanId: null,
+      callerTraceId: inbound ? inbound.traceId : null,
+      // "No opinion": the platform applies TRACE_SAMPLE_RATE deterministically on the trace id, on
+      // its own hops and when these spans are posted to /v1/traces (tsk_07a7465a).
+      sampled: true,
       tracestate: __sw_traceHeader(request, 'tracestate', 512),
       baggage: __sw_traceHeader(request, 'baggage', 8192),
       spans: [],
       dropped: 0,
       // Platform calls started but not yet settled (tsk_b2ff7f01). A call cut
       // off by its caller's deadline settles only after the response, so its
-      // span used to miss the trace. An error response reports these.
+      // span used to miss the trace. An error response reports these; a
+      // success response's post waits (bounded) for them (pfb_f4c8b92c8fa3).
       open: [],
+      // After-response bookkeeping (function-trace-source.ts reportTrace):
+      // when the response was built, the request's drained background work,
+      // a settle notifier for the bounded wait, and whether the post has gone.
+      respondedAt: 0,
+      background: null,
+      onSettle: null,
+      posted: false,
     };
   } catch (_) {
     return null;
@@ -2270,14 +2388,16 @@ function __sw_traceHeader(request, name, maxLength) {
 }
 
 function __sw_traceRecord(trace, span) {
-  if (!trace) return;
+  if (!trace || trace.posted) return;
   if (trace.spans.length >= __sw_MAX_CLIENT_SPANS) { trace.dropped += 1; return; }
+  // Settled after the response was built: work the caller no longer waits for.
+  if (trace.respondedAt) span.attributes = Object.assign({}, span.attributes, { 'sw.after_response': true });
   trace.spans.push(span);
 }
 
 /** Track a platform call from start until it settles (bounded; see open above). */
 function __sw_traceOpen(trace, entry) {
-  if (!trace) return;
+  if (!trace || trace.posted) return;
   if (!Array.isArray(trace.open)) trace.open = [];
   if (trace.open.length < 32) trace.open.push(entry);
 }
@@ -2285,6 +2405,9 @@ function __sw_traceSettle(trace, entry) {
   if (!trace || !Array.isArray(trace.open)) return;
   const i = trace.open.indexOf(entry);
   if (i >= 0) trace.open.splice(i, 1);
+  // The caller records the settled span right after this, in the same turn;
+  // the waiter re-checks one microtask later so that span is already in.
+  if (typeof trace.onSettle === 'function') trace.onSettle();
 }
 
 function __sw_b64urlDecode(s) {
@@ -2384,7 +2507,7 @@ function __sw_preflightJwtAllowExpired(token) {
 // cannot forge its way into being a run_code invocation, so there is no signal
 // to replay. Customer code only ever receives the built sw object; it never
 // reaches buildPlatformContext, so it cannot set this flag.
-function buildPlatformContext(env, request, runtimeFetch = fetch, outboundFetch = runtimeFetch, devFsEnabled = false, existingTrace = null, consoleScope = null) {
+function buildPlatformContext(env, request, runtimeFetch = fetch, outboundFetch = runtimeFetch, devFsEnabled = false, existingTrace = null, consoleScope = null, verifySignupAuthority = null) {
   const console = (consoleScope && consoleScope.nativeConsole) || globalThis.console;
   const __sw_runtimeFetch = runtimeFetch;
   const __sw_outboundFetch = outboundFetch;
@@ -2518,7 +2641,7 @@ function buildPlatformContext(env, request, runtimeFetch = fetch, outboundFetch 
   // segments, and anything that is not plain [a-z0-9_] after that collapses to
   // the generic name rather than riding into a response header.
   let __sw_platformCalls = 0;
-  function __sw_recordPlatformCall(path, startedAt, response) {
+  function __sw_recordPlatformCall(path, startedAt, response, prepMs, fetchMs) {
     if (!__sw_serverTiming) return;
     const totalMs = Date.now() - startedAt;
     let metric;
@@ -2534,6 +2657,10 @@ function buildPlatformContext(env, request, runtimeFetch = fetch, outboundFetch 
       metric = 'sw_call_' + op + '_' + __sw_platformCalls;
     }
     __sw_timingPush(metric, totalMs);
+    // Caller-local boundaries only: preparation precedes the binding/fetch await.
+    // The fetch span includes provider scheduling and response crossing, not body drain.
+    if (Number.isFinite(prepMs)) __sw_timingPush(metric + '_prep', prepMs);
+    if (Number.isFinite(fetchMs)) __sw_timingPush(metric + '_fetch', fetchMs);
     // SPLIT THE HOP FROM THE WORK (tsk_5037f8f1). The span above is the whole
     // call as this function experienced it. The platform reports back what it
     // spent on the same call, and how much of that was its own database, so
@@ -2596,7 +2723,17 @@ function buildPlatformContext(env, request, runtimeFetch = fetch, outboundFetch 
     }
   }
 
+  let __sw_filesMutationState = null;
   async function platformFetch(path, opts) {
+    const state = __sw_filesMutationState;
+    const method = opts && opts.method || 'GET';
+    const media = /^\\/v1\\/(?:ai\\/(?:tts|generate-image|remove-background)|render\\/(?:screenshot|pdf)|web\\/scrape|browser\\/test)$/.test(path);
+    const mutation = state && media && method === 'POST';
+    if (mutation) { state.generation++; state.pending++; state.envelope = null; }
+    try { return await __sw_platformFetchInner(path, opts); }
+    finally { if (mutation) { state.pending--; state.envelope = null; } }
+  }
+  async function __sw_platformFetchInner(path, opts) {
     opts = opts || {};
     if (path === '/v1/db/query' || path === '/v1/db/batch' || path === '/v1/db/raw-read') {
       __sw_enforceAmbientCookieCsrf();
@@ -2643,14 +2780,23 @@ function buildPlatformContext(env, request, runtimeFetch = fetch, outboundFetch 
     const __sw_openEntry = __sw_trace ? { span_id: __sw_spanId, name: __sw_traceOpName(path, __sw_method), started_at: __sw_spanStart, method: __sw_method } : null;
     __sw_traceOpen(__sw_trace, __sw_openEntry);
     let __sw_response;
+    let __sw_fetchStart = 0;
+    let __sw_fetchMs;
+    let __sw_prepMs;
     try {
+      if (__sw_serverTiming) {
+        __sw_fetchStart = Date.now();
+        __sw_prepMs = __sw_fetchStart - __sw_spanStart;
+      }
       __sw_response = await __sw_runtimeFetch(platformBase + path, {
         method: __sw_method,
         headers,
         body: opts.body,
         ...(opts.signal ? { signal: opts.signal } : {}),
       });
+      if (__sw_serverTiming) __sw_fetchMs = Date.now() - __sw_fetchStart;
     } catch (err) {
+      if (__sw_serverTiming) __sw_fetchMs = Date.now() - __sw_fetchStart;
       __sw_traceSettle(__sw_trace, __sw_openEntry);
       // A transport failure is exactly the operation an agent came to find,
       // so it is recorded \u2014 then rethrown UNCHANGED. Tracing observes; it
@@ -2669,7 +2815,7 @@ function buildPlatformContext(env, request, runtimeFetch = fetch, outboundFetch 
           attributes: { 'http.method': __sw_method },
         });
       }
-      __sw_recordPlatformCall(path, __sw_spanStart);
+      __sw_recordPlatformCall(path, __sw_spanStart, undefined, __sw_prepMs, __sw_fetchMs);
       throw err;
     }
     __sw_traceSettle(__sw_trace, __sw_openEntry);
@@ -2687,7 +2833,7 @@ function buildPlatformContext(env, request, runtimeFetch = fetch, outboundFetch 
         attributes: { 'http.method': __sw_method, 'http.status_code': __sw_response.status },
       });
     }
-    __sw_recordPlatformCall(path, __sw_spanStart, __sw_response);
+    __sw_recordPlatformCall(path, __sw_spanStart, __sw_response, __sw_prepMs, __sw_fetchMs);
     return __sw_response;
   }
 
@@ -2802,11 +2948,33 @@ function buildPlatformContext(env, request, runtimeFetch = fetch, outboundFetch 
       await __sw_afterResponse;
       const controller = new AbortController();
       const timeout = setTimeout(function () { controller.abort(); }, 5000);
+      // An ingest-marked bundle (pfb_1b4bedab6ba2; tsk_b8377d6b) sends this buffer to the trusted executor's
+      // isolated ingest (published log allowance, telemetry store); otherwise to the legacy API route, unchanged.
+      // One post per flush and no second attempt: entries not queued are reported once on the native console
+      // (not captured, so no feedback loop), and the customer's response is unaffected.
+      const ingest = typeof __sw_telemetryIngestActive === 'function' && __sw_telemetryIngestActive(env);
       try {
-        const response = await platformFetch('/v1/logs/console', {
-          method: 'POST', body: JSON.stringify({ project_id: projectId, entries: entries }),
+        const response = await platformFetch(ingest ? '/v1/executor/telemetry/console' : '/v1/logs/console', {
+          method: 'POST',
+          headers: ingest
+            ? { 'Content-Type': 'application/json', 'X-Sw-Execution-Attestation': env.SW_EXECUTION_ATTESTATION }
+            : { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ project_id: projectId, entries: entries }),
           signal: controller.signal,
         });
+        if (ingest) {
+          let result = null;
+          try { result = await response.json(); } catch (_) {}
+          const queued = result && typeof result.queued === 'number' ? result.queued : 0;
+          const dropped = result && typeof result.dropped === 'number' ? result.dropped : null;
+          if (response.status === 202 && dropped === 0) return;
+          const failure = new Error(dropped === null
+            ? 'Console log delivery could not be confirmed: ' + entries.length + ' entries, outcome unknown.'
+            : 'Console log delivery: ' + queued + ' queued, ' + dropped + ' dropped'
+              + (result && result.reason ? ' (' + result.reason + ')' : result && result.dropped_quota ? ' (daily_quota)' : '') + '.');
+          failure.__swConsoleDelivery = true;
+          throw failure;
+        }
         if (!response.ok) throw new Error('Console log delivery was refused.');
         const result = await response.json();
         if (!result.data || result.data.failed || result.data.unknown) {
@@ -3050,7 +3218,11 @@ function buildPlatformContext(env, request, runtimeFetch = fetch, outboundFetch 
   // returning a bare object or null) removes the ambiguous 200-with-null
   // success state the usability audit caught.
   function __sw_requireAuthUser(method, d) {
-    if (d && d.user && typeof d.user === 'object' && !__sw_arrayIsArray(d.user)) return d.user;
+    if (d && d.user && typeof d.user === 'object' && !__sw_arrayIsArray(d.user)) {
+      const user = __sw_assign({}, d.user);
+      delete user.plan; delete user.plan_status; delete user.entitlements; delete user.__sw_entitlements;
+      return user;
+    }
     return __sw_malformedAuthResponse(method, 'did not include a user object');
   }
 
@@ -3378,8 +3550,8 @@ function buildPlatformContext(env, request, runtimeFetch = fetch, outboundFetch 
   let __sw_identityPromise = null;
   let __sw_verifiedSubjectProof = null;
 
-  /* One signed delivery, one verification (tsk_e04f603b). The platform records
-   * each delivery signature once, so every consumer in this context \u2014 the
+  /* One signed delivery, one verification (tsk_e04f603b): each signature is
+   * recorded once, so every consumer in this context \u2014 the
    * explicit sw.jobs.verifyInvocation, the agent checkpoint reader, the signed
    * identity and sw.db scoping \u2014 shares ONE verification of the delivery as it
    * arrived (the private clone taken at context build, before customer code).
@@ -3390,7 +3562,7 @@ function buildPlatformContext(env, request, runtimeFetch = fetch, outboundFetch 
     const h = function (name) { return req.headers.get(name) || ''; };
     return {
       method: req.method,
-      path: new URL(req.url).pathname,
+      path: new URL(req.url).pathname, origin: new URL(req.url).origin,
       source: h('X-Somewhere-Invocation-Source') || h('X-Somewhere-Source') || 'job',
       invocationId: h('X-Somewhere-Job-Id') || h('X-Somewhere-Message-Id'),
       timestamp: h('X-Somewhere-Invocation-Timestamp'),
@@ -3399,26 +3571,25 @@ function buildPlatformContext(env, request, runtimeFetch = fetch, outboundFetch 
     };
   }
   const __sw_signedDelivery = __sw_internalInvocationRequest ? __sw_invocationFields(__sw_internalInvocationRequest) : null;
+  ${APP_MCP_CONTEXT_JS}
   let __sw_signedBody = null;
   function __sw_signedDeliveryBody() {
     if (!__sw_signedBody) __sw_signedBody = __sw_internalInvocationRequest.clone().text();
     return __sw_signedBody;
   }
   function __sw_postInvocationVerify(fields, body) {
-    return platformJSON('/v1/jobs/verify-invocation', {
+    return platformJSON(fields.source === 'mcp' ? '/v1/app-mcp/' + encodeURIComponent(projectId) + '/verify-invocation' : '/v1/jobs/verify-invocation', {
       method: 'POST',
       __swFenceExempt: true,
       body: JSON.stringify({
         project_id: projectId, source: fields.source, invocation_id: fields.invocationId,
-        target_method: fields.method, target_path: fields.path, timestamp: fields.timestamp,
+        target_method: fields.method, target_path: fields.path, target_origin: fields.origin, timestamp: fields.timestamp,
         body, body_sha256: fields.bodySha256, signature: fields.signature,
       }),
     });
   }
-  // The canonical verify-invocation answer (routes/jobs.ts) is the only shape
-  // that verifies: valid:false is a refusal; a missing or non-boolean valid, a
-  // source/invocation that is not this one, or a subject that is neither a
-  // complete app user nor an explicit project-owned null triple is unknown.
+  // Only canonical verification answers count; valid:false is a refusal; a
+  // mismatching source/invocation or incomplete subject is unknown.
   function __sw_classifyVerification(data, fields) {
     if (!data || typeof data !== 'object' || typeof data.valid !== 'boolean') return 'unknown';
     if (data.valid === false) return 'invalid';
@@ -3551,7 +3722,8 @@ function buildPlatformContext(env, request, runtimeFetch = fetch, outboundFetch 
       __sw_identityPromise = __sw_signedDelivery ? __sw_signedPrincipal() : Promise.resolve().then(function () {
         return __sw_authVerifyPrincipal ? __sw_authVerifyPrincipal(__sw_authSnapshotRequest) : null;
       }).catch(function (error) {
-        if (isDraftExecution && error && error.code === 'AUTH_VERIFY_UNAVAILABLE') throw error;
+        // An identity that could not be adjudicated is never "no user".
+        if (error && error.code === 'AUTH_VERIFY_UNAVAILABLE') throw error;
         return null;
       });
     }
@@ -3573,7 +3745,7 @@ function buildPlatformContext(env, request, runtimeFetch = fetch, outboundFetch 
     const appToken = __sw_signedDelivery ? null : (__sw_pendingRefresh.access || __sw_snapshotAppToken());
     const proofHeaders = appToken
       ? { 'X-App-Token': appToken }
-      : (__sw_verifiedSubjectProof ? { 'X-Somewhere-Subject-Proof': __sw_verifiedSubjectProof } : null);
+      : (__sw_verifiedSubjectProof ? { [__sw_signedDelivery && __sw_signedDelivery.source === 'mcp' ? 'X-Somewhere-Mcp-Proof' : 'X-Somewhere-Subject-Proof']: __sw_verifiedSubjectProof } : null);
     // Direct managed executor (founder build mode): forward the signed auth receipt this
     // isolate already verified for this EXACT token, while it is unexpired, so the platform
     // need not re-read the subject. Never for a refreshed or pending token (it has its own
@@ -4301,7 +4473,7 @@ var DB_MANAGED_JS = `
           if (!visitorToken) __sw_structThrow403('VISITOR_SESSION_INVALID', 'A visitor session is required.');
           headers['X-Sw-Visitor-Session'] = visitorToken;
         }
-        if (authority === 'user' && !headers['X-App-Token'] && !(__sw_signedDelivery && headers['X-Somewhere-Subject-Proof']))
+        if (authority === 'user' && !headers['X-App-Token'] && !(__sw_signedDelivery && (headers['X-Somewhere-Subject-Proof'] || headers['X-Somewhere-Mcp-Proof'])))
           __sw_structThrow403('AUTH_REQUIRED', 'A signed-in app user or verified row-bound job is required.');
         if (authority !== 'user' && headers['X-Somewhere-Subject-Proof']) __sw_structThrow403('MANAGED_AUTHORITY_UNAVAILABLE', 'This release does not yet support this authority on its separate managed database.');
         headers['Content-Type'] = 'application/json';
@@ -4353,6 +4525,14 @@ var DB_MANAGED_JS = `
             const e = new Error(body.message);
             e.code = body.error; e.status = reply.status; e.retry = false; e.retryable = false; e.__sw_expose = true;
             e.outcome = body.outcome;
+            // Read-only overload: retry metadata only, never a retry here. Eligible only when this
+            // call sent no write and the platform marked an overloaded read that did not run.
+            // A read after a write this request already saved stays non-retryable (__sw_committedKnownReadFailure).
+            if (!writes && __sw_writeLedger().confirmedWrites === 0 && body.retry === true && body.error === 'DB_UNAVAILABLE'
+              && body.outcome === 'failed' && body.write_committed !== true) {
+              e.retry = true; e.retryable = true;
+              if (typeof body.retry_after_ms === 'number' && body.retry_after_ms >= 0 && body.retry_after_ms <= 60000) e.retry_after_ms = body.retry_after_ms;
+            }
             if (body.write_committed === true) { e.write_committed = true; __sw_writeLedger().confirmedWrites++; }
             // An already-committed keyed operation names its receipt when the platform read it.
             const receipt = keyed ? __sw_managedReceipt(body.idempotency) : null;
@@ -8294,11 +8474,11 @@ ${SCHEMA_VALIDATOR_JS}      const __sw_schemaChecks = __sw_createSchemaValidator
       }
 
       async function __sw_structResolveScope(table, verb, asServer, allowPublicGuest, allowVisitorIdentity, generatedRead) {
+        if (__sw_mcpRequest && (asServer === true || __sw_structResolveIntent(table) === 'server_only')) __sw_structThrow403('MANAGED_AUTHORITY_UNAVAILABLE', 'An MCP invocation requires app-user authority.');
         if (asServer !== undefined && asServer !== true) {
           __sw_structThrow('sw.db.' + verb + ': asServer must be exactly true (boolean) when present \u2014 it is the explicit server-mode annotation for intentional cross-user reads. Omit it for user-scoped access.');
         }
-        // Validate the table identifier FIRST \u2014 before owner/intent lookup \u2014
-        // so a hostile or malformed name is a VALIDATION_ERROR, not a
+        // Validate the identifier so a hostile name is a VALIDATION_ERROR, not a
         // confusing "no declared intent" (and so the runtime's error ordering
         // matches the deploy extractor's, which validates the identifier
         // before classifying intent). The render chokepoint re-quotes it.
@@ -8718,9 +8898,15 @@ ${DB_RENDER_IR_JS}
         const dropped = buf.dropped;
         buf.byFp = Object.create(null); buf.fps = 0; buf.dropped = 0;
         if (list.length === 0 && dropped === 0) return Promise.resolve();
-        return platformFetch('/v1/db/query-observations', {
+        // An ingest-marked bundle (pfb_4603c2d3ae9a; tsk_b8377d6b) sends the SAME body to the trusted executor's
+        // isolated ingest, with the release attestation; the executor queues it to the telemetry store. Otherwise the
+        // legacy API route, unchanged. Never both, no fallback: a refused or failed post is dropped and counted.
+        const __sw_obsIngest = typeof __sw_telemetryIngestActive === 'function' && __sw_telemetryIngestActive(env);
+        return platformFetch(__sw_obsIngest ? '/v1/executor/telemetry/query-observations' : '/v1/db/query-observations', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: __sw_obsIngest
+            ? { 'Content-Type': 'application/json', 'X-Sw-Execution-Attestation': env.SW_EXECUTION_ATTESTATION }
+            : { 'Content-Type': 'application/json' },
           body: JSON.stringify({ observations: list, dropped: dropped }),
         }).then(function (response) {
           if (!response.ok) throw new Error('HTTP ' + response.status);
@@ -8987,6 +9173,52 @@ var DB_RAW_JS = `      var __sw_rawReadDbInstance = null;
         throw err;
       }
 
+      // Raw-write public-data invalidation lives HERE, beside the raw paths that call it, so this
+      // fragment carries every helper it uses (pfb from Docs: a fragment-level executor found
+      // __sw_rawResultWrote undefined when it lived in db-public-read.ts). Raw SQL through the NATIVE binding of a legacy (non-split, non-managed) project can write any
+      // table, including a declared public one, and the platform never parses it. Such a write \u2014 or
+      // one whose outcome is unknown \u2014 drops ALL of this project's cached public results (step 2
+      // decision 2). REST raw SQL lands in /v1/db/query|batch, which purge on their own; split-layout
+      // raw SQL reaches only the separate raw database, never declared rows.
+      // At most ONE project-wide signal per request (#743 review), and none when this release declares
+      // no publicly readable table: there is then no cached public result to drop.
+      // var, uninitialised: this fragment's state must be usable wherever the closure places it (the
+      // fragment's own __sw_rawReadDbInstance is a var for the same reason). undefined reads as "not yet".
+      var __sw_publicDataInvalidated;
+      var __sw_hasPublicReadTable;
+      function __sw_releaseHasPublicReadTable() {
+        if (__sw_hasPublicReadTable === undefined) {
+          __sw_hasPublicReadTable = false;
+          for (const name of Object.keys(SCHEMA || {})) {
+            const shape = __sw_structManagedShape(name);
+            if (shape && shape.client && shape.client.publicRead) { __sw_hasPublicReadTable = true; break; }
+          }
+        }
+        return __sw_hasPublicReadTable;
+      }
+      function __sw_publicDataInvalidate() {
+        if (__SW_DB_SPLIT || DB_WRITE_MODE === 'managed') return;
+        if (isDraftExecution || !env.SW_RELEASE_ID || __sw_dbExecutionPath !== 'native') return;
+        if (__sw_publicDataInvalidated || !__sw_releaseHasPublicReadTable()) return;
+        __sw_publicDataInvalidated = true;
+        const pending = platformFetch('/v1/live/public-invalidate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ projectId: projectId, scope: 'project' }),
+        }).then(function (response) {
+          if (!response.ok) throw new Error('HTTP ' + response.status);
+        }).catch(function (error) {
+          console.warn('[SW_PUBLIC_RESULT] project invalidation failed; the edge window still bounds it: ' + ((error && error.message) || String(error)));
+        });
+        __sw_pendingBackground.push(pending);
+      }
+      function __sw_rawResultWrote(results) {
+        const list = __sw_arrayIsArray(results) ? results : [results];
+        return list.some(function (r) {
+          const m = r && r.meta;
+          return !!m && ((typeof m.changes === 'number' && m.changes > 0) || (typeof m.rows_written === 'number' && m.rows_written > 0) || m.changed_db === true);
+        });
+      }
       async function __sw_rawQuery(sql, params, options, authority) {
         ensureBinding();
         const api = authority === __sw_structServerNamespace ? 'sw.db.server.query' : 'sw.db.query';
@@ -9002,9 +9234,17 @@ var DB_RAW_JS = `      var __sw_rawReadDbInstance = null;
         // true } can mint server authority. Only the closure-private namespace
         // capability reaches the managed read transport.
         __sw_rawRequireAuthority(api, authority);
-        const r = await __sw_execOne(api, rawSqlDb(), sql, params);
+        let r;
+        try {
+          r = await __sw_execOne(api, rawSqlDb(), sql, params);
+        } catch (error) {
+          // A write that failed after it may have reached the database is treated as landed.
+          if (__sw_mutationOf(sql)) __sw_publicDataInvalidate();
+          throw error;
+        }
         const rows = r.results || [];
         const mut = __sw_mutationOf(sql);
+        if (mut || __sw_rawResultWrote(r)) __sw_publicDataInvalidate();
         if (mut) {
           __sw_deferDbSizeObservation(r);
         }
@@ -9036,8 +9276,17 @@ var DB_RAW_JS = `      var __sw_rawReadDbInstance = null;
           __sw_throwRawSqlCannotBePlatformScoped('sw.db.batch');
         }
         __sw_rawRequireAuthority(api, authority);
-        const results = await __sw_execBatch(api, rawSqlDb(), statements);
-        if (statements.some(function(s) { return !!__sw_mutationOf(s.sql); })) {
+        const batchMutates = statements.some(function(s) { return !!__sw_mutationOf(s.sql); });
+        let results;
+        try {
+          results = await __sw_execBatch(api, rawSqlDb(), statements);
+        } catch (error) {
+          // DB_BATCH_OUTCOME_UNKNOWN and any other post-dispatch failure: treated as landed.
+          if (batchMutates) __sw_publicDataInvalidate();
+          throw error;
+        }
+        if (batchMutates || __sw_rawResultWrote(results)) __sw_publicDataInvalidate();
+        if (batchMutates) {
           __sw_deferDbSizeObservation(results);
         }
         return results.map(function (r) { return {
@@ -10239,7 +10488,9 @@ var FS_JS = `    fs: (function () {
         }).join('/');
       }
       const __sw_fsOuterFetch = platformFetch;
-      const __sw_fsOuterJSON = platformJSON;
+      // Per invocation and shared by the file views, never an isolate authority cache.
+      const __sw_filesRead = { envelope: null, subject: null, generation: 0, pending: 0 };
+      if (typeof __sw_filesMutationState !== 'undefined') __sw_filesMutationState = __sw_filesRead;
       function __sw_makeFs(__sw_fsActor, __sw_fsIsDev, __sw_fsServerAuthority) {
         // Every transport call below goes through these: with an acting user they add that user's
         // verified credential headers; the explicit server/dev views declare project authority.
@@ -10268,8 +10519,35 @@ var FS_JS = `    fs: (function () {
           const base = opts || {};
           return Object.assign({}, base, { headers: Object.assign({}, base.headers || {}, subject) });
         }
-        async function platformFetch(path, opts) { return __sw_fsOuterFetch(path, await __sw_fsWithSubject(opts)); }
-        async function platformJSON(path, opts) { return __sw_fsOuterJSON(path, await __sw_fsWithSubject(opts)); }
+        async function platformFetch(path, opts) {
+          const rs = __sw_filesRead;
+          const mutation = !!(opts && opts.method && opts.method !== 'GET');
+          if (mutation) { rs.generation++; rs.pending++; rs.envelope = null; }
+          const generation = rs.generation;
+          const pending = rs.pending;
+          try {
+            const prepared = await __sw_fsWithSubject(opts);
+            const headers = Object.assign({}, prepared.headers || {});
+            const subject = JSON.stringify([headers['X-Somewhere-Acting-Subject'] || 'server', headers['X-App-Token'] || null, headers['X-Somewhere-Subject-Proof'] || null]);
+            if (subject !== rs.subject) { rs.envelope = null; rs.subject = subject; }
+            if (!mutation && !rs.pending && rs.envelope) headers['X-Sw-Files-Read-Session'] = rs.envelope;
+            if (env.SW_EXECUTION_ATTESTATION) headers['X-Sw-Execution-Attestation'] = env.SW_EXECUTION_ATTESTATION;
+            const response = await __sw_fsOuterFetch(path, Object.assign({}, prepared, { headers: headers }));
+            const returned = response.headers.get('X-Sw-Files-Read-Session');
+            if (!mutation && !pending && !rs.pending && generation === rs.generation && subject === rs.subject) {
+              rs.envelope = response.ok && typeof returned === 'string' && returned.length <= 2048 && /^swfr1\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$/.test(returned) ? returned : null;
+            }
+            return response;
+          } catch (err) { rs.envelope = null; throw err; } finally { if (mutation) { rs.pending--; rs.envelope = null; } }
+        }
+        async function platformJSON(path, opts) {
+          try {
+            const response = await platformFetch(path, opts);
+            const data = await response.json().catch(function () { return null; });
+            if (!response.ok || !data || data.ok === false) throw __sw_platformError(response, data);
+            return data.data;
+          } catch (err) { throw __sw_markExpected(err); }
+        }
         const view = {
       async read(path, opts) {
         path = __sw_fsUrlPath(path);
@@ -10341,8 +10619,9 @@ var FS_JS = `    fs: (function () {
             ? conflict.message
             : 'the file changed since it was read \u2014 re-read it and retry with the current version'));
           err.code = 'FS_VERSION_CONFLICT';
+          err.status = 412;
           if (conflict && conflict.data) err.current_version = conflict.data.current_version;
-          throw err;
+          throw __sw_markExpected(err);
         }
         // Any other refusal is the platform's own typed error, as for read: an
         // authorization 403 stays a 403 for the app, not a bare Error/500.
@@ -10356,7 +10635,15 @@ var FS_JS = `    fs: (function () {
       async delete(path) {
         const asUser = await __sw_fsActor();
         const userQ = asUser ? '?as_user=' + encodeURIComponent(asUser) : '';
-        return platformFetch('/v1/fs/' + projectId + __sw_fsUrlPath(path) + userQ, { method: 'DELETE' }).then(r => r.json());
+        const r = await platformFetch('/v1/fs/' + projectId + __sw_fsUrlPath(path) + userQ, { method: 'DELETE' });
+        // A refused or failed delete is the platform's own typed error, as for read and write: resolving with the error
+        // envelope let callers report a delete that never happened as a success (founder file benchmark, 2026-10-22).
+        if (!r.ok) {
+          let data;
+          try { data = await r.json(); } catch { data = null; }
+          throw __sw_markExpected(__sw_platformError(r, data));
+        }
+        return r.json();
       },
       async move(from, to, opts) {
         const body = { from: __sw_fsPath(from), to: __sw_fsPath(to) };
@@ -10799,13 +11086,25 @@ var EMAIL_JS = `    email: {
     },
 `;
 
+// worker/src/utils/ai-user-memory-sql.ts
+var AI_USER_MEMORY_MERGE_SQL = `INSERT INTO _ai_user_memory (user_id, blob_json, updated_at)
+VALUES (?, ?, ?)
+ON CONFLICT(user_id) DO UPDATE SET blob_json = (
+  SELECT json_group_object(key, json(encoded)) FROM (
+    SELECT key, json -> fullkey AS encoded
+    FROM json_each(_ai_user_memory.blob_json)
+    WHERE key NOT IN (SELECT key FROM json_each(excluded.blob_json))
+    UNION ALL
+    SELECT key, json -> fullkey AS encoded
+    FROM json_each(excluded.blob_json)
+  )
+), updated_at = excluded.updated_at
+WHERE json_type(_ai_user_memory.blob_json) = 'object'
+RETURNING blob_json`;
+
 // worker/src/runtime/ai.ts
 var AI_JS = `    ai: (function () {
-      // Direct DB binding for sw.ai surfaces that read/write the
-      // project DB (catalogTool, userMemory, notifications bell).
-      // Mirrors the sw.db IIFE's "const DB = env.PROJECT_DB;" \u2014 kept
-      // separate per-closure so each surface fails loud with a
-      // helpful error rather than throwing on undefined.
+      // Legacy memory uses the bound database; split memory uses private transport.
       const DB = env.PROJECT_DB;
 
       // hideCost (tsk_e628155a #2): keep per-call cost ACCESSIBLE to the dev
@@ -11125,6 +11424,28 @@ var AI_JS = `    ai: (function () {
           console.error('sw.ai.userMemory: ensureTable failed:', err && err.message ? err.message : err);
         }
       }
+      async function managedMemory(action, memory) {
+        __sw_enforceAmbientCookieCsrf();
+        const headers = await __sw_runtimeSubjectHeaders('X-Somewhere-Managed-Authority', 'none');
+        if (!headers['X-App-Token'] || headers['X-Somewhere-Subject-Proof']) {
+          const err = new Error('A signed-in app user is required.'); err.code = 'AUTH_REQUIRED'; throw err;
+        }
+        headers['Content-Type'] = 'application/json';
+        headers['X-Sw-Execution-Attestation'] = env.SW_EXECUTION_ATTESTATION;
+        return platformJSON('/v1/db/managed/user-memory', {
+          method: 'POST', headers,
+          body: JSON.stringify((action === 'replace' || action === 'merge') ? { action, memory } : { action }),
+        });
+      }
+      async function replaceMemory(userId, memory) {
+        if (env.SW_DB_LAYOUT === 'split') return managedMemory('replace', memory);
+        await ensureMemoryTable();
+        await DB.prepare(
+          'INSERT INTO _ai_user_memory (user_id, blob_json, updated_at) VALUES (?, ?, ?) ' +
+          'ON CONFLICT(user_id) DO UPDATE SET blob_json = excluded.blob_json, updated_at = excluded.updated_at'
+        ).bind(String(userId), JSON.stringify(memory), Date.now()).run();
+        return memory;
+      }
       // sw.ai.userMemory \u2014 Runtime v2 (tsk_327fe8a4): the subject is DERIVED
       // from the request's verified principal, never a caller-passed id. Each
       // op fails closed (AUTH_REQUIRED) without a verified user, before any DB
@@ -11132,6 +11453,7 @@ var AI_JS = `    ai: (function () {
       const userMemory = {
         async get() {
           const userId = await __sw_requireSubject('sw.ai.userMemory.get');
+          if (env.SW_DB_LAYOUT === 'split') return managedMemory('get');
           await ensureMemoryTable();
           const r = await DB.prepare(
             'SELECT blob_json, updated_at FROM _ai_user_memory WHERE user_id = ?'
@@ -11144,18 +11466,16 @@ var AI_JS = `    ai: (function () {
             const err = new Error('sw.ai.userMemory.update: patch must be a plain object'); err.code = 'VALIDATION_ERROR'; throw err;
           }
           const userId = await __sw_requireSubject('sw.ai.userMemory.update');
+          if (env.SW_DB_LAYOUT === 'split') return managedMemory('merge', patch);
           await ensureMemoryTable();
-          const current = await this.get();
-          const merged = { ...current, ...patch };
-          const now = Date.now();
-          await DB.prepare(
-            'INSERT INTO _ai_user_memory (user_id, blob_json, updated_at) VALUES (?, ?, ?) ' +
-            'ON CONFLICT(user_id) DO UPDATE SET blob_json = excluded.blob_json, updated_at = excluded.updated_at'
-          ).bind(String(userId), JSON.stringify(merged), now).run();
-          return merged;
+          const row = await DB.prepare(${JSON.stringify(AI_USER_MEMORY_MERGE_SQL)})
+            .bind(String(userId), JSON.stringify(patch), Date.now()).first();
+          if (!row || typeof row.blob_json !== 'string') throw new Error('Memory write acknowledgement missing committed value.');
+          return JSON.parse(row.blob_json);
         },
         async clear() {
           const userId = await __sw_requireSubject('sw.ai.userMemory.clear');
+          if (env.SW_DB_LAYOUT === 'split') return managedMemory('clear');
           await ensureMemoryTable();
           await DB.prepare('DELETE FROM _ai_user_memory WHERE user_id = ?').bind(String(userId)).run();
           return { cleared: true };
@@ -11219,10 +11539,7 @@ var AI_JS = `    ai: (function () {
             }),
           });
           if (r && r.parsed && typeof r.parsed === 'object') {
-            await DB.prepare(
-              'INSERT INTO _ai_user_memory (user_id, blob_json, updated_at) VALUES (?, ?, ?) ' +
-              'ON CONFLICT(user_id) DO UPDATE SET blob_json = excluded.blob_json, updated_at = excluded.updated_at'
-            ).bind(String(userId), JSON.stringify(r.parsed), Date.now()).run();
+            await replaceMemory(userId, r.parsed);
             return r.parsed;
           }
           return current;
@@ -12080,6 +12397,26 @@ var AUTH_SERVER_JS = `        server: (function () {
         })(),
 `;
 
+// worker/src/runtime/auth-refresh-response.ts
+var AUTH_REFRESH_RESPONSE_JS = `(async function (refresh) {
+  const response = await platformFetch('/v1/auth/refresh', { method: 'POST', body: JSON.stringify({ project_id: projectId, refresh_token: refresh }) });
+  let result;
+  try { result = await response.json(); } catch (_) { result = null; }
+  if (!response.ok || !result || result.ok === false) {
+    const err = __sw_platformError(response, result);
+    // Only definite auth denials from the response are public. Thrown
+    // transport errors and unknown rotation outcomes stay opaque.
+    if (result && result.ok === false &&
+        ((response.status === 401 && err.code === 'AUTH_INVALID_CREDS') ||
+         (response.status === 403 && err.code === 'AUTH_BANNED'))) {
+      err.message = err.code === 'AUTH_BANNED' ? 'This account has been suspended.' : 'Refresh token is invalid or revoked. Sign in again.';
+      throw __sw_markExpected(err);
+    }
+    throw err;
+  }
+  return result.data;
+})`;
+
 // worker/src/runtime/auth.ts
 var AUTH_JS = `    auth: (function () {
       const DB = env.PROJECT_DB;
@@ -12088,6 +12425,16 @@ var AUTH_JS = `    auth: (function () {
       // email, update password, profile, /me). The smt_ developer key is
       // skipped for these calls because the route handlers explicitly
       // reject developer mode.
+      // The ONE answer for "identity could not be adjudicated": a fixed code,
+      // status and message. Never the platform's prose, a token or user data.
+      function __sw_authVerifyUnavailable() {
+        const unavailable = new Error('Identity verification is temporarily unavailable. Please retry.');
+        unavailable.code = 'AUTH_VERIFY_UNAVAILABLE';
+        unavailable.status = 503;
+        unavailable.__sw_expose = true;
+        return unavailable;
+      }
+
       // ONE TRACE WITH THE SERVER (tsk_b2ff7f01). The auth calls are built by
       // hand (they need the raw Response for the rotated-token headers), so
       // unlike platformFetch they sent no traceparent and recorded no client
@@ -12303,10 +12650,15 @@ var AUTH_JS = `    auth: (function () {
       // every caller gets a fresh object: mutating a previously-returned payload
       // can never corrupt the snapshot or any later caller's copy \u2014 which is
       // also what makes id/role read off a fresh me() result authoritative.
+      function __sw_identityUser(profile) {
+        const user = __sw_assign({}, profile);
+        delete user.plan; delete user.plan_status; delete user.entitlements; delete user.__sw_entitlements;
+        return user;
+      }
       function __sw_cloneAuthPayload(payload) {
         if (!payload || typeof payload !== 'object') return payload;
         if (payload.user && typeof payload.user === 'object') {
-          return __sw_assign({}, payload, { user: __sw_assign({}, payload.user) });
+          return __sw_assign({}, payload, { user: __sw_identityUser(payload.user) });
         }
         return __sw_assign({}, payload);
       }
@@ -12429,6 +12781,7 @@ var AUTH_JS = `    auth: (function () {
       // forwardedToken is a typed FORWARDED_CREDENTIAL_INVALID throw, never a
       // silent identity.
       async function __sw_resolveRequestUser(req, opts) {
+        if (__sw_mcpRequest && req === __sw_mcpRequest) return __sw_mcpPrincipal();
         // Transport (b): an explicitly forwarded credential. Presence of the
         // key with a non-string value is an identity CLAIM \u2014 reject it loudly
         // rather than deriving authority from something the caller supplied.
@@ -12446,7 +12799,6 @@ var AUTH_JS = `    auth: (function () {
           return await __sw_principalFromToken(forwarded, { fromCookie: false, refreshToken: null, enrich: opts });
         }
 
-        // Transport (a): the credential attached to this request.
         if (!req || !req.headers || typeof req.headers.get !== 'function') return null;
         // Parse the Cookie header once into an exact-key map. A per-name
         // regex had an order edge case \u2014 reading 'token' failed when
@@ -12524,33 +12876,31 @@ var AUTH_JS = `    auth: (function () {
           // verification we COULD NOT ADJUDICATE: returning null there logs a
           // still-valid session out AND hides a platform fault behind a
           // "session ended" \u2014 exactly why this incident stayed invisible for
-          // hours. Drafts and the declared public-read union propagate typed
-          // unavailability; other contexts retain their existing null result.
-          // Both emit the classified diagnostic.
+          // hours. Every context, draft or ordinary, throws the fixed typed
+          // unavailability; the platform's prose is never forwarded. A deleted
+          // user is the platform's one non-401/403 rejection (404
+          // AUTH_INVALID_CREDS on /v1/auth/me) and stays unauthenticated.
           const status = err && typeof err.status === 'number' ? err.status : 0;
-          const credentialRejected = status === 401 || status === 403;
-          if (!credentialRejected) {
-            console.error(
-              '[sw.auth] identity verification could not complete (PLATFORM FAULT, not a logout \u2014 the credential may still be valid):',
-              (err && err.code) || 'AUTH_VERIFY_UNAVAILABLE',
-              (err && err.message) || String(err),
-            );
-          }
-          if ((isDraftExecution || enrich && enrich.__sw_failUnavailable === true) && !credentialRejected) {
-            const unavailable = new Error('Identity verification is temporarily unavailable. Please retry.');
-            unavailable.code = 'AUTH_VERIFY_UNAVAILABLE';
-            unavailable.status = 503;
-            unavailable.__sw_expose = true;
-            throw unavailable;
-          }
-          return null;
+          const credentialRejected = status === 401 || status === 403
+            || (status === 404 && err && err.code === 'AUTH_INVALID_CREDS');
+          if (credentialRejected) return null;
+          // Fixed code and a bounded HTTP status only: err.code and err.message
+          // can carry upstream data, so neither is logged.
+          console.error(
+            '[sw.auth] identity verification could not complete (PLATFORM FAULT, not a logout \u2014 the credential may still be valid):',
+            'AUTH_VERIFY_UNAVAILABLE',
+            Number.isInteger(status) && status >= 100 && status <= 599 ? status : 0,
+          );
+          throw __sw_authVerifyUnavailable();
         }
-        if (!user) return null;
+        // me() resolved, so this must be a verified identity. A resolved
+        // answer without one is not a credential rejection.
+        if (!user || typeof user !== 'object' || __sw_arrayIsArray(user)) throw __sw_authVerifyUnavailable();
         // The authoritative identity read: off the object me() just returned,
         // before enrichment and before the object is handed to anyone.
         const verifiedId = user.id;
         const verifiedRole = user.role === 'admin' ? 'admin' : 'user';
-        if (typeof verifiedId !== 'string' || !verifiedId) return null;
+        if (typeof verifiedId !== 'string' || !verifiedId.trim()) throw __sw_authVerifyUnavailable();
         // Draft identity reads must not claim visitor rows in shared storage.
         if (!isDraftExecution) await __sw_claimVisitorForUser(verifiedId, __sw_pendingRefresh.access || token);
 
@@ -12603,7 +12953,7 @@ var AUTH_JS = `    auth: (function () {
 
       function __sw_authIssuance(path, body) {
         return platformJSON(path, { method: 'POST', body: body,
-          headers: projectId ? { 'X-Sw-Executing-Project': projectId } : {} });
+          headers: { ...(projectId ? { 'X-Sw-Executing-Project': projectId } : {}), ...(path === '/v1/auth/signup' && verifySignupAuthority ? { 'X-Sw-Execution-Attestation': env.SW_EXECUTION_ATTESTATION, 'x-sw-verify-signup': verifySignupAuthority.token, 'x-sw-verify-signup-context': verifySignupAuthority.context } : {}) } });
       }
 
       const __sw_auth = {
@@ -12683,6 +13033,17 @@ var AUTH_JS = `    auth: (function () {
             throw invalid;
           }
 
+          // REQUEST-LOCAL /me memo (pfb_7c7eb7ec54cc). Reached only by a draft or
+          // a bundle without a receipt key. The single-flight above clears once
+          // settled, so without this two sequential lookups in one request (the
+          // declared-data permission check, then the row composer) each crossed
+          // /v1/auth/me. Never for a role check (noCache) or the expired+refresh
+          // path; the map dies with the request, and each hit is a fresh clone.
+          if (!opts.noCache && pre && pre.sig && !(refreshToken && pre.expired)) {
+            const hit = __sw_cacheGet(__sw_authMeCache, pre.sig);
+            if (hit && hit.expiresAt > now) return __sw_cloneAuthPayload(hit.snapshot);
+          }
+
           // Build the auth call by hand because we need the raw
           // Response back to read X-New-* headers \u2014 userTokenJSON
           // throws away the headers and returns data only.
@@ -12716,15 +13077,12 @@ var AUTH_JS = `    auth: (function () {
           }
 
           const payload = data.data;
-          // A successful HTTP response is not an identity receipt. Draft owner
-          // resolution must never turn malformed authority data into a visitor.
-          if (isDraftExecution && (data.ok !== true || !payload || typeof payload !== 'object'
+          // A successful HTTP response is not an identity receipt. In every
+          // context, malformed authority data must never become a visitor.
+          if (data.ok !== true || !payload || typeof payload !== 'object'
               || Array.isArray(payload) || !payload.user || typeof payload.user !== 'object'
-              || Array.isArray(payload.user) || typeof payload.user.id !== 'string' || !payload.user.id.trim())) {
-            const unavailable = new Error('Identity verification returned an invalid identity receipt.');
-            unavailable.code = 'AUTH_VERIFY_UNAVAILABLE';
-            unavailable.status = 503;
-            throw unavailable;
+              || Array.isArray(payload.user) || typeof payload.user.id !== 'string' || !payload.user.id.trim()) {
+            throw __sw_authVerifyUnavailable();
           }
 
           const newAccess = r.headers.get('X-New-Access-Token') || r.headers.get('x-new-access-token');
@@ -12734,20 +13092,37 @@ var AUTH_JS = `    auth: (function () {
             __sw_pendingRefresh.refresh = newRefresh;
           }
 
-          return payload;
+          if (!opts.noCache && pre && pre.sig && !(newAccess && newRefresh)) {
+            let ttl = __sw_AUTH_ME_TTL_MS;
+            const authorityExpiry = Number(r.headers.get('X-Sw-Auth-Expires-At'));
+            if (Number.isFinite(authorityExpiry) && authorityExpiry > 0) ttl = Math.min(ttl, authorityExpiry - now);
+            if (pre.expSec) {
+              const untilExp = pre.expSec * 1000 - now - 5000;
+              if (untilExp < ttl) ttl = untilExp;
+            }
+            if (ttl > 0) {
+              if (__sw_cacheSize(__sw_authMeCache) >= __sw_AUTH_ME_MAX) {
+                const firstKey = __sw_cacheKeys(__sw_authMeCache).next().value;
+                if (firstKey) __sw_cacheDelete(__sw_authMeCache, firstKey);
+              }
+              __sw_cacheSet(__sw_authMeCache, pre.sig, { snapshot: __sw_cloneAuthPayload(payload), expiresAt: now + ttl });
+            }
+          }
+
+          return __sw_cloneAuthPayload(payload);
         },
         async refreshSession(req) {
           if (!req || req.method !== 'POST') { const e = new Error('Session refresh requires POST.'); e.code = 'METHOD_NOT_ALLOWED'; e.status = 405; throw __sw_markExpected(e); }
           const auth = cookieSessionAuth('refreshSession', req);
           const refresh = auth.refreshToken;
           if (!refresh) { const e = new Error('Refresh credential required.'); e.code = 'AUTH_REQUIRED'; e.status = 401; throw __sw_markExpected(e); }
-          const d = await platformJSON('/v1/auth/refresh', { method: 'POST', body: JSON.stringify({ project_id: projectId, refresh_token: refresh }) });
+          const d = await ${AUTH_REFRESH_RESPONSE_JS}(refresh);
           if (!d || !d.access_token || !d.refresh_token) throw new Error('Session refresh was not confirmed.');
           let user, expiresAt;
           if (env.PROJECT_AUTH_RECEIPT_KEY) {
             const claims = await __sw_verifyAccessToken(env.PROJECT_AUTH_RECEIPT_KEY, d.access_token, projectId);
             if (!claims) throw new Error('Refreshed access token could not be verified.');
-            user = claims.user; expiresAt = claims.exp * 1000;
+            user = __sw_identityUser(claims.user); expiresAt = claims.exp * 1000;
           } else {
             // No receipt key bound (pfb_05cb9d3c1a17): the platform answers who the new
             // token is. Its expiry is read from the token the platform just issued, and
@@ -13929,11 +14304,51 @@ var SEARCH_JS = `    search: {
           body: JSON.stringify({ ...opts, project_id: projectId }),
         });
       },
-      remove(opts) {
-        return platformJSON('/v1/search/remove', {
-          method: 'POST',
-          body: JSON.stringify({ ...opts, project_id: projectId }),
-        });
+      async remove(opts) {
+        // POST /v1/search/remove accepts at most 1000 ids per request (its documented limit). A larger set is
+        // removed in sequential batches of that size (pfb_15edae086398). The batches are NOT one atomic removal:
+        // the first failed batch stops the rest, is never retried here, and the thrown error reports which ids
+        // are confirmed removed, which are unconfirmed (that batch may or may not have applied) and which were
+        // not attempted. Success is returned only when every batch is confirmed.
+        const ids = opts && Array.isArray(opts.ids) ? opts.ids : null;
+        const BATCH = 1000;
+        if (!ids || ids.length <= BATCH) {
+          return platformJSON('/v1/search/remove', { method: 'POST', body: JSON.stringify({ ...opts, project_id: projectId }) });
+        }
+        const unique = Array.from(new Set(ids));
+        let removed = 0;
+        let last = null;
+        let batches = 0;
+        for (let offset = 0; offset < unique.length; offset += BATCH) {
+          const batch = unique.slice(offset, offset + BATCH);
+          try {
+            last = await platformJSON('/v1/search/remove', { method: 'POST', body: JSON.stringify({ ...opts, ids: batch, project_id: projectId }) });
+          } catch (err) {
+            // A 4xx is a refusal before any mutation (that batch was not removed). Anything else (an unconfirmed
+            // removal, a 5xx, a lost reply) leaves that batch's outcome unknown.
+            const status = err && typeof err.status === 'number' ? err.status : null;
+            const definite = status !== null && status >= 400 && status < 500 && !(err && err.code === 'SEARCH_REMOVE_UNCONFIRMED');
+            const failure = new Error(removed > 0
+              ? 'Search removal stopped partway: ' + removed + ' of ' + unique.length + ' items are confirmed removed. '
+                + (definite ? 'The next batch was refused and nothing after it was attempted.' : 'The next batch could not be confirmed (some of it may be removed) and nothing after it was attempted.')
+                + ' Check which ids still exist before removing again.'
+              : ((err && err.message) || 'Search removal failed.'));
+            failure.code = removed > 0 ? 'SEARCH_REMOVE_PARTIAL' : (err && err.code) || 'SEARCH_REMOVE_FAILED';
+            if (status !== null) failure.status = status;
+            failure.retry = false;
+            failure.cause_code = (err && err.code) || null;
+            failure.partial = {
+              total: unique.length,
+              removed_ids: unique.slice(0, offset),
+              unconfirmed_ids: definite ? [] : batch,
+              not_removed_ids: definite ? unique.slice(offset) : unique.slice(offset + batch.length),
+            };
+            throw failure;
+          }
+          removed += batch.length;
+          batches++;
+        }
+        return { index: opts.index, removed, item_count: last && last.item_count !== undefined ? last.item_count : null, batches };
       },
     },
 `;
@@ -15241,6 +15656,11 @@ var CONTEXT_TAIL_JS = `  };
       'groups',
       'crypto', 'db', 'fs', 'auth', 'billing', 'email', 'payments', 'logs', 'sw', 'ctx',
       '__sw_pendingRefresh', '__sw_pendingCookies', '__sw_pendingBackground',
+      // Response state the shim's attachPendingRefresh reads on every answer (#439). A draft's
+      // read session is inert by construction (context-head: envelope null when isDraftExecution),
+      // so it never issues a header; omitting it threw DRAFT_SIDE_EFFECT_BLOCKED and turned every
+      // draft response into a 409/500 (pfb ticket in the commit).
+      '__sw_readSession',
       // The response gate the shim releases after the answer (tsk_5037f8f1).
       // The shim READS these off whatever buildPlatformContext returned, which
       // in a draft is this proxy \u2014 an unlisted name throws from inside the
@@ -15252,6 +15672,10 @@ var CONTEXT_TAIL_JS = `  };
       // DRAFT_SIDE_EFFECT_BLOCKED on every draft request (tsk_47a2a3f6).
       'trace', '__sw_trace',
       '__sw_serverTiming',
+      // The handler wrapper reads this on every request to pick the MCP delivery's request. It is never
+      // defined in a draft (app MCP runs only on releases), so the read must yield undefined, not throw
+      // DRAFT_SIDE_EFFECT_BLOCKED for every draft function call (pfb_b8234957e8aa).
+      '__sw_mcpRequest',
     ]);
     const draftTarget = Object.create(null);
     for (const property of draftSafe) {
@@ -15287,7 +15711,7 @@ var CONTEXT_TAIL_JS = `  };
     Object.freeze(draftTarget);
     return draftSw;
   }
-  // sw and ctx are aliases \u2014 same object.
+  if (__sw_mcpRequest) Object.defineProperty(sw, '__sw_mcpRequest', { value: __sw_mcpRequest });
   sw.sw = sw;
   sw.ctx = sw;
   Object.defineProperty(sw, 'realtime', { get: __sw_realtimeRetired, enumerable: false, configurable: false });
@@ -16649,18 +17073,50 @@ function traceIdOf(platformCtx) {
   } catch (_) { return null; }
 }
 
+/** The developer's next step for a crashed request, kept out of \`message\` (the generated client
+ *  shows that to an app's end users). Only a 32-hex trace id is substituted (tsk_da2dba3d). */
+function functionErrorHint(platformCtx) {
+  const traceId = traceIdOf(platformCtx);
+  return typeof traceId === 'string' && /^[0-9a-f]{32}$/.test(traceId)
+    ? 'For the developer: this request\'s stack is in the project logs. Run somewhere logs --trace ' + traceId + ', or call project_logs with this trace_id.'
+    : 'For the developer: this response has no trace id. The stack is in the project logs: run somewhere logs, or call project_logs.';
+}
+
+/** Developer correlation for a failure that WAS reported to the owner's logs (tsk_da2dba3d). An
+ *  expected refusal (wrong password, duplicate email) is not logged, so it never gets these fields:
+ *  the hint, plus the 32-hex trace id (same value as X-Trace-Id) and the edge request id when
+ *  each is well-formed. Neither is ever invented; an absent one is simply omitted. */
+function reportedFailureFields(platformCtx, requestId) {
+  const out = { hint: functionErrorHint(platformCtx) };
+  if (typeof requestId === 'string' && /^[A-Za-z0-9-]{1,64}$/.test(requestId)) out.request_id = requestId;
+  const traceId = traceIdOf(platformCtx);
+  if (typeof traceId === 'string' && /^[0-9a-f]{32}$/.test(traceId)) out.trace_id = traceId;
+  return out;
+}
+
 /** Add the correlation handle without changing responses when tracing is absent. */
 function attachTraceId(response, platformCtx) {
   try {
     const t = platformCtx && platformCtx.__sw_trace;
-    if (!t) return response;
+    // X-Sw-Route-Pattern is the PLATFORM's (the edge's completion log): a function's own copy never
+    // passes through, with or without a trace; only the runtime's matched pattern is set below.
+    if (!t) {
+      if (!response.headers.has('X-Sw-Route-Pattern')) return response;
+      const stripped = new Headers(response.headers);
+      stripped.delete('X-Sw-Route-Pattern');
+      return new Response(response.body, { status: response.status, statusText: response.statusText, headers: stripped });
+    }
     const headers = new Headers(response.headers);
+    headers.delete('X-Sw-Route-Pattern');
     headers.set('X-Trace-Id', t.traceId);
     headers.set('traceparent', '00-' + t.traceId + '-' + t.spanId + '-' + (t.sampled ? '01' : '00'));
     headers.set('X-Trace-Sampling', t.sampled
       ? 'stored'
       : response.status >= 400 ? 'stored;reason=error' : 'not-stored');
     if (t.tracestate) headers.set('tracestate', t.tracestate);
+    // The matched route PATTERN, for the web edge's completion log only (it strips this header before
+    // the response reaches the caller). A pattern-shaped value or nothing; never the concrete path.
+    if (typeof t.route === 'string' && /^\/[A-Za-z0-9_\-\/:.*\[\]]{0,199}$|^unmatched$/.test(t.route)) headers.set('X-Sw-Route-Pattern', t.route);
     return new Response(response.body, {
       status: response.status,
       statusText: response.statusText,
@@ -16714,14 +17170,31 @@ function attachRuntimeServerTiming(response, platformCtx, handlerStartedAt) {
  *  nothing and cost a platform crossing plus a key read on every request
  *  (tsk_b2ff7f01). Each post that is still sent refreshes the rate. */
 let __sw_knownTraceSampleRate = 0;
+/** When that rate was learned. A learned rate counts for 60 s from the reply
+ *  that taught it (each reply resets it; not sliding), then reads as unknown,
+ *  and unknown means post. So a capture window that lowers the rate to 1
+ *  reaches a warm isolate within 60 s plus one request, at the cost of at
+ *  most one extra post per isolate per minute (pfb_f4c8b92c8fa3). */
+let __sw_knownTraceSampleRateAt = 0;
+const __sw_TRACE_RATE_TTL_MS = 60000;
 
 function __sw_traceWouldBeDropped(traceId, spans, status) {
   const rate = __sw_knownTraceSampleRate;
   if (!(rate > 1) || status >= 400) return false;
+  if (!(Date.now() - __sw_knownTraceSampleRateAt < __sw_TRACE_RATE_TTL_MS)) return false;
   for (let i = 0; i < spans.length; i++) if (spans[i] && spans[i].status === 'error') return false;
   const bucket = Number.parseInt(String(traceId).slice(-8), 16);
   if (!Number.isFinite(bucket)) return false;
   return bucket % rate !== 0;
+}
+
+/** Isolated telemetry ingest (tsk_b8377d6b): ON only when the publisher set SW_TELEMETRY_INGEST (the
+ *  telemetry resources exist) AND this is a direct native production bundle, whose private transport
+ *  routes the ingest paths to the trusted executor. Then traces and error reports go ONLY there, with
+ *  the release attestation; a refusal or failure drops them (no retry, never the API's routes). */
+function __sw_telemetryIngestActive(env) {
+  return !!(env && env.SW_TELEMETRY_INGEST === '1' && env.SW_EXECUTION_ATTESTATION && !env.SW_CODE_RUN_RELEASE
+    && typeof __sw_managedRuntimeFetch !== 'undefined' && __sw_managedRuntimeFetch);
 }
 
 /** Fire-and-forget this invocation's root and platform-call spans. */
@@ -16748,6 +17221,8 @@ function reportTrace(env, ctx, platformCtx, request, match, startedAt, status, p
       attributes: Object.assign(
         { 'http.method': method, 'http.route': route, 'http.status_code': status },
         t.dropped > 0 ? { 'trace.dropped_spans': t.dropped } : {},
+        // A caller's own trace context, recorded as a link only; never this request's id (tsk_20a32059).
+        t.callerTraceId ? { 'trace.caller_trace_id': t.callerTraceId } : {},
         // Which Cloudflare location received this request, so distance can be told apart from
         // work in stored traces. A dispatched worker has no request.cf, so the web edge forwards
         // request.cf.colo as X-Sw-Edge-Colo (caller copies stripped there); request.cf wins.
@@ -16760,28 +17235,105 @@ function reportTrace(env, ctx, platformCtx, request, match, startedAt, status, p
         })(),
       ),
     };
-    const spans = [rootSpan].concat(t.spans);
-    t.spans = [];
-    // An error response reports the platform calls it did not wait for: a call
-    // cut off by its caller's deadline (for example a managed write's 20 s
-    // bound) settles only after this report, so its span was lost and the trace
-    // showed the root alone (tsk_b2ff7f01). Error traces are always stored, so
-    // this adds no crossing and no sampling change; it adds up to 16 span rows
-    // to an error trace. A success response never adds these.
-    if (status >= 400 && Array.isArray(t.open) && t.open.length) {
-      const now = Date.now();
-      for (const o of t.open.slice(0, 16)) {
-        spans.push({ span_id: o.span_id, trace_id: t.traceId, parent_span_id: t.spanId, name: o.name, kind: 'client',
-          started_at: o.started_at, duration_ms: now - o.started_at, status: 'error', error_code: 'UNFINISHED_AT_RESPONSE',
-          attributes: { 'http.method': o.method, 'sw.unfinished': true } });
+    t.respondedAt = Date.now();
+    if (status >= 400) {
+      // An error response reports the platform calls it did not wait for: a call
+      // cut off by its caller's deadline (for example a managed write's 20 s
+      // bound) settles only after this report, so its span was lost and the trace
+      // showed the root alone (tsk_b2ff7f01). Error traces are always stored, so
+      // this adds no crossing and no sampling change; it adds up to 16 span rows
+      // to an error trace.
+      const spans = [rootSpan].concat(t.spans);
+      if (Array.isArray(t.open) && t.open.length) {
+        const now = Date.now();
+        for (const o of t.open.slice(0, 16)) {
+          spans.push({ span_id: o.span_id, trace_id: t.traceId, parent_span_id: t.spanId, name: o.name, kind: 'client',
+            started_at: o.started_at, duration_ms: now - o.started_at, status: 'error', error_code: 'UNFINISHED_AT_RESPONSE',
+            attributes: { 'http.method': o.method, 'sw.unfinished': true } });
+        }
       }
+      __sw_postTrace(env, ctx, t, spans, status, platformFetch);
+      return;
     }
-    if (Array.isArray(t.open)) t.open = [];
+    // A success response: a trace the platform would drop whole is not sent and
+    // not waited for (as before). Otherwise the post waits until the request's
+    // drained background work and every open platform call have settled, or
+    // __sw_TRACE_AFTER_RESPONSE_MS pass, then posts ONCE: calls that settled
+    // after the response carry sw.after_response; a call still open at the bound
+    // is posted as unfinished with status ok, so sampling and storage of a
+    // success trace are unchanged (pfb_f4c8b92c8fa3). The answer is not delayed:
+    // this runs in waitUntil after the response.
+    if (__sw_traceWouldBeDropped(t.traceId, [rootSpan].concat(t.spans), status)) { __sw_traceClose(t); return; }
+    const background = Array.isArray(t.background) ? t.background : [];
+    t.background = null;
+    if (background.length === 0 && !(Array.isArray(t.open) && t.open.length)) {
+      __sw_postTrace(env, ctx, t, [rootSpan].concat(t.spans), status, platformFetch);
+      return;
+    }
+    ctx.waitUntil(__sw_traceQuiet(t, background, __sw_TRACE_AFTER_RESPONSE_MS).then(function () {
+      const spans = [rootSpan].concat(t.spans);
+      const now = Date.now();
+      for (const o of (Array.isArray(t.open) ? t.open : []).slice(0, 16)) {
+        spans.push({ span_id: o.span_id, trace_id: t.traceId, parent_span_id: t.spanId, name: o.name, kind: 'client',
+          started_at: o.started_at, duration_ms: now - o.started_at, status: 'ok', error_code: null,
+          attributes: { 'http.method': o.method, 'sw.unfinished': true, 'sw.after_response': true } });
+      }
+      __sw_postTrace(env, ctx, t, spans, status, platformFetch);
+    }).catch(function () {}));
+  } catch (_) {}
+}
+
+/** How long a success response's trace post waits for after-response platform
+ *  work. Covers the 5 s query-observation window (context-head). */
+const __sw_TRACE_AFTER_RESPONSE_MS = 10000;
+
+/** No more spans or open calls are collected for this request's trace. */
+function __sw_traceClose(t) {
+  t.posted = true;
+  t.spans = [];
+  if (Array.isArray(t.open)) t.open = [];
+  t.onSettle = null;
+  t.background = null;
+}
+
+/** Resolves when the background work has settled and no platform call is open,
+ *  re-checked one microtask after each settle (the settled span is recorded in
+ *  that turn), or when the bound passes. Never rejects. */
+function __sw_traceQuiet(t, background, boundMs) {
+  return new Promise(function (resolve) {
+    let done = false;
+    let backgroundDone = background.length === 0;
+    let timer = null;
+    const finish = function () {
+      if (done) return;
+      done = true; t.onSettle = null;
+      if (timer !== null) clearTimeout(timer);
+      resolve();
+    };
+    const check = function () {
+      Promise.resolve().then(function () {
+        if (backgroundDone && !(Array.isArray(t.open) && t.open.length)) finish();
+      });
+    };
+    timer = setTimeout(finish, boundMs);
+    t.onSettle = check;
+    if (!backgroundDone) {
+      Promise.allSettled(background.map(function (p) { return Promise.resolve(p); })).then(function () { backgroundDone = true; check(); });
+    }
+    check();
+  });
+}
+
+/** Send one trace post (or skip it when the platform would drop it whole). */
+function __sw_postTrace(env, ctx, t, spans, status, platformFetch) {
+  try {
+    __sw_traceClose(t);
     if (__sw_traceWouldBeDropped(t.traceId, spans, status)) return;
     const platformDomain = env.PLATFORM_DOMAIN || 'somewhere.tech';
     const platformBase = env.PLATFORM_API_BASE || ('https://api.' + platformDomain);
+    const ingest = __sw_telemetryIngestActive(env);
     ctx.waitUntil(
-      platformFetch(platformBase + '/v1/traces', {
+      platformFetch(platformBase + (ingest ? '/v1/executor/telemetry/traces' : '/v1/traces'), {
         method: 'POST',
         headers: {
           'Authorization': 'Bearer ' + env.PROJECT_API_KEY,
@@ -16789,20 +17341,44 @@ function reportTrace(env, ctx, platformCtx, request, match, startedAt, status, p
           'traceparent': '00-' + t.traceId + '-' + t.spanId + '-' + (t.sampled ? '01' : '00'),
           ...(t.tracestate ? { 'tracestate': t.tracestate } : {}),
           ...(t.baggage ? { 'baggage': t.baggage } : {}),
+          ...(ingest ? { 'X-Sw-Execution-Attestation': env.SW_EXECUTION_ATTESTATION } : {}),
         },
         body: JSON.stringify({ project_id: env.PROJECT_ID, spans }),
       }).then(function (response) {
         return response.json().then(function (body) {
-          const rate = body && body.data && body.data.sample_rate;
-          if (Number.isInteger(rate) && rate >= 1) __sw_knownTraceSampleRate = rate;
+          // Legacy route: { data: { sample_rate } }; executor ingest: { sample_rate }.
+          const rate = body && ((body.data && body.data.sample_rate) || body.sample_rate);
+          if (Number.isInteger(rate) && rate >= 1) { __sw_knownTraceSampleRate = rate; __sw_knownTraceSampleRateAt = Date.now(); }
         });
       }).catch(function () {})
     );
   } catch (_) {}
 }
 
+/** The executor ingest bounds an error report's data at 16 KB of JSON BYTES and refuses (drops) a larger one
+ *  (tsk_7780bf5a). A stack trimmed to 8000 CHARS can still exceed that once it is non-ASCII or escape-heavy, so in
+ *  ingest mode the data is fitted in bytes: shorten the stack until it fits, then drop it, then keep only the
+ *  identifying fields. Never lose the report for its size. Legacy mode is unchanged. */
+const __sw_ERROR_DATA_BUDGET_BYTES = 15 * 1024;
+function __sw_jsonBytes(value) {
+  try { return new TextEncoder().encode(JSON.stringify(value)).length; } catch (_) { return Infinity; }
+}
+function __sw_fitErrorData(data, ingest) {
+  if (!ingest || __sw_jsonBytes(data) <= __sw_ERROR_DATA_BUDGET_BYTES) return data;
+  const fitted = Object.assign({}, data, { stack_truncated: true });
+  let stack = typeof data.stack === 'string' ? data.stack : '';
+  while (stack.length > 0) {
+    stack = stack.slice(0, Math.floor(stack.length * 0.7));
+    fitted.stack = stack;
+    if (__sw_jsonBytes(fitted) <= __sw_ERROR_DATA_BUDGET_BYTES) return fitted;
+  }
+  fitted.stack = null;
+  if (__sw_jsonBytes(fitted) <= __sw_ERROR_DATA_BUDGET_BYTES) return fitted;
+  return { code: data.code, response_code: data.response_code, request_id: data.request_id, status: data.status, slot: data.slot, data_truncated: true };
+}
+
 /** Best-effort function exception reporting correlated to the same trace. */
-async function reportFunctionError(env, request, code, err, responseStatus, requestId, routePath, platformFetch, platformCtx) {
+async function reportFunctionError(env, request, code, err, responseStatus, requestId, routePath, platformFetch, platformCtx, responseCode) {
   try {
     const platformDomain = env.PLATFORM_DOMAIN || 'somewhere.tech';
     const platformBase = env.PLATFORM_API_BASE || ('https://api.' + platformDomain);
@@ -16815,11 +17391,28 @@ async function reportFunctionError(env, request, code, err, responseStatus, requ
     let method = '';
     try { pathname = new URL(request.url).pathname; } catch (_) {}
     try { method = request.method; } catch (_) {}
-    await platformFetch(platformBase + '/v1/logs', {
+    const ingest = __sw_telemetryIngestActive(env);
+    const data = __sw_fitErrorData({
+      code,
+      // The code this runtime ANSWERED (closed set, server-chosen); code above is the owner's own (tsk_fca1267b).
+      response_code: responseCode || code,
+      stack: ingest && typeof stack === 'string' ? stack.slice(0, 8000) : stack,
+      request_id: requestId,
+      method,
+      path: pathname,
+      route: routePath || null,
+      slot: env.PROJECT_ENV || null,
+      status: responseStatus,
+      table: (err && err.table) || null,
+      owner_column: (err && err.owner_column) || null,
+      binding: (err && err.binding) || null,
+    }, ingest);
+    await platformFetch(platformBase + (ingest ? '/v1/executor/telemetry/errors' : '/v1/logs'), {
       method: 'POST',
       headers: {
         'Authorization': 'Bearer ' + apiKey,
         'Content-Type': 'application/json',
+        ...(ingest ? { 'X-Sw-Execution-Attestation': env.SW_EXECUTION_ATTESTATION } : {}),
         ...(trace ? { 'traceparent': '00-' + trace.traceId + '-' + trace.spanId + '-' + (trace.sampled ? '01' : '00') } : {}),
         ...(trace && trace.tracestate ? { 'tracestate': trace.tracestate } : {}),
         ...(trace && trace.baggage ? { 'baggage': trace.baggage } : {}),
@@ -16827,20 +17420,10 @@ async function reportFunctionError(env, request, code, err, responseStatus, requ
       body: JSON.stringify({
         project_id: env.PROJECT_ID,
         level: 'error',
-        message: code + ': ' + errMessage,
-        data: {
-          code,
-          stack,
-          request_id: requestId,
-          method,
-          path: pathname,
-          route: routePath || null,
-          slot: env.PROJECT_ENV || null,
-          status: responseStatus,
-          table: (err && err.table) || null,
-          owner_column: (err && err.owner_column) || null,
-          binding: (err && err.binding) || null,
-        },
+        // The executor ingest bounds a report (message 8 KB, data 16 KB) and drops an oversized one whole,
+        // so in ingest mode the text is trimmed to fit instead of losing the report.
+        message: ingest ? (code + ': ' + errMessage).slice(0, 8000) : code + ': ' + errMessage,
+        data: data,
         source: 'function',
       }),
     });
@@ -17754,7 +18337,7 @@ function isApiIndexHandlerPath(file) {
   return /^api\/.+\/index\.(?:ts|tsx|mts|js|mjs|jsx)$/.test(file);
 }
 
-// worker/node_modules/acorn/dist/acorn.mjs
+// ../files-migration-c0-rig/worker/node_modules/acorn/dist/acorn.mjs
 var astralIdentifierCodes = [509, 0, 227, 0, 150, 4, 294, 9, 1368, 2, 2, 1, 6, 3, 41, 2, 5, 0, 166, 1, 574, 3, 9, 9, 7, 9, 32, 4, 318, 1, 80, 3, 71, 10, 50, 3, 123, 2, 54, 14, 32, 10, 3, 1, 11, 3, 46, 10, 8, 0, 46, 9, 7, 2, 37, 13, 2, 9, 6, 1, 45, 0, 13, 2, 49, 13, 9, 3, 2, 11, 83, 11, 7, 0, 3, 0, 158, 11, 6, 9, 7, 3, 56, 1, 2, 6, 3, 1, 3, 2, 10, 0, 11, 1, 3, 6, 4, 4, 68, 8, 2, 0, 3, 0, 2, 3, 2, 4, 2, 0, 15, 1, 83, 17, 10, 9, 5, 0, 82, 19, 13, 9, 214, 6, 3, 8, 28, 1, 83, 16, 16, 9, 82, 12, 9, 9, 7, 19, 58, 14, 5, 9, 243, 14, 166, 9, 71, 5, 2, 1, 3, 3, 2, 0, 2, 1, 13, 9, 120, 6, 3, 6, 4, 0, 29, 9, 41, 6, 2, 3, 9, 0, 10, 10, 47, 15, 343, 9, 54, 7, 2, 7, 17, 9, 57, 21, 2, 13, 123, 5, 4, 0, 2, 1, 2, 6, 2, 0, 9, 9, 49, 4, 2, 1, 2, 4, 9, 9, 330, 3, 10, 1, 2, 0, 49, 6, 4, 4, 14, 10, 5350, 0, 7, 14, 11465, 27, 2343, 9, 87, 9, 39, 4, 60, 6, 26, 9, 535, 9, 470, 0, 2, 54, 8, 3, 82, 0, 12, 1, 19628, 1, 4178, 9, 519, 45, 3, 22, 543, 4, 4, 5, 9, 7, 3, 6, 31, 3, 149, 2, 1418, 49, 513, 54, 5, 49, 9, 0, 15, 0, 23, 4, 2, 14, 1361, 6, 2, 16, 3, 6, 2, 1, 2, 4, 101, 0, 161, 6, 10, 9, 357, 0, 62, 13, 499, 13, 245, 1, 2, 9, 726, 6, 110, 6, 6, 9, 4759, 9, 787719, 239];
 var astralIdentifierStartCodes = [0, 11, 2, 25, 2, 18, 2, 1, 2, 14, 3, 13, 35, 122, 70, 52, 268, 28, 4, 48, 48, 31, 14, 29, 6, 37, 11, 29, 3, 35, 5, 7, 2, 4, 43, 157, 19, 35, 5, 35, 5, 39, 9, 51, 13, 10, 2, 14, 2, 6, 2, 1, 2, 10, 2, 14, 2, 6, 2, 1, 4, 51, 13, 310, 10, 21, 11, 7, 25, 5, 2, 41, 2, 8, 70, 5, 3, 0, 2, 43, 2, 1, 4, 0, 3, 22, 11, 22, 10, 30, 66, 18, 2, 1, 11, 21, 11, 25, 71, 55, 7, 1, 65, 0, 16, 3, 2, 2, 2, 28, 43, 28, 4, 28, 36, 7, 2, 27, 28, 53, 11, 21, 11, 18, 14, 17, 111, 72, 56, 50, 14, 50, 14, 35, 39, 27, 10, 22, 251, 41, 7, 1, 17, 2, 60, 28, 11, 0, 9, 21, 43, 17, 47, 20, 28, 22, 13, 52, 58, 1, 3, 0, 14, 44, 33, 24, 27, 35, 30, 0, 3, 0, 9, 34, 4, 0, 13, 47, 15, 3, 22, 0, 2, 0, 36, 17, 2, 24, 20, 1, 64, 6, 2, 0, 2, 3, 2, 14, 2, 9, 8, 46, 39, 7, 3, 1, 3, 21, 2, 6, 2, 1, 2, 4, 4, 0, 19, 0, 13, 4, 31, 9, 2, 0, 3, 0, 2, 37, 2, 0, 26, 0, 2, 0, 45, 52, 19, 3, 21, 2, 31, 47, 21, 1, 2, 0, 185, 46, 42, 3, 37, 47, 21, 0, 60, 42, 14, 0, 72, 26, 38, 6, 186, 43, 117, 63, 32, 7, 3, 0, 3, 7, 2, 1, 2, 23, 16, 0, 2, 0, 95, 7, 3, 38, 17, 0, 2, 0, 29, 0, 11, 39, 8, 0, 22, 0, 12, 45, 20, 0, 19, 72, 200, 32, 32, 8, 2, 36, 18, 0, 50, 29, 113, 6, 2, 1, 2, 37, 22, 0, 26, 5, 2, 1, 2, 31, 15, 0, 328, 18, 16, 0, 2, 12, 2, 33, 125, 0, 80, 921, 103, 110, 18, 195, 2637, 96, 16, 1071, 18, 5, 26, 3994, 6, 582, 6842, 29, 1763, 568, 8, 30, 18, 78, 18, 29, 19, 47, 17, 3, 32, 20, 6, 18, 433, 44, 212, 63, 129, 74, 6, 0, 67, 12, 65, 1, 2, 0, 29, 6135, 9, 1237, 42, 9, 8936, 3, 2, 6, 2, 1, 2, 290, 16, 0, 30, 2, 3, 0, 15, 3, 9, 395, 2309, 106, 6, 12, 4, 8, 8, 9, 5991, 84, 2, 70, 2, 1, 3, 0, 3, 1, 3, 3, 2, 11, 2, 0, 2, 6, 2, 64, 2, 3, 3, 7, 2, 6, 2, 27, 2, 3, 2, 4, 2, 0, 4, 6, 2, 339, 3, 24, 2, 24, 2, 30, 2, 24, 2, 30, 2, 24, 2, 30, 2, 24, 2, 30, 2, 24, 2, 7, 1845, 30, 7, 5, 262, 61, 147, 44, 11, 6, 17, 0, 322, 29, 19, 43, 485, 27, 229, 29, 3, 0, 496, 6, 2, 3, 2, 1, 2, 14, 2, 196, 60, 67, 8, 0, 1205, 3, 2, 26, 2, 1, 2, 0, 3, 0, 2, 9, 2, 3, 2, 0, 2, 0, 7, 0, 5, 0, 2, 0, 2, 0, 2, 2, 2, 1, 2, 0, 3, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 1, 2, 0, 3, 3, 2, 6, 2, 3, 2, 3, 2, 0, 2, 9, 2, 16, 6, 2, 2, 4, 2, 16, 4421, 42719, 33, 4153, 7, 221, 3, 5761, 15, 7472, 16, 621, 2467, 541, 1507, 4938, 6, 4191];
 var nonASCIIidentifierChars = "\u200C\u200D\xB7\u0300-\u036F\u0387\u0483-\u0487\u0591-\u05BD\u05BF\u05C1\u05C2\u05C4\u05C5\u05C7\u0610-\u061A\u064B-\u0669\u0670\u06D6-\u06DC\u06DF-\u06E4\u06E7\u06E8\u06EA-\u06ED\u06F0-\u06F9\u0711\u0730-\u074A\u07A6-\u07B0\u07C0-\u07C9\u07EB-\u07F3\u07FD\u0816-\u0819\u081B-\u0823\u0825-\u0827\u0829-\u082D\u0859-\u085B\u0897-\u089F\u08CA-\u08E1\u08E3-\u0903\u093A-\u093C\u093E-\u094F\u0951-\u0957\u0962\u0963\u0966-\u096F\u0981-\u0983\u09BC\u09BE-\u09C4\u09C7\u09C8\u09CB-\u09CD\u09D7\u09E2\u09E3\u09E6-\u09EF\u09FE\u0A01-\u0A03\u0A3C\u0A3E-\u0A42\u0A47\u0A48\u0A4B-\u0A4D\u0A51\u0A66-\u0A71\u0A75\u0A81-\u0A83\u0ABC\u0ABE-\u0AC5\u0AC7-\u0AC9\u0ACB-\u0ACD\u0AE2\u0AE3\u0AE6-\u0AEF\u0AFA-\u0AFF\u0B01-\u0B03\u0B3C\u0B3E-\u0B44\u0B47\u0B48\u0B4B-\u0B4D\u0B55-\u0B57\u0B62\u0B63\u0B66-\u0B6F\u0B82\u0BBE-\u0BC2\u0BC6-\u0BC8\u0BCA-\u0BCD\u0BD7\u0BE6-\u0BEF\u0C00-\u0C04\u0C3C\u0C3E-\u0C44\u0C46-\u0C48\u0C4A-\u0C4D\u0C55\u0C56\u0C62\u0C63\u0C66-\u0C6F\u0C81-\u0C83\u0CBC\u0CBE-\u0CC4\u0CC6-\u0CC8\u0CCA-\u0CCD\u0CD5\u0CD6\u0CE2\u0CE3\u0CE6-\u0CEF\u0CF3\u0D00-\u0D03\u0D3B\u0D3C\u0D3E-\u0D44\u0D46-\u0D48\u0D4A-\u0D4D\u0D57\u0D62\u0D63\u0D66-\u0D6F\u0D81-\u0D83\u0DCA\u0DCF-\u0DD4\u0DD6\u0DD8-\u0DDF\u0DE6-\u0DEF\u0DF2\u0DF3\u0E31\u0E34-\u0E3A\u0E47-\u0E4E\u0E50-\u0E59\u0EB1\u0EB4-\u0EBC\u0EC8-\u0ECE\u0ED0-\u0ED9\u0F18\u0F19\u0F20-\u0F29\u0F35\u0F37\u0F39\u0F3E\u0F3F\u0F71-\u0F84\u0F86\u0F87\u0F8D-\u0F97\u0F99-\u0FBC\u0FC6\u102B-\u103E\u1040-\u1049\u1056-\u1059\u105E-\u1060\u1062-\u1064\u1067-\u106D\u1071-\u1074\u1082-\u108D\u108F-\u109D\u135D-\u135F\u1369-\u1371\u1712-\u1715\u1732-\u1734\u1752\u1753\u1772\u1773\u17B4-\u17D3\u17DD\u17E0-\u17E9\u180B-\u180D\u180F-\u1819\u18A9\u1920-\u192B\u1930-\u193B\u1946-\u194F\u19D0-\u19DA\u1A17-\u1A1B\u1A55-\u1A5E\u1A60-\u1A7C\u1A7F-\u1A89\u1A90-\u1A99\u1AB0-\u1ABD\u1ABF-\u1ACE\u1B00-\u1B04\u1B34-\u1B44\u1B50-\u1B59\u1B6B-\u1B73\u1B80-\u1B82\u1BA1-\u1BAD\u1BB0-\u1BB9\u1BE6-\u1BF3\u1C24-\u1C37\u1C40-\u1C49\u1C50-\u1C59\u1CD0-\u1CD2\u1CD4-\u1CE8\u1CED\u1CF4\u1CF7-\u1CF9\u1DC0-\u1DFF\u200C\u200D\u203F\u2040\u2054\u20D0-\u20DC\u20E1\u20E5-\u20F0\u2CEF-\u2CF1\u2D7F\u2DE0-\u2DFF\u302A-\u302F\u3099\u309A\u30FB\uA620-\uA629\uA66F\uA674-\uA67D\uA69E\uA69F\uA6F0\uA6F1\uA802\uA806\uA80B\uA823-\uA827\uA82C\uA880\uA881\uA8B4-\uA8C5\uA8D0-\uA8D9\uA8E0-\uA8F1\uA8FF-\uA909\uA926-\uA92D\uA947-\uA953\uA980-\uA983\uA9B3-\uA9C0\uA9D0-\uA9D9\uA9E5\uA9F0-\uA9F9\uAA29-\uAA36\uAA43\uAA4C\uAA4D\uAA50-\uAA59\uAA7B-\uAA7D\uAAB0\uAAB2-\uAAB4\uAAB7\uAAB8\uAABE\uAABF\uAAC1\uAAEB-\uAAEF\uAAF5\uAAF6\uABE3-\uABEA\uABEC\uABED\uABF0-\uABF9\uFB1E\uFE00-\uFE0F\uFE20-\uFE2F\uFE33\uFE34\uFE4D-\uFE4F\uFF10-\uFF19\uFF3F\uFF65";
@@ -26169,8 +26752,115 @@ function sequentialEmailFindings(functions) {
   return { findings, skippedFiles, truncated };
 }
 
+// worker/src/services/source-lint-user-lookup.ts
+var MAX_FILE_BYTES3 = 256 * 1024;
+var MAX_FINDINGS_PER_FILE3 = 20;
+var MAX_FINDINGS3 = 100;
+var SEARCH_WINDOW = 4e3;
+var CALL = /\blistUsers\s*\(/g;
+var SEARCH_METHODS = "(?:find|filter|some|findIndex|findLast|findLastIndex)";
+var IDENT3 = /^[A-Za-z_$][\w$]*$/;
+function closeOf(source, open) {
+  const pairs = { "(": ")", "[": "]", "{": "}" };
+  const stack = [];
+  let quote = null;
+  for (let i = open; i < source.length; i++) {
+    const ch = source[i];
+    if (quote) {
+      if (ch === "\\") i++;
+      else if (ch === quote) quote = null;
+      continue;
+    }
+    if (ch === '"' || ch === "'" || ch === "`") {
+      quote = ch;
+      continue;
+    }
+    if (pairs[ch]) stack.push(pairs[ch]);
+    else if (ch === ")" || ch === "]" || ch === "}") {
+      if (stack.pop() !== ch) return -1;
+      if (stack.length === 0) return i + 1;
+    }
+  }
+  return -1;
+}
+var escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+function resultRefs(before) {
+  const tail = before.slice(-200);
+  const destructured = /(?:const|let|var)\s*\{([^{}]*)\}\s*=\s*(?:await\s+)?[\w$.?\s]*$/.exec(tail);
+  if (destructured) {
+    for (const part of destructured[1].split(",")) {
+      const [key, alias] = part.split(":").map((s) => s.trim());
+      if (key === "users") return [escapeRe(alias && IDENT3.test(alias) ? alias : "users")];
+    }
+    return [];
+  }
+  const named = /(?:(?:const|let|var)\s+)?([A-Za-z_$][\w$]*)\s*=\s*(?:await\s+)?[\w$.?\s]*$/.exec(tail);
+  return named ? [`${escapeRe(named[1])}\\s*\\??\\.\\s*users`] : [];
+}
+function comparesExactEmail(callback) {
+  return callback.split(/&&|\|\|/).some((clause) => /\.\s*email\b/.test(clause) && /(?<![!=<>])={2,3}(?!=)/.test(clause));
+}
+function searchesExactEmail(source, from, refs) {
+  const window = source.slice(from, from + SEARCH_WINDOW);
+  for (const ref2 of refs) {
+    const pattern = new RegExp(`(?:^|[^\\w$.])${ref2}\\s*\\??\\.\\s*${SEARCH_METHODS}\\s*\\(`, "g");
+    for (let m = pattern.exec(window); m; m = pattern.exec(window)) {
+      const open = from + m.index + m[0].length - 1;
+      const close = closeOf(source, open);
+      if (close > 0 && comparesExactEmail(source.slice(open, close))) return true;
+    }
+  }
+  return false;
+}
+function scanFile2(source) {
+  const offsets = [];
+  for (let m = CALL.exec(source); m; m = CALL.exec(source)) {
+    const open = m.index + m[0].length - 1;
+    const close = closeOf(source, open);
+    if (close < 0) continue;
+    if (/\bemails\b/.test(source.slice(open, close))) continue;
+    const chained = new RegExp(`^\\s*\\)?\\s*\\??\\.\\s*users\\s*\\??\\.\\s*${SEARCH_METHODS}\\s*\\(`).exec(source.slice(close, close + 120));
+    if (chained) {
+      const searchOpen = close + chained[0].length - 1;
+      const searchClose = closeOf(source, searchOpen);
+      if (searchClose > 0 && comparesExactEmail(source.slice(searchOpen, searchClose))) {
+        offsets.push(m.index);
+        continue;
+      }
+    }
+    const refs = resultRefs(source.slice(0, m.index));
+    if (refs.length && searchesExactEmail(source, close, refs)) offsets.push(m.index);
+  }
+  CALL.lastIndex = 0;
+  return offsets;
+}
+function userEmailScanFindings(functions) {
+  const findings = [];
+  let skippedFiles = 0;
+  let truncated = false;
+  for (const [file, raw] of Object.entries(functions)) {
+    if (typeof raw !== "string" || !raw.includes("listUsers")) continue;
+    if (raw.length > MAX_FILE_BYTES3) {
+      skippedFiles++;
+      continue;
+    }
+    const source = stripComments(raw);
+    const offsets = scanFile2(source);
+    if (offsets.length === 0) continue;
+    const starts = lineIndex(source);
+    for (const [n, offset2] of offsets.entries()) {
+      if (n >= MAX_FINDINGS_PER_FILE3 || findings.length >= MAX_FINDINGS3) {
+        truncated = true;
+        break;
+      }
+      findings.push({ file, line: lineAt2(starts, offset2) });
+    }
+  }
+  return { findings, skippedFiles, truncated };
+}
+
 // worker/src/services/source-lint.ts
-var SOURCE_LINT_VERSION = "4";
+var SOURCE_LINT_VERSION = "5";
 async function lintSourceSnapshot(files, functions = {}) {
   const entries2 = (map) => Object.keys(map).sort().map((key) => [key, map[key]]);
   const sha256 = async (value) => {
@@ -26192,7 +26882,7 @@ function lintSource(files, functions = {}) {
     line: finding.line,
     message: `${finding.label} in source. The existing deploy secret guard may refuse this source.`,
     fix: "Remove the credential literal. Store it as a project environment variable without a VITE_ or REACT_APP_ prefix and read it only inside a server handler.",
-    docs: "https://somewhere.tech/docs/sw.env.txt"
+    docs: "https://somewhere.cloud/docs/sw.env.txt"
   }));
   const schema = files["db/schema.ts"];
   let requestOwnership = "not-applicable";
@@ -26208,7 +26898,7 @@ function lintSource(files, functions = {}) {
           line: Number(/\bline (\d+):/.exec(message)?.[1] ?? 1),
           message,
           fix: "Correct this declaration using the indicated schema helper, column or access rule. The same schema parser runs during deploy.",
-          docs: "https://somewhere.tech/docs/declared-data.txt"
+          docs: "https://somewhere.cloud/docs/declared-data.txt"
         });
       }
     } else {
@@ -26228,7 +26918,7 @@ function lintSource(files, functions = {}) {
           line: finding.line,
           message: finding.columns.length === 1 ? `${finding.table}.${finding.columns[0]} is set or matched through sw.db.server from request input, so a caller can choose whose row this is. Lint cannot see authorization done elsewhere; confirm this write is authorized.` : `${finding.table} ownership columns ${finding.columns.join(", ")} are set through sw.db.server from the whole request body, so a caller can choose whose row this is. Lint cannot see authorization done elsewhere; confirm this write is authorized.`,
           fix: `Set ${finding.columns.join(" and ")} from the signed-in user (sw.auth) or use the user-mode sw.db write, which sets ownership itself. If the handler intentionally acts for another user, check the caller's role before this write.`,
-          docs: "https://somewhere.tech/docs/declared-data.txt"
+          docs: "https://somewhere.cloud/docs/declared-data.txt"
         });
       }
     }
@@ -26245,11 +26935,29 @@ function lintSource(files, functions = {}) {
         line: finding.line,
         message: "sw.email.send is awaited inside a loop, so each email waits for the previous one to be delivered and the total time grows with the number of recipients. A handler or job that reaches its time limit stops sending the rest without an error.",
         fix: "If each email is independent of the others, send them a few at a time (for example batches of 5 with Promise.allSettled per batch) or move bulk sending into a job. Keep the loop sequential when order matters or an email depends on an earlier result; avoid one unbounded Promise.all over an arbitrary list.",
-        docs: "https://somewhere.tech/docs/sw.email.txt"
+        docs: "https://somewhere.cloud/docs/sw.email.txt"
       });
     }
   } catch {
     sequentialEmail = "skipped";
+  }
+  let userEmailLookup = Object.keys(functions).length === 0 ? "not-applicable" : "checked";
+  try {
+    const result = userEmailScanFindings(functions);
+    if (result.skippedFiles > 0 || result.truncated) userEmailLookup = "partial";
+    for (const finding of result.findings) {
+      findings.push({
+        rule: "somewhere/user-email-scan",
+        severity: "warning",
+        file: finding.file,
+        line: finding.line,
+        message: "sw.auth listUsers is called without emails and its result is then searched for one exact email. That reads whole directory pages to find one user, so it gets slower as the app grows, and a user beyond the pages read is reported as missing.",
+        fix: "Look the user up directly with sw.auth.server.listUsers({ emails: [email] }); it returns only that user (users[0], or none). Keep paging listUsers for real bulk work such as exports or admin lists.",
+        docs: "https://somewhere.cloud/docs/sw.auth.txt"
+      });
+    }
+  } catch {
+    userEmailLookup = "skipped";
   }
   for (const finding of apiIndexRouteFindings(functions)) {
     findings.push({
@@ -26259,13 +26967,13 @@ function lintSource(files, functions = {}) {
       line: 1,
       message: finding.warning,
       fix: "Keep this filename if /index is intentional; otherwise use the parent route filename after checking for a conflicting handler.",
-      docs: "https://somewhere.tech/docs/functions.txt"
+      docs: "https://somewhere.cloud/docs/functions.txt"
     });
   }
   findings.sort((a, b) => a.file.localeCompare(b.file) || a.line - b.line || a.rule.localeCompare(b.rule));
   return {
     version: SOURCE_LINT_VERSION,
     findings,
-    coverage: { schema: schema === void 0 ? "absent" : "checked", request_ownership: requestOwnership, sequential_email: sequentialEmail, authorization: "not-assessed" }
+    coverage: { schema: schema === void 0 ? "absent" : "checked", request_ownership: requestOwnership, sequential_email: sequentialEmail, user_email_lookup: userEmailLookup, authorization: "not-assessed" }
   };
 }

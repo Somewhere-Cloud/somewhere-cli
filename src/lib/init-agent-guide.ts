@@ -1,13 +1,13 @@
 import { BUNDLED_SKILLS_PACK } from './skills-pack.generated.js';
 import { SKILLS_DIR, skillNames } from './skills-pack.js';
 
-// Generated mirror of somewhere.tech/docs/agent-workflow.md. The platform
+// Generated mirror of somewhere.cloud/docs/agent-workflow.md. The platform
 // docs lint byte-compares this value when SOMEWHERE_CLI_REPO points here.
 export const AGENT_WORKFLOW = `## Getting started — build, deploy, verify
 
 \`somewhere init --name <slug>\` creates a React + TypeScript app; no login needed.
 Default: sign-in UI. Minimal: SDK and auth route. Bare: neither. \`init --catalog --json\` lists \`--features\` modules.
-\`npx @somewhere-tech/cli deploy\` publishes a temporary app and prints its live
+\`npx @somewhere-cloud/cli deploy\` publishes a temporary app and prints its live
 URL, claim URL and expiry. Login is needed for account-owned operations,
 the email test inbox and cron. On a hosted VM, \`somewhere login\` uses browser approval and keeps you signed in.
 Start auth/data/cron with \`somewhere docs recipe-signed-in-app --full\`.
@@ -31,8 +31,8 @@ Routes: \`index.html\` loads \`src/main.tsx\`; every extensionless path with no 
 helpers. Avoid names differing only in letter case (\`SignIn.tsx\`, \`signin.tsx\`).
 
 With auth enabled, \`api/auth/[...path].ts\` is
-\`export { somewhereAuth as default } from '@somewhere-tech/sdk/server'\`; pages
-use \`createSomewhereAuth()\` from \`@somewhere-tech/sdk/auth\` (no SDK:
+\`export { somewhereAuth as default } from '@somewhere-cloud/sdk/server'\`; pages
+use \`createSomewhereAuth()\` from \`@somewhere-cloud/sdk/auth\` (no SDK:
 \`docs({ topic: 'auth-client' })\`). \`auth.signUp({ email, password,
 displayName? })\` / \`auth.signIn({ email, password })\` return the user or throw
 with the message. Gate pages on \`auth.getState().status\` (React:
@@ -62,7 +62,7 @@ first: \`handle\` below is a public address its owner claimed:
 const { handle, title, from_email } = body as { handle?: unknown; title?: unknown; from_email?: unknown };
 if (typeof handle !== 'string' || typeof title !== 'string' || typeof from_email !== 'string'
     || !title.trim() || title.length > 200 || /[\\r\\n]/.test(title)
-    || from_email.length > 254 || !/^[^\\s@]+@[^\\s@]+$/.test(from_email)) return Response.json({ error: 'bad input' }, { status: 400 });
+    || from_email.length > 254 || !/^[^\\s@]+@[^\\s@]+\$/.test(from_email)) return Response.json({ error: 'bad input' }, { status: 400 });
 const { data: [profile] } = await sw.db.server.from('profiles', { where: { handle }, limit: 1 });
 if (!profile) return Response.json({ error: 'unknown handle' }, { status: 404 });
 await sw.db.server.insert('entries', { user_id: profile.user_id, owner_email: profile.owner_email,
@@ -87,5 +87,5 @@ export const SKILLS_POINTER = `Skills: \`${SKILLS_DIR}/\` — `
   + skillNames(BUNDLED_SKILLS_PACK).map((name) => `\`${name}\``).join(', ')
   + '. Read the skill that matches the task. `somewhere skills status` inspects the installed pack; `somewhere skills update` updates unmodified files.';
 
-export const INIT_AGENTS_MD = `# somewhere.tech project contract\n${SKILLS_POINTER}\n${AGENT_WORKFLOW}\n`;
+export const INIT_AGENTS_MD = `# somewhere.cloud project contract\n${SKILLS_POINTER}\n${AGENT_WORKFLOW}\n`;
 export const INIT_CLAUDE_MD = 'Read AGENTS.md for project instructions.\n';

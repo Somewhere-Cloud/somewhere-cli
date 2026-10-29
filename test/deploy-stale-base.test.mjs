@@ -225,7 +225,7 @@ test('deploy writes state, leaves first payload legacy, then sends base_version 
           data: {
             version: version++,
             files: 1,
-            url: 'https://stale-base.somewhere.tech',
+            url: 'https://stale-base.somewhere.cloud',
             has_functions: false,
           },
         });
@@ -299,7 +299,7 @@ test('pull updates last_deploy so the next deploy uses the pulled current versio
         deployBody = JSON.parse(body);
         sendJson(res, 200, {
           ok: true,
-          data: { version: 10, files: 1, url: 'https://stale-base.somewhere.tech', has_functions: false },
+          data: { version: 10, files: 1, url: 'https://stale-base.somewhere.cloud', has_functions: false },
         });
         return;
       }
@@ -451,7 +451,7 @@ test('pull --force removes remote deletions before advancing state', async () =>
         deployBody = JSON.parse(body);
         sendJson(res, 200, {
           ok: true,
-          data: { version: 10, files: 1, url: 'https://stale-base.somewhere.tech', has_functions: false },
+          data: { version: 10, files: 1, url: 'https://stale-base.somewhere.cloud', has_functions: false },
         });
         return;
       }
@@ -603,7 +603,7 @@ test('negative saved version is treated as absent and never sent as base_version
         deployBody = JSON.parse(body);
         sendJson(res, 200, {
           ok: true,
-          data: { version: 1, files: 1, url: 'https://stale-base.somewhere.tech', has_functions: false },
+          data: { version: 1, files: 1, url: 'https://stale-base.somewhere.cloud', has_functions: false },
         });
         return;
       }
@@ -646,7 +646,7 @@ test('project refs that are not the canonical linked project_id do not reuse sav
         deployBody = JSON.parse(body);
         sendJson(res, 200, {
           ok: true,
-          data: { version: 8, files: 1, url: 'https://target-site.somewhere.tech', has_functions: false },
+          data: { version: 8, files: 1, url: 'https://target-site.somewhere.cloud', has_functions: false },
         });
         return;
       }
@@ -704,7 +704,7 @@ test('deploy --force --yes sends force:true with the saved base_version', async 
         deployBody = JSON.parse(body);
         sendJson(res, 200, {
           ok: true,
-          data: { version: 5, files: 1, url: 'https://stale-base.somewhere.tech', has_functions: false },
+          data: { version: 5, files: 1, url: 'https://stale-base.somewhere.cloud', has_functions: false },
         });
         return;
       }
@@ -749,7 +749,7 @@ test('deploy with function_errors does not advance last_deploy state', async () 
           data: {
             version: 99,
             files: 1,
-            url: 'https://stale-base.somewhere.tech',
+            url: 'https://stale-base.somewhere.cloud',
             has_functions: true,
             function_errors: [{ route: 'api/fail', error: 'boom' }],
           },
@@ -792,7 +792,7 @@ test('deploy --temporary does not send or update saved stale-base state', async 
         deployBody = JSON.parse(body);
         sendJson(res, 200, {
           ok: true,
-          data: { version: 9, files: 1, url: 'https://stale-base.somewhere.tech', has_functions: false },
+          data: { version: 9, files: 1, url: 'https://stale-base.somewhere.cloud', has_functions: false },
         });
         return;
       }
@@ -891,7 +891,7 @@ test('release-native mixed surface: deploy anchors base_release_id and a STALE_R
               version: 1,
               active_release_id: 'rel_first',
               files: 1,
-              url: 'https://stale-base.somewhere.tech',
+              url: 'https://stale-base.somewhere.cloud',
               has_functions: false,
             },
           });
@@ -953,7 +953,7 @@ test('deploy --force --yes omits base_release_id so the overwrite is auto-adopte
         deployBody = JSON.parse(body);
         sendJson(res, 200, {
           ok: true,
-          data: { version: 5, active_release_id: 'rel_forced', files: 1, url: 'https://stale-base.somewhere.tech', has_functions: false },
+          data: { version: 5, active_release_id: 'rel_forced', files: 1, url: 'https://stale-base.somewhere.cloud', has_functions: false },
         });
         return;
       }
@@ -995,7 +995,7 @@ test('a normal deploy anchors base_release_id from saved release_id', async () =
         deployBody = JSON.parse(body);
         sendJson(res, 200, {
           ok: true,
-          data: { version: 8, active_release_id: 'rel_next', files: 1, url: 'https://stale-base.somewhere.tech', has_functions: false },
+          data: { version: 8, active_release_id: 'rel_next', files: 1, url: 'https://stale-base.somewhere.cloud', has_functions: false },
         });
         return;
       }
@@ -1026,7 +1026,7 @@ test('a plain (non-json) deploy also persists the release_id anchor', async () =
       if (req.method === 'POST' && req.url === '/v1/deploy') {
         sendJson(res, 200, {
           ok: true,
-          data: { project_id: 'proj_stale_base', version: 1, active_release_id: 'rel_plain', files: 1, url: 'https://stale-base.somewhere.tech', has_functions: false },
+          data: { project_id: 'proj_stale_base', version: 1, active_release_id: 'rel_plain', files: 1, url: 'https://stale-base.somewhere.cloud', has_functions: false },
         });
         return;
       }
@@ -1081,7 +1081,7 @@ test('pull persists active_release_id so the next deploy anchors base_release_id
         deployBody = JSON.parse(body);
         sendJson(res, 200, {
           ok: true,
-          data: { version: 10, active_release_id: 'rel_after_pull', files: 1, url: 'https://stale-base.somewhere.tech', has_functions: false },
+          data: { version: 10, active_release_id: 'rel_after_pull', files: 1, url: 'https://stale-base.somewhere.cloud', has_functions: false },
         });
         return;
       }
@@ -1115,7 +1115,7 @@ test('a project created empty here deploys from genesis and records the publishe
     req.on('end', () => {
       if (req.method === 'POST' && req.url === '/v1/deploy') {
         bodies.push(JSON.parse(body));
-        sendJson(res, 200, { ok: true, data: { version: 1, active_release_id: 'rel_genesis_published', files: 1, url: 'https://stale-base.somewhere.tech', has_functions: false } });
+        sendJson(res, 200, { ok: true, data: { version: 1, active_release_id: 'rel_genesis_published', files: 1, url: 'https://stale-base.somewhere.cloud', has_functions: false } });
         return;
       }
       sendJson(res, 404, { ok: false, error: 'NOT_FOUND', message: req.url });

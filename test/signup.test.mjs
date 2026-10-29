@@ -65,7 +65,7 @@ test('`somewhere signup` is a registered command that prints the URL as text', a
     result.stdout.includes('https://somewhere.cloud/auth?intent=signup'),
     `the URL must be printed as text for a headless agent to relay:\n${result.stdout}`,
   );
-  assert.match(result.stdout, /Create your somewhere\.tech account/);
+  assert.match(result.stdout, /Create your somewhere\.cloud account/);
   assert.doesNotMatch(result.stderr, /unknown command/i);
 });
 
@@ -85,7 +85,7 @@ test("login's own output carries an account-creation line", () => {
 test('help mentions signup at the top level and on login', async () => {
   const top = await run(['--help']);
   assert.equal(top.status, 0);
-  assert.match(top.stdout, /^\s*signup\s+Create a somewhere\.tech account/m);
+  assert.match(top.stdout, /^\s*signup\s+Create a somewhere\.cloud account/m);
 
   const loginHelp = await run(['login', '--help']);
   assert.equal(loginHelp.status, 0);

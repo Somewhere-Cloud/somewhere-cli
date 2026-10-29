@@ -94,14 +94,14 @@ test('anonymous init preserves occupied, linked and malformed-link directories',
 test('authenticated create retains remote creation, linking and install behavior', async () => {
   const result = await run(['--name', 'fixture', '--json'], { token: 'smt_fixture' });
   assert.equal(result.status, 0, result.stdout + result.stderr); assert.equal(JSON.parse(result.stdout).id, project.id);
-  assert.deepEqual(requests, ['POST /projects']);
+  assert.deepEqual(requests, ['POST /projects', 'GET /projects/fixture-project/urls']);
   assert.equal(JSON.parse(readFileSync(join(result.cwd, '.somewhere.json'))).project_id, project.id);
   assert.ok(existsSync(join(result.cwd, 'install-called'))); assert.ok(existsSync(join(result.cwd, 'index.html')));
   assertInitGuidance(result, JSON.parse(result.stdout).hooks);
 });
 test('authenticated link uses only owned project lookup; server denial writes nothing', async () => {
   const linked = await run(['--link', '--project', 'fixture', '--json'], { token: 'smt_fixture' });
-  assert.equal(linked.status, 0, linked.stderr); assert.deepEqual(requests, ['GET /projects']);
+  assert.equal(linked.status, 0, linked.stderr); assert.deepEqual(requests, ['GET /projects', 'GET /projects/fixture-project/urls']);
   assert.equal(existsSync(join(linked.cwd, 'index.html')), false);
   assertNoInitHooks(linked.cwd);
   assert.equal(JSON.parse(linked.stdout).hooks, undefined);
@@ -132,7 +132,7 @@ test('authenticated text setup reports project-local hook activation', async () 
   const result = await run(['--name', 'fixture'], { token: 'smt_fixture' });
   assert.equal(result.status, 0, result.stdout + result.stderr);
   assert.match(result.stdout, /Project created/);
-  assert.deepEqual(requests, ['POST /projects']);
+  assert.deepEqual(requests, ['POST /projects', 'GET /projects/fixture-project/urls']);
   assertInitGuidance(result);
 });
 
@@ -140,7 +140,7 @@ for (const json of [false, true]) {
   test(`authenticated bare setup writes no hooks (${json ? 'JSON' : 'text'})`, async () => {
     const result = await run(['--name', 'fixture', '--bare', ...(json ? ['--json'] : [])], { token: 'smt_fixture' });
     assert.equal(result.status, 0, result.stdout + result.stderr);
-    assert.deepEqual(requests, ['POST /projects']);
+    assert.deepEqual(requests, ['POST /projects', 'GET /projects/fixture-project/urls']);
     assert.equal(existsSync(join(result.cwd, 'index.html')), false);
     assert.equal(existsSync(join(result.cwd, 'install-called')), false);
     assert.ok(existsSync(join(result.cwd, 'AGENTS.md')));
@@ -221,7 +221,7 @@ test('init existing-project linking in human output installs no agent config', a
   assert.equal(result.status, 0, result.stdout + result.stderr);
   assertNoInitHooks(result.cwd);
   assert.equal(existsSync(join(result.base, '.claude.json')), false);
-  assert.deepEqual(requests, ['GET /projects']);
+  assert.deepEqual(requests, ['GET /projects', 'GET /projects/fixture-project/urls']);
 });
 
 test('explicit opt-in installs only the selected host typecheck hook, without MCP or global setup', async () => {

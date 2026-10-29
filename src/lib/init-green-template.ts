@@ -11,7 +11,7 @@ const PACKAGE_JSON = `{
     "typecheck": "somewhere typecheck"
   },
   "dependencies": {
-    "@somewhere-tech/sdk": "0.12.10",
+    "@somewhere-cloud/sdk": "0.13.0",
     "react": "19.2.7",
     "react-dom": "19.2.7"
   },
@@ -92,7 +92,7 @@ export function App() {
 
   return (
     <main>
-      <p className="eyebrow">somewhere.tech starter</p>
+      <p className="eyebrow">somewhere.cloud starter</p>
       <h1>Start with a working full-stack app.</h1>
       <p className="message">{message}</p>
       <p className="hint">Edit <code>src/App.tsx</code>, then deploy the raw source.</p>
@@ -129,7 +129,7 @@ h1 { max-width: 660px; margin: 12px 0 24px; font-size: clamp(2.7rem, 8vw, 5.5rem
 code { color: #0e6542; }
 `;
 
-const README = `# somewhere.tech starter
+const README = `# somewhere.cloud starter
 
 This project starts green: a typed React page calls a typed public greeting
 function. It reads the server-only table declared in \`db/schema.ts\` and
@@ -165,14 +165,14 @@ export function createGreenTemplate(): InitScaffoldFile[] {
     { path: 'tsconfig.json', content: TSCONFIG },
     {
       path: 'index.html',
-      content: '<!doctype html>\n<html lang="en">\n  <head>\n    <meta charset="UTF-8" />\n    <meta name="viewport" content="width=device-width, initial-scale=1.0" />\n    <title>somewhere.tech starter</title>\n  </head>\n  <body>\n    <div id="root"></div>\n    <script type="module" src="/src/main.tsx"></script>\n  </body>\n</html>\n',
+      content: '<!doctype html>\n<html lang="en">\n  <head>\n    <meta charset="UTF-8" />\n    <meta name="viewport" content="width=device-width, initial-scale=1.0" />\n    <title>somewhere.cloud starter</title>\n  </head>\n  <body>\n    <div id="root"></div>\n    <script type="module" src="/src/main.tsx"></script>\n  </body>\n</html>\n',
     },
     { path: 'src/App.tsx', content: APP },
     { path: 'src/main.tsx', content: MAIN },
     { path: 'src/services/greeting.ts', content: SERVICE },
     { path: 'src/styles.css', content: STYLES },
     { path: 'api/greeting.ts', content: API },
-    { path: 'api/auth/[...path].ts', content: "export { somewhereAuth as default } from '@somewhere-tech/sdk/server';\n" },
+    { path: 'api/auth/[...path].ts', content: "export { somewhereAuth as default } from '@somewhere-cloud/sdk/server';\n" },
     { path: 'db/schema.ts', content: SCHEMA },
     { path: 'types/app.ts', content: APP_TYPES },
   ];

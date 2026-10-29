@@ -108,7 +108,7 @@ function makeServers({ revokedRefresh = false } = {}) {
         res.statusCode = 401;
         res.setHeader(
           'WWW-Authenticate',
-          'Bearer realm="somewhere.tech", error="invalid_token"',
+          'Bearer realm="somewhere.cloud", error="invalid_token"',
         );
         res.end(JSON.stringify({
           jsonrpc: '2.0',

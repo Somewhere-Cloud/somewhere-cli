@@ -102,7 +102,7 @@ test('a deploy the platform marks retry:true is sent again, and the second attem
         }
         sendJson(res, 200, {
           ok: true,
-          data: { files: 1, url: 'https://retryverdict.somewhere.tech', has_functions: false },
+          data: { files: 1, url: 'https://retryverdict.somewhere.cloud', has_functions: false },
         });
         return;
       }
@@ -117,7 +117,7 @@ test('a deploy the platform marks retry:true is sent again, and the second attem
       assert.equal(deployCalls, 2, 'the platform said retry; the CLI must retry exactly once');
       assert.match(result.stdout, /retryable failure \(PUBLISH_FROZEN\)/);
       assert.match(result.stdout, /retrying once/);
-      assert.match(result.stdout, /Live at https:\/\/retryverdict\.somewhere\.tech/);
+      assert.match(result.stdout, /Live at https:\/\/retryverdict\.somewhere\.cloud/);
     },
   );
 });

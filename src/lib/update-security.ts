@@ -9,7 +9,7 @@ import type { Bundle as SigstoreBundle } from 'sigstore';
 
 export const CLI_PACKAGE = '@somewhere-tech/cli';
 export const OFFICIAL_NPM_REGISTRY = 'https://registry.npmjs.org';
-export const OFFICIAL_REPOSITORY = 'https://github.com/Somewhere-Tech/somewhere-cli';
+export const OFFICIAL_REPOSITORY = 'https://github.com/Somewhere-Cloud/somewhere-cli';
 const SLSA_PROVENANCE = 'https://slsa.dev/provenance/v1';
 const IN_TOTO_STATEMENT = 'https://in-toto.io/Statement/v1';
 const GITHUB_WORKFLOW_BUILD_TYPE = 'https://slsa-framework.github.io/github-actions-buildtypes/workflow/v1';
@@ -24,7 +24,7 @@ const GITHUB_OWNER_ID = '275776787';
 // Immutable GitHub identity values from the Fulcio certificate, not the
 // falsifiable SLSA payload. Pinning numeric IDs prevents repository-name reuse.
 const GITHUB_CERTIFICATE_OIDS = {
-  '1.3.6.1.4.1.57264.1.5': 'Somewhere-Tech/somewhere-cli',
+  '1.3.6.1.4.1.57264.1.5': 'Somewhere-Cloud/somewhere-cli',
   '1.3.6.1.4.1.57264.1.15': `\x0c\x0a${GITHUB_REPOSITORY_ID}`,
   '1.3.6.1.4.1.57264.1.17': `\x0c\x09${GITHUB_OWNER_ID}`,
   '1.3.6.1.4.1.57264.1.22': '\x0c\x06public',
@@ -65,7 +65,7 @@ function escapeRegex(value: string): string {
 
 function trustedWorkflowIdentity(version: string): string {
   const releaseTag = `v${escapeRegex(version)}`;
-  return '^https://github\\.com/Somewhere-Tech/somewhere-cli/\\.github/workflows/' +
+  return '^https://github\\.com/Somewhere-Cloud/somewhere-cli/\\.github/workflows/' +
     `(?:version-guard\\.yml@refs/heads/master|publish\\.yml@(?:refs/heads/master|refs/tags/${releaseTag}))$`;
 }
 

@@ -71,7 +71,7 @@ function unsignedProvenance(version, bytes) {
     predicate: {
       buildDefinition: {
         externalParameters: {
-          workflow: { repository: 'https://github.com/Somewhere-Tech/somewhere-cli' },
+          workflow: { repository: 'https://github.com/Somewhere-Cloud/somewhere-cli' },
         },
       },
     },

@@ -19,7 +19,7 @@ export function assertCandidateIdentity(source, head, master) {
 export async function checkCandidate(source, version) {
   validateCandidate(source, version);
   const git = (...args) => execFileSync('git', args, { encoding: 'utf8' }).trim();
-  if (!/^https:\/\/github\.com\/Somewhere-Tech\/somewhere-cli(?:\.git)?$/.test(git('remote', 'get-url', 'origin'))) {
+  if (!/^https:\/\/github\.com\/Somewhere-Cloud\/somewhere-cli(?:\.git)?$/.test(git('remote', 'get-url', 'origin'))) {
     throw new Error('unexpected origin repository');
   }
   git('fetch', '--no-tags', 'origin', '+refs/heads/master:refs/remotes/origin/master');
@@ -36,7 +36,7 @@ export function assertProvenanceSource(body, source) {
   const attestation = body.attestations?.find((entry) => entry.predicateType === 'https://slsa.dev/provenance/v1');
   const statement = JSON.parse(Buffer.from(attestation.bundle.dsseEnvelope.payload, 'base64').toString('utf8'));
   const sources = statement.predicate?.buildDefinition?.resolvedDependencies?.filter((entry) =>
-    entry.uri?.startsWith('git+https://github.com/Somewhere-Tech/somewhere-cli@'));
+    entry.uri?.startsWith('git+https://github.com/Somewhere-Cloud/somewhere-cli@'));
   if (!sources?.length || sources.some((entry) => entry.digest?.gitCommit !== source)) {
     throw new Error('verified provenance does not authenticate the registry gitHead');
   }

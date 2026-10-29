@@ -12,7 +12,7 @@
   "homepage": "https://somewhere.tech",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Somewhere-Tech/somewhere-cli.git"
+    "url": "git+https://github.com/Somewhere-Cloud/somewhere-cli.git"
   },
   "license": "MIT",
   "author": {

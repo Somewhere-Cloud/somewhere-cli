@@ -9,9 +9,9 @@ const publisher = readFileSync(new URL('../.github/workflows/publish.yml', impor
 const guard = readFileSync(new URL('../.github/workflows/version-guard.yml', import.meta.url), 'utf8');
 const script = publisher.match(/          script: \|\n([\s\S]*?)      - uses: actions\/checkout/)[1].split('\n').map((line) => line.slice(12)).join('\n');
 const authenticate = new Function('context', 'github', 'core', `return (async () => { ${script} })()`);
-const official = 'Somewhere-Tech/somewhere-cli';
+const official = 'Somewhere-Cloud/somewhere-cli';
 function context(run = {}) {
-  return { repo: { owner: 'Somewhere-Tech', repo: 'somewhere-cli' }, eventName: 'workflow_run', sha: source, ref: 'refs/heads/master', payload: { workflow_run: {
+  return { repo: { owner: 'Somewhere-Cloud', repo: 'somewhere-cli' }, eventName: 'workflow_run', sha: source, ref: 'refs/heads/master', payload: { workflow_run: {
     conclusion: 'success', event: 'push', head_branch: 'master', head_sha: source,
     head_repository: { full_name: official }, repository: { full_name: official }, path: '.github/workflows/version-guard.yml', ...run,
   } } };

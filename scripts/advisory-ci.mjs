@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { validateCandidate } from './publish-release.mjs';
 import { readPublishedVersion } from './version-guard.mjs';
 
-export const OFFICIAL = 'Somewhere-Tech/somewhere-cli';
+export const OFFICIAL = 'Somewhere-Cloud/somewhere-cli';
 const NAME = '@somewhere-tech/cli';
 const git = (cwd, ...args) => execFileSync('git', args, { cwd, encoding: 'utf8' }).trim();
 export function validateTrigger(env) {

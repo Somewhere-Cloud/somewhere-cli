@@ -27,7 +27,7 @@ env:
 
 jobs:
   pin:
-    if: github.repository == 'Somewhere-Tech/somewhere-cli' && github.ref == 'refs/heads/master'
+    if: github.repository == 'Somewhere-Cloud/somewhere-cli' && github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
@@ -37,7 +37,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          repository: Somewhere-Tech/somewhere-cli
+          repository: Somewhere-Cloud/somewhere-cli
           ref: ${{ github.sha }}
           fetch-depth: 0
           persist-credentials: false
@@ -65,13 +65,13 @@ jobs:
       # Trusted helper stays at the workflow source; published code has its own checkout.
       - uses: actions/checkout@v4
         with:
-          repository: Somewhere-Tech/somewhere-cli
+          repository: Somewhere-Cloud/somewhere-cli
           ref: ${{ github.sha }}
           path: control
           persist-credentials: false
       - uses: actions/checkout@v4
         with:
-          repository: Somewhere-Tech/somewhere-cli
+          repository: Somewhere-Cloud/somewhere-cli
           ref: ${{ needs.pin.outputs.source }}
           path: published
           persist-credentials: false

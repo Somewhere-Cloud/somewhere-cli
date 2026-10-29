@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.37.86
+
+### Fixed
+
+- The CLI now talks to Somewhere's current hosts (`api.somewhere.cloud`, `mcp.somewhere.cloud`, runner and site defaults). The previous release still defaulted to `api.somewhere.tech`, which has moved, so `somewhere deploy` from a fresh folder failed immediately. `init` → `deploy` works again with no login and no environment overrides.
+- The README quick start marks `somewhere login` as optional; `init` and `deploy` run anonymously and print a claim link.
+
 ## 0.37.77
 
 ### Fixed

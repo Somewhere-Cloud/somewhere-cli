@@ -147,8 +147,8 @@ unused \`types/app.ts\` too. A missing optional include directory is harmless.
 The greeting's \`serverOnly()\` scope demonstrates a trusted public endpoint;
 it is not the default for your app's data. Choose fitting declared access
 before the first deploy: \`owner()\` for personal rows, \`group()\` for teams,
-and \`anyOf()\` for combined access. Read \`somewhere docs sw.db --section
-provider-or-booker-and-owner-or-staff-recipes\` for booking and help-desk rules.
+and \`anyOf()\` for combined access. For booking and help-desk rules, read:
+\`somewhere docs sw.db --section provider-or-booker-and-owner-or-staff-recipes\`
 
 \`\`\`sh
 somewhere typecheck

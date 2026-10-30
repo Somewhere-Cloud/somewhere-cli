@@ -34,6 +34,20 @@ export const BINARY_EXTS = new Set([
 // patterns must ship in `functions`/`update_functions`, not `files` — otherwise
 // the worker writes them to static storage and never invokes the bundler, so
 // the routes never register.
+/** A test runner's source file by name: `<name>.test.<ext>` or
+ *  `<name>.spec.<ext>` with a JS/TS source extension. Data files
+ *  (`openapi.spec.json`) and plain names (`testimonials.ts`, `api/test.ts`)
+ *  are app files. */
+const TEST_SOURCE_NAME = /\.(?:test|spec)\.[cm]?[jt]sx?$/i;
+
+export function isTestSourcePath(relPath: string): boolean {
+  return TEST_SOURCE_NAME.test(relPath.slice(relPath.lastIndexOf('/') + 1));
+}
+
+export function excludedTestFileReason(relPath: string): string {
+  return `test file — publish it with \`somewhere deploy --include ${relPath}\` or a "!${relPath}" line in .somewhereignore`;
+}
+
 export function isFunctionPath(p: string): boolean {
   if (!/\.(ts|js|mjs)$/i.test(p)) return false;
   if (p.startsWith('api/') || p.startsWith('_lib/')) return true;
@@ -86,6 +100,16 @@ export function collectFiles(baseDir: string, options: CollectOptions = {}): Col
   const publish: string[] = [];
   const deferred: string[] = [];
   for (const relPath of candidates) {
+    // A test source file (`*.test.ts`, `*.spec.tsx`, …) is not part of the
+    // app: under api/ it would deploy as a live route, elsewhere as servable
+    // source (pfb_f3cc58a01e76). Test FOLDERS keep uploading as private source
+    // the platform never serves, so app imports from them still resolve. The
+    // opt-ins below re-include one; they run after the ignore, dotfile and
+    // size rules, so they never reopen what those keep out.
+    if (isTestSourcePath(relPath) && !optIn.has(relPath) && !ignore.reincludes(relPath)) {
+      out.excluded.push({ path: relPath, reason: excludedTestFileReason(relPath) });
+      continue;
+    }
     const isRootFile = !relPath.includes('/');
     if (
       !isRootFile ||
@@ -114,8 +138,8 @@ export function collectFiles(baseDir: string, options: CollectOptions = {}): Col
       if (corpus.includes(relPath)) publish.push(relPath);
       else out.excluded.push({ path: relPath, reason: excludedRootFileReason(relPath) });
     }
-    out.excluded.sort((a, b) => a.path.localeCompare(b.path));
   }
+  out.excluded.sort((a, b) => a.path.localeCompare(b.path));
 
   for (const relPath of publish) classifyInto(out, baseDir, relPath, options.readBinary !== false);
   return out;

@@ -10,7 +10,8 @@ import ora from '../lib/spinner.js';
 import { ApiClient, CliApiError, LONG_CALL_TIMEOUT_MS } from '../lib/client.js';
 import { buildErrorSummary, isBuildError, renderBuildError } from '../lib/build-errors.js';
 import { getToken, loadProjectConfig, readSourceBase, saveSourceBase } from '../lib/config.js';
-import { IGNORE, classifyKey, collectFiles } from '../lib/files.js';
+import { IGNORE, classifyKey, collectFiles, sensitiveReferenceRefusal } from '../lib/files.js';
+import { isSensitiveDeployPath } from '../lib/vendor/deploy-paths.js';
 import { bold, dim, error, green, info, printJson, printJsonError, red, success, teal, warn, yellow } from '../lib/output.js';
 import { showProjectNotices } from '../lib/project-notices.js';
 import { getDeployedProjectServingUrl } from '../lib/project-urls.js';
@@ -650,9 +651,17 @@ async function runHotDeploy(opts: { project?: string; publishFirst?: boolean; js
     projectId = config.project_id;
     subdomain = config.subdomain;
   }
+  // Before any request: a credentials file the source names refuses here.
+  const collected = collectFiles(cwd);
+  const sensitiveRefusal = sensitiveReferenceRefusal(collected);
+  if (sensitiveRefusal) {
+    if (opts.json) printJsonError('SENSITIVE_FILE_REFERENCED', sensitiveRefusal);
+    else error(sensitiveRefusal);
+    process.exit(1);
+  }
   await showProjectNotices(client, projectId);
 
-  const { files, binaryFiles, functions } = collectFiles(cwd);
+  const { files, binaryFiles, functions } = collected;
   const draftId = `draft_${randomUUID()}`;
   const firstOperationId = `previewop_${randomUUID()}`;
   const showPublishProgress = opts.publishFirst === true && opts.json !== true;
@@ -848,7 +857,9 @@ async function runHotDeploy(opts: { project?: string; publishFirst?: boolean; js
     ignored: (p: string) => {
       const rel = relative(cwd, p);
       if (!rel || rel.startsWith('..')) return false;
-      return rel.split(/[\\/]/).some(
+      const segments = rel.split(/[\\/]/);
+      // Credentials and private-key files are never uploaded (deploy path policy).
+      return isSensitiveDeployPath(segments.join('/')) || segments.some(
         (seg) => IGNORE.has(seg) || (seg.startsWith('.') && seg !== '.' && seg !== ''),
       );
     },

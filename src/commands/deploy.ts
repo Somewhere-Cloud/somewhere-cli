@@ -30,7 +30,7 @@ import {
   type StoredTempSession,
 } from '../lib/config.js';
 import { httpsOrigin } from '../lib/project-urls.js';
-import { collectFiles, formatBytes } from '../lib/files.js';
+import { collectFiles, formatBytes, sensitiveReferenceRefusal, type CollectedFiles } from '../lib/files.js';
 import { mintTempAccount } from '../lib/temp-auth.js';
 import { ensureClaimHandoff } from '../lib/claim-handoff.js';
 import { dim, error, green, info, platformErrorEnvelope, printJson, printJsonError, red, success, teal, warn, yellow } from '../lib/output.js';
@@ -539,7 +539,7 @@ export function registerDeploy(program: Command) {
     )
     .option(
       '--dry-run',
-      'Show what would change (added / modified / removed files) in an already deployed project, without deploying. Never creates a project or a temporary workspace.',
+      'Show what would change (added / modified / removed files) in an already deployed project, without deploying. The files a deploy would publish are sent to Somewhere to compute the change; nothing is published. Never creates a project or a temporary workspace.',
     )
     .option(
       '--replace-functions',
@@ -599,7 +599,15 @@ export function registerDeploy(program: Command) {
       });
       const collectionEndedAt = performance.now();
       const collectionMs = collectionEndedAt - collectionStartedAt;
-      const { files, binaryFiles, functions, skipped, excluded } = collected;
+      const { files, binaryFiles, functions, skipped, excluded, sensitive } = collected;
+      // A credentials file the source names: refuse before any request, with
+      // nothing sent (the deploy API refuses these paths too, after upload).
+      const sensitiveRefusal = sensitiveReferenceRefusal(collected);
+      if (sensitiveRefusal) {
+        if (opts.json) printJsonError('SENSITIVE_FILE_REFERENCED', sensitiveRefusal);
+        else error(sensitiveRefusal);
+        process.exit(1);
+      }
       if (
         Object.keys(files).length === 0
         && Object.keys(binaryFiles).length === 0
@@ -926,6 +934,11 @@ export function registerDeploy(program: Command) {
         printExcludedFiles(excluded, targetDir, { remember: !opts.dryRun });
         if (process.stderr.isTTY) spinner?.start();
       }
+      if (sensitive.length && !opts.json) {
+        spinner?.stop();
+        printSensitiveFiles(sensitive);
+        if (process.stderr.isTTY) spinner?.start();
+      }
 
       // A deploy replaces the whole project, so a file we skip is DELETED from
       // production if it was there before. Never silent — surface every skip.
@@ -967,6 +980,11 @@ export function registerDeploy(program: Command) {
         .reduce((sum, b64) => sum + Math.floor((b64.length * 3) / 4), 0);
       const totalBytes = textBytes + binaryBytes;
 
+      if (opts.dryRun && !opts.json) {
+        spinner?.stop();
+        info(dim(`Dry run: sending ${totalFiles} files (${formatBytes(totalBytes)}) to Somewhere to compute the change. Nothing is published.`));
+        if (process.stderr.isTTY) spinner?.start();
+      }
       if (spinner) {
         spinner.text = opts.dryRun
           ? `Checking ${totalFiles} files (${formatBytes(totalBytes)})...`
@@ -1776,6 +1794,13 @@ export function printExcludedFiles(
     ),
   );
   if (remember) markPublishNoticeSeen(targetDir);
+}
+
+/** Credentials and private-key files held back by the deploy path policy.
+ *  Neither --include nor a "!" line publishes them. */
+export function printSensitiveFiles(sensitive: CollectedFiles['sensitive']): void {
+  info(`Never uploaded (${sensitive.length}): ${sensitive.map((e) => e.path).join(', ')}`);
+  info(dim('Credentials and private-key files stay on your machine; --include and "!" lines do not publish them. Store a secret your code needs with `somewhere env set` and read it with sw.env in a function.'));
 }
 
 /** Why a dry run stops before reaching the platform (pfb_a0af8bb647dc). */

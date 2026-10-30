@@ -30,7 +30,7 @@ const { buildCheckBody, buildCheckRunBody, checkErrorsToCliError, checkRunExitCo
   formatCompileOnlySuccess, localPreflightVerdict, registerCheck, runLocalPreflight } =
   await import('../dist/commands/check.js');
 
-const collected = (over = {}) => ({ files: {}, binaryFiles: {}, functions: {}, ...over });
+const collected = (over = {}) => ({ files: {}, binaryFiles: {}, functions: {}, sensitive: [], ...over });
 
 test('buildCheckBody: always carries project_id + files', () => {
   assert.deepEqual(buildCheckBody(collected({ files: { 'index.html': '<html>' } }), 'p1'), {

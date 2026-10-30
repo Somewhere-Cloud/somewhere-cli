@@ -5,9 +5,9 @@ import ora from '../lib/spinner.js';
 import { ApiClient, CliApiError, LONG_CALL_TIMEOUT_MS } from '../lib/client.js';
 import { isBuildError, renderBuildError, type BuildErrorDetail } from '../lib/build-errors.js';
 import { getToken, loadProjectConfig } from '../lib/config.js';
-import { collectFiles, formatBytes, type CollectedFiles } from '../lib/files.js';
+import { collectFiles, formatBytes, sensitiveReferenceRefusal, type CollectedFiles } from '../lib/files.js';
 import { shellQuote } from '../lib/next-actions.js';
-import { printExcludedFiles } from './deploy.js';
+import { printExcludedFiles, printSensitiveFiles } from './deploy.js';
 import { MISSING_TSCONFIG_GUIDANCE } from './typecheck.js';
 import { ensureDeclaredTypePackages, runTypecheck, type TypecheckResult } from '../lib/typecheck.js';
 import { bold, dim, error, green, info, printJson, red, success, warn, yellow } from '../lib/output.js';
@@ -232,10 +232,14 @@ export async function runLocalPreflight(
     Object.keys(collected.files).length +
     Object.keys(collected.functions).length +
     Object.keys(collected.binaryFiles).length;
+  const sensitiveRefusal = sensitiveReferenceRefusal(collected);
   const source: LocalCheckStep = files === 0
     ? { name: 'source', status: 'failed', reason: 'No deployable files found in this directory.', files: 0, bytes: 0 }
-    : { name: 'source', status: 'passed', files, bytes: sourceBytes(collected) };
-  if (collected.skipped.length) source.not_uploaded = collected.skipped;
+    : sensitiveRefusal
+      ? { name: 'source', status: 'failed', reason: sensitiveRefusal, files, bytes: sourceBytes(collected) }
+      : { name: 'source', status: 'passed', files, bytes: sourceBytes(collected) };
+  const notUploaded = [...collected.skipped, ...collected.sensitive.map(({ path, reason }) => ({ path, reason }))];
+  if (notUploaded.length) source.not_uploaded = notUploaded;
   if (collected.excluded.length) source.not_published = collected.excluded;
 
   let typecheckStep: LocalCheckStep;
@@ -338,6 +342,13 @@ export function registerCheck(program: Command) {
 
       const client = new ApiClient(getToken());
       const collected = collectFiles(targetDir);
+      const sensitiveRefusal = sensitiveReferenceRefusal(collected);
+      if (sensitiveRefusal) {
+        if (opts.json) printJson({ ok: false, error: 'SENSITIVE_FILE_REFERENCED', message: sensitiveRefusal });
+        else error(sensitiveRefusal);
+        process.exit(1);
+      }
+      if (collected.sensitive.length && !opts.json) printSensitiveFiles(collected.sensitive);
       // Same publish surface the deploy uses — `deploy-check` saying "0 errors"
       // while a private note was about to ship is what made this a real
       // incident, so the check names the held-back files too (tsk_c166924f).

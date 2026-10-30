@@ -6,6 +6,8 @@ import {
   isAppSurfaceRootFile,
   isReferenceCorpusPath,
 } from './publish-surface.js';
+import { isSensitiveDeployPath } from './vendor/deploy-paths.js';
+import { shellQuote } from './next-actions.js';
 
 // Directories / files never uploaded. Mirrors the deploy collector.
 export const IGNORE = new Set([
@@ -103,7 +105,14 @@ export interface CollectedFiles {
   /** Root files held back because they are not part of the app (notes, logs,
    *  transcripts). Always printed by name — see printExcludedFiles. */
   excluded: Array<{ path: string; reason: string }>;
+  /** Credentials and private-key files, by the deploy API's own path policy
+   *  (src/lib/vendor/deploy-paths.ts). Never read, never uploaded, and no
+   *  opt-in reopens them. `referencedBy` lists published source files whose
+   *  text contains the file's name: a filename match, not import analysis. */
+  sensitive: Array<{ path: string; reason: string; referencedBy: string[] }>;
 }
+
+export const SENSITIVE_FILE_REASON = 'credentials or private-key file — never uploaded';
 
 export interface CollectOptions {
   /** Root files to publish on purpose (`somewhere deploy --include NOTES.md`). */
@@ -116,7 +125,7 @@ export interface CollectOptions {
 /** Walk a directory tree and bucket every file into static / binary / function,
  *  applying the same path remapping the deploy command uses. */
 export function collectFiles(baseDir: string, options: CollectOptions = {}): CollectedFiles {
-  const out: CollectedFiles = { files: {}, binaryFiles: {}, functions: {}, skipped: [], excluded: [] };
+  const out: CollectedFiles = { files: {}, binaryFiles: {}, functions: {}, skipped: [], excluded: [], sensitive: [] };
   const ignore = loadDeployIgnore(baseDir);
   const candidates: string[] = [];
   walk(baseDir, baseDir, out, ignore, candidates);
@@ -159,23 +168,32 @@ export function collectFiles(baseDir: string, options: CollectOptions = {}): Col
     }
   }
 
+  // Published text files only; a sensitive file is never a candidate, so its
+  // contents are never read here.
+  const corpusFiles = (paths: string[]) => paths.filter(isReferenceCorpusPath).map((relPath) => {
+    try {
+      return [relPath, readFileSync(join(baseDir, relPath), 'utf-8')] as const;
+    } catch {
+      return [relPath, ''] as const;
+    }
+  });
   if (deferred.length > 0) {
-    const corpus = publish
-      .filter(isReferenceCorpusPath)
-      .map((relPath) => {
-        try {
-          return readFileSync(join(baseDir, relPath), 'utf-8');
-        } catch {
-          return '';
-        }
-      })
-      .join('\n');
+    const corpus = corpusFiles(publish).map(([, text]) => text).join('\n');
     for (const relPath of deferred) {
       if (corpus.includes(relPath)) publish.push(relPath);
       else out.excluded.push({ path: relPath, reason: excludedRootFileReason(relPath) });
     }
   }
   out.excluded.sort((a, b) => a.path.localeCompare(b.path));
+
+  if (out.sensitive.length > 0) {
+    const published = corpusFiles(publish);
+    for (const entry of out.sensitive) {
+      const name = entry.path.slice(entry.path.lastIndexOf('/') + 1);
+      entry.referencedBy = published.filter(([, text]) => text.includes(name)).map(([relPath]) => relPath);
+    }
+    out.sensitive.sort((a, b) => a.path.localeCompare(b.path));
+  }
 
   for (const relPath of publish) classifyInto(out, baseDir, relPath, options.readBinary !== false);
   return out;
@@ -211,6 +229,12 @@ function walk(
       continue;
     }
     if (!entry.isFile()) continue;
+    // The deploy API refuses these paths in any folder; hold them back here,
+    // before their contents are read or any request is made.
+    if (isSensitiveDeployPath(relPath)) {
+      out.sensitive.push({ path: relPath, reason: SENSITIVE_FILE_REASON, referencedBy: [] });
+      continue;
+    }
     // Editor declarations are regenerated from source by the deploy compiler.
     // Uploading a local copy would introduce duplicate or stale client types.
     if ((entry.name === DATA_DECLARATION_FILE || entry.name === FILES_DECLARATION_FILE)
@@ -397,4 +421,20 @@ function globToRegExp(pattern: string): RegExp {
 
 function escapeRegExp(ch: string): string {
   return /[\\^$+?.()|[\]{}]/.test(ch) ? `\\${ch}` : ch;
+}
+
+/** Refusal text when published source names a held-back credentials file, or
+ *  null. Names paths only; never the file's contents. */
+export function sensitiveReferenceRefusal(collected: Pick<CollectedFiles, 'sensitive'>): string | null {
+  const referenced = collected.sensitive.filter((entry) => entry.referencedBy.length > 0);
+  if (referenced.length === 0) return null;
+  const example = referenced[0];
+  const envName = example.path.slice(example.path.lastIndexOf('/') + 1).replace(/[^A-Za-z0-9]+/g, '_').replace(/^_+|_+$/g, '').toUpperCase() || 'SECRET';
+  return [
+    'Nothing was sent. Your source references a credentials or private-key file that is never uploaded:',
+    ...referenced.map((entry) => `  ${entry.referencedBy.join(', ')} mentions ${entry.path}`),
+    'This is a filename match in your source, not an import analysis. Code that loads the file would fail once deployed, because the file is not published.',
+    `To use it, keep it out of your source: save it as a project secret (somewhere env set ${envName} --stdin < ${shellQuote(example.path)}) and read it inside a function with sw.env.${envName}.`,
+    'If nothing loads it (for example, only a comment mentions it), add it to .somewhereignore or move it out of this folder, then run the command again.',
+  ].join('\n');
 }

@@ -287,7 +287,8 @@ export function temporaryConfigExpired(
   return Number.isFinite(expiresMs) && expiresMs <= nowMs;
 }
 
-/** A stored credential the platform would accept — read WITHOUT `getToken()`,
+/** A stored credential that is not locally known to be expired. Says nothing
+ *  about whether the platform still accepts it. Read WITHOUT `getToken()`,
  *  whose "Not logged in" / "Temporary session expired" paths exit the process. */
 export function hasUsableCredential(config: CliConfig | null = loadConfig()): boolean {
   return Boolean(config?.token) && !temporaryConfigExpired(config);

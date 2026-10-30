@@ -1796,11 +1796,11 @@ export function printExcludedFiles(
   if (remember) markPublishNoticeSeen(targetDir);
 }
 
-/** Credentials and private-key files held back by the deploy path policy.
+/** Files held back by the sensitive-path policy (vendored deploy path policy).
  *  Neither --include nor a "!" line publishes them. */
 export function printSensitiveFiles(sensitive: CollectedFiles['sensitive']): void {
   info(`Never uploaded (${sensitive.length}): ${sensitive.map((e) => e.path).join(', ')}`);
-  info(dim('Credentials and private-key files stay on your machine; --include and "!" lines do not publish them. Store a secret your code needs with `somewhere env set` and read it with sw.env in a function.'));
+  info(dim('Files blocked by the sensitive-path policy stay on your machine; --include and "!" lines do not publish them. The policy matches file names only: a secret under any other name uploads like any other file. Store a secret your code needs with `somewhere env set` and read it with sw.env in a function.'));
 }
 
 /** Why a dry run stops before reaching the platform (pfb_a0af8bb647dc). */

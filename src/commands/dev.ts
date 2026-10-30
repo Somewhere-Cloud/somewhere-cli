@@ -858,7 +858,7 @@ async function runHotDeploy(opts: { project?: string; publishFirst?: boolean; js
       const rel = relative(cwd, p);
       if (!rel || rel.startsWith('..')) return false;
       const segments = rel.split(/[\\/]/);
-      // Credentials and private-key files are never uploaded (deploy path policy).
+      // Files the sensitive-path policy names are never uploaded.
       return isSensitiveDeployPath(segments.join('/')) || segments.some(
         (seg) => IGNORE.has(seg) || (seg.startsWith('.') && seg !== '.' && seg !== ''),
       );

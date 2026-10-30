@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.38.4
+
+### Changed
+
+- `somewhere deploy --dry-run` no longer creates anything. Signed out, or in a
+  folder that is not linked to a project, it stops before contacting Somewhere:
+  no temporary workspace, no project, no link and no change to project or login
+  files. It says so and points to `somewhere typecheck` and `somewhere lint`,
+  which check your code without contacting Somewhere, or to `somewhere deploy`.
+  In a linked folder it shows the deploy's changes as before, and it no longer
+  records the one-time "not published" notice in `.somewhere.json`.
+- Tests stay on your machine by default: `*.test.*` and `*.spec.*` source
+  files, and anything in a `tests/` or `__tests__/` folder, are listed under
+  "Not published". To publish one, use `somewhere deploy --include <path>` or a
+  `!<path>` line in `.somewhereignore`. `--include tests` or `!tests/` publishes
+  the whole folder, for an app that imports helpers from it. `.env` files stay
+  excluded either way, and `.well-known` keeps publishing.
+- No new commands, options or dependencies. `--include` now also takes a test
+  folder, as above.
+
 ## 0.38.3
 
 ### Changed

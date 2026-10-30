@@ -539,7 +539,7 @@ export function registerDeploy(program: Command) {
     )
     .option(
       '--dry-run',
-      'Show what would change (added / modified / removed files) without deploying',
+      'Show what would change (added / modified / removed files) in an already deployed project, without deploying. Never creates a project or a temporary workspace.',
     )
     .option(
       '--replace-functions',
@@ -567,8 +567,8 @@ export function registerDeploy(program: Command) {
     )
     .option(
       '--include <paths>',
-      'Publish a root file the deploy would otherwise hold back, e.g. --include NOTES.md ' +
-        '(comma-separate several, or repeat the flag). A "!NOTES.md" line in .somewhereignore does the same thing permanently.',
+      'Publish a file or folder the deploy would otherwise hold back, e.g. --include NOTES.md or --include tests ' +
+        '(comma-separate several, or repeat the flag). A "!NOTES.md" or "!tests/" line in .somewhereignore does the same thing permanently.',
       (value: string, previous: string[] = []) =>
         previous.concat(value.split(',').map((v) => v.trim()).filter(Boolean)),
     )
@@ -658,6 +658,22 @@ export function registerDeploy(program: Command) {
       // The throwaway minted beside a real login belongs to this project root
       // only; another directory gets its own (pfb_29428f76480e).
       const projectRoot = canonicalProjectRoot(targetDir);
+
+      // A dry run reads; it never provisions (pfb_a0af8bb647dc). Comparing
+      // needs a credential that can already open an existing project. Without
+      // one, minting a temporary account or creating a project to compare
+      // against would be the side effect a dry run promises not to have.
+      if (opts.dryRun && useTemporary) {
+        const canReuse = besideRealLogin ? isTempSessionLive(sideCar) : hasReusableTempCredential(storedConfig);
+        const hasTarget = Boolean(opts.project)
+          || (besideRealLogin ? Boolean(tempProjectFor(sideCar, projectRoot)) : Boolean(findProjectConfigEntry(targetDir)));
+        if (!canReuse || !hasTarget) {
+          const message = formatDryRunNeedsProjectExplanation();
+          if (opts.json) printJsonError('DRY_RUN_NEEDS_PROJECT', message);
+          else console.error(message);
+          process.exit(1);
+        }
+      }
 
       let token: string;
       if (useTemporary) {
@@ -846,7 +862,7 @@ export function registerDeploy(program: Command) {
         }
       }
 
-      if (tempSession && projectId) {
+      if (tempSession && projectId && !opts.dryRun) {
         if (besideRealLogin) {
           tempSession.handoffReady = false;
         } else {
@@ -906,7 +922,8 @@ export function registerDeploy(program: Command) {
       // missing without anyone noticing.
       if (excluded.length && !opts.json) {
         spinner?.stop();
-        printExcludedFiles(excluded, targetDir);
+        // A dry run leaves .somewhere.json as it found it.
+        printExcludedFiles(excluded, targetDir, { remember: !opts.dryRun });
         if (process.stderr.isTTY) spinner?.start();
       }
 
@@ -1746,17 +1763,31 @@ const isInternalPath = (p: string) =>
 export function printExcludedFiles(
   excluded: Array<{ path: string; reason: string }>,
   targetDir: string,
+  { remember = true }: { remember?: boolean } = {},
 ): void {
   info(`Not published (${excluded.length}): ${excluded.map((e) => e.path).join(', ')}`);
   if (publishNoticeSeen(targetDir)) return;
   info(
     dim(
-      'Notes, logs and scratch files in your project root that nothing in your app uses stay on your machine. ' +
+      'Notes, logs and scratch files in your project root that nothing in your app uses stay on your machine, ' +
+        'and so do *.test.* and *.spec.* source files and anything in a tests/ or __tests__/ folder. ' +
         'Every other file in this folder, subfolders included, is uploaded with your app. ' +
-        'To publish one of these root files on purpose: somewhere deploy --include <file>, or add a "!<file>" line to .somewhereignore.',
+        'To publish one of these files on purpose: somewhere deploy --include <file>, or add a "!<file>" line to .somewhereignore.',
     ),
   );
-  markPublishNoticeSeen(targetDir);
+  if (remember) markPublishNoticeSeen(targetDir);
+}
+
+/** Why a dry run stops before reaching the platform (pfb_a0af8bb647dc). */
+export function formatDryRunNeedsProjectExplanation(): string {
+  return [
+    'A dry run compares this folder with a project you have already deployed, and there is none to compare with here:',
+    'this folder is not linked to a project, or you are not signed in.',
+    'Nothing was created, no temporary workspace was started, and no project or login files were changed.',
+    '',
+    'To check your code without contacting Somewhere: `somewhere typecheck` and `somewhere lint`.',
+    'To deploy for real (signed out, this starts a temporary workspace): `somewhere deploy`.',
+  ].join('\n');
 }
 
 function printDryRun(plan: DryRunResult, scope?: 'functions' | 'static') {

@@ -114,7 +114,7 @@ for (const [label, setup] of [
     const before = { config: snapshot(fx.configDir), app: snapshot(fx.app) };
     const r = await run(['deploy', '--dry-run'], fx.app, fx.configDir);
     assertRefusedWithoutSideEffects(r, fx, before);
-    assert.match(r.stderr, /Nothing was created, no temporary workspace was started, and no files were written\./);
+    assert.match(r.stderr, /Nothing was created, no temporary workspace was started, and no project or login files were changed\./);
     assert.match(r.stderr, /`somewhere typecheck` and `somewhere lint`/);
     assert.doesNotMatch(r.all, /deploy-check|proof-of-work|Claim URL|nothing was deployed/i);
   });

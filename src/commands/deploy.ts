@@ -1783,7 +1783,7 @@ export function formatDryRunNeedsProjectExplanation(): string {
   return [
     'A dry run compares this folder with a project you have already deployed, and there is none to compare with here:',
     'this folder is not linked to a project, or you are not signed in.',
-    'Nothing was created, no temporary workspace was started, and no files were written.',
+    'Nothing was created, no temporary workspace was started, and no project or login files were changed.',
     '',
     'To check your code without contacting Somewhere: `somewhere typecheck` and `somewhere lint`.',
     'To deploy for real (signed out, this starts a temporary workspace): `somewhere deploy`.',

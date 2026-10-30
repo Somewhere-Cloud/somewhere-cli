@@ -25,7 +25,12 @@ const SENSITIVE_EXTENSION_RE = /\.(?:pem|key|p12|pfx)$/i;
 // renders a credentials form, or a page documenting them, is normal customer
 // code (rule 9: the guard must not reject the legitimate pattern). Bare
 // `credentials` with no extension stays blocked: that shape is a secrets file.
-const SENSITIVE_BASENAME_RE = /^(?:credentials(?:\.(?:json|ya?ml|toml|ini|txt|env|cfg|conf|properties))?|secrets?(?:\.(?:json|ya?ml|toml|ini))?|service[-_.]?account(?:[-_.]?key)?\.json)$/i;
+// The Firebase Admin SDK key file is downloaded as
+// `<project>-firebase-adminsdk-<id>-<hex>.json` (pfb_eabb4ff5c759). Only that
+// name shape: firebase.json, firebase-config.json, google-services.json and
+// other client config stay deployable. A key renamed to anything else is not
+// covered by this name rule.
+const SENSITIVE_BASENAME_RE = /^(?:credentials(?:\.(?:json|ya?ml|toml|ini|txt|env|cfg|conf|properties))?|secrets?(?:\.(?:json|ya?ml|toml|ini))?|service[-_.]?account(?:[-_.]?key)?\.json|(?:[a-z0-9][a-z0-9-]*-)?firebase-adminsdk(?:-[a-z0-9]+)*\.json)$/i;
 // `.env.example` / `.env.sample` / `.env.template` exist SPECIFICALLY to carry
 // no secrets — they are the committed placeholder every real repo ships, so
 // blocking them failed a customer's first deploy with a message implying we

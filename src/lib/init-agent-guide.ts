@@ -5,39 +5,35 @@ import { SKILLS_DIR, skillNames } from './skills-pack.js';
 // docs lint byte-compares this value when SOMEWHERE_CLI_REPO points here.
 export const AGENT_WORKFLOW = `## Getting started — build, deploy, verify
 
-\`somewhere init --name <slug>\` creates a React + TypeScript app; no login needed.
-Default: sign-in UI. Minimal: SDK and auth route. Bare: neither. \`init --catalog --json\` lists \`--features\` modules.
-\`npx @somewhere-cloud/cli deploy\` publishes a temporary app and prints its live
-URL, claim URL and expiry. Login is needed for account-owned operations,
-the email test inbox and cron. On a hosted VM, \`somewhere login\` uses browser approval and keeps you signed in.
+\`somewhere init --name <slug>\` writes React + TypeScript. Signed out: local only;
+signed in: also creates and links a project.
+Default: sign-in UI; minimal: SDK/auth route; bare: neither. \`init --catalog --json\`: modules.
+\`npx @somewhere-cloud/cli deploy\` publishes raw source: signed out, a temporary URL, claim URL
+and expiry; linked, your account project. On a hosted VM, \`somewhere login\` uses browser approval and keeps you signed in.
+Account operations, test inbox and cron need login.
 Start auth/data/cron with \`somewhere docs recipe-signed-in-app --full\`.
 
 After edits: \`somewhere typecheck\` and focused local/browser tests. Publish:
 1. \`somewhere deploy\` (do not build first). Deploy
-   checks compilation, schema and secrets, refusing a blank page
-   before going live; \`somewhere deploy-check\` runs them without publishing
+   checks compilation, schema and secrets; \`somewhere deploy-check\` runs them without publishing
    (diagnosis, review, \`--run /api/x\`).
-2. Run \`somewhere verify\` once on the final deployed journey (or
-   \`--flow flow.json\`); rerun after fixes. Sign test users up
+2. Run \`somewhere verify\` on the final journey (\`--flow flow.json\`); rerun after fixes. Sign test users up
    in-app at \`*.test.somewhere.site\`; more: \`actors\` + \`journey\` (\`somewhere docs browser\`).
-3. \`somewhere browser\` inspects a page; \`somewhere logs --tail 10\`, then
-   \`somewhere errors\`: read the failure first.
+3. Inspect: \`somewhere browser\`; diagnose: \`somewhere logs --tail 10\`, \`somewhere errors\`.
 4. Test mail: \`somewhere email test-inbox <addr>\` includes \`verification_code\`.
    Don't retest sign-in or \`sw.db.from\` scoping; test each table's scope, auth before \`sw.db.server\`/raw SQL, bad input and journeys.
 
-Routes: \`index.html\` loads \`src/main.tsx\`; every extensionless path with no file
-(\`/signin\`) serves \`index.html\`, so one app routes by \`location.pathname\`.
+Routes: \`index.html\` loads \`src/main.tsx\`; unmatched extensionless paths
+(\`/signin\`) serve it. Route the app by \`location.pathname\`.
 \`api/notes/[id].ts\` is \`/api/notes/:id\`; \`_\`-prefixed names are import-only
-helpers. Avoid names differing only in letter case (\`SignIn.tsx\`, \`signin.tsx\`).
+helpers. Avoid names differing only in case.
 
 With auth enabled, \`api/auth/[...path].ts\` is
 \`export { somewhereAuth as default } from '@somewhere-cloud/sdk/server'\`; pages
-use \`createSomewhereAuth()\` from \`@somewhere-cloud/sdk/auth\` (no SDK:
-\`docs({ topic: 'auth-client' })\`). \`auth.signUp({ email, password,
+use \`createSomewhereAuth()\` from \`@somewhere-cloud/sdk/auth\` (client and React hooks:
+\`somewhere docs auth-client --section react-auth-state\`). \`auth.signUp({ email, password,
 displayName? })\` / \`auth.signIn({ email, password })\` return the user or throw
-with the message. Gate pages on \`auth.getState().status\` (React:
-\`useAuthState()\`) as the auth starter's \`src/App.tsx\` does. Sign-up signs the user
-in with \`email_verified: false\`; unverified users can sign in and pass
+with the message. Gate on \`auth.getState().status\` (React: \`useAuthState()\`). Sign-up sets \`email_verified: false\`; unverified users pass
 \`auth: 'required'\`. \`sw.auth.requireUser(req)\` returns \`{ id, email,
 role, email_verified, … }\` or throws 401 \`AUTH_REQUIRED\`;
 \`sw.auth.fromRequest(req)\` returns it or \`null\`.
@@ -48,10 +44,13 @@ async ({ body, user, params }, sw) => value })\`; set \`auth\` (\`'required'\`,
 function (req, sw)\` returning a \`Response\`. Params: \`params.id\` there,
 \`sw.params.id\` bare; \`somewhere typecheck\` types bare handlers too.
 
-Data: declare tables in \`db/schema.ts\`; pages use \`somewhere:data\`
+Data: \`id()\` is a random text key; use \`text()\` for references to it.
+Declare tables in \`db/schema.ts\`; pages use \`somewhere:data\`
 (\`data.notes.list()\`, \`.create()\`, \`.update(id, …)\`) without API files.
 Use \`owner()\` for personal rows, \`group()\` for invited teams, \`appRole()\`
 for app-wide roles, \`anyOf()\` for owner or a role, \`allOf()\` for members-only rows.
+Booking/help desk: \`somewhere docs sw.db --section provider-or-booker-and-owner-or-staff-recipes\`.
+Keep fitting scopes when an exceptional write needs \`sw.db.server.tx\`.
 \`shared()\` gives signed-in reads and creator-only writes. \`client\` sets browser
 columns; \`publicRead: { where }\` admits visitors. Public-profile enquiries use
 \`client.intake\` (\`somewhere docs declared-data\`). Keep scopes and grants;
@@ -69,8 +68,7 @@ await sw.db.server.insert('entries', { user_id: profile.user_id, owner_email: pr
   title: title.trim(), from_email, created_ms: Date.now() });
 \`\`\`
 
-The owner comes from that lookup, never the body; the sender is not the
-owner. Rate limits and the alert are in \`somewhere docs recipe-signed-in-app\`.
+Use the looked-up owner, never the body. Rate limits/alerts: \`recipe-signed-in-app\`.
 Use \`serverOnly()\` only when every operation needs a function's own access check.
 Structured queries: \`sw.db.from\` / \`insert\` / \`update\` / \`remove\` return \`{ data: rows[], count,
 changes }\`; \`where: { a: 1, b: { in: ids }, c: { gte: 2 }, d: null }\` (one

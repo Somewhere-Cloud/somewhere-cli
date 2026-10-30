@@ -689,7 +689,7 @@ test('init creates the green starter, --bare keeps only the workflow guide, and 
     assert.match(readFileSync(join(empty, 'src/auth/hooks.ts'), 'utf8'), /useAuthState as useSdkAuthState/);
     assert.match(readFileSync(join(empty, 'src/config.ts'), 'utf8'), /APP_NAME = "Scaffold App"/);
     assert.throws(() => readFileSync(join(empty, 'db/schema.ts')), /ENOENT/, 'private data is opt-in');
-    assert.match(readFileSync(join(empty, 'AGENTS.md'), 'utf8'), /somewhere verify` once on the final deployed journey/);
+    assert.match(readFileSync(join(empty, 'AGENTS.md'), 'utf8'), /Run `somewhere verify` on the final journey/);
     assert.equal(
       readFileSync(join(empty, 'CLAUDE.md'), 'utf8'),
       'Read AGENTS.md for project instructions.\n',
@@ -731,7 +731,7 @@ test('init creates the green starter, --bare keeps only the workflow guide, and 
     for (const file of ['.claude/settings.json', '.codex/hooks.json', '.mcp.json']) assert.equal(existsSync(join(bare, file)), false);
     assert.throws(() => readFileSync(join(bare, 'package.json')), /ENOENT/);
     assert.throws(() => readFileSync(join(bare, 'src/App.tsx')), /ENOENT/);
-    assert.match(readFileSync(join(bare, 'AGENTS.md'), 'utf8'), /somewhere verify` once on the final deployed journey/);
+    assert.match(readFileSync(join(bare, 'AGENTS.md'), 'utf8'), /Run `somewhere verify` on the final journey/);
     assert.equal(readFileSync(join(bare, 'CLAUDE.md'), 'utf8'), 'Read AGENTS.md for project instructions.\n');
 
     // An existing guide is the developer's: --bare adds only what is absent.

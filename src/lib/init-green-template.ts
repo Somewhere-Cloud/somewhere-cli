@@ -138,11 +138,17 @@ the greeting message; add caller authorization before serving private data.
 The SDK and \`api/auth/[...path].ts\` are included; add your sign-in UI or use
 \`somewhere init --template auth\` for the complete sign-in screens.
 
-When replacing the greeting, remove its page/service files and mark its
-already-deployed table with \`greetings: removedTable()\` in the schema (import
-\`removedTable\` from \`somewhere/db\`). A deploy retires it with the normal
-30-day retention; deleting the declaration alone is refused. Remove an unused
-\`types/app.ts\` too. A missing optional include directory is harmless.
+When replacing the greeting, remove its page/service files. If this table has
+never been deployed, delete its schema declaration. If it has been deployed,
+use \`greetings: removedTable()\` (import \`removedTable\` from \`somewhere/db\`);
+the deploy retires it with 30-day retention, even if it is empty. Remove an
+unused \`types/app.ts\` too. A missing optional include directory is harmless.
+
+The greeting's \`serverOnly()\` scope demonstrates a trusted public endpoint;
+it is not the default for your app's data. Choose fitting declared access
+before the first deploy: \`owner()\` for personal rows, \`group()\` for teams,
+and \`anyOf()\` for combined access. Read \`somewhere docs sw.db --section
+provider-or-booker-and-owner-or-staff-recipes\` for booking and help-desk rules.
 
 \`\`\`sh
 somewhere typecheck

@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.38.2
+
+### Changed
+
+- The bundled schema-changes skill says that `removedTable()` retires a deployed
+  table with 30-day data retention, instead of pointing to a description "above"
+  that the skill does not include. The bundled skills match the platform's served
+  pack.
+- The minimal starter's README keeps the booking and help-desk recipe command on
+  one line.
+- No command, option or dependency changes.
+
 ## 0.38.1
 
 ### Changed

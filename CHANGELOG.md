@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.38.1
+
+### Changed
+
+- `somewhere init` writes the current agent workflow, skills and minimal starter
+  guidance. `AGENTS.md` matches the published platform workflow: `id()` is a
+  random text key referenced with `text()`, fitting declared scopes stay in place
+  when an exceptional write needs `sw.db.server.tx`, and the sign-in starter modes
+  are listed on one line. The bundled skills match the platform's served pack.
+- The minimal starter's README says to delete a table declaration that was never
+  deployed and to use `removedTable()` for a deployed table, even an empty one.
+  It also notes that the greeting's `serverOnly()` scope is a demonstration, not
+  the default for app data, and points to the booking and help-desk recipes.
+- No command, option or dependency changes.
+
 ## 0.38.0
 
 ### Changed

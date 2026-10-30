@@ -49,6 +49,7 @@ const SECRETS = {
   'nested/deep/secrets.json': `{"k":"${CANARY}"}\n`,
   'credentials/prod.txt': `${CANARY}\n`,
   'certs/client.p12': `${CANARY}\n`,
+  'config/acme-firebase-adminsdk-fbsvc-1a2b3c4d5e.json': `{"private_key":"${CANARY}"}\n`,
 };
 // Legitimate files whose names resemble the policy's words.
 const LEGIT = {
@@ -64,6 +65,9 @@ const LEGIT = {
   'src/pem-viewer.tsx': 'export const PemViewer = 1;\n',
   'config/firebase.json': '{"hosting":{}}\n',
   'config/app.json': '{"theme":"dark"}\n',
+  'config/firebase-config.json': '{"apiKey":"public"}\n',
+  'android/google-services.json': '{"project_info":{}}\n',
+  'src/firebase-adminsdk.ts': 'export const admin = 1;\n',
 };
 
 test('FIRES: credentials and private-key files in any folder are held back, never uploaded, never read', () => {
@@ -87,7 +91,8 @@ test('LEGITIMATE: credentials.ts/tsx/md, .well-known, keys.ts, secret-santa.ts, 
   assert.deepEqual(c.sensitive, []);
   const up = uploaded(c);
   for (const path of ['credentials.ts', 'src/components/credentials.tsx', 'docs/credentials.md', '.well-known/security.txt',
-    'src/keys.ts', 'src/key-value.ts', 'api/secret-santa.ts', 'src/pem-viewer.tsx', 'config/firebase.json', 'config/app.json']) {
+    'src/keys.ts', 'src/key-value.ts', 'api/secret-santa.ts', 'src/pem-viewer.tsx', 'config/firebase.json', 'config/app.json',
+    'config/firebase-config.json', 'android/google-services.json', 'src/firebase-adminsdk.ts']) {
     assert.ok(up.includes(path), `${path} uploads`);
   }
   assert.ok(up.some((p) => p.endsWith('.well-known/assetlinks.json')), 'public/.well-known uploads');
@@ -251,7 +256,7 @@ test('deploy --dry-run keeps the remote diff, discloses the upload, and sends no
   assert.equal(deploys.length, 1);
   assert.equal(deploys[0].body.dry_run, true, 'the dry run is still computed by the platform');
   assert.match(r.all, /Dry run: sending \d+ files \(.+\) to Somewhere to compute the change\. Nothing is published\./);
-  assert.match(r.all, /Never uploaded \(8\): /);
+  assert.match(r.all, /Never uploaded \(9\): /);
   assert.match(r.all, /Files blocked by the sensitive-path policy stay on your machine/);
   assert.match(r.all, /matches file names only: a secret under any other name uploads like any other file/);
   assert.doesNotMatch(deploys[0].raw, new RegExp(CANARY), 'no secret byte in the request');

@@ -1,5 +1,36 @@
 # Changelog
 
+## 0.38.5
+
+### Changed
+
+- Files blocked by the deploy's sensitive-path policy never leave your
+  machine. The CLI now applies the same policy Somewhere applies to every
+  uploaded path, while it collects files: before any file is read into an
+  upload and before any request. The policy matches file names only, in any
+  folder: private-key files (`id_rsa`, `*.pem`, `*.key`, `*.p12`, `*.pfx`),
+  `credentials` data files (`credentials.json`, `credentials.yaml`, …), secrets
+  files (`secrets.json`, `secrets.yaml`, …), `service-account.json`,
+  `service-account-key.json` and the Firebase Admin SDK key file
+  (`<project>-firebase-adminsdk-<id>.json`). Dotfiles such as `.env` were
+  already never uploaded. This filename policy does not detect secrets under
+  other names. Held-back files are listed under "Never uploaded", and neither
+  `--include` nor a `!` line in `.somewhereignore` or `.gitignore` publishes
+  them. `credentials.ts`,
+  `credentials.tsx`, `credentials.md`, `.well-known/` and ordinary config such
+  as `firebase.json` and `google-services.json` are not affected by this policy.
+- When your published code mentions one of those files by name, `deploy`,
+  `deploy --dry-run`, `deploy-check` and `preview` stop before contacting
+  Somewhere, name the file and the code that mentions it, and suggest storing it
+  as a project secret (`somewhere env set NAME --stdin < file`, read with
+  `sw.env.NAME` in a function). This is a filename match in your code, not an
+  import analysis; documentation such as `README.md` is not searched. If nothing
+  loads the file, add it to `.somewhereignore` or move it out of the folder.
+- `somewhere deploy --dry-run` now says, in its help and in its human-readable
+  output before it runs, that the files a deploy would publish are sent to
+  Somewhere to compute the change and that nothing is published. A dry run
+  still works this way. `--dry-run --json` output is unchanged.
+
 ## 0.38.4
 
 ### Changed

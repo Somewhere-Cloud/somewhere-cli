@@ -291,12 +291,17 @@ export function registerAuth(program: Command) {
         // must NOT report success. Show the cached identity, then exit non-zero.
         // A revoked session (dashboard "Revoke", `somewhere logout` elsewhere)
         // says so in the platform's own words rather than guessing "expired".
-        const revoked = err instanceof CliApiError && err.statusCode === 401 && /revoked/i.test(err.message);
+        // Only a 401 is about the login; an outage or a dropped connection is not,
+        // and must not send a working login to `somewhere login`.
+        const rejected = err instanceof CliApiError && err.statusCode === 401;
+        const revoked = rejected && /revoked/i.test(err.message);
         const message = revoked
           ? err.message
-          : 'Could not fetch account details — token may be expired. Run: somewhere login';
+          : rejected
+            ? 'Could not fetch account details — token may be expired. Run: somewhere login'
+            : `Could not check this login: ${err instanceof Error ? err.message : String(err)}. The stored login was not changed; run the command again once the platform answers.`;
         if (opts.json) {
-          printJson({ error: revoked ? 'SESSION_REVOKED' : 'WHOAMI_FAILED', message });
+          printJson({ error: revoked ? 'SESSION_REVOKED' : rejected ? 'WHOAMI_FAILED' : 'WHOAMI_UNAVAILABLE', message });
           process.exitCode = 1;
           return;
         }
@@ -339,11 +344,21 @@ export function registerAuth(program: Command) {
         const me = await client.call<{ email?: string; username?: string }>(
           'GET',
           '/auth/platform-me',
+          undefined,
+          undefined,
+          { refresh: false },
         );
         email = me.email ?? '';
         username = me.username ?? '';
       } catch (err) {
-        error(`Token is not valid: ${err instanceof Error ? err.message : String(err)}`, err);
+        const detail = err instanceof Error ? err.message : String(err);
+        // Only an authentication refusal says the token is bad. An outage, a
+        // non-JSON page or a dropped connection says nothing about it.
+        if (err instanceof CliApiError && err.statusCode === 401) {
+          error(`Token is not valid: ${detail}`, err);
+        } else {
+          error(`Could not verify the token: ${detail}. Nothing was saved and your current login is unchanged; run the command again once the platform answers.`, err);
+        }
         process.exit(1);
       }
       saveConfig({ token, user: { email, username } });

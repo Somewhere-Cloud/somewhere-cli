@@ -373,6 +373,8 @@ export function choosePreviewCandidate(
 export function registerDev(program: Command) {
   program.command('dev')
     .description('Frontend hot reload with API requests proxied to your deployed project. Backend code runs only after deploy or preview.')
+    // dev runs no command of yours: a stray `dev npm run dev` is refused, not ignored.
+    .allowExcessArguments(false)
     .option('--project <id>', 'Override project ID')
     .option('--port <port>', 'Local frontend port', '8787')
     .option('--open', 'Open the local frontend in your browser')

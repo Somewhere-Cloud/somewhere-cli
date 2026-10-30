@@ -73,7 +73,9 @@ export class ApiClient {
     path: string,
     body?: unknown,
     query?: Record<string, string | number | undefined>,
-    opts?: { timeoutMs?: number; baseUrl?: string },
+    /** refresh: false checks THIS client's key only. The refresh path renews the
+     *  stored login, which is a different credential from one being verified. */
+    opts?: { timeoutMs?: number; baseUrl?: string; refresh?: false },
   ): Promise<T> {
     try {
       return await this.request<T>(method, path, body, query, opts);
@@ -83,7 +85,7 @@ export class ApiClient {
         const label = operationLabel(method, path);
         if (label) Object.defineProperty(err, 'operation', { value: label, enumerable: false });
       }
-      if (!(err instanceof CliApiError) || err.code !== 'API_KEY_EXPIRED') throw err;
+      if (!(err instanceof CliApiError) || err.code !== 'API_KEY_EXPIRED' || opts?.refresh === false) throw err;
       const refreshed = await this.refreshAccessKey(opts?.timeoutMs);
       // refreshAccessKey now THROWS a clear re-login error when it can't refresh
       // (no refresh token, or a dead one); a false return is only the rare

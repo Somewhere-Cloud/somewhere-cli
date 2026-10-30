@@ -1,9 +1,10 @@
 // tsk_1108097a: deploy and check report what they UPLOAD, not what the site
-// publishes. The collector is unchanged (subfolders such as tests/ and e2e/
-// are still uploaded, because an app may import helpers from them); the CLI
-// never claims a subfolder is private, and the platform's own warnings about
-// what it keeps private are printed as sent. A server that sends no such
-// warning gets no claim from the CLI either way.
+// publishes. tsk_746516 (founder/task decision, superseding the earlier
+// upload-everything behaviour): a tests/ or __tests__/ folder is held back by
+// default and named as not published; other subfolders such as e2e/ still
+// upload. The CLI never claims a subfolder is private, and the platform's own
+// warnings about what it keeps private are printed as sent. A server that
+// sends no such warning gets no claim from the CLI either way.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
@@ -92,7 +93,7 @@ async function withPlatform(warnings, fn) {
 }
 
 const uploaded = (request) => Object.keys(request.body.files ?? {}).sort();
-const EXPECTED_UPLOAD = ['e2e/run.mjs', 'index.html', 'src/main.js', 'tests/note.txt'];
+const EXPECTED_UPLOAD = ['e2e/run.mjs', 'index.html', 'src/main.js'];
 
 for (const [label, warnings] of [['a server that names private files', [SERVER_WARNING]], ['a server that sends no warning', []]]) {
   test(`deploy with ${label}: uploads subfolders, says "uploaded", and adds no claim of its own`, async () => {
@@ -102,13 +103,13 @@ for (const [label, warnings] of [['a server that names private files', [SERVER_W
       const first = await run(['deploy'], { cwd: dir, env });
       assert.equal(first.status, 0, first.all);
       const deploy = requests.find((r) => r.url === '/v1/deploy');
-      assert.deepEqual(uploaded(deploy), EXPECTED_UPLOAD, 'the collector still uploads tests/ and e2e/');
+      assert.deepEqual(uploaded(deploy), EXPECTED_UPLOAD, 'e2e/ still uploads; tests/ is held back');
       assert.ok(!('NOTES.md' in deploy.body.files), 'an unreferenced root note is still held back');
 
-      assert.match(first.all, /Not published \(1\): NOTES\.md/);
+      assert.match(first.all, /Not published \(2\): NOTES\.md, tests\/note\.txt/);
       assert.match(first.all, /Every other file in this folder, subfolders included, is uploaded with your app\./);
       assert.doesNotMatch(first.all, /A deploy publishes your app/);
-      assert.match(first.all, /4 static files uploaded \(/);
+      assert.match(first.all, /3 static files uploaded \(/);
       assert.doesNotMatch(first.all, /static files? deployed/);
 
       if (warnings.length) {
@@ -121,7 +122,7 @@ for (const [label, warnings] of [['a server that names private files', [SERVER_W
       // The once-per-project explanation is remembered; the named list is not.
       const second = await run(['deploy'], { cwd: dir, env });
       assert.equal(second.status, 0, second.all);
-      assert.match(second.all, /Not published \(1\): NOTES\.md/);
+      assert.match(second.all, /Not published \(2\): NOTES\.md, tests\/note\.txt/);
       assert.doesNotMatch(second.all, /Every other file in this folder/);
     });
   });
@@ -158,7 +159,7 @@ test('deploy-check sends the same upload, names held-back root files truthfully,
     assert.equal(human.status, 0, human.all);
     const check = requests.find((r) => r.url === '/v1/deploy/check');
     assert.deepEqual(uploaded(check), EXPECTED_UPLOAD);
-    assert.match(human.all, /Not published \(1\): NOTES\.md/);
+    assert.match(human.all, /Not published \(2\): NOTES\.md, tests\/note\.txt/);
     assert.match(human.all, /subfolders included, is uploaded with your app/);
     assert.doesNotMatch(human.all, /A deploy publishes your app/);
     assert.equal(human.all.split(SERVER_WARNING).length - 1, 1);
@@ -179,7 +180,7 @@ test('non-TTY deploy prints collection once across all preflight warnings and ke
     const human = await run(['deploy'], { cwd: dir, env });
     assert.equal(human.status, 0, human.all);
     assert.equal(human.stderr.split('Collecting files...').length - 1, 1, human.all);
-    assert.match(human.all, /Not published \(1\): NOTES\.md/);
+    assert.match(human.all, /Not published \(2\): NOTES\.md, tests\/note\.txt/);
     assert.match(human.all, /1 file\(s\) will NOT be uploaded/);
     assert.match(human.all, /linked\.html — symlink \(not followed\)/);
     assert.match(human.all, /This looks like a Node server app/);

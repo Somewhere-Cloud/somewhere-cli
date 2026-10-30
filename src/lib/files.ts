@@ -44,8 +44,41 @@ export function isTestSourcePath(relPath: string): boolean {
   return TEST_SOURCE_NAME.test(relPath.slice(relPath.lastIndexOf('/') + 1));
 }
 
-export function excludedTestFileReason(relPath: string): string {
-  return `test file — publish it with \`somewhere deploy --include ${relPath}\` or a "!${relPath}" line in .somewhereignore`;
+/** The folders held back by default, matched by name at any depth. */
+export const TEST_FOLDERS: readonly string[] = ['tests', '__tests__'];
+
+/** The first folder of relPath that is a test folder, e.g. `src/__tests__`. */
+export function testFolderOf(relPath: string): string | null {
+  const segments = relPath.split('/');
+  for (let i = 0; i < segments.length - 1; i++) {
+    if (TEST_FOLDERS.includes(segments[i].toLowerCase())) return segments.slice(0, i + 1).join('/');
+  }
+  return null;
+}
+
+/**
+ * Why a collected file is held back as a test, or null when it publishes.
+ * `optedIn(path, isDirectory)` answers whether an explicit opt-in names that
+ * path. A folder default is lifted by an opt-in for the file or any folder
+ * above it; the file-name default only by an opt-in for the file itself.
+ */
+export function testExclusionReason(
+  relPath: string,
+  optedIn: (path: string, isDirectory: boolean) => boolean,
+): string | null {
+  const fileOptIn = optedIn(relPath, false);
+  const folder = testFolderOf(relPath);
+  if (folder && !fileOptIn) {
+    const segments = relPath.split('/');
+    const ancestors = segments.slice(0, -1).map((_, i) => segments.slice(0, i + 1).join('/'));
+    if (!ancestors.some((dir) => optedIn(dir, true))) {
+      return `in the ${folder}/ test folder — publish it with \`somewhere deploy --include ${folder}\` or a "!${folder}/" line in .somewhereignore`;
+    }
+  }
+  if (isTestSourcePath(relPath) && !fileOptIn) {
+    return `test file — publish it with \`somewhere deploy --include ${relPath}\` or a "!${relPath}" line in .somewhereignore`;
+  }
+  return null;
 }
 
 export function isFunctionPath(p: string): boolean {
@@ -95,19 +128,22 @@ export function collectFiles(baseDir: string, options: CollectOptions = {}): Col
   // the reference pass, which is deliberately generous: a bare filename
   // anywhere in the published source is enough to publish it.
   const optIn = new Set(
-    (options.include ?? []).map((p) => toDeployPath(p.trim())).filter(Boolean),
+    (options.include ?? []).map((p) => toDeployPath(p.trim()).replace(/^\.\//, '').replace(/\/+$/, '')).filter(Boolean),
   );
   const publish: string[] = [];
   const deferred: string[] = [];
   for (const relPath of candidates) {
-    // A test source file (`*.test.ts`, `*.spec.tsx`, …) is not part of the
-    // app: under api/ it would deploy as a live route, elsewhere as servable
-    // source (pfb_f3cc58a01e76). Test FOLDERS keep uploading as private source
-    // the platform never serves, so app imports from them still resolve. The
-    // opt-ins below re-include one; they run after the ignore, dotfile and
-    // size rules, so they never reopen what those keep out.
-    if (isTestSourcePath(relPath) && !optIn.has(relPath) && !ignore.reincludes(relPath)) {
-      out.excluded.push({ path: relPath, reason: excludedTestFileReason(relPath) });
+    // Tests are not part of the app (pfb_f3cc58a01e76, tsk_746516): a test
+    // source file (`*.test.ts`, `*.spec.tsx`, …) under api/ would deploy as a
+    // live route, and anything in a `tests/` or `__tests__/` folder is held back
+    // by default. An app that imports helpers from a test folder publishes them
+    // explicitly: `--include tests` or a `!tests/` line re-includes the folder,
+    // and an opt-in naming the file re-includes one file. Both run after the
+    // ignore, dotfile and size rules, so they never reopen what those keep out.
+    const testReason = testExclusionReason(relPath, (path, isDirectory) =>
+      optIn.has(path) || ignore.reincludes(path, isDirectory));
+    if (testReason) {
+      out.excluded.push({ path: relPath, reason: testReason });
       continue;
     }
     const isRootFile = !relPath.includes('/');
@@ -267,10 +303,10 @@ class DeployIgnoreMatcher {
 
   /** A `!<pattern>` line naming this path — the explicit "publish it anyway"
    *  opt-in the platform already documents for .somewhereignore. */
-  reincludes(relPath: string): boolean {
+  reincludes(relPath: string, isDirectory = false): boolean {
     const normalized = toDeployPath(relPath);
     return this.rules.some(
-      (rule) => rule.negate && matchesIgnoreRule(rule, normalized, false),
+      (rule) => rule.negate && matchesIgnoreRule(rule, normalized, isDirectory),
     );
   }
 }

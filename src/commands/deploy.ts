@@ -567,8 +567,8 @@ export function registerDeploy(program: Command) {
     )
     .option(
       '--include <paths>',
-      'Publish a root file the deploy would otherwise hold back, e.g. --include NOTES.md ' +
-        '(comma-separate several, or repeat the flag). A "!NOTES.md" line in .somewhereignore does the same thing permanently.',
+      'Publish a file or folder the deploy would otherwise hold back, e.g. --include NOTES.md or --include tests ' +
+        '(comma-separate several, or repeat the flag). A "!NOTES.md" or "!tests/" line in .somewhereignore does the same thing permanently.',
       (value: string, previous: string[] = []) =>
         previous.concat(value.split(',').map((v) => v.trim()).filter(Boolean)),
     )
@@ -1770,7 +1770,7 @@ export function printExcludedFiles(
   info(
     dim(
       'Notes, logs and scratch files in your project root that nothing in your app uses stay on your machine, ' +
-        'and so does any *.test.* or *.spec.* source file. ' +
+        'and so do *.test.* and *.spec.* source files and anything in a tests/ or __tests__/ folder. ' +
         'Every other file in this folder, subfolders included, is uploaded with your app. ' +
         'To publish one of these files on purpose: somewhere deploy --include <file>, or add a "!<file>" line to .somewhereignore.',
     ),

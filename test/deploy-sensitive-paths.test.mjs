@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-// Credentials and private-key files never leave the machine (consumer review of
+// Files the sensitive-path policy names never leave the machine (consumer review of
 // 0.38.4, pfb_8991bd81d349, pfb_1bc48b5a24ae, pfb_856072304b0c). The deploy API
 // refuses these paths in any folder (worker/src/utils/deploy-paths.ts, vendored
 // byte-identical); the CLI now applies the same policy while collecting, before
@@ -215,7 +215,7 @@ for (const [label, args, setup] of [
     const r = await run(args, fx.dir, fx.configDir);
     assert.equal(r.status, 1, r.all);
     assert.deepEqual(requests, [], 'no request reaches the platform');
-    assert.match(r.all, /Nothing was sent\. Your source references a credentials or private-key file/);
+    assert.match(r.all, /Nothing was sent\. Your source references a file blocked by the sensitive-path policy/);
     assert.doesNotMatch(r.all, new RegExp(CANARY));
   });
 }
@@ -252,6 +252,8 @@ test('deploy --dry-run keeps the remote diff, discloses the upload, and sends no
   assert.equal(deploys[0].body.dry_run, true, 'the dry run is still computed by the platform');
   assert.match(r.all, /Dry run: sending \d+ files \(.+\) to Somewhere to compute the change\. Nothing is published\./);
   assert.match(r.all, /Never uploaded \(8\): /);
+  assert.match(r.all, /Files blocked by the sensitive-path policy stay on your machine/);
+  assert.match(r.all, /matches file names only: a secret under any other name uploads like any other file/);
   assert.doesNotMatch(deploys[0].raw, new RegExp(CANARY), 'no secret byte in the request');
   const sent = [...Object.keys(deploys[0].body.files), ...Object.keys(deploys[0].body.functions ?? {}), ...Object.keys(deploys[0].body.binary_files ?? {})];
   for (const path of Object.keys(SECRETS)) assert.ok(!sent.includes(path), `${path} not sent`);

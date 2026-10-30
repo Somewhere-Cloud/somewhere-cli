@@ -105,14 +105,14 @@ export interface CollectedFiles {
   /** Root files held back because they are not part of the app (notes, logs,
    *  transcripts). Always printed by name — see printExcludedFiles. */
   excluded: Array<{ path: string; reason: string }>;
-  /** Credentials and private-key files, by the deploy API's own path policy
+  /** Files the deploy API's sensitive-path policy names
    *  (src/lib/vendor/deploy-paths.ts). Never read, never uploaded, and no
    *  opt-in reopens them. `referencedBy` lists published source files whose
    *  text contains the file's name: a filename match, not import analysis. */
   sensitive: Array<{ path: string; reason: string; referencedBy: string[] }>;
 }
 
-export const SENSITIVE_FILE_REASON = 'credentials or private-key file — never uploaded';
+export const SENSITIVE_FILE_REASON = 'blocked by the sensitive-path policy — never uploaded';
 
 export interface CollectOptions {
   /** Root files to publish on purpose (`somewhere deploy --include NOTES.md`). */
@@ -431,7 +431,7 @@ export function sensitiveReferenceRefusal(collected: Pick<CollectedFiles, 'sensi
   const example = referenced[0];
   const envName = example.path.slice(example.path.lastIndexOf('/') + 1).replace(/[^A-Za-z0-9]+/g, '_').replace(/^_+|_+$/g, '').toUpperCase() || 'SECRET';
   return [
-    'Nothing was sent. Your source references a credentials or private-key file that is never uploaded:',
+    'Nothing was sent. Your source references a file blocked by the sensitive-path policy, which is never uploaded:',
     ...referenced.map((entry) => `  ${entry.referencedBy.join(', ')} mentions ${entry.path}`),
     'This is a filename match in your source, not an import analysis. Code that loads the file would fail once deployed, because the file is not published.',
     `To use it, keep it out of your source: save it as a project secret (somewhere env set ${envName} --stdin < ${shellQuote(example.path)}) and read it inside a function with sw.env.${envName}.`,

@@ -175,3 +175,37 @@ test('vendored runtime declaration matches the platform source', { skip: platfor
   const output = execFileSync(process.execPath, [script, platformSource, '--check'], { encoding: 'utf8' });
   assert.match(output, /parity verified/);
 });
+
+// An auth-required endpoint's user always has an email, as requireUser and the
+// docs promise; the 0.38.5 vendored bundle (pre-1055) still typed it
+// string | null | undefined. Optional auth keeps a nullable user, and a wrong
+// use of the email is still refused.
+test('auth-required endpoint user.email is a string; optional auth and wrong uses are refused', async t => {
+  const ok = await project(t, `export const me = sw.endpoint({
+  auth: 'required',
+  handler: async ({ user }) => {
+    const email: string = user.email;
+    return { email: email.toLowerCase() };
+  },
+});
+`);
+  assert.equal(ok.ok, true, ok.raw);
+  const refused = await project(t, `export const optional = sw.endpoint({
+  auth: 'optional',
+  handler: async ({ user }) => {
+    const email: string = user.email;
+    return { email };
+  },
+});
+export const wrong = sw.endpoint({
+  auth: 'required',
+  handler: async ({ user }) => {
+    const count: number = user.email;
+    return { count };
+  },
+});
+`);
+  assert.equal(refused.ok, false);
+  assert.deepEqual(refused.errors.map(error => [error.line, error.code]), [[4, 'TS2322'], [4, 'TS18047'], [11, 'TS2322']], refused.raw);
+  assert.match(refused.raw, /\(11,\d+\): error TS2322: Type 'string' is not assignable to type 'number'/);
+});

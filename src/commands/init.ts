@@ -4,7 +4,9 @@ import ora from '../lib/spinner.js';
 import { ApiClient } from '../lib/client.js';
 import {
   getToken,
+  hasUsableCredential,
   loadConfig,
+  temporaryConfigExpired,
   hasGlobalMcpConfig,
   saveGlobalMcpConfig,
   saveMcpConfig,
@@ -184,7 +186,12 @@ export function registerInit(program: Command) {
       // Missing credentials never block local source generation. Linking and
       // bare project creation remain account operations; deploy owns anonymous
       // provisioning and its proof-of-work / temporary-session isolation.
-      if (!loadConfig()?.token && !opts.link && !opts.bare) {
+      // An expired temporary session (left by an earlier no-login deploy) is
+      // no credential at all: it never blocks the local starter, and deploy
+      // replaces it with a fresh one (tsk_97979518).
+      const storedConfig = loadConfig();
+      if (!hasUsableCredential(storedConfig) && !opts.link && !opts.bare) {
+        const expiredTemporaryAt = temporaryConfigExpired(storedConfig) ? storedConfig.temp_expires_at : undefined;
         if (existing || existsSync(join(dir, '.somewhere.json')) || !shouldScaffold) {
           error('Local starter generation requires an empty, unlinked directory. Existing files were kept. Run somewhere docs start for the anonymous deploy workflow.');
           process.exit(1);
@@ -200,10 +207,12 @@ export function registerInit(program: Command) {
           const skills = writeInitSkills(dir);
           const next = ['somewhere deploy', 'somewhere docs start'];
           if (opts.json) {
-            printJson({ local: true, linked: false, name: localName, files: scaffold.created, dependencies_installed: false, skills,
+            printJson({ local: true, linked: false, name: localName, dir, files: scaffold.created, dependencies_installed: false, skills,
+              ...(expiredTemporaryAt ? { expired_temporary_session_ignored: expiredTemporaryAt } : {}),
               ...(plan ? { selection: plan.selection, extension_points: extensionPoints(plan.selection) } : {}), next });
           } else {
-            success(`Local starter written (${scaffold.created.length} files); no account or project was created.`);
+            success(`Local starter written to ${dir} (${scaffold.created.length} files); no account or project was created.`);
+            if (expiredTemporaryAt) info(`Ignored the temporary session on this machine that expired at ${expiredTemporaryAt}; somewhere deploy starts a new one.`);
             reportSkills(skills);
             info('Dependencies are not installed. Run npm install if you want to run it locally.');
             info('Next: somewhere deploy — publish with a temporary workspace, no login needed.');
@@ -321,7 +330,7 @@ export function registerInit(program: Command) {
 
         if (shouldScaffold) {
           const scaffold = writeInitScaffold(dir, scaffoldFiles(project.name));
-          success(`Full-stack starter written (${scaffold.created.length} files)`);
+          success(`Full-stack starter written to ${dir} (${scaffold.created.length} files)`);
           reportSkills(writeInitSkills(dir));
           if (template !== 'minimal' || plan) {
             const selection = plan?.selection ?? DEFAULT_AUTH_SELECTION;

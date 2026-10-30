@@ -117,7 +117,7 @@ test('invitation options and automatic-completion outcomes follow the CLI writer
     if (sent.error === null) {
       const role: SomewhereGroupRole = sent.data.group.role;
       const status: 'pending' = sent.data.invite.status;
-      const delivery: 'sent' | 'pending' = sent.data.delivery;
+      const delivery: 'sent' | 'pending' | 'not_sent' = sent.data.delivery;
       const expiry: number = sent.data.invite.expires_at;
       void [role, status, delivery, expiry];
     }

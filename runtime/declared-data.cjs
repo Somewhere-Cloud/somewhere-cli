@@ -810,7 +810,31 @@ interface SomewhereAppRoleGrant {
 interface SomewhereGroupInvitation {
   invite: { id: string; email: string; status: 'pending'; redirect_uri: string; expires_at: number; created_at: number };
   group: { group_id: string; role: SomewhereGroupRole };
-  delivery: 'sent' | 'pending';
+  /** What THIS call sent. not_sent: the address already had this pending
+   *  invitation; it is returned as is and no second email goes out. */
+  delivery: 'sent' | 'pending' | 'not_sent';
+  /** With not_sent: what is known about the invitation's one email.
+   *  sent/queued: the provider took it. unknown: it may have gone out.
+   *  starting: a send may still begin. not_sent: no email went out.
+   *  Nothing is re-sent automatically. After not_sent or unknown,
+   *  revokeInvitation then invite again sends one new email with a new link;
+   *  after unknown the earlier email may still arrive (its link stops working
+   *  once revoked). */
+  email_state?: SomewhereGroupInvitationEmailState;
+}
+
+type SomewhereGroupInvitationEmailState = 'sent' | 'queued' | 'unknown' | 'starting' | 'not_sent';
+
+/** A pending invitation, as its sender or a member who may grant its role sees it. */
+interface SomewhereGroupPendingInvitation {
+  invite_id: string;
+  email: string;
+  role: SomewhereGroupRole;
+  invited_by: string;
+  status: 'pending';
+  created_at: number;
+  expires_at: number;
+  email_state: SomewhereGroupInvitationEmailState;
 }
 
 /**
@@ -847,13 +871,20 @@ type SomewhereGroupsResult<T> = { data: T; error: null } | { data: null; error: 
  */
 interface SomewhereGroups {
   create(req: Request, input: { name: string }): Promise<SomewhereGroupsResult<SomewhereGroupDetail>>;
-  /** Also completes (and reports) up to 3 of the signed-in user's accepted invitations. */
+  /** Also completes (and reports) up to 3 of the signed-in user's invitations not yet confirmed at sign-in. */
   list(req: Request, opts?: SomewhereGroupsPageOptions): Promise<SomewhereGroupsResult<SomewhereGroupsPage<SomewhereGroup> & { invitations: SomewhereGroupInvitationOutcome[] }>>;
   get(req: Request, groupId: string): Promise<SomewhereGroupsResult<SomewhereGroupDetail>>;
   members(req: Request, groupId: string, opts?: SomewhereGroupsPageOptions): Promise<SomewhereGroupsResult<SomewhereGroupsPage<SomewhereGroupMember>>>;
-  /** Invite by email with a role the signed-in user may grant. The platform
-   *  sends one email and adds the member when they accept; no app call is needed. */
+  /** Invite any email with a role the signed-in user may grant. The platform
+   *  sends one email. An address that already belongs to a verified account
+   *  in this app gets access right away; any other joins when it signs in with
+   *  that verified email (the link, or any sign-in). The answer is the same in
+   *  every case; no app call is needed. Inviting an address that already has a
+   *  pending invitation sends nothing. */
   invite(req: Request, groupId: string, input: { email: string; role: SomewhereGroupRole; redirect_uri: string; expires_in?: number }): Promise<SomewhereGroupsResult<SomewhereGroupInvitation>>;
+  /** Pending invitations of one group (oldest first) that the signed-in member could revoke:
+   *  ones they sent, and ones whose role they may grant. A non-member gets GROUP_NOT_FOUND. */
+  invitations(req: Request, groupId: string, opts?: SomewhereGroupsPageOptions): Promise<SomewhereGroupsResult<SomewhereGroupsPage<SomewhereGroupPendingInvitation>>>;
   /** Revoke in the invitation's own group, as its sender or a member who may grant its role. */
   revokeInvitation(req: Request, inviteId: string): Promise<SomewhereGroupsResult<{ revoked: true }>>;
   leave(req: Request, groupId: string): Promise<SomewhereGroupsResult<{ left: true }>>;
@@ -931,10 +962,17 @@ type SomewhereDbUpdate = {
   | { set?: never; increment: SomewhereDbIncrement }
 );
 interface SomewhereDbRemove { where?: SomewhereDbWhere | null }
-type SomewhereDbWriteIntent =
-  | { op: 'insert'; table: string; values: SomewhereDbValues; options?: SomewhereDbPlainInsertOptions | null }
-  | ({ op: 'update'; table: string } & SomewhereDbUpdate)
-  | { op: 'remove'; table: string; where?: SomewhereDbWhere | null };
+// One closed-batch step per declared table, checked like the matching single call
+// (insert values, update set/increment). With no declared tables every name and
+// value stays accepted, as before. Insert and Set pick caller or server identity.
+type __SomewhereDbIntentFor<T extends string, Insert extends 'insert' | 'serverInsert', Set extends 'set' | 'serverSet'> =
+  | { op: 'insert'; table: T; values: __SomewhereDeclared<T, Insert, SomewhereDbValues>; options?: SomewhereDbPlainInsertOptions | null }
+  | ({ op: 'update'; table: T } & SomewhereDbUpdateFor<T, Set>)
+  | { op: 'remove'; table: T; where?: SomewhereDbWhere | null };
+// sw.db.server.tx: server authority may name row identity (owner column, shared authorship).
+type SomewhereDbWriteIntent = { [T in SomewhereDbTable]: __SomewhereDbIntentFor<T, 'serverInsert', 'serverSet'> }[SomewhereDbTable];
+// sw.db.tx: the platform composes row identity from the verified user, as sw.db.insert does.
+type SomewhereDbCallerWriteIntent = { [T in SomewhereDbTable]: __SomewhereDbIntentFor<T, 'insert', 'set'> }[SomewhereDbTable];
 // db/schema.ts's tables, one entry each, generated beside this declaration
 // (declaredTablesDeclaration). With no declared tables it stays empty: any
 // table name is accepted and rows are Record<string, unknown>. Once tables are
@@ -1012,10 +1050,11 @@ interface SomewhereServerDb {
   // an unknown outcome; a rejection never promises rollback or safe replay.
   tx(intents: readonly SomewhereDbWriteIntent[]): Promise<SomewhereDbResult[]>;
 }
-interface SomewhereCallerDb extends Omit<SomewhereServerDb, 'from' | 'count' | 'insert' | 'update'> {
+interface SomewhereCallerDb extends Omit<SomewhereServerDb, 'from' | 'count' | 'insert' | 'update' | 'tx'> {
   // The platform composes row identity from the verified user.
   insert<T extends SomewhereDbTable>(table: T, values: __SomewhereDeclared<T, 'insert', SomewhereDbValues>, options?: SomewhereDbInsertOptions | null): Promise<SomewhereDbInsertResult<SomewhereDbRow<T>>>;
   update<T extends SomewhereDbTable>(table: T, spec: SomewhereDbUpdateFor<T, 'set'>): Promise<SomewhereDbResult<SomewhereDbRow<T>>>;
+  tx(intents: readonly SomewhereDbCallerWriteIntent[]): Promise<SomewhereDbResult[]>;
   from<T extends SomewhereDbTable, const C extends readonly SomewhereDbColumn<T>[] = readonly SomewhereDbColumn<T>[], const I extends readonly SomewhereDbRelationName<T>[] = []>(
     table: T, options?: (SomewhereDbReadOptionsFor<T, C, I> & { asServer?: true }) | null): Promise<SomewhereDbResult<SomewhereDbReadRow<T, C, I>>>;
   count(table: SomewhereDbTable, options?: (SomewhereDbCountOptions & { asServer?: true }) | null): Promise<{ data: number; error: null }>;

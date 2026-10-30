@@ -5,8 +5,8 @@
     "worker/containers/compile/declared-data-contract.cjs": "6afb0b85f333ba8f6c60246857a05f0bcebb54e189f612476516e4a9aea5be35",
     "worker/containers/compile/generated-declarations-render.cjs": "7ffdb34645cc9eccac6eba39dc86b646a41c4de8a1a038d2b5b46f42df9f1157",
     "worker/containers/compile/generated-declarations.cjs": "6e9902e054c5c784fd9b3c3fafc1869e79954100a45014e1132247cd82833ec4",
-    "worker/containers/compile/groups-types.cjs": "69c774890a2e3e12315e01590579a0bdfb5c02de846997b61d4dae17022992c7",
-    "worker/containers/compile/runtime-types.cjs": "ea575ac70d5677eca0676bfbf4f494d9b7ae35b01d5ac5054baee02733450452",
+    "worker/containers/compile/groups-types.cjs": "e587931bdcdb88008b1f9d84828d12f2425aa5ef95619b0d260b556b2a849164",
+    "worker/containers/compile/runtime-types.cjs": "70cb20e7e5248a0f9c52049bf066930ba8e2101695668dcab5478bb9b328cc9b",
     "worker/containers/compile/schema-types.cjs": "78b444d92d3bc072a6d97eacb2bdb82cd5163031ea0a27aa901fd00122668b92",
     "worker/containers/compile/typed-data.cjs": "1c8bec853fbee4ffd34c651076a4e1f4d8b18c0c2be5e99e31df7c9283207627",
     "worker/containers/compile/typed-files.cjs": "a0b1818afbc7673f84583c76436a3b3ca1d1fdf63d8d8db138b36646103f0708",
@@ -33,5 +33,5 @@
     "worker/src/utils/managed-groups/policy.ts": "2c5b48479a2925bea9a820022c63ca5fa827e2ff5531fe1ab6c0b058b7212b39",
     "worker/src/utils/reference-check-inputs.ts": "c909cdc79cb722eb2c5d16dad75a835c03f2288f5a536f75cfae7291f7bcff86"
   },
-  "sha256": "144f89ebb7f2cca5927fe8b943743ff5bb1649f29a9758c5bf7e484a40529385"
+  "sha256": "474563607451e4ebd795d114580fb9ffb8de927d61b34710c056c309c55ce7ee"
 }

@@ -127,7 +127,7 @@ export default (async (req, sw) => {
   await sw.db.server.insert('notes', { user_id: id, title: 'hello' });
   await sw.db.server.insert('inbox', { _sw_author_id: null, message: 'system' });
   const results = await sw.db.server.tx([
-    { op: 'update', table: 'notes', set: { custom_owner: id }, where: { id } },
+    { op: 'update', table: 'notes', set: { user_id: id }, where: { id } },
     { op: 'remove', table: 'notes', where: { id: 'old' } },
   ]);
   return { changes: results[0].changes };

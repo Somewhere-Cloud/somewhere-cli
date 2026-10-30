@@ -31,6 +31,50 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
 ));
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 
+// worker/containers/compile/function-route.cjs
+var require_function_route = __commonJS({
+  "worker/containers/compile/function-route.cjs"(exports, module2) {
+    "use strict";
+    var SOURCE_EXTENSION = /\.(ts|tsx|mts|js|mjs|jsx)$/;
+    var NAME2 = /^[A-Za-z_][A-Za-z0-9_]*$/;
+    function functionRouteSegments2(file) {
+      const parts = file.replace(SOURCE_EXTENSION, "").split("/");
+      if (parts.length > 1 && parts[parts.length - 1] === "index") {
+        const parent = parts[parts.length - 2];
+        const rest = parent.match(/^\[\.\.\.([A-Za-z_][A-Za-z0-9_]*)\]$/);
+        if (rest) {
+          throw new Error(`a catch-all folder cannot hold an index file: ${file}; name the file ${parts.slice(0, -1).join("/")}.ts instead.`);
+        }
+        parts.pop();
+      }
+      return parts.map((segment, i) => {
+        const rest = segment.match(/^\[\.\.\.([^\]]*)\]$/);
+        if (rest && NAME2.test(rest[1])) {
+          if (i !== parts.length - 1) throw new Error(`catch-all [...${rest[1]}] must be the last path segment: ${file}`);
+          return { type: "rest", value: rest[1] };
+        }
+        const param = segment.match(/^\[([^\]]*)\]$/);
+        if (param && NAME2.test(param[1])) return { type: "param", value: param[1] };
+        if (/[\[\]]/.test(segment)) {
+          throw new Error(`malformed parametric segment "${segment}" in ${file}; accepted forms are [name] and [...name].`);
+        }
+        return { type: "static", value: segment };
+      });
+    }
+    function displayRoute2(segments) {
+      return "/" + segments.map((s) => s.type === "static" ? s.value : s.type === "param" ? `:${s.value}` : `*${s.value}`).join("/");
+    }
+    function routeShape2(segments) {
+      return "/" + segments.map((s) => s.type === "static" ? s.value : s.type === "param" ? ":" : "*").join("/");
+    }
+    function typedClientRoute(clientParts) {
+      const parts = clientParts[clientParts.length - 1] === "index" ? clientParts.slice(0, -1) : clientParts;
+      return parts.length ? `/api/${parts.join("/")}` : "/api";
+    }
+    module2.exports = { functionRouteSegments: functionRouteSegments2, displayRoute: displayRoute2, routeShape: routeShape2, typedClientRoute };
+  }
+});
+
 // worker/containers/compile/declared-data-contract.cjs
 var require_declared_data_contract = __commonJS({
   "worker/containers/compile/declared-data-contract.cjs"(exports, module2) {
@@ -1190,6 +1234,9 @@ function scanSourceForSecrets(files, functions) {
   return findings;
 }
 
+// worker/src/utils/function-bundle.ts
+var import_function_route = __toESM(require_function_route());
+
 // worker/src/runtime/verify-signup.ts
 var VERIFY_SIGNUP_FETCH_PROLOGUE = "    const verifySignup = await __sw_captureVerifySignup(request); request = verifySignup.request;";
 
@@ -1367,7 +1414,7 @@ var RETIRED_TABLE_JS = `      // A read of a table retired with removedTable() (
         if (!(expiresMs > nowMs)) return null;
         return 'Table "' + table + '" was removed from db/schema.ts, and its data is retained until '
           + new Date(expiresMs).toISOString().slice(0, 10)
-          + '. To restore the table with its data, declare it again in db/schema.ts and deploy.';
+          + '. A deploy that declares it again in db/schema.ts restores the table with its data.';
       }
       async function __sw_explainRetiredTable(database, err) {
         const raw = String((err && err.original && err.original.message) || '');
@@ -1392,7 +1439,7 @@ var RETIRED_TABLE_JS = `      // A read of a table retired with removedTable() (
 
 // worker/src/utils/database-full.ts
 var DATABASE_FULL_PATTERN = /SQLITE_FULL|database or disk is full|database is full|at maximum size|exceeds the maximum database size|database size limit (?:has been )?(?:reached|exceeded)/i;
-var DATABASE_FULL_MESSAGE = "The database could not complete this write because its storage is full. Check database storage under Usage in the dashboard for your account allowance.";
+var DATABASE_FULL_MESSAGE = "The database could not complete this write because its storage is full. Database storage and the account allowance are shown under Usage in the dashboard.";
 
 // worker/src/runtime/db-typed-errors.ts
 var DB_TYPED_ERRORS_JS = `      // The REST bridge's refusal as the caller sees it. A typed envelope
@@ -1428,8 +1475,26 @@ var DB_TYPED_ERRORS_JS = `      // The REST bridge's refusal as the caller sees 
           .replace(/^[\\s:;.,]+|[\\s:;.,]+$/g, '')
           .trim();
       }
+      // A write a unique or primary-key rule refused: the caller's own duplicate,
+      // nothing applied. One shape on every bridge (binding, the REST query and
+      // batch fallbacks, the managed endpoint): code, status and the browser
+      // contract's message. Uncaught, it stays the opaque function error.
+      function __sw_dataConflict(err) {
+        const conflict = new Error('A record with these values already exists.');
+        conflict.code = 'DATA_CONFLICT';
+        conflict.status = 409;
+        conflict.retryable = false;
+        conflict.original = err;
+        return conflict;
+      }
+      // A reply that does not prove the write was refused never becomes a conflict.
+      function __sw_outcomeUnproven(code) {
+        return typeof code === 'string' && /OUTCOME_UNKNOWN|COMMITTED/.test(code);
+      }
       function __sw_decorateError(label, sqlPreview, err) {
         const msg = (err && err.message) || String(err);
+        // The platform already classified this refusal (platform-data/transport.ts uniqueConflict).
+        if (err && err.code === 'DATA_CONFLICT') return __sw_dataConflict(err);
         let sizeCode = null;
         let sizeMessage = null;
         if (${DATABASE_FULL_PATTERN}.test(msg)) {
@@ -1485,6 +1550,13 @@ var DB_TYPED_ERRORS_JS = `      // The REST bridge's refusal as the caller sees 
           better.code = 'SCHEMA_DRIFT';
           better.original = err;
           return better;
+        }
+        // The engine's own wording of the same refusal (binding, or a platform
+        // CONSTRAINT_VIOLATION relayed by the REST fallback).
+        if (!__sw_outcomeUnproven(err && err.code)
+          && /\\b(?:UNIQUE|PRIMARY KEY) constraint failed\\b|\\bSQLITE_CONSTRAINT_(?:UNIQUE|PRIMARYKEY)\\b/i.test(msg)) {
+          console.error('[SW_DB_CONFLICT] ' + label + ' \u2014 ' + msg + ' \u2014 ' + snippet);
+          return __sw_dataConflict(err);
         }
         // Any OTHER database error: the native binding / provider passthrough
         // surfaces raw strings like "D1_ERROR: ... : SQLITE_CONSTRAINT" that
@@ -1562,7 +1634,7 @@ var DB_TYPED_ERRORS_JS = `      // The REST bridge's refusal as the caller sees 
           return err;
         }
         const failed = new Error('A database write earlier in this request was saved, but a later database read failed. ' +
-          'Do not retry the whole action. Inspect the saved data, then correct or retry the failed read.');
+          'Repeating the whole action would repeat the saved write; the saved data is in the database, and the failed read alone can be repeated.');
         failed.code = 'DB_COMMITTED_READ_FAILED';
         failed.prior_write_committed = true;
         failed.retryable = false;
@@ -2847,7 +2919,7 @@ function buildPlatformContext(env, request, runtimeFetch = fetch, outboundFetch 
     // console.error), but the message stays neutral (tsk_8a4809cf,
     // tsk_d4224d57).
     const msg = (r.status === 402 && (code === 'INSUFFICIENT_BALANCE' || code === 'PAID_API_NOT_ACTIVATED' || code === 'PAID_AI_DISABLED'))
-      ? 'This AI feature is temporarily unavailable. Please try again later.'
+      ? 'This AI feature is temporarily unavailable; a later request can succeed.'
       : ((data && data.message) || ('Platform call failed: ' + r.status));
     const err = new Error(msg);
     err.code = code;
@@ -3206,7 +3278,7 @@ function buildPlatformContext(env, request, runtimeFetch = fetch, outboundFetch 
   }
 
   function __sw_malformedAuthResponse(method, detail) {
-    const err = new Error('sw.auth.' + method + ': the platform sign-in response ' + detail + '. This is a platform fault, not an error in your code \u2014 report it via support_ticket.');
+    const err = new Error('sw.auth.' + method + ': the platform sign-in response ' + detail + '. This is a platform fault, not an error in your code; platform support requests are accepted at POST /v1/platform-feedback.');
     err.code = 'AUTH_RESPONSE_MALFORMED';
     err.status = 502;
     throw err;
@@ -4223,7 +4295,7 @@ var DB_ROW_LINKS_JS = `
         headers['X-Sw-Execution-Attestation'] = env.SW_EXECUTION_ATTESTATION;
         if (extra) for (const name of Object.keys(extra)) headers[name] = extra[name];
         const unavailable = function () {
-          const e = new Error('The link operation could not be completed. Do not retry automatically.');
+          const e = new Error('The link operation could not be completed; an automatic repeat is not safe.');
           e.code = 'LINK_UNAVAILABLE'; e.status = 503; e.retryable = false; e.__sw_expose = true;
           return e;
         };
@@ -4255,7 +4327,7 @@ var DB_ROW_LINKS_JS = `
         headers['X-Sw-Execution-Attestation'] = env.SW_EXECUTION_ATTESTATION;
         if (clientIp) headers['X-Sw-Client-Ip'] = String(clientIp).slice(0, 64);
         const unknown = function () {
-          const e = new Error('The write outcome could not be confirmed. Do not retry automatically.');
+          const e = new Error('The write outcome could not be confirmed; an automatic repeat is not safe.');
           e.code = 'DB_WRITE_OUTCOME_UNKNOWN'; e.status = 503; e.retry = false; e.retryable = false; e.outcome = 'unknown'; e.__sw_expose = true;
           return e;
         };
@@ -4281,7 +4353,7 @@ var DB_ROW_LINKS_JS = `
         }
         const data = body.data, receipt = data && __sw_managedReceipt(data.idempotency);
         if (!receipt || typeof data.grant !== 'string' || !/^crt_[0-9a-f]{32}$/.test(data.grant) || !__sw_arrayIsArray(data.data) || data.data.length !== 1) {
-          const e = new Error('The row was created, but retry protection could not be confirmed. Do not retry it.');
+          const e = new Error('The row was created, but retry protection could not be confirmed; a repeat could create a second row.');
           e.code = 'IDEMPOTENCY_RECEIPT_INVALID'; e.status = 502; e.retry = false; e.retryable = false;
           e.outcome = 'committed'; e.write_committed = true; e.__sw_expose = true;
           throw e;
@@ -4302,7 +4374,7 @@ var DB_ROW_LINKS_JS = `
         if (session) headers['X-Sw-Creator'] = session;
         if (clientIp) headers['X-Sw-Client-Ip'] = String(clientIp).slice(0, 64);
         const unknown = function () {
-          const e = new Error('The creator operation could not be confirmed. Do not retry automatically.');
+          const e = new Error('The creator operation could not be confirmed; an automatic repeat is not safe.');
           e.code = 'CREATOR_OUTCOME_UNKNOWN'; e.status = 503; e.retry = false; e.retryable = false; e.outcome = 'unknown'; e.__sw_expose = true;
           return e;
         };
@@ -4353,7 +4425,7 @@ var DB_INTAKE_JS = `
         headers['X-Sw-Execution-Attestation'] = env.SW_EXECUTION_ATTESTATION;
         if (clientIp) headers['X-Sw-Client-Ip'] = String(clientIp).slice(0, 64);
         const unknown = function () {
-          const e = new Error('The write outcome could not be confirmed. Do not retry automatically.');
+          const e = new Error('The write outcome could not be confirmed; an automatic repeat is not safe.');
           e.code = 'DB_WRITE_OUTCOME_UNKNOWN'; e.status = 503; e.retry = false; e.retryable = false; e.outcome = 'unknown'; e.__sw_expose = true;
           return e;
         };
@@ -4379,7 +4451,7 @@ var DB_INTAKE_JS = `
         }
         const data = body.data, receipt = data && __sw_managedReceipt(data.idempotency);
         if (!receipt || data.accepted !== true) {
-          const e = new Error('The submission was accepted, but retry protection could not be confirmed. Do not retry it.');
+          const e = new Error('The submission was accepted, but retry protection could not be confirmed; a repeat could submit it twice.');
           e.code = 'IDEMPOTENCY_RECEIPT_INVALID'; e.status = 502; e.retry = false; e.retryable = false;
           e.outcome = 'committed'; e.write_committed = true; e.__sw_expose = true;
           throw e;
@@ -4507,7 +4579,7 @@ var DB_MANAGED_JS = `
         const started = Date.now();
         let answer;
         const unconfirmed = function () {
-          const e = new Error(writes ? 'The write outcome could not be confirmed. Do not retry automatically.' : 'The managed query could not be completed.');
+          const e = new Error(writes ? 'The write outcome could not be confirmed; an automatic repeat is not safe.' : 'The managed query could not be completed.');
           e.code = writes ? 'DB_WRITE_OUTCOME_UNKNOWN' : 'DB_UNAVAILABLE';
           e.status = 503; e.retry = false; e.retryable = false; e.outcome = writes ? 'unknown' : 'read_failed'; e.__sw_expose = true;
           return e;
@@ -4550,7 +4622,7 @@ var DB_MANAGED_JS = `
             // The write is confirmed, but without an exact receipt it is not a protected outcome.
             const receipt = __sw_managedReceipt(answer[0].idempotency);
             if (!receipt) {
-              const e = new Error('The write committed, but its retry protection could not be confirmed. Do not retry it.');
+              const e = new Error('The write committed, but its retry protection could not be confirmed; a repeat could apply it twice.');
               e.code = 'IDEMPOTENCY_RECEIPT_INVALID'; e.status = 502; e.retry = false; e.retryable = false;
               e.outcome = 'committed'; e.write_committed = true; e.__sw_expose = true;
               throw e;
@@ -7020,7 +7092,7 @@ var DB_JS = `    db: (function () {
       function __sw_draftDbUnavailable() {
         const err = new Error(inlineCheck
           ? 'A handler check runs without a database, so sw.db is not available here. Deploy, then call the live route to exercise database code.'
-          : 'This draft database clone is unavailable, so the draft cannot run safely. Retry shortly.'
+          : 'This draft database clone is unavailable, so the draft cannot run safely; a later request can succeed.'
         );
         err.code = 'DRAFT_DB_NOT_ISOLATED';
         err.status = inlineCheck ? 409 : 503;
@@ -7059,7 +7131,7 @@ var DB_JS = `    db: (function () {
           }
           if (code === 'MANAGED_READ_UNAVAILABLE') {
             const err = new Error((body && body.message) ||
-              'Managed-mode read capability is temporarily unavailable. Retry shortly.');
+              'Managed-mode read capability is temporarily unavailable; a later request can succeed.');
             err.code = 'MANAGED_READ_UNAVAILABLE';
             err.status = 503;
             err.retryable = true;
@@ -7100,7 +7172,7 @@ var DB_JS = `    db: (function () {
           const err = new Error(
             'sw.db.' + operation + ' cannot reach the project database: the PROJECT_DB binding is unavailable, ' +
             'and the fallback runtime credential was rejected (HTTP ' + response.status +
-            (upstreamCode ? ', ' + upstreamCode : '') + '). Retry shortly; if this persists, promote or redeploy the function.'
+            (upstreamCode ? ', ' + upstreamCode : '') + '). A later request can succeed; a promote or redeploy of the function issues a new runtime credential.'
           );
           err.code = 'DB_CONNECTION_NOT_READY';
           err.status = 503;
@@ -9601,7 +9673,7 @@ var DB_COMPOSED_WRITES_JS = `      // Per-column conditions are ANDed. A bounded
           for (const item of prepared) __sw_emitQueryEvent(item.ir, Date.now() - started, 0, false, error && error.code || 'DB_BATCH_OUTCOME_UNKNOWN');
           // A preflight refusal carries its existing remedy. A lost transport
           // acknowledgement never proves rollback and must not invite replay.
-          if (error && ['DRAFT_DB_NOT_ISOLATED', 'DEV_DB_NOT_ISOLATED', 'DB_CONNECTION_NOT_READY', 'CONSTRAINT_VIOLATION', 'DATABASE_VALUE_TOO_LARGE',
+          if (error && ['DRAFT_DB_NOT_ISOLATED', 'DEV_DB_NOT_ISOLATED', 'DB_CONNECTION_NOT_READY', 'CONSTRAINT_VIOLATION', 'DATA_CONFLICT', 'DATABASE_VALUE_TOO_LARGE',
             'MEMBERSHIP_REQUIRED', 'POLICY_AUTHORITY_REQUIRED'].indexOf(error.code) !== -1) throw error;
           throw __sw_batchOutcomeUnknown();
         }
@@ -10187,9 +10259,9 @@ var DB_RESULT_FIDELITY_JS = `      var __sw_declaredResultChecks;
         const err = new Error(
           'The statement ran and its changes were applied, but the row it returned holds an integer outside ' +
           "JavaScript's exact number range in column " + JSON.stringify(String(column)) + ', which cannot be read ' +
-          'back exactly afterwards. Do not retry the statement. Select the column as CAST(' +
-          __sw_quoteResultColumn(column) + ' AS TEXT) in the RETURNING list, or write through sw.db.insert / ' +
-          'sw.db.update / sw.db.remove, which compose that cast for you.'
+          'back exactly afterwards; repeating the statement would apply its changes again. The column reads back exactly as CAST(' +
+          __sw_quoteResultColumn(column) + ' AS TEXT) in the RETURNING list, and sw.db.insert / ' +
+          'sw.db.update / sw.db.remove compose that cast.'
         );
         err.code = 'DATABASE_VALUE_TOO_LARGE';
         err.status = 400;
@@ -10239,7 +10311,7 @@ var DB_RESULT_FIDELITY_JS = `      var __sw_declaredResultChecks;
       function __sw_declaredValue(column, value) { return __sw_declaredResults().value(column, value); }
       function __sw_declaredValueError(table, column, applied) {
         const err = new Error((applied
-          ? 'The statement ran and its changes were applied, but the row it returned could not be read back. Do not retry the statement. '
+          ? 'The statement ran and its changes were applied, but the row it returned could not be read back; repeating the statement would apply its changes again. '
           : '') +
           'Column ' + JSON.stringify(String(column.n)) + ' on ' + JSON.stringify(String(table)) + ' holds a stored value that is not a valid ' +
           column.t + ' as declared in db/schema.ts, so it cannot be returned as that type. ' +
@@ -10251,7 +10323,7 @@ var DB_RESULT_FIDELITY_JS = `      var __sw_declaredResultChecks;
       }
       function __sw_declaredWideError(table, column, applied) {
         const err = new Error((applied
-          ? 'The statement ran and its changes were applied, but the row it returned could not be read back. Do not retry the statement. '
+          ? 'The statement ran and its changes were applied, but the row it returned could not be read back; repeating the statement would apply its changes again. '
           : '') +
           'Column ' + JSON.stringify(String(column.n)) + ' on ' + JSON.stringify(String(table)) + " holds a whole number outside JavaScript's exact " +
           'range (-9007199254740991 to 9007199254740991), so it cannot be returned as an integer() number without changing it. ' +
@@ -11160,7 +11232,7 @@ var AI_JS = `    ai: (function () {
             try { data = await r.json(); } catch { data = null; }
             const code = (data && (data.code || data.error)) || 'PLATFORM_ERROR';
             const msg = (r.status === 402 && (code === 'INSUFFICIENT_BALANCE' || code === 'PAID_API_NOT_ACTIVATED' || code === 'PAID_AI_DISABLED'))
-              ? 'This AI feature is temporarily unavailable. Please try again later.'
+              ? 'This AI feature is temporarily unavailable; a later request can succeed.'
               : ((data && data.message) || ('Platform call failed: ' + r.status));
             const err = new Error(msg);
             err.code = code;
@@ -11212,7 +11284,7 @@ var AI_JS = `    ai: (function () {
           // echo err.message to end users \u2014 never leak the owner billing
           // prose. Keep the real code/status for the dev's own logging.
           if (r.status === 402 && (code === 'INSUFFICIENT_BALANCE' || code === 'PAID_API_NOT_ACTIVATED' || code === 'PAID_AI_DISABLED')) {
-            msg = 'This AI feature is temporarily unavailable. Please try again later.';
+            msg = 'This AI feature is temporarily unavailable; a later request can succeed.';
           }
           const err = new Error(msg); if (code) err.code = code; err.status = r.status; throw err;
         }
@@ -11233,7 +11305,7 @@ var AI_JS = `    ai: (function () {
           // 402 INSUFFICIENT_BALANCE is end-user-triggerable \u2014 keep the
           // real code/status for logging but neutralize the message.
           if (r.status === 402 && (code === 'INSUFFICIENT_BALANCE' || code === 'PAID_API_NOT_ACTIVATED' || code === 'PAID_AI_DISABLED')) {
-            msg = 'This AI feature is temporarily unavailable. Please try again later.';
+            msg = 'This AI feature is temporarily unavailable; a later request can succeed.';
           }
           const err = new Error(msg); if (code) err.code = code; err.status = r.status; throw err;
         }
@@ -11254,7 +11326,7 @@ var AI_JS = `    ai: (function () {
           // 402 INSUFFICIENT_BALANCE is end-user-triggerable \u2014 keep the
           // real code/status for logging but neutralize the message.
           if (r.status === 402 && (code === 'INSUFFICIENT_BALANCE' || code === 'PAID_API_NOT_ACTIVATED' || code === 'PAID_AI_DISABLED')) {
-            msg = 'This AI feature is temporarily unavailable. Please try again later.';
+            msg = 'This AI feature is temporarily unavailable; a later request can succeed.';
           }
           const err = new Error(msg); if (code) err.code = code; err.status = r.status; throw err;
         }
@@ -12301,7 +12373,7 @@ var AUTH_MANAGED_VISITOR_JS = `      // Visitor identity is declared when the re
             body = __sw_jsonParse(await response.text());
           } catch (_) { body = null; }
           if (!response || !response.ok || !body || body.ok !== true || !body.data || typeof body.data !== 'object') {
-            const err = new Error(body && typeof body.message === 'string' ? body.message : 'The visitor session could not be confirmed. Do not retry automatically.');
+            const err = new Error(body && typeof body.message === 'string' ? body.message : 'The visitor session could not be confirmed; an automatic repeat is not safe.');
             err.code = body && typeof body.error === 'string' ? body.error : 'VISITOR_SESSION_OUTCOME_UNKNOWN';
             err.status = response && response.status >= 400 ? response.status : 503;
             err.retry = false; err.retryable = false; err.__sw_expose = true;
@@ -13330,7 +13402,7 @@ var AUTH_JS = `    auth: (function () {
         },
         // Mint the httpOnly session cookies from an existing token pair \u2014
         // the primitive the *WithCookie helpers wrap (tsk_1dd4e1b4). For
-        // backends (e.g. @somewhere-tech/sdk/server, or its legacy auth shim) that already called
+        // backends (e.g. @somewhere-cloud/sdk/server, or its legacy auth shim) that already called
         // login / googleExchange / verifyOtp and want THAT session as
         // cookies without a second platform call.
         setSessionCookies(access, refresh) {
@@ -13366,7 +13438,9 @@ var AUTH_JS = `    auth: (function () {
             __sw_enforceCookieCsrf(__sw_authSnapshotRequest);
           }
           if (refresh) {
-            const result = await this.logout({ refresh_token: refresh }).catch(function (err) { throw __sw_markExpected(err); });
+            // The access cookie (signed, names its session) lets the platform confirm a
+            // sign-out whose first response was lost; it revokes nothing by itself.
+            const result = await this.logout(access ? { refresh_token: refresh, access_token: access } : { refresh_token: refresh }).catch(function (err) { throw __sw_markExpected(err); });
             if (!result || result.logged_out !== true) {
               const err = new Error('Could not confirm sign-out.');
               err.code = 'SIGN_OUT_UNCONFIRMED';
@@ -14223,7 +14297,7 @@ var RENDER_JS = `    render: (function () {
           // 402 INSUFFICIENT_BALANCE is end-user-triggerable \u2014 keep the
           // real code/status for logging but neutralize the message.
           if (r.status === 402 && code === 'INSUFFICIENT_BALANCE') {
-            msg = 'This feature is temporarily unavailable. Please try again later.';
+            msg = 'This feature is temporarily unavailable; a later request can succeed.';
           }
           const err = new Error(msg); if (code) err.code = code; err.status = r.status; throw err;
         }
@@ -14243,7 +14317,7 @@ var RENDER_JS = `    render: (function () {
           // 402 INSUFFICIENT_BALANCE is end-user-triggerable \u2014 keep the
           // real code/status for logging but neutralize the message.
           if (r.status === 402 && code === 'INSUFFICIENT_BALANCE') {
-            msg = 'This feature is temporarily unavailable. Please try again later.';
+            msg = 'This feature is temporarily unavailable; a later request can succeed.';
           }
           const err = new Error(msg); if (code) err.code = code; err.status = r.status; throw err;
         }
@@ -14885,13 +14959,14 @@ var GROUPS_JS = `    groups: (() => {
         get(_req, groupId) { return call('GET', '/' + seg(groupId)); },
         members(_req, groupId, opts) { return call('GET', '/' + seg(groupId) + '/members' + page([], opts)); },
         // One email; the platform completes the membership when the invitee
-        // signs in through it (or on their next groups list).
+        // signs in, through it or with any sign-in proving that address.
         invite(_req, groupId, input) {
           return call('POST', '/' + seg(groupId) + '/invitations', {
             email: input && input.email, role: input && input.role, redirect_uri: input && input.redirect_uri,
             ...(input && input.expires_in !== undefined ? { expires_in: input.expires_in } : {}),
           });
         },
+        invitations(_req, groupId, opts) { return call('GET', '/' + seg(groupId) + '/invitations' + page([], opts)); },
         revokeInvitation(_req, inviteId) { return call('POST', '/invitation-grants/' + seg(inviteId) + '/revoke'); },
         leave(_req, groupId) { return call('POST', '/' + seg(groupId) + '/leave'); },
         // Owner only; the group's own app rows stay, unreachable without server authority.
@@ -15786,9 +15861,9 @@ function declaredListGetPlan(operation, input, shape, fields, fail) {
       if (column && column.t === "integer") {
         if (typeof value === "number" && Number.isSafeInteger(value)) return value;
         if (typeof value === "string" && /^(0|-?[1-9][0-9]*)$/.test(value) && value.length <= 17 && Number.isSafeInteger(Number(value))) return Number(value);
-        return fail(400, "DATA_INPUT_INVALID", "Supply a valid primary key.");
+        return fail(400, "DATA_INPUT_INVALID", "A valid primary key is required.");
       }
-      if (!(typeof value === "string" && value.length > 0 && value.length <= 4096)) return fail(400, "DATA_INPUT_INVALID", "Supply a valid primary key.");
+      if (!(typeof value === "string" && value.length > 0 && value.length <= 4096)) return fail(400, "DATA_INPUT_INVALID", "A valid primary key is required.");
       return value;
     },
     and(where2, field, predicate) {
@@ -15948,7 +16023,7 @@ function __sw_dataIsDuplicateConflict(error) {
   for (let depth = 0; current && depth < 4; depth++) {
     const code = typeof current.code === 'string' ? current.code : '';
     const message = typeof current.message === 'string' ? current.message : '';
-    if (/^SQLITE_CONSTRAINT_(?:UNIQUE|PRIMARYKEY)$/i.test(code)
+    if (code === 'DATA_CONFLICT' || /^SQLITE_CONSTRAINT_(?:UNIQUE|PRIMARYKEY)$/i.test(code)
       || /^(?:D1_ERROR:\s*)?(?:UNIQUE|PRIMARY KEY) constraint failed(?:\s*:|$)/i.test(message)) return true;
     current = current.original;
   }
@@ -16016,9 +16091,9 @@ function __sw_dataKey(value, column) {
   if (column.t === 'integer') {
     if (typeof value === 'number' && Number.isSafeInteger(value)) return value;
     if (typeof value === 'string' && /^(0|-?[1-9][0-9]*)$/.test(value) && value.length <= 17 && Number.isSafeInteger(Number(value))) return Number(value);
-    __sw_dataFail(400, 'DATA_INPUT_INVALID', 'Supply a valid primary key.');
+    __sw_dataFail(400, 'DATA_INPUT_INVALID', 'A valid primary key is required.');
   }
-  if (!(typeof value === 'string' && value.length > 0 && value.length <= 4096)) __sw_dataFail(400, 'DATA_INPUT_INVALID', 'Supply a valid primary key.');
+  if (!(typeof value === 'string' && value.length > 0 && value.length <= 4096)) __sw_dataFail(400, 'DATA_INPUT_INVALID', 'A valid primary key is required.');
   return value;
 }
 function __sw_dataAnd(where, field, predicate) {
@@ -16057,7 +16132,7 @@ async function __sw_dataAuthorizeRead(request, sw, shape, policy) {
     if (!user || user.id === undefined || user.id === null) {
       const message = shape.author
         ? 'This shared table is a signed-in shared view, and this data request has no verified user. Sign in to read it. For intentionally public catalog data, declare an explicit client.read column allowlist plus client.publicRead in db/schema.ts, run \`somewhere deploy\`, then use the generated \`somewhere:data\` client (docs({ topic: \'declared-data\' })). client.publicRead does not grant anonymous authority to ordinary sw.db.from calls in custom functions.'
-        : 'Sign in to use this data operation.';
+        : 'This data operation requires a signed-in user.';
       __sw_dataFail(401, 'AUTH_REQUIRED', message);
     }
   }
@@ -16077,6 +16152,11 @@ async function __sw_dataRead(sw, table, policy, options, verb) {
     __sw_dataSpan(sw, 'sw_data_op', started);
   }
 }
+/** Whether this release's pinned contract grants the browser any operation (hasDeclaredDataAccess, at run time). */
+function __sw_dataAnyClientGrant() {
+  return Object.values(__SW_DATA_SCHEMA).some(({ client }) => client && (client.read !== false || client.create !== null
+    || client.update !== null || client.delete || client.intake !== undefined || client.links !== undefined));
+}
 /** The exact current data contract digest (one computation per isolate). */
 function __sw_dataContractDigest() {
   if (!__sw_dataDigestPromise) {
@@ -16095,7 +16175,7 @@ function __sw_dataIntakeReference(value, column) {
   if (column && column.t === 'bigint' && typeof value === 'string' && /^(0|-?[1-9][0-9]{0,18})$/.test(value)
     && BigInt(value) >= -9223372036854775808n && BigInt(value) <= 9223372036854775807n) return value;
   if (column && column.t === 'text' && typeof value === 'string') return value;
-  __sw_dataFail(400, 'DATA_INPUT_INVALID', 'Supply a valid reference.');
+  __sw_dataFail(400, 'DATA_INPUT_INVALID', 'A valid reference is required.');
 }
 async function __sw_dataIntake(request, sw, input, table, shape) {
   if (__sw_artifactExecution !== 'standard') __sw_dataFail(409, 'INTAKE_DRAFT_UNAVAILABLE', 'Public submissions work on the live app only.');
@@ -16133,6 +16213,12 @@ async function __sw_handleDeclaredData(request, sw, env) {
     : operation === 'intake' ? ['reference', 'values', 'operation_key'] : null;
   if (!extras) __sw_dataFail(400, 'DATA_OPERATION_INVALID', 'Use list, get, relation_list, aggregate, create, update, or delete.');
   __sw_dataKeys(input, ['contract', 'table', 'operation', ...extras], 'Request');
+  // A release that grants the browser nothing publishes no contract digest
+  // (app description data.client.status 'not_declared'), so no request can
+  // match one. Refuse as access, not as a stale client, whatever table is named.
+  if (!__sw_dataAnyClientGrant()) {
+    __sw_dataFail(403, 'DATA_ACCESS_DENIED', 'This app declares no browser data access. Use the table from a function with sw.db, or add a client block in db/schema.ts.');
+  }
   __sw_dataContractDigest();
   const keyed = Object.prototype.hasOwnProperty.call(input, 'idempotency_key');
   let matchingContract = input.contract === await __sw_dataDigestPromise;
@@ -16190,7 +16276,7 @@ async function __sw_handleDeclaredData(request, sw, env) {
     const authStarted = Date.now();
     const user = await sw.auth.fromRequest(request);
     __sw_dataSpan(sw, 'sw_data_authz', authStarted);
-    if (!user || user.id === undefined || user.id === null) __sw_dataFail(401, 'AUTH_REQUIRED', 'Sign in to use this data operation.');
+    if (!user || user.id === undefined || user.id === null) __sw_dataFail(401, 'AUTH_REQUIRED', 'This data operation requires a signed-in user.');
   }
   const fields = __sw_dataReadFields(shape);
   const primaryKey = shape.clientPrimaryKey;
@@ -16359,7 +16445,7 @@ async function __sw_handleDeclaredData(request, sw, env) {
     try { result = ownerRead ? await ownerRead(plan.options) : await __sw_dataRead(sw, table, policy, plan.options); }
     catch (error) {
       // A selected token's refusal is final. Never refresh or replay after dispatch.
-      if (ownerRead && error && error.status === 401 && (error.code === 'AUTH_REQUIRED' || error.code === 'AUTH_INVALID_CREDS')) __sw_dataFail(401, 'AUTH_REQUIRED', 'Sign in to use this data operation.');
+      if (ownerRead && error && error.status === 401 && (error.code === 'AUTH_REQUIRED' || error.code === 'AUTH_INVALID_CREDS')) __sw_dataFail(401, 'AUTH_REQUIRED', 'This data operation requires a signed-in user.');
       throw error;
     }
     // Row capability hints (tsk_668f0ce2 item 7): the platform's per-row answer, narrowed by this
@@ -16601,7 +16687,7 @@ async function __sw_handleCreatorDoor(request, sw) {
   const root = __sw_creatorRoot(input.table);
   if (!root) invalid();
   const entry = entries.find(item => item.grant === input.creator_id);
-  if (!entry) __sw_dataFail(401, 'CREATOR_SESSION_MISSING', 'Open the creator link again to continue.');
+  if (!entry) __sw_dataFail(401, 'CREATOR_SESSION_MISSING', 'The creator link session is no longer valid; opening the creator link again starts a new one.');
   const owner = root.ownerColumn || 'user_id', key = root.clientPrimaryKey;
   const childOf = (table) => {
     const relation = (root.relations || []).find(r => r.table === table && root.client.links.children.includes(r.name));
@@ -16698,7 +16784,7 @@ async function __sw_dataLinked(request, sw, input, table, shape) {
   if (__sw_artifactExecution !== 'standard') __sw_dataFail(409, 'LINKS_DRAFT_UNAVAILABLE', 'Share links work on the live app only.');
   if (typeof input.link !== 'string' || !/^lnk_[0-9a-f]{32}$/.test(input.link)) __sw_dataFail(400, 'DATA_INPUT_INVALID', 'link must be a link id.');
   const entry = __sw_linkEntries(request).find(item => item.grant === input.link);
-  if (!entry) __sw_dataFail(401, 'LINK_SESSION_MISSING', 'Open the link again to continue.');
+  if (!entry) __sw_dataFail(401, 'LINK_SESSION_MISSING', 'The link session is no longer valid; opening the link again starts a new one.');
   const operation = input.operation;
   const own = shape.client && shape.client.links;
   const parent = own ? null : __sw_linkRootFor(table);
@@ -17443,13 +17529,13 @@ function isRoutedFunctionPath(path) {
 // worker/src/utils/endpoint-auth-mode.ts
 var ENDPOINT_AUTH_MODES = ["required", "optional", "none"];
 var ENDPOINT_AUTH_MODE_INVALID = "ENDPOINT_AUTH_MODE_INVALID";
-var ENDPOINT_AUTH_MODES_HINT = "Use one of: 'required' (caller must be signed in), 'optional' (user when signed in, otherwise null), 'none' (public).";
+var ENDPOINT_AUTH_MODES_HINT = "Supported modes: 'required' (caller must be signed in), 'optional' (user when signed in, otherwise null), 'none' (public).";
 var MODES = new Set(ENDPOINT_AUTH_MODES);
 
 // worker/src/utils/endpoint-rate-limit.ts
 var ENDPOINT_RATE_LIMIT_INVALID = "ENDPOINT_RATE_LIMIT_INVALID";
 var ENDPOINT_RATE_LIMIT_MAX_COUNT = 1e6;
-var ENDPOINT_RATE_LIMIT_HINT = `Use '<count>/<unit>' with a whole count from 1 to ${ENDPOINT_RATE_LIMIT_MAX_COUNT} and a unit of second, minute, hour or day, for example '30/minute'. Remove rateLimit for no limit.`;
+var ENDPOINT_RATE_LIMIT_HINT = `rateLimit accepts '<count>/<unit>' with a whole count from 1 to ${ENDPOINT_RATE_LIMIT_MAX_COUNT} and a unit of second, minute, hour or day, for example '30/minute'; without rateLimit there is no limit.`;
 var ENDPOINT_RATE_LIMIT_JS = `
 /** Parse "10/minute" / "60/hour" / "1000/day" into { max, windowSeconds }, or null. */
 function __sw_parseRateLimit(spec) {
@@ -17503,7 +17589,7 @@ function parseClientPermissions(value, columns, scope) {
     }
   }
   if (!["owner", "member", "shared", "policy"].includes(scope.kind)) {
-    return fail("serverOnly() tables cannot declare client access. Use a server function for business logic.");
+    return fail("serverOnly() tables cannot declare client access; their rows are reached only from server functions.");
   }
   if (scope.policy?.kind === "all_of") {
     if (input.publicRead !== void 0 && input.publicRead !== false) return fail("allOf() tables cannot declare client.publicRead; their rows are reachable only by current members.");
@@ -17561,9 +17647,9 @@ function parseClientPermissions(value, columns, scope) {
       if (column.helper === "id" || (scope.kind === "owner" || scope.kind === "policy") && name === scope.column) {
         return fail(`client.${operation} cannot write the platform-assigned identity field "${entry}".`);
       }
-      if (column.helper === "blob") return fail(`client.${operation} cannot write binary field "${entry}". Use project files for uploads.`);
+      if (column.helper === "blob") return fail(`client.${operation} cannot write binary field "${entry}"; uploads go to project files.`);
       if (typeof publicRead === "object" && Object.prototype.hasOwnProperty.call(publicRead.where, name)) {
-        return fail(`client.${operation} cannot write publication field "${entry}". Use a server operation to publish rows.`);
+        return fail(`client.${operation} cannot write publication field "${entry}"; rows are published by a server operation.`);
       }
       if (operation === "update" && (scope.kind === "member" || scope.kind === "policy") && scope.group?.includes(name)) {
         return fail(`client.update cannot move a row between membership groups by changing "${entry}".`);
@@ -17576,7 +17662,7 @@ function parseClientPermissions(value, columns, scope) {
   }
   if (writes.create !== null) {
     if (typeof publicRead === "object" && !privateByDefault(publicRead.where, fields)) {
-      return fail("client.create has no fixed publication-field default that guarantees a private row. Give at least one predicate field a private default, or use a server operation.");
+      return fail("client.create has no fixed publication-field default that guarantees a private row. It is accepted when at least one predicate field has a private default; otherwise rows are created by a server operation.");
     }
     for (const column of columns) {
       if (column.helper !== "id" && !column.nullable && !column.hasDefault && !column.autoNow && !writes.create.includes(column.name)) {
@@ -17654,7 +17740,7 @@ function parseIntakePermissions(value, columns, scope, publicRead) {
     const column = byName2.get(name);
     if (!column) return `client.intake.fields names undeclared or platform-managed field "${entry}".`;
     if (column.helper === "id" || name === scope.column) return `client.intake.fields cannot set the platform-assigned identity field "${entry}".`;
-    if (column.helper === "blob") return `client.intake.fields cannot accept binary field "${entry}". Use project files for uploads.`;
+    if (column.helper === "blob") return `client.intake.fields cannot accept binary field "${entry}"; uploads go to project files.`;
     if (column.autoNow) return `client.intake.fields cannot set "${entry}", which the platform fills in.`;
     if (typeof publicRead === "object" && Object.prototype.hasOwnProperty.call(publicRead.where, name)) {
       return `client.intake.fields cannot set publication field "${entry}".`;
@@ -17668,7 +17754,7 @@ function parseIntakePermissions(value, columns, scope, publicRead) {
     }
   }
   if (typeof publicRead === "object" && !privateByDefault(publicRead.where, byName2)) {
-    return "client.intake has no fixed publication-field default that guarantees a private row. Give at least one predicate field a private default.";
+    return "client.intake has no fixed publication-field default that guarantees a private row; it is accepted when at least one predicate field has a private default.";
   }
   let where;
   if (input.where !== void 0) {
@@ -17825,10 +17911,10 @@ function readPaymentBindings(r, fail) {
       fields[key] = readString(r, fail, `payments.${name}.${key}`).value.toLowerCase();
       return;
     }
-    r.expectPunct("{", `opening payments.${name}.onPaid \u2014 declare one transition, { status: { from: [...], to: '...' } }`);
+    r.expectPunct("{", `opening payments.${name}.onPaid, which takes one transition: { status: { from: [...], to: '...' } }`);
     const column = r.readKey(`for the status column in payments.${name}.onPaid`);
     r.expectPunct(":", `after payments.${name}.onPaid.${column.name}`);
-    r.expectPunct("{", `opening payments.${name}.onPaid.${column.name} \u2014 declare { from: [...], to: '...' }`);
+    r.expectPunct("{", `opening payments.${name}.onPaid.${column.name}, which takes { from: [...], to: '...' }`);
     const transition = {};
     while (!r.tryPunct("}")) {
       const opt = r.readKey(`for an option of payments.${name}.onPaid.${column.name}`);
@@ -17846,7 +17932,7 @@ function readPaymentBindings(r, fail) {
     r.tryPunct(",");
     if (!r.tryPunct("}")) {
       const extra = r.peek();
-      fail(extra.line, `payments.${name}.onPaid declares one status transition only; remove the second entry. Other paid effects run from the signed payment event.`);
+      fail(extra.line, `payments.${name}.onPaid declares one status transition only; this one has a second entry. Other paid effects run from the signed payment event.`);
     }
     const values = [...transition.from, transition.to];
     for (const t of values) {
@@ -17882,7 +17968,7 @@ function readJobBindings(r, fail) {
 }
 function readServiceRoles(r, fail) {
   const entries2 = readNamed(r, fail, "serviceRoles", "service role", ["tables"], (_key, fields, name) => {
-    r.expectPunct("{", `opening serviceRoles.${name}.tables \u2014 declare { table: ['read', ...] }`);
+    r.expectPunct("{", `opening serviceRoles.${name}.tables, which takes { table: ['read', ...] }`);
     const tables = [];
     const tableLines = {};
     while (!r.tryPunct("}")) {
@@ -17915,7 +18001,7 @@ function validateBindings(input, tableInfo, errors) {
       errors.push(`${at2(entry, "table")}${kind} "${entry.name}" names table "${entry.table}", which is not declared in db/schema.ts.`);
       return null;
     }
-    if (!info.privateUser) errors.push(`${at2(entry, "table")}${kind} "${entry.name}" names table "${entry.table}", whose scope is not owner(), member(), anyOf(), group(), appRole() or parent(). It binds rows a signed-in user holds; use a server function for other tables.`);
+    if (!info.privateUser) errors.push(`${at2(entry, "table")}${kind} "${entry.name}" names table "${entry.table}", whose scope is not owner(), member(), anyOf(), group(), appRole() or parent(). It binds rows a signed-in user holds; other tables are reached from server functions.`);
     if (!info.key) errors.push(`${at2(entry, "table")}${kind} "${entry.name}" names table "${entry.table}", which needs exactly one id() key.`);
     return info;
   };
@@ -17924,7 +18010,7 @@ function validateBindings(input, tableInfo, errors) {
     const info = rowTable(p, "payment binding");
     if (!info) continue;
     if (info.table.scope.kind === "policy" && reachesAllOf(info.table.scope.policy)) {
-      errors.push(`${at2(p, "table")}payment binding "${p.name}" names table "${p.table}", which uses allOf(); payment bindings on allOf tables are not supported yet. Use a server function.`);
+      errors.push(`${at2(p, "table")}payment binding "${p.name}" names table "${p.table}", which uses allOf(); payment bindings on allOf tables are not supported yet; such tables are reached from server functions.`);
       continue;
     }
     const column = (name) => info.table.columns.find((c) => c.name === name);
@@ -17942,7 +18028,7 @@ function validateBindings(input, tableInfo, errors) {
       if (c.helper !== helper || c.nullable) errors.push(`${at2(p, field)}payment binding "${p.name}": "${p.table}"."${name}" must be ${what}.`);
       if (info.identity.includes(name)) errors.push(`${at2(p, field)}payment binding "${p.name}": "${p.table}"."${name}" is the table's access column; a payment never moves a row.`);
       const writable = [...info.table.client?.create ?? [], ...info.table.client?.update ?? [], ...info.table.client?.intake?.fields ?? []];
-      if (writable.includes(name)) errors.push(`${at2(p, field)}payment binding "${p.name}": "${p.table}"."${name}" is browser-writable through client.create, client.update or client.intake. Remove it there; the server sets prices and the payment sets the status.`);
+      if (writable.includes(name)) errors.push(`${at2(p, field)}payment binding "${p.name}": "${p.table}"."${name}" is browser-writable through client.create, client.update or client.intake, and a payment binding requires it not to be; the server sets prices and the payment sets the status.`);
     }
     if ((/* @__PURE__ */ new Set([p.amount, p.currency, p.status.column])).size !== 3) errors.push(`${at2(p, "")}payment binding "${p.name}" must name three different columns for amount, currency and status.`);
     const status = column(p.status.column);
@@ -17953,7 +18039,7 @@ function validateBindings(input, tableInfo, errors) {
   for (const j of input.jobs ?? []) rowTable(j, "job binding");
   const taken = /* @__PURE__ */ new Set([...BUILT_IN_GROUP_ROLES, ...input.groups?.roles ?? [], ...(input.appRoles ?? []).map((role) => role.name)]);
   for (const s of input.serviceRoles ?? []) {
-    if (taken.has(s.name)) errors.push(`${at2(s, "")}service role "${s.name}" has the name of a group or app role. Service roles are a separate namespace for unattended work; pick another name.`);
+    if (taken.has(s.name)) errors.push(`${at2(s, "")}service role "${s.name}" has the name of a group or app role. Service roles are a separate namespace for unattended work, so the name must differ.`);
     const tableLines = lines.get(s.tables) ?? {};
     for (const grant of s.tables) {
       if (!tableInfo(grant.table)) errors.push(`line ${tableLines[grant.table] ?? 0}: service role "${s.name}" grants table "${grant.table}", which is not declared in db/schema.ts.`);
@@ -17963,33 +18049,8 @@ function validateBindings(input, tableInfo, errors) {
 
 // worker/src/utils/function-bundle.ts
 function compileRoutePattern(file) {
-  const noExt = file.replace(/\.(ts|tsx|mts|js|mjs|jsx)$/, "");
-  const parts = noExt.split("/");
-  const pattern = [];
-  const display = [];
-  parts.forEach((seg, i) => {
-    const rest = seg.match(/^\[\.\.\.([a-zA-Z_][a-zA-Z0-9_]*)\]$/);
-    if (rest) {
-      if (i !== parts.length - 1) {
-        throw new Error(`catch-all [...${rest[1]}] must be the last path segment: ${file}`);
-      }
-      pattern.push({ type: "rest", value: rest[1] });
-      display.push(`*${rest[1]}`);
-      return;
-    }
-    const param = seg.match(/^\[([a-zA-Z_][a-zA-Z0-9_]*)\]$/);
-    if (param) {
-      pattern.push({ type: "param", value: param[1] });
-      display.push(`:${param[1]}`);
-      return;
-    }
-    if (/[\[\]]/.test(seg)) {
-      throw new Error(`malformed parametric segment "${seg}" in ${file}. Use [name] or [...name].`);
-    }
-    pattern.push({ type: "static", value: seg });
-    display.push(seg);
-  });
-  return { pattern, displayPath: "/" + display.join("/") };
+  const pattern = (0, import_function_route.functionRouteSegments)(file).map((s) => ({ type: s.type, value: s.value }));
+  return { pattern, displayPath: (0, import_function_route.displayRoute)(pattern), shape: (0, import_function_route.routeShape)(pattern) };
 }
 function displayRouteForFunctionFile(file) {
   if (typeof file !== "string" || !file) return null;
@@ -18255,7 +18316,7 @@ globalThis.sw.endpoint = function (config) {
         );
         return __sw_mergeHeaders(
           new Response(
-            JSON.stringify({ ok: false, error: 'RATE_LIMIT_UNAVAILABLE', message: 'Rate limiting is temporarily unavailable; this request was blocked. Retry shortly.' }),
+            JSON.stringify({ ok: false, error: 'RATE_LIMIT_UNAVAILABLE', message: 'Rate limiting is temporarily unavailable; this request was blocked. A later identical request can succeed.' }),
             { status: 503, headers: { 'Content-Type': 'application/json', 'Retry-After': String(rateLimit.windowSeconds) } }
           ),
           corsHeaders
@@ -18300,7 +18361,7 @@ globalThis.sw.endpoint = function (config) {
         return __sw_mergeHeaders(__sw_jsonError(status, code || 'HANDLER_ERROR', 'The request could not be completed.'), corsHeaders);
       }
       return __sw_mergeHeaders(
-        __sw_jsonError(500, 'HANDLER_ERROR', 'Endpoint handler threw an error. See your function logs for the details.'),
+        __sw_jsonError(500, 'HANDLER_ERROR', 'Endpoint handler threw an error; the details are in your function logs.'),
         corsHeaders
       );
     }
@@ -18311,33 +18372,38 @@ globalThis.sw.endpoint = function (config) {
 // worker/src/utils/api-index-route-warnings.ts
 function apiIndexRouteFindings(functions) {
   const paths = Object.keys(functions ?? {}).sort();
-  const pathsByRoute = /* @__PURE__ */ new Map();
+  const pathsByShape = /* @__PURE__ */ new Map();
   for (const path of paths) {
-    const route = displayRouteForFunctionFile(path);
-    if (!route) continue;
-    const existing = pathsByRoute.get(route);
+    if (!isRoutedFunctionPath(path)) continue;
+    let shape;
+    try {
+      shape = compileRoutePattern(path).shape;
+    } catch {
+      continue;
+    }
+    const existing = pathsByShape.get(shape);
     if (existing) existing.push(path);
-    else pathsByRoute.set(route, [path]);
+    else pathsByShape.set(shape, [path]);
   }
   return paths.flatMap((file) => {
-    if (!isApiIndexHandlerPath(file)) return [];
-    const route = displayRouteForFunctionFile(file);
-    if (!route) return [];
-    const alternative = file.replace(/\/index(\.[^.]+)$/, "$1");
-    const parentRoute = displayRouteForFunctionFile(alternative);
-    if (!parentRoute) return [];
-    const existing = pathsByRoute.get(parentRoute) ?? [];
-    if (existing.length > 0) {
-      return [{ file, warning: `Handler ${file} serves ${route}; directory index handlers keep /index in the URL. ${parentRoute} already has a handler: ${existing.join(", ")}. Choose the intended handler and route; both routes remain distinct.` }];
+    if (!isApiIndexHandlerPath(file) || !isRoutedFunctionPath(file)) return [];
+    let shape;
+    try {
+      shape = compileRoutePattern(file).shape;
+    } catch {
+      return [];
     }
-    return [{ file, warning: `Handler ${file} serves ${route}; directory index handlers keep /index in the URL. To serve ${parentRoute} instead, use ${alternative}.` }];
+    const others = (pathsByShape.get(shape) ?? []).filter((path) => path !== file);
+    if (others.length === 0) return [];
+    const route = displayRouteForFunctionFile(file);
+    return [{ file, warning: `Handler ${file} serves ${route}, and so does ${others.join(", ")}. A deploy refuses two handlers for the same path; keep one.` }];
   });
 }
 function isApiIndexHandlerPath(file) {
-  return /^api\/.+\/index\.(?:ts|tsx|mts|js|mjs|jsx)$/.test(file);
+  return /^api\/.+\/index\.(?:ts|tsx|mts|js|mjs|jsx)$/.test(file) || /^api\/index\.(?:ts|tsx|mts|js|mjs|jsx)$/.test(file);
 }
 
-// ../files-migration-c0-rig/worker/node_modules/acorn/dist/acorn.mjs
+// ../../../../../../pmwork/wt/files-migration-c0-rig/worker/node_modules/acorn/dist/acorn.mjs
 var astralIdentifierCodes = [509, 0, 227, 0, 150, 4, 294, 9, 1368, 2, 2, 1, 6, 3, 41, 2, 5, 0, 166, 1, 574, 3, 9, 9, 7, 9, 32, 4, 318, 1, 80, 3, 71, 10, 50, 3, 123, 2, 54, 14, 32, 10, 3, 1, 11, 3, 46, 10, 8, 0, 46, 9, 7, 2, 37, 13, 2, 9, 6, 1, 45, 0, 13, 2, 49, 13, 9, 3, 2, 11, 83, 11, 7, 0, 3, 0, 158, 11, 6, 9, 7, 3, 56, 1, 2, 6, 3, 1, 3, 2, 10, 0, 11, 1, 3, 6, 4, 4, 68, 8, 2, 0, 3, 0, 2, 3, 2, 4, 2, 0, 15, 1, 83, 17, 10, 9, 5, 0, 82, 19, 13, 9, 214, 6, 3, 8, 28, 1, 83, 16, 16, 9, 82, 12, 9, 9, 7, 19, 58, 14, 5, 9, 243, 14, 166, 9, 71, 5, 2, 1, 3, 3, 2, 0, 2, 1, 13, 9, 120, 6, 3, 6, 4, 0, 29, 9, 41, 6, 2, 3, 9, 0, 10, 10, 47, 15, 343, 9, 54, 7, 2, 7, 17, 9, 57, 21, 2, 13, 123, 5, 4, 0, 2, 1, 2, 6, 2, 0, 9, 9, 49, 4, 2, 1, 2, 4, 9, 9, 330, 3, 10, 1, 2, 0, 49, 6, 4, 4, 14, 10, 5350, 0, 7, 14, 11465, 27, 2343, 9, 87, 9, 39, 4, 60, 6, 26, 9, 535, 9, 470, 0, 2, 54, 8, 3, 82, 0, 12, 1, 19628, 1, 4178, 9, 519, 45, 3, 22, 543, 4, 4, 5, 9, 7, 3, 6, 31, 3, 149, 2, 1418, 49, 513, 54, 5, 49, 9, 0, 15, 0, 23, 4, 2, 14, 1361, 6, 2, 16, 3, 6, 2, 1, 2, 4, 101, 0, 161, 6, 10, 9, 357, 0, 62, 13, 499, 13, 245, 1, 2, 9, 726, 6, 110, 6, 6, 9, 4759, 9, 787719, 239];
 var astralIdentifierStartCodes = [0, 11, 2, 25, 2, 18, 2, 1, 2, 14, 3, 13, 35, 122, 70, 52, 268, 28, 4, 48, 48, 31, 14, 29, 6, 37, 11, 29, 3, 35, 5, 7, 2, 4, 43, 157, 19, 35, 5, 35, 5, 39, 9, 51, 13, 10, 2, 14, 2, 6, 2, 1, 2, 10, 2, 14, 2, 6, 2, 1, 4, 51, 13, 310, 10, 21, 11, 7, 25, 5, 2, 41, 2, 8, 70, 5, 3, 0, 2, 43, 2, 1, 4, 0, 3, 22, 11, 22, 10, 30, 66, 18, 2, 1, 11, 21, 11, 25, 71, 55, 7, 1, 65, 0, 16, 3, 2, 2, 2, 28, 43, 28, 4, 28, 36, 7, 2, 27, 28, 53, 11, 21, 11, 18, 14, 17, 111, 72, 56, 50, 14, 50, 14, 35, 39, 27, 10, 22, 251, 41, 7, 1, 17, 2, 60, 28, 11, 0, 9, 21, 43, 17, 47, 20, 28, 22, 13, 52, 58, 1, 3, 0, 14, 44, 33, 24, 27, 35, 30, 0, 3, 0, 9, 34, 4, 0, 13, 47, 15, 3, 22, 0, 2, 0, 36, 17, 2, 24, 20, 1, 64, 6, 2, 0, 2, 3, 2, 14, 2, 9, 8, 46, 39, 7, 3, 1, 3, 21, 2, 6, 2, 1, 2, 4, 4, 0, 19, 0, 13, 4, 31, 9, 2, 0, 3, 0, 2, 37, 2, 0, 26, 0, 2, 0, 45, 52, 19, 3, 21, 2, 31, 47, 21, 1, 2, 0, 185, 46, 42, 3, 37, 47, 21, 0, 60, 42, 14, 0, 72, 26, 38, 6, 186, 43, 117, 63, 32, 7, 3, 0, 3, 7, 2, 1, 2, 23, 16, 0, 2, 0, 95, 7, 3, 38, 17, 0, 2, 0, 29, 0, 11, 39, 8, 0, 22, 0, 12, 45, 20, 0, 19, 72, 200, 32, 32, 8, 2, 36, 18, 0, 50, 29, 113, 6, 2, 1, 2, 37, 22, 0, 26, 5, 2, 1, 2, 31, 15, 0, 328, 18, 16, 0, 2, 12, 2, 33, 125, 0, 80, 921, 103, 110, 18, 195, 2637, 96, 16, 1071, 18, 5, 26, 3994, 6, 582, 6842, 29, 1763, 568, 8, 30, 18, 78, 18, 29, 19, 47, 17, 3, 32, 20, 6, 18, 433, 44, 212, 63, 129, 74, 6, 0, 67, 12, 65, 1, 2, 0, 29, 6135, 9, 1237, 42, 9, 8936, 3, 2, 6, 2, 1, 2, 290, 16, 0, 30, 2, 3, 0, 15, 3, 9, 395, 2309, 106, 6, 12, 4, 8, 8, 9, 5991, 84, 2, 70, 2, 1, 3, 0, 3, 1, 3, 3, 2, 11, 2, 0, 2, 6, 2, 64, 2, 3, 3, 7, 2, 6, 2, 27, 2, 3, 2, 4, 2, 0, 4, 6, 2, 339, 3, 24, 2, 24, 2, 30, 2, 24, 2, 30, 2, 24, 2, 30, 2, 24, 2, 30, 2, 24, 2, 7, 1845, 30, 7, 5, 262, 61, 147, 44, 11, 6, 17, 0, 322, 29, 19, 43, 485, 27, 229, 29, 3, 0, 496, 6, 2, 3, 2, 1, 2, 14, 2, 196, 60, 67, 8, 0, 1205, 3, 2, 26, 2, 1, 2, 0, 3, 0, 2, 9, 2, 3, 2, 0, 2, 0, 7, 0, 5, 0, 2, 0, 2, 0, 2, 2, 2, 1, 2, 0, 3, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 1, 2, 0, 3, 3, 2, 6, 2, 3, 2, 3, 2, 0, 2, 9, 2, 16, 6, 2, 2, 4, 2, 16, 4421, 42719, 33, 4153, 7, 221, 3, 5761, 15, 7472, 16, 621, 2467, 541, 1507, 4938, 6, 4191];
 var nonASCIIidentifierChars = "\u200C\u200D\xB7\u0300-\u036F\u0387\u0483-\u0487\u0591-\u05BD\u05BF\u05C1\u05C2\u05C4\u05C5\u05C7\u0610-\u061A\u064B-\u0669\u0670\u06D6-\u06DC\u06DF-\u06E4\u06E7\u06E8\u06EA-\u06ED\u06F0-\u06F9\u0711\u0730-\u074A\u07A6-\u07B0\u07C0-\u07C9\u07EB-\u07F3\u07FD\u0816-\u0819\u081B-\u0823\u0825-\u0827\u0829-\u082D\u0859-\u085B\u0897-\u089F\u08CA-\u08E1\u08E3-\u0903\u093A-\u093C\u093E-\u094F\u0951-\u0957\u0962\u0963\u0966-\u096F\u0981-\u0983\u09BC\u09BE-\u09C4\u09C7\u09C8\u09CB-\u09CD\u09D7\u09E2\u09E3\u09E6-\u09EF\u09FE\u0A01-\u0A03\u0A3C\u0A3E-\u0A42\u0A47\u0A48\u0A4B-\u0A4D\u0A51\u0A66-\u0A71\u0A75\u0A81-\u0A83\u0ABC\u0ABE-\u0AC5\u0AC7-\u0AC9\u0ACB-\u0ACD\u0AE2\u0AE3\u0AE6-\u0AEF\u0AFA-\u0AFF\u0B01-\u0B03\u0B3C\u0B3E-\u0B44\u0B47\u0B48\u0B4B-\u0B4D\u0B55-\u0B57\u0B62\u0B63\u0B66-\u0B6F\u0B82\u0BBE-\u0BC2\u0BC6-\u0BC8\u0BCA-\u0BCD\u0BD7\u0BE6-\u0BEF\u0C00-\u0C04\u0C3C\u0C3E-\u0C44\u0C46-\u0C48\u0C4A-\u0C4D\u0C55\u0C56\u0C62\u0C63\u0C66-\u0C6F\u0C81-\u0C83\u0CBC\u0CBE-\u0CC4\u0CC6-\u0CC8\u0CCA-\u0CCD\u0CD5\u0CD6\u0CE2\u0CE3\u0CE6-\u0CEF\u0CF3\u0D00-\u0D03\u0D3B\u0D3C\u0D3E-\u0D44\u0D46-\u0D48\u0D4A-\u0D4D\u0D57\u0D62\u0D63\u0D66-\u0D6F\u0D81-\u0D83\u0DCA\u0DCF-\u0DD4\u0DD6\u0DD8-\u0DDF\u0DE6-\u0DEF\u0DF2\u0DF3\u0E31\u0E34-\u0E3A\u0E47-\u0E4E\u0E50-\u0E59\u0EB1\u0EB4-\u0EBC\u0EC8-\u0ECE\u0ED0-\u0ED9\u0F18\u0F19\u0F20-\u0F29\u0F35\u0F37\u0F39\u0F3E\u0F3F\u0F71-\u0F84\u0F86\u0F87\u0F8D-\u0F97\u0F99-\u0FBC\u0FC6\u102B-\u103E\u1040-\u1049\u1056-\u1059\u105E-\u1060\u1062-\u1064\u1067-\u106D\u1071-\u1074\u1082-\u108D\u108F-\u109D\u135D-\u135F\u1369-\u1371\u1712-\u1715\u1732-\u1734\u1752\u1753\u1772\u1773\u17B4-\u17D3\u17DD\u17E0-\u17E9\u180B-\u180D\u180F-\u1819\u18A9\u1920-\u192B\u1930-\u193B\u1946-\u194F\u19D0-\u19DA\u1A17-\u1A1B\u1A55-\u1A5E\u1A60-\u1A7C\u1A7F-\u1A89\u1A90-\u1A99\u1AB0-\u1ABD\u1ABF-\u1ACE\u1B00-\u1B04\u1B34-\u1B44\u1B50-\u1B59\u1B6B-\u1B73\u1B80-\u1B82\u1BA1-\u1BAD\u1BB0-\u1BB9\u1BE6-\u1BF3\u1C24-\u1C37\u1C40-\u1C49\u1C50-\u1C59\u1CD0-\u1CD2\u1CD4-\u1CE8\u1CED\u1CF4\u1CF7-\u1CF9\u1DC0-\u1DFF\u200C\u200D\u203F\u2040\u2054\u20D0-\u20DC\u20E1\u20E5-\u20F0\u2CEF-\u2CF1\u2D7F\u2DE0-\u2DFF\u302A-\u302F\u3099\u309A\u30FB\uA620-\uA629\uA66F\uA674-\uA67D\uA69E\uA69F\uA6F0\uA6F1\uA802\uA806\uA80B\uA823-\uA827\uA82C\uA880\uA881\uA8B4-\uA8C5\uA8D0-\uA8D9\uA8E0-\uA8F1\uA8FF-\uA909\uA926-\uA92D\uA947-\uA953\uA980-\uA983\uA9B3-\uA9C0\uA9D0-\uA9D9\uA9E5\uA9F0-\uA9F9\uAA29-\uAA36\uAA43\uAA4C\uAA4D\uAA50-\uAA59\uAA7B-\uAA7D\uAAB0\uAAB2-\uAAB4\uAAB7\uAAB8\uAABE\uAABF\uAAC1\uAAEB-\uAAEF\uAAF5\uAAF6\uABE3-\uABEA\uABEC\uABED\uABF0-\uABF9\uFB1E\uFE00-\uFE0F\uFE20-\uFE2F\uFE33\uFE34\uFE4D-\uFE4F\uFF10-\uFF19\uFF3F\uFF65";
@@ -23996,7 +24062,7 @@ function resolveSchemaConstants(tokens, callable, maxTokens, fail) {
   const budget = (line, adding) => {
     expanded += adding;
     if (expanded > maxTokens) {
-      fail(line, "reusing constants here expands the declaration past the size db/schema.ts allows. Reuse fewer copies, or write the shared part once.");
+      fail(line, "reusing constants here expands the declaration past the size db/schema.ts allows; fewer copies, or the shared part written once, stay within it.");
     }
   };
   const expandRange = (from, to, into, owner) => {
@@ -24013,7 +24079,7 @@ function resolveSchemaConstants(tokens, callable, maxTokens, fail) {
         }
         const constant = lookup(target, owner);
         if (opener !== "{") {
-          fail(t.line, `...${target.value} is only supported inside an object literal { \u2026 }. Reference ${target.value} directly, or write the values inline.`);
+          fail(t.line, `...${target.value} is only supported inside an object literal { \u2026 }; elsewhere ${target.value} is referenced directly or its values are written inline.`);
         }
         if (!constant.objectLiteral) {
           fail(t.line, `...${target.value} spreads a constant that is not an object literal { \u2026 }. Only object constants can be spread.`);
@@ -24039,7 +24105,7 @@ function resolveSchemaConstants(tokens, callable, maxTokens, fail) {
       }
       if (owner === null && STATEMENT_WORDS.has(t.value)) {
         if (isIdent(t, "export") && isIdent(next, "const")) {
-          fail(t.line, '"export const" is not supported in db/schema.ts; the file exports only the schema. Remove "export" from the constant.');
+          fail(t.line, '"export const" is not supported in db/schema.ts; the file exports only the schema, and constants are declared without "export".');
         }
         into.push(t);
         continue;
@@ -24050,7 +24116,7 @@ function resolveSchemaConstants(tokens, callable, maxTokens, fail) {
           fail(t.line, `${t.value} is a constant, not a function \u2014 write ${t.value} without "( \u2026 )".`);
         }
         if (isPunct(next, ".")) {
-          fail(t.line, `${t.value}.${tokens[k + 2]?.value ?? ""} reads a property of a constant, which db/schema.ts cannot evaluate. Declare that part as its own constant, or write it inline.`);
+          fail(t.line, `${t.value}.${tokens[k + 2]?.value ?? ""} reads a property of a constant, which db/schema.ts cannot evaluate; that part is accepted as its own constant or written inline.`);
         }
         budget(t.line, constant.tokens.length);
         append(into, constant.tokens);
@@ -24065,12 +24131,12 @@ function resolveSchemaConstants(tokens, callable, maxTokens, fail) {
         continue;
       }
       if (isPunct(next, ".")) {
-        fail(t.line, `${t.value}.${tokens[k + 2]?.value ?? ""} reads a value at run time; db/schema.ts is read without running it. Write the literal value instead.`);
+        fail(t.line, `${t.value}.${tokens[k + 2]?.value ?? ""} reads a value at run time; db/schema.ts is read without running it, so it accepts only the literal value.`);
       }
       if (isPunct(next, "(")) {
-        fail(t.line, `${t.value}(\u2026) is a function call; db/schema.ts is read without running it, so only the schema helpers can be called. Write the value inline, or declare it with const using schema helpers and literals.`);
+        fail(t.line, `${t.value}(\u2026) is a function call; db/schema.ts is read without running it, so only the schema helpers can be called. Values are written inline, or declared with const using schema helpers and literals.`);
       }
-      fail(t.line, `"${t.value}" is not defined in db/schema.ts. Declare it above export default as const ${t.value} = \u2026; or write the value inline.`);
+      fail(t.line, `"${t.value}" is not defined in db/schema.ts. A value is either declared above export default as const ${t.value} = \u2026; or written inline.`);
     }
   };
   const lookup = (t, owner) => {
@@ -24081,37 +24147,37 @@ function resolveSchemaConstants(tokens, callable, maxTokens, fail) {
       fail(t.line, `constant ${t.value} refers to itself. A constant must be built from values declared above it.`);
     }
     if (at2 !== void 0) {
-      fail(t.line, owner ? `constant ${owner} uses ${t.value}, which is declared later (line ${at2}). Move ${t.value} above ${owner}; constants that refer to each other in a cycle cannot be resolved.` : `${t.value} is used before its declaration on line ${at2}. Move the const above export default.`);
+      fail(t.line, owner ? `constant ${owner} uses ${t.value}, which is declared later (line ${at2}); ${t.value} must come above ${owner}, and constants that refer to each other in a cycle cannot be resolved.` : `${t.value} is used before its declaration on line ${at2}; a const must come above export default.`);
     }
-    return fail(t.line, `"${t.value}" is not defined in db/schema.ts. Declare it above export default as const ${t.value} = \u2026; or write the value inline.`);
+    return fail(t.line, `"${t.value}" is not defined in db/schema.ts. A value is either declared above export default as const ${t.value} = \u2026; or written inline.`);
   };
   while (!isIdent(tokens[i], "export")) {
     const t = tokens[i];
     if (t.kind === "eof") return [...out, t];
     if (isIdent(t, "let") || isIdent(t, "var")) {
-      fail(t.line, `"${t.value}" declares a changeable binding; db/schema.ts allows only const. Change "${t.value}" to "const".`);
+      fail(t.line, `"${t.value}" declares a changeable binding; db/schema.ts allows only const, not "${t.value}".`);
     }
     if (!isIdent(t, "const")) {
       if (t.kind === "ident" && constants.has(t.value)) {
-        fail(t.line, `${t.value} is changed after its declaration; constants in db/schema.ts cannot be reassigned or mutated. Declare the final value once with const.`);
+        fail(t.line, `${t.value} is changed after its declaration; constants in db/schema.ts cannot be reassigned or mutated, so each final value is declared once with const.`);
       }
       if (isIdent(t, "import")) fail(t.line, "imports must come first in db/schema.ts, before any const.");
       return [...out, ...tokens.slice(i)];
     }
     const nameTok = tokens[i + 1];
     if (!nameTok || nameTok.kind !== "ident") {
-      fail(t.line, "destructuring (const { \u2026 } = / const [ \u2026 ] =) is not supported in db/schema.ts. Declare one constant per name: const name = \u2026;");
+      fail(t.line, "destructuring (const { \u2026 } = / const [ \u2026 ] =) is not supported in db/schema.ts; it accepts one constant per name: const name = \u2026;");
     }
     const name = nameTok.value;
     if (callable.has(name) || LITERAL_WORDS.has(name) || STATEMENT_WORDS.has(name) || name === "schema") {
-      fail(nameTok.line, `const ${name} shadows a db/schema.ts helper or keyword. Choose another name, such as ${name}Rule.`);
+      fail(nameTok.line, `const ${name} shadows a db/schema.ts helper or keyword; a different name, such as ${name}Rule, does not.`);
     }
     if (imported.has(name)) {
-      fail(nameTok.line, `const ${name} has the same name as an import. Choose another name.`);
+      fail(nameTok.line, `const ${name} has the same name as an import; constant names must differ from imports.`);
     }
-    if (constants.has(name)) fail(nameTok.line, `const ${name} is declared twice. Keep one declaration.`);
+    if (constants.has(name)) fail(nameTok.line, `const ${name} is declared twice; a constant is declared once.`);
     if (isPunct(tokens[i + 2], ":")) {
-      fail(tokens[i + 2].line, `const ${name} has a type annotation; db/schema.ts constants take their type from the helpers. Remove ": \u2026".`);
+      fail(tokens[i + 2].line, `const ${name} has a type annotation; db/schema.ts constants take their type from the helpers, so ": \u2026" is not accepted.`);
     }
     if (!isPunct(tokens[i + 2], "=")) fail(nameTok.line, `expected "=" after const ${name}.`);
     const start = i + 3;
@@ -24122,16 +24188,16 @@ function resolveSchemaConstants(tokens, callable, maxTokens, fail) {
       if (v.kind === "punct" && OPENERS.includes(v.value)) depth++;
       else if (v.kind === "punct" && CLOSERS.includes(v.value)) {
         depth--;
-        if (depth < 0) fail(v.line, `const ${name} has an unmatched "${v.value}". Balance its brackets.`);
+        if (depth < 0) fail(v.line, `const ${name} has an unmatched "${v.value}"; its brackets are unbalanced.`);
       } else if (depth === 0 && (isPunct(v, ";") || isPunct(v, ",") || isIdent(v, "const") && !isIdent(tokens[k - 1], "as") || isIdent(v, "let") || isIdent(v, "var") || isIdent(v, "export"))) break;
-      if (depth === 0 && isPunct(v, "=")) fail(v.line, `${name} is assigned twice; give each constant one value.`);
+      if (depth === 0 && isPunct(v, "=")) fail(v.line, `${name} is assigned twice; each constant takes one value.`);
     }
-    if (depth !== 0) fail(nameTok.line, `const ${name} has an unclosed bracket. Balance its brackets.`);
+    if (depth !== 0) fail(nameTok.line, `const ${name} has an unclosed bracket; its brackets are unbalanced.`);
     let end2 = k;
     if (end2 - start >= 2 && isIdent(tokens[end2 - 2], "as") && isIdent(tokens[end2 - 1], "const")) end2 -= 2;
     if (end2 === start) fail(nameTok.line, `const ${name} has no value.`);
     if (isPunct(tokens[k], ",")) {
-      fail(tokens[k].line, `one declaration declares several constants; write one const per name (const ${name} = \u2026;).`);
+      fail(tokens[k].line, `one declaration declares several constants; db/schema.ts accepts one const per name (const ${name} = \u2026;).`);
     }
     const value = [];
     expandRange(start, end2, value, name);
@@ -24140,7 +24206,7 @@ function resolveSchemaConstants(tokens, callable, maxTokens, fail) {
     i = isPunct(tokens[k], ";") ? k + 1 : k;
   }
   if (isIdent(tokens[i], "export") && isIdent(tokens[i + 1], "const")) {
-    fail(tokens[i].line, '"export const" is not supported in db/schema.ts; the file exports only the schema. Remove "export" from the constant.');
+    fail(tokens[i].line, '"export const" is not supported in db/schema.ts; the file exports only the schema, and constants are declared without "export".');
   }
   const body = [];
   const open = tokens.findIndex((v, k) => k > i && isPunct(v, "(") && isIdent(tokens[k - 1], "schema"));
@@ -24150,12 +24216,12 @@ function resolveSchemaConstants(tokens, callable, maxTokens, fail) {
   for (let k = end; k < tokens.length; k++) {
     const v = tokens[k];
     if (v.kind === "ident" && constants.has(v.value) && (isPunct(tokens[k + 1], "=") || isPunct(tokens[k + 1], "."))) {
-      fail(v.line, `${v.value} is changed after its declaration; constants in db/schema.ts cannot be reassigned or mutated. Declare the final value once with const.`);
+      fail(v.line, `${v.value} is changed after its declaration; constants in db/schema.ts cannot be reassigned or mutated, so each final value is declared once with const.`);
     }
     body.push(v);
   }
   if (out.length + body.length > maxTokens) {
-    fail(tokens[i].line, "reusing constants here expands the declaration past the size db/schema.ts allows. Reuse fewer copies, or write the shared part once.");
+    fail(tokens[i].line, "reusing constants here expands the declaration past the size db/schema.ts allows; fewer copies, or the shared part written once, stay within it.");
   }
   return [...out, ...body];
 }
@@ -24265,18 +24331,18 @@ function validateDeclaredRelations(tables, tableByName, knownColumns, markedGone
     for (const rel of t.relations) {
       if (rel.name === "__proto__" || rel.name === "prototype" || rel.name === "constructor") {
         errors.push(
-          `Relation "${t.name}"."${rel.name}" uses a reserved object name. Choose a relation name that can be returned as an ordinary row field.`
+          `Relation "${t.name}"."${rel.name}" uses a reserved object name; a relation name must be returnable as an ordinary row field.`
         );
       } else if (rootNames.has(rel.name)) {
         errors.push(
-          `Relation "${t.name}"."${rel.name}" has the same name as a column on "${t.name}". Choose a different relation name so nesting related rows cannot overwrite the root column.`
+          `Relation "${t.name}"."${rel.name}" has the same name as a column on "${t.name}". A relation name must differ from the columns, so nesting related rows cannot overwrite the root column.`
         );
       }
       const related = tableByName.get(rel.table);
       if (!related) {
         const marked = markedGone(rel.table);
         errors.push(
-          marked ? `Relation "${t.name}"."${rel.name}" targets "${rel.table}", which this file marks ${marked}. Remove the relation before the table can go.` : `Relation "${t.name}"."${rel.name}" targets ${rel.kind === "hasMany" ? "child" : "parent"} table "${rel.table}", which is not declared in db/schema.ts. A relation can only target a managed table in the same declaration.`
+          marked ? `Relation "${t.name}"."${rel.name}" targets "${rel.table}", which this file marks ${marked}. The table can go only once no relation targets it.` : `Relation "${t.name}"."${rel.name}" targets ${rel.kind === "hasMany" ? "child" : "parent"} table "${rel.table}", which is not declared in db/schema.ts. A relation can only target a managed table in the same declaration.`
         );
         continue;
       }
@@ -24285,7 +24351,7 @@ function validateDeclaredRelations(tables, tableByName, knownColumns, markedGone
       const idCol = keySide.columns.find((c) => c.helper === "id");
       if (!idCol) {
         errors.push(
-          rel.kind === "hasMany" ? `Table "${t.name}" declares relation "${rel.name}" but has no id() column to join on. A hasMany relation joins the child's foreign key to this table's primary key \u2014 declare an id() column.` : `Relation "${t.name}"."${rel.name}" belongsTo "${rel.table}", but "${rel.table}" has no id() column to join on. A belongsTo relation joins this table's foreign key to the parent's primary key \u2014 declare an id() column on "${rel.table}".`
+          rel.kind === "hasMany" ? `Table "${t.name}" declares relation "${rel.name}" but has no id() column to join on. A hasMany relation joins the child's foreign key to this table's primary key, so the table needs an id() column.` : `Relation "${t.name}"."${rel.name}" belongsTo "${rel.table}", but "${rel.table}" has no id() column to join on. A belongsTo relation joins this table's foreign key to the parent's primary key, so "${rel.table}" needs an id() column.`
         );
       } else {
         rel.parentKey = idCol.name;
@@ -24299,13 +24365,13 @@ function validateDeclaredRelations(tables, tableByName, knownColumns, markedGone
       }
       if (fkCol.references !== keySide.name) {
         errors.push(
-          fkCol.references === null ? `Relation "${t.name}"."${rel.name}" joins on "${fkSide.name}"."${rel.fk}", but that column declares no foreign key. Declare it as ${rel.fk}: <type>({ references: '${keySide.name}' }) so the join key is a proven foreign key, not a free-form join.` : `Relation "${t.name}"."${rel.name}" joins on "${fkSide.name}"."${rel.fk}", but that column references "${fkCol.references}", not "${keySide.name}". The foreign key must reference the table that holds the primary key of this relation.`
+          fkCol.references === null ? `Relation "${t.name}"."${rel.name}" joins on "${fkSide.name}"."${rel.fk}", but that column declares no foreign key. The join key must be a proven foreign key, not a free-form join: ${rel.fk}: <type>({ references: '${keySide.name}' }).` : `Relation "${t.name}"."${rel.name}" joins on "${fkSide.name}"."${rel.fk}", but that column references "${fkCol.references}", not "${keySide.name}". The foreign key must reference the table that holds the primary key of this relation.`
         );
       } else if (idCol) {
         const expectedHelper = idCol.uuid ? "text" : "integer";
         if (fkCol.helper !== expectedHelper) {
           errors.push(
-            `Relation "${t.name}"."${rel.name}" joins "${fkSide.name}"."${rel.fk}" to "${keySide.name}"."${idCol.name}", but their key types do not match. Use ${expectedHelper}() for the foreign key so fetched rows can be stitched to the ${idCol.uuid ? "text" : "whole-number"} key exactly.`
+            `Relation "${t.name}"."${rel.name}" joins "${fkSide.name}"."${rel.fk}" to "${keySide.name}"."${idCol.name}", but their key types do not match. The foreign key needs ${expectedHelper}() so fetched rows can be stitched to the ${idCol.uuid ? "text" : "whole-number"} key exactly.`
           );
         }
       }
@@ -24337,7 +24403,7 @@ function validateRowLinks(tables, tableByName, errors) {
       }
       const earlier = childOf.get(child.name);
       if (earlier && earlier !== t.name) {
-        errors.push(`Table "${child.name}" is a link child of both "${earlier}" and "${t.name}". Declare it as a link child of one table.`);
+        errors.push(`Table "${child.name}" is a link child of both "${earlier}" and "${t.name}"; a table is a link child of one table only.`);
         continue;
       }
       childOf.set(child.name, t.name);
@@ -24386,7 +24452,7 @@ function validateIntake(tables, tableByName, errors) {
       continue;
     }
     if (column.helper !== "id" && !column.unique) {
-      errors.push(`${at2} names reference "${field}", which is not unique on "${target.name}". Declare it { unique: true }; a reference must name one row.`);
+      errors.push(`${at2} names reference "${field}", which is not unique on "${target.name}". A reference must name one row, so the field needs { unique: true }.`);
       continue;
     }
     if (column.nullable) {
@@ -24500,7 +24566,7 @@ function readFileOwner(r, fail, name) {
   r.expectPunct("{", `in owner() for file collection "${name}"`);
   const key = r.readKey(`in owner() for file collection "${name}"`);
   if (key.name === "visitors") {
-    fail(key.line, `owner({ visitors: true }) is not available for file collections yet: an upload needs a signed-in account. Use owner().`);
+    fail(key.line, `owner({ visitors: true }) is not available for file collections yet: an upload needs a signed-in account, so file collections take owner().`);
   }
   fail(key.line, `owner() on file collection "${name}" takes no options \u2014 the owner is always the signed-in uploader.`);
 }
@@ -24563,7 +24629,7 @@ function readFileScope(r, fail, name) {
     if (owners !== 1 || !member) fail(tok.line, `anyOf() on file collection "${name}" requires exactly one owner() and one member().`);
     return { kind: "owner_or_member", member };
   }
-  return fail(tok.line, `unknown scope "${tok.value}" on file collection "${name}". Use owner(), member(), anyOf(owner(), member()), parent({ table, via }), shared(), or serverOnly().`);
+  return fail(tok.line, `unknown scope "${tok.value}" on file collection "${name}". File collection scopes are owner(), member(), anyOf(owner(), member()), parent({ table, via }), shared(), and serverOnly().`);
 }
 function readCollection(r, fail, name, errors) {
   const callee = r.expectIdent(`for file collection "${name}"`);
@@ -24617,11 +24683,11 @@ function readCollection(r, fail, name, errors) {
         if (limit.name === "maxSize") {
           const raw = r.readLiteral(`for limits.maxSize of "${name}"`);
           limits.maxSize = parseFileSize(raw);
-          if (limits.maxSize === null) errors.push(`File collection "${name}" has an invalid limits.maxSize: use a whole number of bytes or a size such as '25MB'.`);
+          if (limits.maxSize === null) errors.push(`File collection "${name}" has an invalid limits.maxSize: it takes a whole number of bytes or a size such as '25MB'.`);
         } else {
           limits.types = readStringList(r, fail, `limits.types of file collection "${name}"`).map((t) => t.toLowerCase());
           for (const type of limits.types) {
-            if (!MIME_PATTERN.test(type)) errors.push(`File collection "${name}" has an invalid limits.types entry "${type}": use a content type such as 'image/png' or 'image/*'.`);
+            if (!MIME_PATTERN.test(type)) errors.push(`File collection "${name}" has an invalid limits.types entry "${type}": it takes a content type such as 'image/png' or 'image/*'.`);
           }
         }
         if (!r.tryPunct(",")) {
@@ -24642,16 +24708,16 @@ function readCollection(r, fail, name, errors) {
   if (rootError) errors.push(rootError);
   const declaresClient = FILE_OPERATIONS.some((op) => client[op]);
   if (scope.kind === "server_only" && declaresClient) {
-    errors.push(`File collection "${name}" is serverOnly() and cannot declare client operations. Remove client, or choose a scope the browser may use.`);
+    errors.push(`File collection "${name}" is serverOnly() and cannot declare client operations; client operations need a scope the browser may use.`);
   }
   if (isPublic && client.read) {
-    errors.push(`File collection "${name}" is public: true and also declares client.read. Public already lets anyone read; remove client.read.`);
+    errors.push(`File collection "${name}" is public: true and also declares client.read. Public already lets anyone read, so client.read is not accepted with it.`);
   }
   if (isPublic && (scope.kind === "member" || scope.kind === "owner_or_member")) {
-    errors.push(`File collection "${name}" is public: true on a member() scope, which would let anyone read team files. Remove public, or use owner() or serverOnly().`);
+    errors.push(`File collection "${name}" is public: true on a member() scope, which would let anyone read team files. public: true is accepted with owner() or serverOnly().`);
   }
   if (isPublic && scope.kind === "parent") {
-    errors.push(`File collection "${name}" is public: true on a parent() scope, which would let anyone read files that follow a private row. Remove public.`);
+    errors.push(`File collection "${name}" is public: true on a parent() scope, which would let anyone read files that follow a private row, so public: true is not accepted there.`);
   }
   return { name, path: typeof path === "string" ? path : "", scope, public: isPublic, client, limits };
 }
@@ -24662,7 +24728,7 @@ function readFileCollections(r, fail, errors) {
   while (!r.tryPunct("}")) {
     const key = r.readKey("for a file collection name");
     if (!COLLECTION_NAME.test(key.name)) {
-      errors.push(`File collection name "${key.name}" is invalid. Use lowercase letters, digits and underscores, starting with a letter.`);
+      errors.push(`File collection name "${key.name}" is invalid. A name is lowercase letters, digits and underscores, starting with a letter.`);
     }
     if (out.some((c) => c.name === key.name)) fail(key.line, `file collection "${key.name}" is declared twice.`);
     r.expectPunct(":", `after file collection "${key.name}"`);
@@ -24699,7 +24765,7 @@ function validateFileCollections(collections, table, errors) {
         continue;
       }
       if (facts.edges + 1 > MAX_FILE_PARENT_EDGES) {
-        errors.push(`File collection "${a.name}" uses parent({ table: '${parent.table}' }), which makes a chain of ${facts.edges + 1} parent edges counting the file. At most ${MAX_FILE_PARENT_EDGES} are allowed; attach the files to a table nearer the root of the chain.`);
+        errors.push(`File collection "${a.name}" uses parent({ table: '${parent.table}' }), which makes a chain of ${facts.edges + 1} parent edges counting the file. At most ${MAX_FILE_PARENT_EDGES} are allowed; a table nearer the root of the chain has fewer edges.`);
         continue;
       }
       parent.key = facts.key;
@@ -24714,7 +24780,7 @@ function validateFileCollections(collections, table, errors) {
       continue;
     }
     if (membership.clientWrites) {
-      errors.push(`Table "${m.membership}" grants membership access to file collection "${a.name}" and cannot allow client writes. Change membership through a server function.`);
+      errors.push(`Table "${m.membership}" grants membership access to file collection "${a.name}" and cannot allow client writes; membership changes go through a server function.`);
     }
     if (!membership.columns.has(m.memberUser)) errors.push(`The membership table "${m.membership}" (for file collection "${a.name}") has no "${m.memberUser}" column named in member({ member_user }).`);
     if (!membership.columns.has(m.memberGroup)) errors.push(`The membership table "${m.membership}" (for file collection "${a.name}") has no "${m.memberGroup}" column named in member({ member_group }).`);
@@ -24746,7 +24812,7 @@ function roleVocabularyErrors(policy) {
   dupes(policy.adminGrantableGroupRoles, "groups.adminGrantableRoles");
   dupes(policy.appRoles, "appRoles");
   for (const role of policy.groupRoles) {
-    if (BUILT_IN_GROUP_ROLES2.includes(role)) errors.push(`"${role}" is a built-in group role; declare only additional roles.`);
+    if (BUILT_IN_GROUP_ROLES2.includes(role)) errors.push(`"${role}" is a built-in group role; groups.roles lists only additional roles.`);
   }
   for (const role of policy.adminGrantableGroupRoles) {
     if (!policy.groupRoles.includes(role)) errors.push(`groups.adminGrantableRoles names "${role}", which is not in groups.roles.`);
@@ -24855,7 +24921,7 @@ function resolveGroupScopes(tables, vocabulary, errors) {
       const where = `line ${declared.line}: `;
       const column = t.columns.find((c) => c.name === node.column);
       if (!column) {
-        errors.push(`${where}Table "${t.name}" uses group({ column: '${node.column}' }), but "${node.column}" is not one of its declared columns. Declare it as ${node.column}: text().`);
+        errors.push(`${where}Table "${t.name}" uses group({ column: '${node.column}' }), but "${node.column}" is not one of its declared columns; it needs ${node.column}: text().`);
       } else if (column.helper !== "text" || column.nullable) {
         errors.push(`${where}Table "${t.name}" uses group({ column: '${node.column}' }), which must be a non-nullable text() column: every row belongs to exactly one group.`);
       }
@@ -24863,7 +24929,7 @@ function resolveGroupScopes(tables, vocabulary, errors) {
         const list = declared.explicit[op] ?? omitted;
         for (const role of list) {
           if (!allRoles.includes(role)) {
-            errors.push(`${where}group({ roles: { ${op} } }) on table "${t.name}" names "${role}", which is not a group role. Use owner, admin, member, or a role declared in groups.roles.`);
+            errors.push(`${where}group({ roles: { ${op} } }) on table "${t.name}" names "${role}", which is not a group role. Group roles are owner, admin, member, and the roles declared in groups.roles.`);
           }
         }
         node.roles[op] = sorted(list);
@@ -24875,7 +24941,7 @@ function resolveGroupScopes(tables, vocabulary, errors) {
         }
       }
       if ((branch || allOf) && GROUP_OPERATIONS.every((op) => node.roles[op].length === 0)) {
-        errors.push(`${where}group() inside ${allOf ? "allOf()" : "anyOf()"} on table "${t.name}" grants no operation. List the group roles that may read, update or delete every row of the group.`);
+        errors.push(`${where}group() inside ${allOf ? "allOf()" : "anyOf()"} on table "${t.name}" grants no operation; it needs the group roles that may read, update or delete every row of the group.`);
       }
       if (!(branch && allOf) && t.client?.create && !t.client.create.includes(node.column)) {
         errors.push(`${where}Table "${t.name}" uses group() and client.create must include "${node.column}" so every new row names the group it belongs to.`);
@@ -25000,7 +25066,7 @@ function resolveAppRoleScopes(tables, appRoles, errors) {
       if (!declared) continue;
       for (const { op, name, line } of declared.names) {
         if (!vocabulary.has(name)) {
-          errors.push(`line ${line}: appRole({ roles: { ${op} } }) on table "${t.name}" names "${name}", which is not declared in the schema's appRoles option. List only app roles declared there; group roles and admin do not apply.`);
+          errors.push(`line ${line}: appRole({ roles: { ${op} } }) on table "${t.name}" names "${name}", which is not declared in the schema's appRoles option. appRole() accepts only app roles declared there; group roles and admin do not apply.`);
         }
       }
       for (const op of ["update", "delete"]) {
@@ -25010,7 +25076,7 @@ function resolveAppRoleScopes(tables, appRoles, errors) {
         }
       }
       if (branch && APP_ROLE_OPERATIONS.every((op) => node.roles[op].length === 0)) {
-        errors.push(`line ${declared.line}: appRole() inside ${root.kind === "all_of" ? "allOf()" : "anyOf()"} on table "${t.name}" grants no operation. List the app roles that may read, update or delete every row.`);
+        errors.push(`line ${declared.line}: appRole() inside ${root.kind === "all_of" ? "allOf()" : "anyOf()"} on table "${t.name}" grants no operation; it needs the app roles that may read, update or delete every row.`);
       }
       declaredLines.delete(node);
     }
@@ -25063,7 +25129,7 @@ function readAppRoles(r, fail) {
     const key = r.readKey("for an app role name");
     if (out.some((role2) => role2.name === key.name)) fail(key.line, `app role "${key.name}" is declared twice.`);
     r.expectPunct(":", `after app role "${key.name}"`);
-    r.expectPunct("{", `opening app role "${key.name}" \u2014 declare it as { grantableBy: [...] }`);
+    r.expectPunct("{", `opening app role "${key.name}", which takes { grantableBy: [...] }`);
     const role = { name: key.name, grantableBy: [] };
     const seen = /* @__PURE__ */ new Set();
     while (!r.tryPunct("}")) {
@@ -25230,7 +25296,7 @@ function tokenize2(source) {
       continue;
     }
     if (ch === "`") {
-      throw new SchemaTsError(`line ${line}: template literals are not allowed in db/schema.ts \u2014 use plain 'single-quoted' strings.`);
+      throw new SchemaTsError(`line ${line}: template literals are not allowed in db/schema.ts; strings are plain 'single-quoted' strings.`);
     }
     if (ch === "'" || ch === '"') {
       const startLine = line;
@@ -25431,11 +25497,11 @@ function checkDeclaredName(kind, raw, line) {
     throw new SchemaTsError(`line ${line}: ${kind} name "${raw.slice(0, 40)}\u2026" is longer than ${MAX_NAME_LENGTH} characters.`);
   }
   if (!SAFE_IDENT.test(raw)) {
-    throw new SchemaTsError(`line ${line}: ${kind} name "${raw}" is invalid. Use letters, digits, and underscores, starting with a letter or underscore.`);
+    throw new SchemaTsError(`line ${line}: ${kind} name "${raw}" is invalid. A name is letters, digits, and underscores, starting with a letter or underscore.`);
   }
   const name = raw.toLowerCase();
   if (name.startsWith("_") || RESERVED_PREFIXES.some((p) => name.startsWith(p))) {
-    throw new SchemaTsError(`line ${line}: ${kind} name "${raw}" uses a reserved platform prefix and cannot be declared. Pick a different name \u2014 in particular, names starting with "app_" or "_" belong to the platform.`);
+    throw new SchemaTsError(`line ${line}: ${kind} name "${raw}" uses a reserved platform prefix and cannot be declared: names starting with "app_" or "_" belong to the platform.`);
   }
   return name;
 }
@@ -25449,12 +25515,12 @@ function readColumn(r, tableName, rawName, line) {
   }
   if (TABLE_MARKER_HELPERS.has(helper)) {
     throw new SchemaTsError(
-      `line ${helperTok.line}: "${tableName}"."${rawName}" uses ${helper}(), which marks a whole table, not a column. Removing columns from the live database is not supported yet, so keep "${rawName}" declared with its column type.`
+      `line ${helperTok.line}: "${tableName}"."${rawName}" uses ${helper}(), which marks a whole table, not a column. Removing columns from the live database is not supported yet, so "${rawName}" stays declared with its column type.`
     );
   }
   if (!COLUMN_HELPERS.has(helper)) {
     throw new SchemaTsError(
-      `line ${helperTok.line}: unknown column type "${helper}" on "${tableName}"."${rawName}". Use one of: id, text, number, integer, bigint, boolean, timestamp, json, blob.`
+      `line ${helperTok.line}: unknown column type "${helper}" on "${tableName}"."${rawName}". Column types are id, text, number, integer, bigint, boolean, timestamp, json, and blob.`
     );
   }
   r.expectPunct("(", `after "${helper}"`);
@@ -25511,7 +25577,7 @@ function readColumn(r, tableName, rawName, line) {
           );
         }
         if (t === "integer" && typeof value === "number" && !Number.isSafeInteger(value)) {
-          throw new SchemaTsError(Number.isInteger(value) ? `line ${optLine}: the default for integer column "${tableName}"."${rawName}" is outside JavaScript's exact whole-number range (\xB19007199254740991). Declare the column bigint() and write the default as a string.` : `line ${optLine}: the default for integer column "${tableName}"."${rawName}" must be a whole number.`);
+          throw new SchemaTsError(Number.isInteger(value) ? `line ${optLine}: the default for integer column "${tableName}"."${rawName}" is outside JavaScript's exact whole-number range (\xB19007199254740991); a bigint() column takes such a default written as a string.` : `line ${optLine}: the default for integer column "${tableName}"."${rawName}" must be a whole number.`);
         }
         if (t === "bigint" && typeof value === "string" && !isCanonicalBigintText(value)) {
           throw new SchemaTsError(`line ${optLine}: the default for bigint column "${tableName}"."${rawName}" must be a whole number between -9223372036854775808 and 9223372036854775807, written as a string with no sign other than a leading minus and no leading zeros.`);
@@ -25551,7 +25617,7 @@ function readColumn(r, tableName, rawName, line) {
   if (col.hasDefault && col.default === null) {
     if (!col.nullable) {
       throw new SchemaTsError(
-        `line ${line}: "${tableName}"."${rawName}" is required but declares { default: null } \u2014 a required column can never hold null. Give it a real default, or mark it { nullable: true }.`
+        `line ${line}: "${tableName}"."${rawName}" is required but declares { default: null } \u2014 a required column can never hold null. It is accepted with a non-null default or { nullable: true }.`
       );
     }
     col.hasDefault = false;
@@ -25794,7 +25860,7 @@ function readRelations(r, tableName) {
   while (!r.tryPunct("}")) {
     const key = r.readKey(`for a relation name of table "${tableName}"`);
     if (!SAFE_IDENT.test(key.name) || key.name.length > MAX_NAME_LENGTH) {
-      throw new SchemaTsError(`line ${key.line}: relation name "${key.name}" on table "${tableName}" is invalid. Use letters, digits, and underscores, starting with a letter or underscore.`);
+      throw new SchemaTsError(`line ${key.line}: relation name "${key.name}" on table "${tableName}" is invalid. A name is letters, digits, and underscores, starting with a letter or underscore.`);
     }
     const name = key.name.toLowerCase();
     if (seen.has(name)) throw new SchemaTsError(`line ${key.line}: relation "${key.name}" on table "${tableName}" is declared twice.`);
@@ -25802,7 +25868,7 @@ function readRelations(r, tableName) {
     r.expectPunct(":", `after relation "${key.name}" on table "${tableName}"`);
     const callee = r.expectIdent(`for relation "${key.name}" on table "${tableName}"`);
     if (callee.value !== "hasMany" && callee.value !== "belongsTo") {
-      throw new SchemaTsError(`line ${callee.line}: relation "${key.name}" on table "${tableName}" uses "${callee.value}()", which is not supported. Use hasMany('child_table', 'foreign_key') or belongsTo('parent_table', 'foreign_key').`);
+      throw new SchemaTsError(`line ${callee.line}: relation "${key.name}" on table "${tableName}" uses "${callee.value}()", which is not supported. Relations are hasMany('child_table', 'foreign_key') and belongsTo('parent_table', 'foreign_key').`);
     }
     const kind = callee.value;
     const side = kind === "hasMany" ? "child" : "parent";
@@ -25835,7 +25901,7 @@ function readScope(r, tableName) {
   const tok = r.expectIdent(`for the scope of table "${tableName}"`);
   if (!SCOPE_HELPERS.has(tok.value)) {
     throw new SchemaTsError(
-      `line ${tok.line}: unknown scope "${tok.value}" on table "${tableName}". Use owner(), group(), appRole(), member(), anyOf(), allOf(), parent(), shared(), or serverOnly().`
+      `line ${tok.line}: unknown scope "${tok.value}" on table "${tableName}". Table scopes are owner(), group(), appRole(), member(), anyOf(), allOf(), parent(), shared(), and serverOnly().`
     );
   }
   if (tok.value === "anyOf") return readAnyOfScope(r, tableName, tok.line);
@@ -25930,7 +25996,7 @@ function readTable(r, rawName, nameLine) {
   const callee = r.expectIdent(`for table "${rawName}"`);
   if (callee.value === "removed") {
     throw new SchemaTsError(
-      `line ${callee.line}: table "${rawName}" uses removed(), which marks a single column. To remove this table, mark it ${rawName}: removedTable().`
+      `line ${callee.line}: table "${rawName}" uses removed(), which marks a single column; a whole table is removed with ${rawName}: removedTable().`
     );
   }
   if (TABLE_MARKER_HELPERS.has(callee.value)) {
@@ -25967,7 +26033,7 @@ function readTable(r, rawName, nameLine) {
     }
   }
   if (columns.length === 0) {
-    throw new SchemaTsError(`line ${nameLine}: table "${rawName}" declares no columns${removedColumns.length > 0 ? " (removal markers do not count \u2014 a table needs at least one kept column, or mark the whole table removedTable())" : ""}.`);
+    throw new SchemaTsError(`line ${nameLine}: table "${rawName}" declares no columns${removedColumns.length > 0 ? " (removal markers do not count \u2014 a table needs at least one kept column, or the whole table marked removedTable())" : ""}.`);
   }
   if (columns.length > MAX_COLUMNS) {
     throw new SchemaTsError(`line ${nameLine}: table "${rawName}" declares ${columns.length} columns (max ${MAX_COLUMNS}).`);
@@ -26025,7 +26091,7 @@ function readTable(r, rawName, nameLine) {
     const clash = columns.find((c) => c.name === managedOwner.column);
     if (clash) {
       throw new SchemaTsError(
-        `line ${nameLine}: table "${rawName}" declares the column "${managedOwner.column}", but that is its owner column, which the platform creates and manages. Remove it from the columns \u2014 or pick a different owner column with owner({ column: '\u2026' }).`
+        `line ${nameLine}: table "${rawName}" declares the column "${managedOwner.column}", but that is its owner column, which the platform creates and manages, so it is not declared among the columns; owner({ column: '\u2026' }) names a different owner column.`
       );
     }
     if (removedColumns.includes(managedOwner.column)) {
@@ -26040,7 +26106,7 @@ function readTable(r, rawName, nameLine) {
     if (!c.renamedFrom) continue;
     if (declaredNow.has(c.renamedFrom)) {
       throw new SchemaTsError(
-        `line ${nameLine}: "${rawName}"."${c.name}" declares renamedFrom: '${c.renamedFrom}', but "${c.renamedFrom}" is still declared as a column. A rename replaces the old column \u2014 remove its declaration.`
+        `line ${nameLine}: "${rawName}"."${c.name}" declares renamedFrom: '${c.renamedFrom}', but "${c.renamedFrom}" is still declared as a column. A rename replaces the old column, so the old declaration is not accepted alongside it.`
       );
     }
     if (managedOwner && c.renamedFrom === managedOwner.column) {
@@ -26050,7 +26116,7 @@ function readTable(r, rawName, nameLine) {
     }
     if (removedColumns.includes(c.renamedFrom)) {
       throw new SchemaTsError(
-        `line ${nameLine}: "${rawName}"."${c.renamedFrom}" is marked removed() AND named by renamedFrom on "${c.name}" \u2014 it cannot be both removed and renamed. Keep one.`
+        `line ${nameLine}: "${rawName}"."${c.renamedFrom}" is marked removed() AND named by renamedFrom on "${c.name}" \u2014 it cannot be both removed and renamed.`
       );
     }
     if (renameSources.has(c.renamedFrom)) {
@@ -26085,7 +26151,7 @@ function readTable(r, rawName, nameLine) {
     const single = entry.columns.length === 1 ? columns.find((c) => c.name === entry.columns[0]) : void 0;
     if (single) {
       if (single.helper === "id") {
-        throw new SchemaTsError(`line ${entry.line}: the primary key "${single.name}" on table "${rawName}" is already unique; remove its one-column "unique" group.`);
+        throw new SchemaTsError(`line ${entry.line}: the primary key "${single.name}" on table "${rawName}" is already unique, so a one-column "unique" group on it is not accepted.`);
       }
       single.unique = true;
       continue;
@@ -26120,7 +26186,7 @@ function readTable(r, rawName, nameLine) {
 }
 function extractSchemaTs(source, options = {}) {
   if (typeof source !== "string" || source.trim().length === 0) {
-    return { ok: false, errors: ["db/schema.ts is empty. Declare at least one table, or remove the file to leave the database unmanaged."] };
+    return { ok: false, errors: ["db/schema.ts is empty. It needs at least one table; without the file, the database is unmanaged."] };
   }
   if (source.length > MAX_SOURCE_BYTES) {
     return { ok: false, errors: [`db/schema.ts is larger than ${Math.floor(MAX_SOURCE_BYTES / 1024)}KB \u2014 that is not a schema declaration.`] };
@@ -26179,7 +26245,7 @@ function extractSchemaTs(source, options = {}) {
       );
     }
     if (tables.length === 0 && removedTables.length === 0 && exportedTables.length === 0 && !managedSearch && !fileCollections?.length) {
-      return { ok: false, errors: ["db/schema.ts declares no tables. Declare at least one table, or remove the file to leave the database unmanaged."] };
+      return { ok: false, errors: ["db/schema.ts declares no tables. It needs at least one table; without the file, the database is unmanaged."] };
     }
     if (tables.length > MAX_TABLES) {
       return { ok: false, errors: [`db/schema.ts declares ${tables.length} tables (max ${MAX_TABLES}).`] };
@@ -26191,7 +26257,7 @@ function extractSchemaTs(source, options = {}) {
         if (c.references && !names.has(c.references)) {
           const marked = removedTables.includes(c.references) || exportedTables.includes(c.references);
           errors.push(
-            marked ? `Column "${t.name}"."${c.name}" references "${c.references}", which this file marks ${removedTables.includes(c.references) ? "removedTable()" : "exported()"}. Remove the reference (mark the column removed(), or drop "references" from it) before the table can go.` : `Column "${t.name}"."${c.name}" references "${c.references}", which is not declared in db/schema.ts. Foreign keys can only target tables in the same declaration.`
+            marked ? `Column "${t.name}"."${c.name}" references "${c.references}", which this file marks ${removedTables.includes(c.references) ? "removedTable()" : "exported()"}. The table can go only once no column references it (the column marked removed(), or without "references").` : `Column "${t.name}"."${c.name}" references "${c.references}", which is not declared in db/schema.ts. Foreign keys can only target tables in the same declaration.`
           );
         }
       }
@@ -26203,7 +26269,7 @@ function extractSchemaTs(source, options = {}) {
         if (!key) continue;
         const fits = key.uuid ? c.helper === "text" : c.helper === "integer" || c.helper === "number";
         if (fits) continue;
-        errors.push(key.uuid ? `Column "${t.name}"."${c.name}" references "${c.references}", whose id() is a random text key, but is declared ${c.helper}(). Declare it text({ references: '${c.references}' }), or give "${c.references}" an integer key with id({ uuid: false }).` : `Column "${t.name}"."${c.name}" references "${c.references}", whose key is an integer (id({ uuid: false })), but is declared ${c.helper}(). Declare it integer({ references: '${c.references}' }), or give "${c.references}" a random text key with id().`);
+        errors.push(key.uuid ? `Column "${t.name}"."${c.name}" references "${c.references}", whose id() is a random text key, but is declared ${c.helper}(). The column type must match the key: text({ references: '${c.references}' }), or an integer key on "${c.references}" with id({ uuid: false }).` : `Column "${t.name}"."${c.name}" references "${c.references}", whose key is an integer (id({ uuid: false })), but is declared ${c.helper}(). The column type must match the key: integer({ references: '${c.references}' }), or a random text key on "${c.references}" with id().`);
       }
     }
     const tableByName = new Map(tables.map((t) => [t.name, t]));
@@ -26254,7 +26320,7 @@ function extractSchemaTs(source, options = {}) {
         }
         const membershipCols = knownColumns(membershipTable);
         if (membershipTable.client && (membershipTable.client.create !== null || membershipTable.client.update !== null || membershipTable.client.delete || membershipTable.client.intake !== void 0)) {
-          errors.push(`Table "${sc.membership}" grants membership access to "${t.name}" and cannot allow client writes. Change membership through a server function.`);
+          errors.push(`Table "${sc.membership}" grants membership access to "${t.name}" and cannot allow client writes; membership changes go through a server function.`);
         }
         if (!membershipCols.has(sc.memberUser)) {
           errors.push(
@@ -26317,6 +26383,8 @@ var MAX_FINDINGS_PER_FILE = 20;
 var MAX_FINDINGS = 100;
 var IDENT2 = /^[A-Za-z_$][\w$]*$/;
 var WRITE = /\.(insert|update)\(\s*(['"`])([A-Za-z_]\w{0,63})\2\s*,\s*/g;
+var TX = /\.tx\(/g;
+var STEP = /\{(?=\s*['"]?(?:op|table)['"]?\s*:)/g;
 var VERIFIED = /\b(?:verifyInvocation|verifyWebhook|constructEvent|verifySignature)\s*\(/;
 var VERIFIER_NAMES = /* @__PURE__ */ new Set(["verifyInvocation", "verifyWebhook", "constructEvent", "verifySignature"]);
 function hasVerifierCall(source) {
@@ -26360,7 +26428,7 @@ function stripComments(source) {
   return out;
 }
 function bindings(source) {
-  const b = { objects: /* @__PURE__ */ new Set(), forms: /* @__PURE__ */ new Set(), values: /* @__PURE__ */ new Set(), callers: /* @__PURE__ */ new Set() };
+  const b = { objects: /* @__PURE__ */ new Set(), paths: /* @__PURE__ */ new Set(), forms: /* @__PURE__ */ new Set(), values: /* @__PURE__ */ new Set(), callers: /* @__PURE__ */ new Set() };
   const input = String.raw`\(?\s*(?:await\s+)?[\w$.]{1,64}\.(json|formData)\(\)`;
   for (const m of source.matchAll(new RegExp(String.raw`\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*(?::[^=;\n]{0,200})?=\s*${input}`, "g"))) {
     (m[2] === "formData" ? b.forms : b.objects).add(m[1]);
@@ -26381,7 +26449,26 @@ function bindings(source) {
       if (name && IDENT2.test(name)) b.callers.add(name);
     }
   }
+  if (/\bsw\.endpoint\s*\(/.test(source)) {
+    for (const m of source.matchAll(/\bhandler\s*(?::\s*)?(?:async\s*)?(?:function\s*)?\(\s*(?:\{([^{}]{0,400})\}|([A-Za-z_$][\w$]*))/g)) {
+      if (m[2]) {
+        b.paths.add(m[2] + ".body");
+        continue;
+      }
+      for (const part of m[1].split(",")) {
+        const [key, renamed] = part.split("=")[0].split(":").map((x) => x.trim());
+        const local = renamed || key;
+        if (!local || !IDENT2.test(local)) continue;
+        if (key === "body") b.objects.add(local);
+        else if (key === "user") b.callers.add(local);
+      }
+    }
+  }
   return b;
+}
+function requestObject(expression, b) {
+  const v = expression.trim();
+  return b.objects.has(v) || b.paths.has(v);
 }
 function serverReceivers(source) {
   const receivers = ["sw.db.server"];
@@ -26450,8 +26537,10 @@ function lineAt2(starts, offset2) {
 }
 function requestValue(value, b) {
   const v = value.trim().replace(/^(?:String|Number|BigInt)\(\s*([\s\S]*?)\s*\)$/, "$1").trim();
-  const member = /^([A-Za-z_$][\w$]*)(?:\??\.[A-Za-z_$][\w$]*|\[[^\]]{1,64}\])$/.exec(v);
-  if (member && b.objects.has(member[1])) return true;
+  const member = /^([A-Za-z_$][\w$]*(?:\??\.[A-Za-z_$][\w$]*)?)(?:\??\.[A-Za-z_$][\w$]*|\[[^\]]{1,64}\])$/.exec(v);
+  if (member && (b.objects.has(member[1]) || b.paths.has(member[1].replace("?.", ".")))) return true;
+  const root = /^([A-Za-z_$][\w$]*)(?:\??\.[A-Za-z_$][\w$]*|\[[^\]]{1,64}\])$/.exec(v);
+  if (root && b.objects.has(root[1])) return true;
   const form = /^([A-Za-z_$][\w$]*)\.get\(\s*['"`][\w-]{1,64}['"`]\s*\)$/.exec(v);
   if (form && b.forms.has(form[1])) return true;
   return IDENT2.test(v) && b.values.has(v.toLowerCase());
@@ -26516,7 +26605,7 @@ function requestOwnershipFindings(functions, schema) {
       }
     }
     const b = bindings(source);
-    if (b.objects.size === 0 && b.forms.size === 0 && b.values.size === 0) continue;
+    if (b.objects.size === 0 && b.paths.size === 0 && b.forms.size === 0 && b.values.size === 0) continue;
     const lower = source.toLowerCase();
     const receivers = serverReceivers(source);
     const starts = lineIndex(source);
@@ -26554,31 +26643,27 @@ function requestOwnershipFindings(functions, schema) {
       columnsByTable.set(table, columns);
       return columns;
     };
-    for (const m of source.matchAll(WRITE)) {
-      if (fileFull) break;
-      if (!receivedBy(source, m.index, receivers)) continue;
-      const table = m[3].toLowerCase();
+    const inspect = (table, kind, at2) => {
       const columns = ownershipColumns(table);
-      if (columns.length === 0) continue;
-      const at2 = m.index + m[0].length;
-      const bare = /^([A-Za-z_$][\w$]*)\s*[,)]/.exec(source.slice(at2, at2 + 80));
-      if (bare && b.objects.has(bare[1])) {
+      if (columns.length === 0) return;
+      const bare = /^([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)?)\s*[,)}]/.exec(source.slice(at2, at2 + 80));
+      if (bare && requestObject(bare[1], b)) {
         report(table, columns, at2);
-        continue;
+        return;
       }
       const payload = objectLiteral(source, at2);
       if (!payload) {
         if (source[at2] === "{") truncated = true;
-        continue;
+        return;
       }
       let list = entries(payload);
-      if (m[1] === "update") {
+      if (kind === "update") {
         list = list.flatMap((e) => {
           if (e.key !== "set" && e.key !== "where") return [e];
           const valueAt = payload.indexOf(e.value, e.offset);
           const inner = valueAt < 0 ? null : objectLiteral(payload, valueAt);
           return inner ? entries(inner).map((x) => ({ ...x, offset: valueAt + x.offset })) : [];
-        });
+        }).filter((e) => e.key !== "op" && e.key !== "table");
       }
       const spreadIndex = list.findIndex((e) => e.spread !== null && b.objects.has(e.spread));
       const spreadColumns = [];
@@ -26589,6 +26674,33 @@ function requestOwnershipFindings(functions, schema) {
         else if (spreadIndex >= 0 && (!last || last.index < spreadIndex)) spreadColumns.push(column);
       }
       if (spreadColumns.length > 0) report(table, spreadColumns, at2 + list[spreadIndex].offset);
+    };
+    for (const m of source.matchAll(WRITE)) {
+      if (fileFull) break;
+      if (!receivedBy(source, m.index, receivers)) continue;
+      inspect(m[3].toLowerCase(), m[1] === "update" ? "update" : "insert", m.index + m[0].length);
+    }
+    if (!fileFull && [...source.matchAll(TX)].some((m) => receivedBy(source, m.index, receivers))) {
+      for (const m of source.matchAll(STEP)) {
+        if (fileFull) break;
+        const step = objectLiteral(source, m.index);
+        if (!step) {
+          truncated = true;
+          continue;
+        }
+        const fields = entries(step);
+        const field = (key) => fields.find((e) => e.key === key);
+        const op = /^['"`](insert|update)['"`]$/.exec(field("op")?.value.trim() ?? "")?.[1];
+        const table = /^['"`]([A-Za-z_]\w{0,63})['"`]$/.exec(field("table")?.value.trim() ?? "")?.[1];
+        if (!op || !table) continue;
+        if (op === "update") {
+          inspect(table.toLowerCase(), "update", m.index);
+          continue;
+        }
+        const values = field("values");
+        const valueAt = values ? step.indexOf(values.value, values.offset) : -1;
+        if (valueAt >= 0) inspect(table.toLowerCase(), "insert", m.index + valueAt);
+      }
     }
   }
   return { findings, skippedFiles, truncated };
@@ -26860,7 +26972,7 @@ function userEmailScanFindings(functions) {
 }
 
 // worker/src/services/source-lint.ts
-var SOURCE_LINT_VERSION = "5";
+var SOURCE_LINT_VERSION = "6";
 async function lintSourceSnapshot(files, functions = {}) {
   const entries2 = (map) => Object.keys(map).sort().map((key) => [key, map[key]]);
   const sha256 = async (value) => {
@@ -26881,7 +26993,7 @@ function lintSource(files, functions = {}) {
     file: finding.file,
     line: finding.line,
     message: `${finding.label} in source. The existing deploy secret guard may refuse this source.`,
-    fix: "Remove the credential literal. Store it as a project environment variable without a VITE_ or REACT_APP_ prefix and read it only inside a server handler.",
+    fix: "A credential literal in source is readable by anyone with the source. A project environment variable without a VITE_ or REACT_APP_ prefix, read only inside a server handler, keeps it private.",
     docs: "https://somewhere.cloud/docs/sw.env.txt"
   }));
   const schema = files["db/schema.ts"];
@@ -26897,7 +27009,7 @@ function lintSource(files, functions = {}) {
           file: "db/schema.ts",
           line: Number(/\bline (\d+):/.exec(message)?.[1] ?? 1),
           message,
-          fix: "Correct this declaration using the indicated schema helper, column or access rule. The same schema parser runs during deploy.",
+          fix: "The indicated schema helper, column or access rule is what this declaration accepts. The same schema parser runs during deploy.",
           docs: "https://somewhere.cloud/docs/declared-data.txt"
         });
       }
@@ -26916,8 +27028,8 @@ function lintSource(files, functions = {}) {
           severity: "warning",
           file: finding.file,
           line: finding.line,
-          message: finding.columns.length === 1 ? `${finding.table}.${finding.columns[0]} is set or matched through sw.db.server from request input, so a caller can choose whose row this is. Lint cannot see authorization done elsewhere; confirm this write is authorized.` : `${finding.table} ownership columns ${finding.columns.join(", ")} are set through sw.db.server from the whole request body, so a caller can choose whose row this is. Lint cannot see authorization done elsewhere; confirm this write is authorized.`,
-          fix: `Set ${finding.columns.join(" and ")} from the signed-in user (sw.auth) or use the user-mode sw.db write, which sets ownership itself. If the handler intentionally acts for another user, check the caller's role before this write.`,
+          message: finding.columns.length === 1 ? `${finding.table}.${finding.columns[0]} is set or matched through sw.db.server from request input, so a caller can choose whose row this is. Lint cannot see authorization done elsewhere, so whether this write is authorized is not established.` : `${finding.table} ownership columns ${finding.columns.join(", ")} are set through sw.db.server from the whole request body, so a caller can choose whose row this is. Lint cannot see authorization done elsewhere, so whether this write is authorized is not established.`,
+          fix: `${finding.columns.join(" and ")} set from the signed-in user (sw.auth), or by the user-mode sw.db write which sets ownership itself, cannot be chosen by the caller. A handler that intentionally acts for another user is safe only with a check of the caller's role before this write.`,
           docs: "https://somewhere.cloud/docs/declared-data.txt"
         });
       }
@@ -26934,7 +27046,7 @@ function lintSource(files, functions = {}) {
         file: finding.file,
         line: finding.line,
         message: "sw.email.send is awaited inside a loop, so each email waits for the previous one to be delivered and the total time grows with the number of recipients. A handler or job that reaches its time limit stops sending the rest without an error.",
-        fix: "If each email is independent of the others, send them a few at a time (for example batches of 5 with Promise.allSettled per batch) or move bulk sending into a job. Keep the loop sequential when order matters or an email depends on an earlier result; avoid one unbounded Promise.all over an arbitrary list.",
+        fix: "Independent emails can be sent a few at a time (for example batches of 5 with Promise.allSettled per batch) or from a job. A sequential loop is needed when order matters or an email depends on an earlier result; one unbounded Promise.all over an arbitrary list has no concurrency limit.",
         docs: "https://somewhere.cloud/docs/sw.email.txt"
       });
     }
@@ -26952,7 +27064,7 @@ function lintSource(files, functions = {}) {
         file: finding.file,
         line: finding.line,
         message: "sw.auth listUsers is called without emails and its result is then searched for one exact email. That reads whole directory pages to find one user, so it gets slower as the app grows, and a user beyond the pages read is reported as missing.",
-        fix: "Look the user up directly with sw.auth.server.listUsers({ emails: [email] }); it returns only that user (users[0], or none). Keep paging listUsers for real bulk work such as exports or admin lists.",
+        fix: "sw.auth.server.listUsers({ emails: [email] }) looks the user up directly and returns only that user (users[0], or none). Paging listUsers fits real bulk work such as exports or admin lists.",
         docs: "https://somewhere.cloud/docs/sw.auth.txt"
       });
     }
@@ -26966,7 +27078,7 @@ function lintSource(files, functions = {}) {
       file: finding.file,
       line: 1,
       message: finding.warning,
-      fix: "Keep this filename if /index is intentional; otherwise use the parent route filename after checking for a conflicting handler.",
+      fix: "A folder's index file serves the folder's own path. Keep one of the two handlers; a deploy refuses both.",
       docs: "https://somewhere.cloud/docs/functions.txt"
     });
   }

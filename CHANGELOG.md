@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.38.3
+
+### Changed
+
+- The starter's AGENTS.md shows webhook and streaming handlers with their
+  parameter types, `(req: Request, sw: SomewhereRuntimeContext)`, instead of
+  saying `somewhere typecheck` types unannotated handlers, which it does not:
+  under the starter's strict settings an unannotated handler is a type error.
+- The bundled realtime-and-background skill's example handler carries the
+  same annotation. The bundled skills match the platform's served pack.
+- No command, option or dependency changes.
+
 ## 0.38.2
 
 ### Changed

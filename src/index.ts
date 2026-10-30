@@ -160,6 +160,10 @@ try {
   const skipRecovery = ['lint', 'login', 'signup', 'logout', 'docs', '--help', '-h', '--version', '-V'].includes(command);
   const recovery = skipRecovery ? { kind: 'none' as const } : await recoverClaimHandoff();
   if (recovery.kind === 'recovered' && recovery.message && !jsonOutputRequested) info(recovery.message);
+  if (recovery.kind === 'stale' && recovery.message) {
+    if (jsonOutputRequested) console.error(recovery.message);
+    else info(recovery.message);
+  }
   if (recovery.kind === 'manual' && recovery.message && !['login', 'signup', 'logout', 'docs'].includes(command)) {
     throw new Error(recovery.message);
   }

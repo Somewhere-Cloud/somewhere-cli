@@ -718,6 +718,17 @@ export function registerDeploy(program: Command) {
             reused: true,
           };
         } else {
+          // An expired session is replaced, never reused or left to block the
+          // deploy; say so once (tsk_97979518). A folder linked to one of its
+          // projects was already refused above.
+          const expiredAt = besideRealLogin
+            ? (temporarySessionExpired(sideCar) ? sideCar!.temp_expires_at : undefined)
+            : (temporarySessionExpired(storedConfig?.temporary ? storedConfig : null) ? storedConfig!.temp_expires_at : undefined);
+          if (expiredAt) {
+            const note = `The temporary session on this machine expired at ${expiredAt}; starting a new one.`;
+            if (opts.json) console.error(note);
+            else info(note);
+          }
           const powSpinner = opts.json ? null : ora('Solving proof-of-work…').start();
           try {
             const account = await mintTempAccount();

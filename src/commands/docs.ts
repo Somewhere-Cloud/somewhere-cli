@@ -1,7 +1,7 @@
 import { fetchWithProxy as fetch } from '../lib/http.js';
 import { once } from 'node:events';
 import { Command } from 'commander';
-import { loadConfig } from '../lib/config.js';
+import { hasUsableCredential } from '../lib/config.js';
 import { dim, error, printJson, printJsonError } from '../lib/output.js';
 import { cachedLatestVersion, isMinorBehind, NPM_UPDATE_COMMAND } from '../lib/notify/providers/update.js';
 import { CLI_VERSION } from '../lib/version.js';
@@ -254,18 +254,8 @@ export function parsePublicDocsManifest(value: unknown): PublicDocsPage[] {
   });
 }
 
-/** A stored credential the platform would accept — read WITHOUT `getToken()`,
- *  whose "Not logged in" path exits the process. A docs read must never take
- *  that path: the corpus is public. */
-export function hasUsableCredential(): boolean {
-  const config = loadConfig();
-  if (!config?.token) return false;
-  if (config.temporary && config.temp_expires_at
-      && new Date(config.temp_expires_at).getTime() <= Date.now()) {
-    return false;
-  }
-  return true;
-}
+/** A docs read must never exit through `getToken()`: the corpus is public. */
+export { hasUsableCredential };
 
 export interface PublicDocsGroup {
   id: string;

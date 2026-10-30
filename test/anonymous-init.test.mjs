@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -21,11 +21,12 @@ const server = createServer((req, res) => {
 });
 await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
 test.after(() => { server.close(); rmSync(root, { recursive: true, force: true }); });
-async function run(args, { token, prepare, explicitLink = false, explicitHook = false } = {}) {
+async function run(args, { token, config: storedConfig, prepare, explicitLink = false, explicitHook = false } = {}) {
   requests = [];
   const base = mkdtempSync(join(root, 'case-')), cwd = join(base, 'app'), config = join(base, 'config'), bin = join(base, 'bin');
   for (const dir of [cwd, config, bin]) mkdirSync(dir);
   if (token) writeFileSync(join(config, 'config.json'), JSON.stringify({ token }));
+  if (storedConfig) writeFileSync(join(config, 'config.json'), JSON.stringify(storedConfig));
   // Only a sentinel, never npm: authenticated init's existing install call is observed locally.
   writeFileSync(join(bin, 'npm'), '#!/bin/sh\nprintf fixture > "$PWD/install-called"\n', { mode: 0o700 });
   // Existing user-wide hook settings must remain untouched by setup.
@@ -236,4 +237,38 @@ test('explicit opt-in installs only the selected host typecheck hook, without MC
   assert.match(hooks.PostToolUse[0].hooks[0].command, /somewhere typecheck --deploy --hook codex$/);
   assert.equal(existsSync(join(result.cwd, '.mcp.json')), false);
   assert.equal(existsSync(join(result.base, '.claude.json')), false);
+});
+
+// tsk_97979518: a temporary session left by an old no-login deploy is no
+// credential once expired; it never blocks the local starter.
+const expiredTemp = { token: 'smt_expired_temp', temporary: true, temp_expires_at: '2026-10-14T18:00:00.000Z',
+  claim_url: 'https://somewhere.cloud/claim/old', user: { email: '', username: '' } };
+test('expired temporary session: init writes the local starter offline and says where', async () => {
+  const json = await run(['--name', 'starter', '--json'], { config: expiredTemp });
+  assert.equal(json.status, 0, json.stdout + json.stderr);
+  const body = JSON.parse(json.stdout);
+  assert.equal(body.local, true); assert.equal(body.dir, realpathSync(json.cwd));
+  assert.equal(body.expired_temporary_session_ignored, expiredTemp.temp_expires_at);
+  assert.deepEqual(requests, []); assert.ok(existsSync(join(json.cwd, 'index.html')));
+  assert.equal(existsSync(join(json.cwd, '.somewhere.json')), false);
+  assert.deepEqual(JSON.parse(readFileSync(join(json.config, 'config.json'), 'utf8')), expiredTemp, 'init leaves the stored session to deploy');
+  const text = await run(['--name', 'starter'], { config: expiredTemp });
+  assert.equal(text.status, 0, text.stdout + text.stderr);
+  assert.ok(text.stdout.includes(`Local starter written to ${realpathSync(text.cwd)} (`), text.stdout);
+  assert.match(text.stdout, /Ignored the temporary session on this machine that expired at 2026-10-14T18:00:00\.000Z; somewhere deploy starts a new one\./);
+  assert.doesNotMatch(text.stdout + text.stderr, /Temporary session expired\. Run/);
+  assert.deepEqual(requests, []);
+});
+test('expired temporary session: account-only init flags still refuse without a request', async () => {
+  for (const args of [['--link', '--project', 'fixture'], ['--bare', '--name', 'fixture']]) {
+    const result = await run([...args, '--json'], { config: expiredTemp });
+    assert.notEqual(result.status, 0); assert.deepEqual(readdirSync(result.cwd), []); assert.deepEqual(requests, []);
+  }
+});
+test('a live temporary session still creates its project through init', async () => {
+  const live = { ...expiredTemp, token: 'smt_fixture', temp_expires_at: new Date(Date.now() + 3_600_000).toISOString() };
+  const result = await run(['--name', 'fixture', '--json'], { config: live });
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.equal(JSON.parse(result.stdout).id, project.id);
+  assert.deepEqual(requests, ['POST /projects', 'GET /projects/fixture-project/urls']);
 });

@@ -1,6 +1,6 @@
 import { createDecipheriv, createHash, randomBytes } from 'node:crypto';
 import type { ClaimCliHandoff, ClaimCliHandoffAck, CliConfig } from '../types.js';
-import { loadConfig, saveConfig } from './config.js';
+import { loadConfig, saveConfig, temporaryConfigExpired } from './config.js';
 import { getDeviceKeyName } from './device.js';
 import { describeThisDevice } from './device-login.js';
 import { API_BASE_URL } from './client.js';
@@ -34,7 +34,9 @@ const CAPABILITIES = ['account_scope'];
 type HttpResponse = Awaited<ReturnType<typeof fetch>>;
 
 export interface ClaimHandoffRecovery {
-  kind: 'none' | 'recovered' | 'manual';
+  /** stale: the temporary session and its continuation have both expired; a
+   *  note, never a blocker. */
+  kind: 'none' | 'recovered' | 'manual' | 'stale';
   message?: string;
 }
 
@@ -147,6 +149,19 @@ function clearCurrentAcknowledgement(expected: ClaimCliHandoffAck): CliConfig | 
   return clean as CliConfig;
 }
 
+/** Remove the expired continuation only if the config still holds exactly it. */
+function dropExpiredHandoff(token: string, state: ClaimCliHandoff): void {
+  const current = loadConfig();
+  if (
+    !current?.temporary
+    || current.token !== token
+    || current.claim_handoff?.handoff_id !== state.handoff_id
+    || current.claim_handoff?.verifier !== state.verifier
+  ) return;
+  const { claim_handoff: _expired, ...rest } = current;
+  saveConfig(rest as CliConfig);
+}
+
 export async function recoverClaimHandoff(): Promise<ClaimHandoffRecovery> {
   let config = loadConfig();
   if (!config) return { kind: 'none' };
@@ -175,6 +190,17 @@ export async function recoverClaimHandoff(): Promise<ClaimHandoffRecovery> {
   if (!response.ok || !envelope.ok || !envelope.data) {
     if (['CLAIM_CLI_HANDOFF_PENDING', 'CLAIM_CLI_HANDOFF_IN_PROGRESS'].includes(envelope.error || '')) {
       return { kind: 'none' };
+    }
+    // The server says the continuation expired (terminal) and this machine's
+    // temporary session is past its own expiry too: neither can be used again,
+    // so an unrelated command (init, a deploy that starts fresh) must not stop
+    // on it (tsk_97979518). Only that exact dead record is dropped.
+    if (envelope.error === 'CLAIM_CLI_HANDOFF_EXPIRED' && temporaryConfigExpired(config)) {
+      dropExpiredHandoff(config.token, state);
+      return {
+        kind: 'stale',
+        message: `The temporary workspace on this machine expired at ${config.temp_expires_at}. If you claimed it in the browser, \`somewhere login\` signs in to it.`,
+      };
     }
     if (['CLAIM_CLI_HANDOFF_DENIED', 'CLAIM_CLI_HANDOFF_EXPIRED', 'CLAIM_CLI_HANDOFF_CONSUMED', 'CLAIM_CLI_HANDOFF_OWNERSHIP_MISMATCH'].includes(envelope.error || '')) {
       return {

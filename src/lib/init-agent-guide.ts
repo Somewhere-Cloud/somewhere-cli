@@ -41,8 +41,8 @@ role, email_verified, … }\` or throws 401 \`AUTH_REQUIRED\`;
 Functions: JSON endpoints use \`sw.endpoint({ auth, body, rateLimit, handler:
 async ({ body, user, params }, sw) => value })\`; set \`auth\` (\`'required'\`,
 \`'optional'\`, \`'none'\`) or deploy refuses it. Webhooks and streaming use a bare \`export default async
-function (req, sw)\` returning a \`Response\`. Params: \`params.id\` there,
-\`sw.params.id\` bare; \`somewhere typecheck\` types bare handlers too.
+function (req: Request, sw: SomewhereRuntimeContext)\` returning a \`Response\`.
+Params: \`params.id\` there, \`sw.params.id\` bare.
 
 Data: \`id()\` is a random text key; use \`text()\` for references to it.
 Declare tables in \`db/schema.ts\`; pages use \`somewhere:data\`

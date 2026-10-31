@@ -1,5 +1,55 @@
 # Changelog
 
+## 0.38.6
+
+### Fixed
+
+- An expired temporary session (from deploying without logging in) no longer
+  blocks `init` or a fresh `deploy`. `init` writes the starter offline and
+  names the folder it wrote to; `deploy` says in one line that it replaced the
+  expired session.
+- Signed out, a deploy that names an existing project (`--project` or a linked
+  folder) now stops before contacting Somewhere with `SIGN_IN_REQUIRED` and
+  the two ways forward (sign in, or drop the target to start a new temporary
+  project), instead of creating a temporary account and then failing.
+- A file over the 5 MB per-file limit that would be published now stops
+  `deploy` and `preview` before any request (`FILE_TOO_LARGE`), instead of
+  being left out while the deploy goes live. `.gitignore` and
+  `.somewhereignore` still keep large files out on purpose.
+- When a deploy request may have reached Somewhere but no answer came back,
+  the CLI never sends it again. It reports the outcome as unknown
+  (`deployment_outcome: "unknown"` with `--json`) and says how to check.
+- `somewhere` needs Node.js 22.19.0 or newer and now says so on older Node.js,
+  instead of failing with a TypeError.
+- `auth set` reports only an HTTP 401 as an invalid token; an outage or other
+  failure says the token could not be verified and saves nothing. `whoami`
+  reports only a 401 as a login problem.
+- Commands piped into a reader that closes early (`docs | head -1`) end
+  quietly instead of reporting a network failure.
+- Anonymous deploy errors keep Somewhere's error code, status and request ids.
+
+### Changed
+
+- `typecheck` is read-only: it never installs packages. Missing type packages
+  stop it with an `npm install` instruction, it announces when it fetches
+  TypeScript with npx, and every check runs under a deadline
+  (`SOMEWHERE_TYPECHECK_TIMEOUT_MS`, default 300 s) that stops its processes.
+- `deploy --json` keeps stdout for the deploy result and lists every file left
+  out locally on stderr, by path and reason.
+- `preview` judges each save like a deploy: ignored files are not uploaded and
+  an oversize file holds the save without changing the last preview.
+- `somewhere api` refuses full URLs, control characters, `..` segments and
+  unsupported methods before sending anything; the request always stays on the
+  configured API.
+- `logs --tail` takes a whole number from 1 up. `dev` refuses extra arguments.
+- The local `last-run.json` records only the command, option names, exit code,
+  time and CLI version, never values or output. `env set` with a value on the
+  command line points to `--stdin`.
+- Declared-data and runtime types and the source lint are refreshed from the
+  live platform.
+- README and help text describe `dev`, `init`, `typecheck` and project delete
+  as they actually behave.
+
 ## 0.38.5
 
 ### Changed

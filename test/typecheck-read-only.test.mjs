@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -50,7 +50,8 @@ test('declared type packages that are not installed: refused, nothing installed,
   const text = await start(['typecheck'], p).done;
   assert.equal(text.status, 1, text.out);
   assert.match(text.out, /Not checked: this project's declared type packages are not installed \(@types\/react\)/);
-  assert.match(text.out, /does not install packages/);
+  assert.match(text.out, /does not install the project's dependencies/);
+  assert.doesNotMatch(text.out, /Could not run the typechecker|npm i -D typescript/);
   const json = await start(['typecheck', '--json'], p).done;
   assert.equal(json.status, 1);
   const body = JSON.parse(json.stdout);
@@ -73,34 +74,56 @@ test('installed declared types: the check runs and passes', async () => {
   assert.equal(existsSync(join(p.base, 'npm-called')), false);
 });
 
-// A project compiler that hangs and has its own child, like npx fetching TypeScript.
+// A project compiler that answers --showConfig (so the CLI writes its temporary
+// overlay config), then hangs ignoring TERM, with a child that ignores TERM too:
+// the hardest case for "no descendant outlives the command".
 function hangingProject() {
   const p = project({ 'index.ts': 'export const x = 1;\n' });
   const tsc = join(p.dir, 'node_modules/.bin/tsc');
   mkdirSync(dirname(tsc), { recursive: true });
-  writeFileSync(tsc, `#!/bin/sh\nsleep 120 &\necho $! > "${join(p.base, 'grandchild.pid')}"\nwait\n`);
+  writeFileSync(tsc, [
+    '#!/bin/sh',
+    'case "$*" in *--showConfig*) echo \'{"files":["index.ts"]}\'; exit 0;; esac',
+    "trap '' TERM",
+    "( trap '' TERM; exec sleep 120 ) &",
+    `echo $! > "${join(p.base, 'grandchild.pid')}"`,
+    `echo $$ > "${join(p.base, 'child.pid')}"`,
+    'wait',
+    '',
+  ].join('\n'));
   chmodSync(tsc, 0o755);
   return p;
 }
+const overlays = (dir) => readdirSync(dir).filter((name) => name.startsWith('.__somewhere_typecheck_'));
 
-test('a typecheck that does not finish is stopped at the deadline, with its children', { skip: process.platform === 'win32' }, async () => {
+async function assertTreeGone(p) {
+  const child = Number(readFileSync(join(p.base, 'child.pid'), 'utf8'));
+  const grandchild = Number(readFileSync(join(p.base, 'grandchild.pid'), 'utf8'));
+  await new Promise((r) => setTimeout(r, 200));
+  assert.equal(alive(child), false, 'the TERM-ignoring compiler must not outlive the command');
+  assert.equal(alive(grandchild), false, 'its TERM-ignoring child must not outlive the command');
+  assert.deepEqual(overlays(p.dir), [], 'the temporary overlay config is removed');
+}
+
+test('a typecheck that does not finish is stopped at the deadline, TERM-resistant descendants included', { skip: process.platform === 'win32' }, async () => {
   const p = hangingProject();
   const run = start(['typecheck', '--json'], p, { SOMEWHERE_TYPECHECK_TIMEOUT_MS: '1500' });
-  const grandchild = await waitFor(join(p.base, 'grandchild.pid'));
+  await waitFor(join(p.base, 'grandchild.pid'));
+  assert.equal(overlays(p.dir).length, 1, 'the overlay exists while the check runs');
   const result = await run.done;
   assert.equal(result.status, 1, result.out);
   assert.match(JSON.parse(result.stdout).spawnError, /did not finish within 2s and was stopped/);
-  await new Promise((r) => setTimeout(r, 300));
-  assert.equal(alive(grandchild), false, 'the compiler\'s own child must not outlive the command');
+  await assertTreeGone(p);
 });
 
-test('Ctrl-C stops the typecheck and its children', { skip: process.platform === 'win32' }, async () => {
-  const p = hangingProject();
-  const run = start(['typecheck'], p);
-  const grandchild = await waitFor(join(p.base, 'grandchild.pid'));
-  run.child.kill('SIGINT');
-  const result = await run.done;
-  assert.equal(result.status, 130, result.out);
-  await new Promise((r) => setTimeout(r, 300));
-  assert.equal(alive(grandchild), false, 'no orphan after Ctrl-C');
-});
+for (const [signal, code] of [['SIGINT', 130], ['SIGTERM', 143]]) {
+  test(`${signal} to the CLI stops the typecheck tree, TERM-resistant descendants included, and removes its temp file`, { skip: process.platform === 'win32' }, async () => {
+    const p = hangingProject();
+    const run = start(['typecheck'], p);
+    await waitFor(join(p.base, 'grandchild.pid'));
+    run.child.kill(signal);
+    const result = await run.done;
+    assert.equal(result.status, code, result.out);
+    await assertTreeGone(p);
+  });
+}

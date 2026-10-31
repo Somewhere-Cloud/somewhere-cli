@@ -1017,6 +1017,8 @@ export function registerDeploy(program: Command) {
       // The platform answered the deploy (or dry run); a later failure is not
       // a refused deploy, so it never gets the relink advice below.
       let deployAnswered = false;
+      // When the deploy request went out, for unknown-outcome readback.
+      let deployRequestStartedAt = new Date().toISOString();
       // The target came from this folder's link, not --project or a project
       // created just now: a not-found then means the link itself is stale.
       const targetFromLink = !opts.project && Boolean(linkedProjectEntry) && projectId === linkedProjectEntry?.config.project_id;
@@ -1113,6 +1115,7 @@ export function registerDeploy(program: Command) {
         }
 
         const requestStartedAt = performance.now();
+        deployRequestStartedAt = new Date().toISOString();
         const preparationMs = requestStartedAt - collectionEndedAt;
         const result = await callDeployWithRetry<DeployResult>(client, body, {
           spinner,
@@ -1389,9 +1392,10 @@ export function registerDeploy(program: Command) {
         // applied", never a blind retry (pfb_47695233e613).
         if (!opts.dryRun && outcomeUnknown(err)) {
           const unknown = err as CliApiError;
-          const message = formatUnknownDeployOutcomeExplanation(unknown.code, deployRetriedAfterTransportFailure(err) !== null);
+          const message = formatUnknownDeployOutcomeExplanation(unknown, String(projectId), deployRequestStartedAt);
           if (opts.json) {
-            printJson({ ok: false, error: unknown.code, deployment_outcome: 'unknown', message });
+            const reference = { ...(unknown.meta.requestId ? { request_id: unknown.meta.requestId } : {}), ...(unknown.meta.traceId ? { trace_id: unknown.meta.traceId } : {}) };
+            printJson({ ok: false, error: unknown.code, deployment_outcome: 'unknown', message, project_id: projectId, request_started_at: deployRequestStartedAt, ...reference });
           } else {
             spinner?.fail('Deploy outcome unknown');
             console.error(message);
@@ -1700,12 +1704,16 @@ async function callDeployWithRetry<T>(
       if (attempt >= DEPLOY_MAX_ATTEMPTS) throw err;
 
       if (!isRetryableDeployError(err)) throw err;
-      // A request that may have reached the server is resent only when the
-      // platform makes a resend of the same body safe (deployReplayIsSafe).
-      if (outcomeUnknown(err) && !deployReplayIsSafe(body)) throw err;
+      // A request that may have reached the server is never resent: no
+      // platform contract makes a second identical deploy safe while the first
+      // may still be running (pfb_47695233e613). Only a connection that never
+      // opened, or the platform's own retry: true, is sent again.
+      if (outcomeUnknown(err)) throw err;
       // Only the CLI's own verdicts leave the first attempt's outcome unknown;
       // a platform retry: true says that attempt changed nothing.
-      transportFailure = err instanceof CliApiError && RETRYABLE_DEPLOY_CODES.has(err.code) ? err.code : null;
+      // Only an unknown first outcome makes a later stale refusal ambiguous; a
+      // connection that never opened sent nothing.
+      transportFailure = outcomeUnknown(err) ? (err as CliApiError).code : null;
       const waitMs = retryWaitMs(err);
       if (!opts.json) {
         opts.spinner?.stop();
@@ -1723,36 +1731,27 @@ async function callDeployWithRetry<T>(
   throw new CliApiError('DEPLOY_RETRY_EXHAUSTED', 'Deploy retry exhausted.', 0);
 }
 
-/**
- * Is sending the same deploy body again safe when the first attempt's outcome
- * is unknown? The platform answers a resent full, non-forced deploy whose
- * source is already live with that live release ("unchanged", or "already
- * live" for an older declared base), and refuses one whose base moved
- * (STALE_RELEASE_BASE): no second release (worker/src/routes/deploy/
- * orchestration.ts, alreadyLiveRetryResponse and the unchanged-source skip).
- * A dry run writes nothing. --force and --scope deploys have no such answer,
- * so they are never resent.
- */
-export function deployReplayIsSafe(body: Record<string, unknown>): boolean {
-  if (body.dry_run === true) return true;
-  return body.force !== true && body.scope === undefined;
-}
-
-/** A transport failure after which the request may have reached the server. */
+/** The request may have reached the server and no authoritative answer was
+ *  read: a timeout or dropped connection after the connection opened, or a
+ *  response whose body was cut off or never finished. */
 export function outcomeUnknown(err: unknown): boolean {
-  return err instanceof CliApiError && RETRYABLE_DEPLOY_CODES.has(err.code) && err.meta.notSent !== true;
+  if (!(err instanceof CliApiError)) return false;
+  if (err.meta.responseBodyIncomplete === true) return true;
+  return RETRYABLE_DEPLOY_CODES.has(err.code) && err.meta.notSent !== true;
 }
 
-/** The deploy request may have been applied and no answer arrived. */
-export function formatUnknownDeployOutcomeExplanation(code: string, resent: boolean): string {
-  const what = code === 'TIMEOUT' ? 'timed out' : code === 'SERVER_SLOW' ? 'stalled waiting for the server' : 'lost its connection';
+/** The deploy request may have been applied and no answer was read. The
+ *  outcome stays unknown until the platform's deploy history settles it. */
+export function formatUnknownDeployOutcomeExplanation(err: CliApiError, projectId: string, startedAt: string): string {
+  const what = err.meta.responseBodyIncomplete ? 'got a response that was cut off before its result could be read'
+    : err.code === 'TIMEOUT' ? 'timed out' : err.code === 'SERVER_SLOW' ? 'stalled waiting for the server' : 'lost its connection';
   return [
-    `The deploy request ${what} after it may have reached the platform${resent ? ', and the one safe resend got no answer either' : ''}. It may or may not have gone live. Do not deploy again until you know.`,
+    `The deploy request ${what} after it may have reached the platform. Its outcome is unknown: it may have gone live, may have been refused, or may still be running. It was not sent again.`,
     '',
     'Next steps:',
-    '  Check the live release: `somewhere status` shows the production version and active release; compare them with the ones before this deploy (this folder\'s last deployed version is in .somewhere.json).',
-    '  To compare the content, run `somewhere pull` into a separate folder.',
-    '  If your changes are live, you are done. If not, deploy again; a deploy from this folder is refused if the live release moved since it was prepared.',
+    `  Read the deploy history: somewhere call project_deploys '${JSON.stringify({ project_id: projectId })}' lists finished deploys (success or rejected) with their times. An entry after ${startedAt} settles this deploy's outcome.`,
+    '  Do not deploy again until it does: a second deploy can race this one if it is still running.',
+    '  If no entry appears, the outcome cannot be confirmed from here; keep the reference below when you ask for help.',
   ].join('\n');
 }
 

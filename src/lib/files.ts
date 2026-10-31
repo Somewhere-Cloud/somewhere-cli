@@ -447,6 +447,38 @@ export function oversizeRefusal(collected: Pick<CollectedFiles, 'oversize'>): st
   ].join('\n');
 }
 
+/**
+ * Preview's save loop uploads changed files one batch at a time. Judge each
+ * batch the way a deploy judges the tree: files the project's .gitignore or
+ * .somewhereignore keeps out are not uploaded, and an uploaded file over the
+ * per-file limit refuses the whole batch before anything is read or sent
+ * (pfb_9c4d1d7fc75c). `paths` are relative to `baseDir`.
+ */
+export function previewBatchCheck(baseDir: string, paths: string[]): { upload: string[]; ignored: string[]; oversize: Array<{ path: string; bytes: number }> } {
+  const ignore = loadDeployIgnore(baseDir);
+  const upload: string[] = [], ignored: string[] = [], oversize: Array<{ path: string; bytes: number }> = [];
+  for (const raw of paths) {
+    const rel = toDeployPath(raw);
+    const parts = rel.split('/');
+    const kept = parts.some((_, i) => ignore.ignores(parts.slice(0, i + 1).join('/'), i < parts.length - 1));
+    if (kept) { ignored.push(rel); continue; }
+    let bytes = 0;
+    try { bytes = statSync(join(baseDir, raw)).size; } catch { /* vanished: the caller skips it */ }
+    if (bytes > MAX_FILE_SIZE) oversize.push({ path: rel, bytes });
+    upload.push(raw);
+  }
+  return { upload, ignored, oversize };
+}
+
+/** The save-loop form of oversizeRefusal: nothing in this save was sent. */
+export function previewOversizeRefusal(oversize: Array<{ path: string; bytes: number }>): string {
+  return [
+    `Nothing in this save was sent: ${oversize.length === 1 ? 'this file is' : 'these files are'} over the ${formatBytes(MAX_FILE_SIZE)} per-file limit:`,
+    ...oversize.map((entry) => `  ${entry.path} (${formatBytes(entry.bytes)})`),
+    'Your last preview is unchanged. Make the file smaller, or add it to .somewhereignore, then save again; the held changes are sent with that save.',
+  ].join('\n');
+}
+
 export function sensitiveReferenceRefusal(collected: Pick<CollectedFiles, 'sensitive'>): string | null {
   const referenced = collected.sensitive.filter((entry) => entry.referencedBy.length > 0);
   if (referenced.length === 0) return null;

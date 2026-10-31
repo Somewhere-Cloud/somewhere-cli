@@ -9,7 +9,8 @@ import { collectFiles, formatBytes, sensitiveReferenceRefusal, type CollectedFil
 import { shellQuote } from '../lib/next-actions.js';
 import { printExcludedFiles, printSensitiveFiles } from './deploy.js';
 import { MISSING_TSCONFIG_GUIDANCE } from './typecheck.js';
-import { missingTypePackagesMessage, planDeclaredTypePackages, runTypecheck, typecheckCompilerSource, type TypecheckResult } from '../lib/typecheck.js';
+import { announceNpxTypeScriptFetch, missingTypePackagesMessage, planDeclaredTypePackages, runTypecheck, typecheckCompilerSource, type TypecheckResult } from '../lib/typecheck.js';
+import { TYPECHECK_TYPESCRIPT_VERSION } from '../lib/typecheck-version.js';
 import { bold, dim, error, green, info, printJson, red, success, warn, yellow } from '../lib/output.js';
 
 /** A single diagnostic from the server-side dry compile. Same file:line shape
@@ -227,6 +228,7 @@ export async function runLocalPreflight(
     // Read-only, like `somewhere typecheck`: never installs into the project.
     const missing = planDeclaredTypePackages(dir).missing;
     if (missing.length) return { ok: false, errors: [], via: typecheckCompilerSource(dir), raw: '', spawnError: missingTypePackagesMessage(missing, dir) };
+    if (typecheckCompilerSource(dir) === 'npx') announceNpxTypeScriptFetch(TYPECHECK_TYPESCRIPT_VERSION);
     return runTypecheck(dir);
   },
 ): Promise<LocalPreflightResult> {

@@ -8,7 +8,7 @@
  *   2. the CLI checkout's TypeScript during development/tests (a devDependency)
  *   3. `npx -y typescript` as a last resort
  */
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { createRequire } from 'node:module';
@@ -194,7 +194,7 @@ export function ensureDeclaredTypePackages(
  *  run package scripts). */
 export function missingTypePackagesMessage(missing: string[], projectDir: string): string {
   return `Not checked: this project's declared type packages are not installed (${missing.join(', ')}). `
-    + `somewhere typecheck does not install packages. Install the project's dependencies (npm install in ${projectDir}), then run it again.`;
+    + `somewhere typecheck does not install the project's dependencies. Install them (npm install in ${projectDir}), then run it again.`;
 }
 
 /** Longest a typecheck child may run before it and its children are stopped.
@@ -206,18 +206,35 @@ export function typecheckTimeoutMs(): number {
 
 export interface BoundedResult { code: number | null; out: string; stdout: string; error?: Error; timedOut: boolean }
 
+/** How long a stopped child tree gets after TERM before KILL, and after KILL
+ *  before the run is reported. */
+const STOP_GRACE_MS = 2_000;
+
 /**
- * Run a typecheck child (tsc, or npx fetching it) with a deadline. On POSIX it
- * gets its own process group so a timeout or Ctrl-C stops npx's children too,
- * never leaving an orphan; on Windows the direct child is stopped.
+ * Run a typecheck child (tsc, or npx fetching it) with a deadline.
+ *
+ * POSIX: the child leads its own process group. A timeout, Ctrl-C or TERM
+ * sends TERM to the whole group, waits for it to empty, sends KILL to whatever
+ * ignored TERM, and waits again, so no descendant outlives the command. A
+ * group is only signalled while it still has members, and no timer survives
+ * the run, so a recycled PID or group is never signalled later.
+ * Windows: the tree is stopped with `taskkill /T /F` (not exercised by this
+ * CLI's tests). `onAbort` runs before the CLI exits on Ctrl-C/TERM, for the
+ * caller's temporary files.
  */
-export function runBounded(command: string, args: string[], cwd: string, timeoutMs = typecheckTimeoutMs()): Promise<BoundedResult> {
+export function runBounded(
+  command: string,
+  args: string[],
+  cwd: string,
+  options: { timeoutMs?: number; onAbort?: () => void } = {},
+): Promise<BoundedResult> {
+  const timeoutMs = options.timeoutMs ?? typecheckTimeoutMs();
   return new Promise((resolve) => {
-    const group = process.platform !== 'win32';
+    const posixGroup = process.platform !== 'win32';
     let child: ReturnType<typeof spawn>;
     try {
       child = spawn(command, args, {
-        cwd, env: process.env, stdio: ['ignore', 'pipe', 'pipe'], detached: group,
+        cwd, env: process.env, stdio: ['ignore', 'pipe', 'pipe'], detached: posixGroup,
         // Windows: tsc.cmd / npx.cmd are batch shims, and since Node 18.20/20.12
         // (CVE-2024-27980) spawning a .cmd/.bat without a shell throws EINVAL.
         // The bundled path runs node directly (process.execPath) and must NOT
@@ -228,35 +245,78 @@ export function runBounded(command: string, args: string[], cwd: string, timeout
       resolve({ code: null, out: '', stdout: '', error: err instanceof Error ? err : new Error(String(err)), timedOut: false });
       return;
     }
-    let out = '', stdout = '', timedOut = false, done = false;
-    const stop = (signal: NodeJS.Signals) => {
-      try {
-        if (group && child.pid) process.kill(-child.pid, signal);
-        else child.kill(signal);
-      } catch { /* already gone */ }
+    let out = '', stdout = '', timedOut = false, closed = false, settled = false, aborting = false, stopping: Promise<void> | null = null;
+    let closeCode: number | null = null, spawnError: Error | undefined;
+    const pid = child.pid;
+    const treeAlive = (): boolean => {
+      if (!pid) return false;
+      if (!posixGroup) return !closed;
+      try { process.kill(-pid, 0); return true; }
+      catch (err) { return (err as NodeJS.ErrnoException).code === 'EPERM'; }
     };
-    const onSignal = (signal: NodeJS.Signals) => { stop('SIGTERM'); process.exit(signal === 'SIGINT' ? 130 : 143); };
-    const onInt = () => onSignal('SIGINT');
-    const onTerm = () => onSignal('SIGTERM');
-    process.once('SIGINT', onInt);
-    process.once('SIGTERM', onTerm);
-    const timer = setTimeout(() => {
-      timedOut = true;
-      stop('SIGTERM');
-      setTimeout(() => stop('SIGKILL'), 2_000).unref();
-    }, timeoutMs);
-    const finish = (result: Omit<BoundedResult, 'out' | 'stdout' | 'timedOut'>) => {
-      if (done) return;
-      done = true;
+    const signalTree = (signal: NodeJS.Signals) => {
+      if (!pid || !treeAlive()) return;
+      if (posixGroup) {
+        try { process.kill(-pid, signal); } catch { /* emptied meanwhile */ }
+      } else {
+        spawnSync('taskkill', ['/pid', String(pid), '/T', '/F'], { stdio: 'ignore', windowsHide: true });
+      }
+    };
+    const waitEmpty = async (ms: number): Promise<boolean> => {
+      const until = Date.now() + ms;
+      while (treeAlive() && Date.now() < until) await new Promise((r) => setTimeout(r, 50));
+      return !treeAlive();
+    };
+    const stopTree = (): Promise<void> => {
+      stopping ??= (async () => {
+        signalTree('SIGTERM');
+        if (await waitEmpty(STOP_GRACE_MS)) return;
+        signalTree('SIGKILL');
+        await waitEmpty(STOP_GRACE_MS);
+      })();
+      return stopping;
+    };
+    const finish = () => {
+      // An interrupted run never reports: the CLI exits from onSignal once the
+      // tree is stopped and temporary files are removed.
+      if (settled || aborting) return;
+      settled = true;
       clearTimeout(timer);
       process.off('SIGINT', onInt);
       process.off('SIGTERM', onTerm);
-      resolve({ ...result, out, stdout, timedOut });
+      resolve({ code: closeCode, out, stdout, timedOut, ...(spawnError ? { error: spawnError } : {}) });
     };
+    const onSignal = (exitCode: number) => {
+      if (aborting) return;
+      aborting = true;
+      clearTimeout(timer);
+      void stopTree().then(() => {
+        try { options.onAbort?.(); } finally { process.exit(exitCode); }
+      });
+    };
+    const onInt = () => onSignal(130);
+    const onTerm = () => onSignal(143);
+    process.on('SIGINT', onInt);
+    process.on('SIGTERM', onTerm);
+    const timer = setTimeout(() => {
+      timedOut = true;
+      void stopTree().then(async () => {
+        // A descendant holding the output pipes can delay 'close'; the tree is
+        // gone, so report after a bounded wait either way.
+        const until = Date.now() + STOP_GRACE_MS;
+        while (!closed && Date.now() < until) await new Promise((r) => setTimeout(r, 50));
+        finish();
+      });
+    }, timeoutMs);
     child.stdout?.on('data', (d: Buffer) => { out += d.toString(); stdout += d.toString(); });
     child.stderr?.on('data', (d: Buffer) => (out += d.toString()));
-    child.on('error', (error: Error) => finish({ code: null, error }));
-    child.on('close', (code: number | null) => finish({ code }));
+    child.on('error', (error: Error) => { spawnError = error; closed = true; if (!timedOut) finish(); });
+    child.on('close', (code: number | null) => {
+      closed = true;
+      closeCode = code;
+      // A timed-out run reports once its tree is stopped (above).
+      if (!timedOut) finish();
+    });
   });
 }
 
@@ -310,6 +370,13 @@ export function runTypecheck(
   return runTypecheckWith(projectDir, command, args, via, declaredData);
 }
 
+/** Announce, on stderr so JSON on stdout is untouched, that TypeScript is
+ *  about to be fetched with npx: a network step that also writes npm's cache.
+ *  The project's own dependencies are never installed. */
+export function announceNpxTypeScriptFetch(version: string): void {
+  process.stderr.write(`TypeScript is not installed in this project; fetching typescript@${version} with npx (needs the npm registry; npm keeps it in its cache). The project's dependencies are not installed.\n`);
+}
+
 /** How this project's typecheck will get its compiler: 'npx' means a
  *  network fetch of TypeScript, which commands announce before running. */
 export function typecheckCompilerSource(projectDir: string): TscInvocation['via'] {
@@ -359,7 +426,7 @@ async function runTypecheckWith(
   }
   const cleanup = () => { if (overlay) rmSync(overlay, { force: true }); };
 
-  const run = await runBounded(command, fullArgs, projectDir);
+  const run = await runBounded(command, fullArgs, projectDir, { onAbort: cleanup });
   cleanup();
   if (run.timedOut) return { ok: false, errors: [], via, raw: run.out, spawnError: timedOutMessage(via) };
   if (run.error) return { ok: false, errors: [], via, raw: run.out, spawnError: run.error.message };

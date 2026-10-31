@@ -63,7 +63,7 @@ For optional after-edit checking, explicitly run `somewhere hooks install --host
 | `somewhere git status` | Show connected repo, commit, deploy status, logs link, and live URL |
 | `somewhere git disconnect` | Stop push-to-deploy; the currently deployed site stays live |
 | `somewhere pull` | Download a project's live deployed source + scaffold tsconfig/package.json for local typechecking |
-| `somewhere typecheck` | Loads the pulled `tsconfig.json` explicitly (equivalent to project-wide `tsc --noEmit`) — catches a dropped import (TS2304) with file:line; do not append source-file args, which bypass the project config. Read-only: it installs nothing and stops if declared type packages are not installed (run `npm install` first); without TypeScript in the project it fetches it with npx |
+| `somewhere typecheck` | Loads the pulled `tsconfig.json` explicitly (equivalent to project-wide `tsc --noEmit`) — catches a dropped import (TS2304) with file:line; do not append source-file args, which bypass the project config. It never installs the project's dependencies and stops if declared type packages are not installed (run `npm install` first); without TypeScript in the project it fetches it with npx (network, npm cache) and says so |
 | `somewhere logs` | Show recent logs |
 | `somewhere logs --follow` | Stream logs in real-time |
 | `somewhere logs --level error` | Filter by level |

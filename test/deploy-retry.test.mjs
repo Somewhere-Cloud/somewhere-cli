@@ -52,7 +52,7 @@ function sendJson(res, status, payload) {
   res.end(JSON.stringify(payload));
 }
 
-test('deploy retries once after a timeout-class upload failure', async () => {
+test('a timed-out deploy is not re-sent: its outcome is unknown', async () => {
   const HOME = mkdtempSync(join(tmpdir(), 'sw-deploy-retry-home-'));
   const fixtureDir = mkdtempSync(join(tmpdir(), 'sw-deploy-retry-fixture-'));
   writeConfig(HOME);
@@ -102,10 +102,11 @@ test('deploy retries once after a timeout-class upload failure', async () => {
       },
     });
 
-    assert.equal(result.status, 0, `stdout:\n${result.stdout}\nstderr:\n${result.stderr}`);
-    assert.equal(deployCalls, 2);
-    assert.match(result.stdout, /Deploy timed out after 1s; retrying once\./);
-    assert.match(result.stdout, /Live at https:\/\/retry\.somewhere\.cloud/);
+    // The first attempt may still go live; sending it again could race it.
+    assert.equal(result.status, 1, `stdout:\n${result.stdout}\nstderr:\n${result.stderr}`);
+    assert.equal(deployCalls, 1);
+    assert.doesNotMatch(result.stdout + result.stderr, /retrying once/);
+    assert.match(result.stdout + result.stderr, /Its outcome is unknown/);
   });
 });
 
@@ -187,13 +188,13 @@ test('deploy --json times out with one structured error and unknown-outcome guid
 
     assert.equal(result.status, 1);
     assert.equal(result.stderr, '');
-    assert.equal(deployCalls, 2);
+    assert.equal(deployCalls, 1);
     const payload = JSON.parse(result.stdout);
     assert.equal(payload.error, 'TIMEOUT');
     // The request may have been applied: never "retry", always read back first.
     assert.equal(payload.deployment_outcome, 'unknown');
-    assert.match(payload.message, /may or may not have gone live/);
-    assert.match(payload.message, /`somewhere status`/);
+    assert.match(payload.message, /Its outcome is unknown/);
+    assert.match(payload.message, /somewhere call project_deploys/);
     assert.doesNotMatch(payload.message, /not applied|before retrying/i);
   });
 });

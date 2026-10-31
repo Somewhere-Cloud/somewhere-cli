@@ -10,7 +10,7 @@ import ora from '../lib/spinner.js';
 import { ApiClient, CliApiError, LONG_CALL_TIMEOUT_MS } from '../lib/client.js';
 import { buildErrorSummary, isBuildError, renderBuildError } from '../lib/build-errors.js';
 import { getToken, loadProjectConfig, readSourceBase, saveSourceBase } from '../lib/config.js';
-import { IGNORE, classifyKey, collectFiles, oversizeRefusal, sensitiveReferenceRefusal } from '../lib/files.js';
+import { IGNORE, classifyKey, collectFiles, oversizeRefusal, previewBatchCheck, previewOversizeRefusal, sensitiveReferenceRefusal } from '../lib/files.js';
 import { isSensitiveDeployPath } from '../lib/vendor/deploy-paths.js';
 import { bold, dim, error, green, info, printJson, printJsonError, red, success, teal, warn, yellow } from '../lib/output.js';
 import { showProjectNotices } from '../lib/project-notices.js';
@@ -853,6 +853,9 @@ async function runHotDeploy(opts: { project?: string; publishFirst?: boolean; js
   // one patch, not three.
   const pendingChanged = new Set<string>();
   const pendingDeleted = new Set<string>();
+  // A save refused for size waits here, untouched, until the next save.
+  const heldChanged = new Set<string>();
+  const heldDeleted = new Set<string>();
   let timer: ReturnType<typeof setTimeout> | null = null;
   let deploying = false;
   let observedSessionActive = false;
@@ -909,9 +912,7 @@ async function runHotDeploy(opts: { project?: string; publishFirst?: boolean; js
       schedule(); // re-arm; a deploy is in flight
       return;
     }
-    const changed = [...pendingChanged];
-    const deleted = [...pendingDeleted];
-    if (!changed.length && !deleted.length) return;
+    if (!pendingChanged.size && !pendingDeleted.size && !heldChanged.size && !heldDeleted.size) return;
     deploying = true;
     try {
       // Check before consuming the save. Promotion closes a preview; if that
@@ -927,14 +928,18 @@ async function runHotDeploy(opts: { project?: string; publishFirst?: boolean; js
         await finishPreview(state === 'promoted' ? 'promoted' : 'closed', true);
         return;
       }
-      pendingChanged.clear();
-      pendingDeleted.clear();
+      const plan = planPreviewSave(cwd, { pendingChanged, pendingDeleted, heldChanged, heldDeleted });
+      if (plan.action === 'none') return;
+      if (plan.action === 'refuse') {
+        error(plan.message);
+        return;
+      }
       const nextCandidate = await deployBatch(
         client,
         projectId!,
         cwd,
-        changed,
-        deleted,
+        plan.upload,
+        plan.deleted,
         draftId,
         candidateReleaseId!,
       );
@@ -990,6 +995,36 @@ async function runHotDeploy(opts: { project?: string; publishFirst?: boolean; js
     if (pollTimer) clearInterval(pollTimer);
     watcher.close().finally(() => process.exit(0));
   });
+}
+
+export interface PreviewSaveQueue {
+  pendingChanged: Set<string>;
+  pendingDeleted: Set<string>;
+  heldChanged: Set<string>;
+  heldDeleted: Set<string>;
+}
+
+/**
+ * Decide one preview save. The pending saves (and any save held back earlier)
+ * are taken from the queue. Ignored files are dropped; a file over the
+ * per-file limit refuses the whole save, which is held unchanged until the
+ * next save so nothing is lost and nothing is retried in a loop.
+ */
+export function planPreviewSave(cwd: string, queue: PreviewSaveQueue):
+  | { action: 'none' }
+  | { action: 'refuse'; message: string }
+  | { action: 'send'; upload: string[]; deleted: string[] } {
+  const changed = [...new Set([...queue.heldChanged, ...queue.pendingChanged])].filter((rel) => !queue.pendingDeleted.has(rel));
+  const deleted = [...new Set([...queue.heldDeleted, ...queue.pendingDeleted])].filter((rel) => !queue.pendingChanged.has(rel));
+  queue.pendingChanged.clear(); queue.pendingDeleted.clear(); queue.heldChanged.clear(); queue.heldDeleted.clear();
+  if (!changed.length && !deleted.length) return { action: 'none' };
+  const checked = previewBatchCheck(cwd, changed);
+  if (checked.oversize.length) {
+    for (const rel of changed) queue.heldChanged.add(rel);
+    for (const rel of deleted) queue.heldDeleted.add(rel);
+    return { action: 'refuse', message: previewOversizeRefusal(checked.oversize) };
+  }
+  return { action: 'send', upload: checked.upload, deleted };
 }
 
 async function deployBatch(

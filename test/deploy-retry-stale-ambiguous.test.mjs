@@ -1,8 +1,6 @@
-// A deploy the CLI re-sent after its OWN timeout / lost connection may have
-// gone live on the first attempt; a STALE_RELEASE_BASE answer to that retry
-// must say so, never "NOT applied" (tsk_8a68dfa2 item 1). Both directions:
-//   - first attempt times out, retry is refused stale → "may already have gone
-//     live", JSON first_attempt_outcome: unknown, exit non-zero;
+// A deploy whose first attempt timed out may have gone live; it is never re-sent
+// and never reported "NOT applied" (tsk_8a68dfa2 item 1, pfb_47695233e613):
+//   - first attempt times out → one send, outcome unknown, exit non-zero;
 //   - first attempt answered by the platform with retry: true (it changed
 //     nothing), retry refused stale → the existing "NOT applied" explanation;
 //   - stale on the first attempt → the existing explanation.
@@ -70,21 +68,24 @@ async function deploy(firstAttempt, extraArgs = []) {
   }
 }
 
-test('a retry after the CLI\'s own timeout that is refused stale says the first attempt may be live', async () => {
+// A timed-out first attempt is no longer re-sent (pfb_47695233e613): its
+// outcome is unknown and is reported as such, so no stale refusal of a resend
+// can be misread as "not applied".
+test('a deploy whose first attempt times out is not re-sent; its outcome is reported unknown', async () => {
   const r = await deploy('hang');
   const out = r.stdout + r.stderr;
-  assert.equal(r.deploys, 2, 'the deploy was re-sent once');
+  assert.equal(r.deploys, 1, 'the deploy was sent once');
   assert.notEqual(r.status, 0);
-  assert.match(out, /may already have gone live/);
+  assert.match(out, /Its outcome is unknown/);
   assert.doesNotMatch(out, /NOT applied/);
 });
 
-test('--json marks the first attempt outcome unknown', async () => {
+test('--json marks a timed-out deploy outcome unknown', async () => {
   const r = await deploy('hang', ['--json']);
   const json = JSON.parse(r.stdout.slice(r.stdout.indexOf('{')));
-  assert.equal(json.error, 'STALE_RELEASE_BASE');
-  assert.equal(json.first_attempt_outcome, 'unknown');
-  assert.equal(json.first_attempt_failure, 'TIMEOUT');
+  assert.equal(json.error, 'TIMEOUT');
+  assert.equal(json.deployment_outcome, 'unknown');
+  assert.equal(r.deploys, 1);
 });
 
 test('a retry after the platform\'s own retry:true keeps the NOT applied explanation', async () => {

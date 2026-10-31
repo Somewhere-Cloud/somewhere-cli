@@ -7,28 +7,33 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-// The deploy body reached the server and no answer came back: the deploy may
-// be live. The CLI never says it was not applied, never advises a blind retry,
-// and resends only a body the platform makes safe to resend (a full,
-// non-forced deploy). --force and --scope deploys are sent once.
+// The deploy body may have reached the server and no authoritative answer was
+// read (pfb_47695233e613): the request is never sent again, the outcome is
+// reported as unknown with deploy-history readback, and nothing says "not
+// applied" or advises a retry. A connection that never opened sent nothing.
 const cli = join(dirname(fileURLToPath(import.meta.url)), '../dist/index.js');
 let deployPosts = 0;
+let mode = 'drop';
 const server = createServer((req, res) => {
   let body = '';
   req.on('data', (c) => { body += c; });
   req.on('end', () => {
     if (req.method === 'POST' && req.url.startsWith('/v1/deploy')) {
       deployPosts += 1;
-      return req.socket.destroy(); // whole body read, then no answer
+      if (mode === 'drop') return req.socket.destroy(); // whole body read, then no answer
+      res.writeHead(200, { 'content-type': 'application/json', 'x-request-id': 'req_fixture' });
+      res.write('{"ok":true,"data":{"version":'); // headers and part of the body arrive...
+      if (mode === 'body-drop') setTimeout(() => res.socket.destroy(), 50); // ...then the connection drops
+      return; // body-stall: never finishes
     }
     res.writeHead(200, { 'content-type': 'application/json' });
     res.end(JSON.stringify({ ok: true, data: { notices: [] } }));
   });
 });
 await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
-test.after(() => server.close());
+test.after(() => { server.closeAllConnections?.(); server.close(); });
 
-function run(args, apiUrl = `http://127.0.0.1:${server.address().port}/v1`) {
+function run(args, apiUrl = `http://127.0.0.1:${server.address().port}/v1`, extraEnv = {}) {
   const base = mkdtempSync(join(tmpdir(), 'sw-unknown-outcome-'));
   const app = join(base, 'app'), config = join(base, 'config');
   mkdirSync(join(app, 'api'), { recursive: true }); mkdirSync(config);
@@ -39,7 +44,7 @@ function run(args, apiUrl = `http://127.0.0.1:${server.address().port}/v1`) {
   return new Promise((resolve) => {
     const child = spawn(process.execPath, [cli, ...args], { cwd: app, stdio: ['ignore', 'pipe', 'pipe'], env: {
       ...process.env, SOMEWHERE_CONFIG_DIR: config, SOMEWHERE_API_URL: apiUrl,
-      SOMEWHERE_NO_NOTIFICATIONS: '1', CI: '1', NO_COLOR: '1',
+      SOMEWHERE_NO_NOTIFICATIONS: '1', CI: '1', NO_COLOR: '1', ...extraEnv,
     } });
     let stdout = '', stderr = '';
     child.stdout.on('data', (v) => stdout += v); child.stderr.on('data', (v) => stderr += v);
@@ -48,41 +53,54 @@ function run(args, apiUrl = `http://127.0.0.1:${server.address().port}/v1`) {
 }
 
 function assertUnknownOutcome(out) {
-  assert.match(out, /may or may not have gone live/);
-  assert.match(out, /Do not deploy again until you know/);
-  assert.match(out, /`somewhere status`/);
-  assert.doesNotMatch(out, /Check your network and retry|NOT applied|not a server rejection/);
+  assert.match(out, /Its outcome is unknown: it may have gone live, may have been refused, or may still be running\. It was not sent again\./);
+  assert.match(out, /somewhere call project_deploys '\{"project_id":"proj_fixture"\}'/);
+  assert.match(out, /Do not deploy again until it does/);
+  assert.doesNotMatch(out, /Check your network and retry|NOT applied|not a server rejection|retrying once|deploy again;/);
 }
 
-test('a full deploy whose answer never arrives is resent once (safe), then reported as unknown outcome', async () => {
-  deployPosts = 0;
-  const result = await run(['deploy']);
-  assert.equal(result.status, 1, result.out);
-  assert.equal(deployPosts, 2);
-  assertUnknownOutcome(result.out);
-  assert.match(result.out, /the one safe resend got no answer either/);
-});
-
-test('--json reports deployment_outcome unknown on stdout', async () => {
-  deployPosts = 0;
-  const result = await run(['deploy', '--json']);
-  assert.equal(result.status, 1);
-  const payload = JSON.parse(result.stdout);
-  assert.equal(payload.deployment_outcome, 'unknown');
-  assert.equal(payload.error, 'NETWORK_ERROR');
-  assertUnknownOutcome(payload.message);
-});
-
-for (const args of [['deploy', '--force', '--yes'], ['deploy', '--scope', 'functions']]) {
-  test(`\`${args.join(' ')}\` is never resent after an unanswered request`, async () => {
-    deployPosts = 0;
+for (const args of [['deploy'], ['deploy', '--force', '--yes'], ['deploy', '--scope', 'functions']]) {
+  test(`\`${args.join(' ')}\`: an unanswered request is sent once and reported as unknown outcome`, async () => {
+    mode = 'drop'; deployPosts = 0;
     const result = await run(args);
     assert.equal(result.status, 1, result.out);
     assert.equal(deployPosts, 1);
     assertUnknownOutcome(result.out);
-    assert.doesNotMatch(result.out, /resend/);
   });
 }
+
+test('--json reports deployment_outcome unknown with the readback details', async () => {
+  mode = 'drop'; deployPosts = 0;
+  const result = await run(['deploy', '--json']);
+  assert.equal(result.status, 1);
+  assert.equal(deployPosts, 1);
+  const payload = JSON.parse(result.stdout);
+  assert.equal(payload.deployment_outcome, 'unknown');
+  assert.equal(payload.error, 'NETWORK_ERROR');
+  assert.equal(payload.project_id, 'proj_fixture');
+  assert.ok(!Number.isNaN(Date.parse(payload.request_started_at)));
+  assertUnknownOutcome(payload.message);
+});
+
+test('headers arrive, then the body is cut off: unknown outcome, not resent', async () => {
+  mode = 'body-drop'; deployPosts = 0;
+  const result = await run(['deploy', '--json']);
+  assert.equal(result.status, 1, result.out);
+  assert.equal(deployPosts, 1);
+  const payload = JSON.parse(result.stdout);
+  assert.equal(payload.deployment_outcome, 'unknown');
+  assert.equal(payload.request_id, 'req_fixture');
+  assert.match(payload.message, /got a response that was cut off before its result could be read/);
+  assertUnknownOutcome(payload.message);
+});
+
+test('headers arrive, then the body stalls past the deadline: unknown outcome, not resent', async () => {
+  mode = 'body-stall'; deployPosts = 0;
+  const result = await run(['deploy'], undefined, { SOMEWHERE_DEPLOY_TIMEOUT_MS: '400' });
+  assert.equal(result.status, 1, result.out);
+  assert.equal(deployPosts, 1);
+  assertUnknownOutcome(result.out);
+});
 
 test('a connection that never opened keeps its retry advice: nothing was sent', async () => {
   const closed = createServer();
@@ -92,5 +110,5 @@ test('a connection that never opened keeps its retry advice: nothing was sent', 
   const result = await run(['deploy'], `http://127.0.0.1:${port}/v1`);
   assert.equal(result.status, 1);
   assert.match(result.out, /ECONNREFUSED/);
-  assert.doesNotMatch(result.out, /may or may not have gone live/);
+  assert.doesNotMatch(result.out, /outcome is unknown/);
 });

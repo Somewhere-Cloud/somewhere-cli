@@ -223,7 +223,7 @@ async function startDeployCheck(projectDir: string): Promise<DeployCheckResult> 
   const { command, args } = deployCheckTsc(projectDir);
   // Bounded, with its process group stopped on timeout or Ctrl-C: an npx
   // fetch of TypeScript never hangs or outlives the command (pfb_8f0f7cdd04a1).
-  const run = await runBounded(command, [...args, '--project', config, '--pretty', 'false'], projectDir);
+  const run = await runBounded(command, [...args, '--project', config, '--pretty', 'false'], projectDir, { onAbort: cleanup });
   cleanup();
   const out = run.out;
   if (run.timedOut) return { ok: false, findings: [], typescript, checkedFiles: checked.length, error: timedOutMessage('npx') };

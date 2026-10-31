@@ -638,12 +638,19 @@ test('MFA continuation is shared by password, magic-link and invitation landings
     assert.equal(resends, 2);
     assert.equal(form.error, 'A code was sent recently. Wait before asking for another one.');
     assert.equal(form.notice, null); assert.equal(form.resendReady, false);
+    timers.shift()(); form=render();
+    resendReply = { sent: true, delivery: 'unknown', expires_in: 120 };
+    await form.resend(); form=render();
+    assert.equal(resends, 3);
+    assert.match(form.notice, /could not confirm delivery/);
+    assert.doesNotMatch(form.notice, /on its way|We emailed you/);
+    assert.equal(form.error, null);
     // Spaces are ignored; the right code finishes sign-in.
     form.setCode(' 123 456 '); form=render(); await form.submit();
     form=render(); assert.equal(form.required,false); assert.equal(form.code,''); assert.equal(done,1);
     assert.deepEqual(calls,[{code:'000000'},{code:'123456'}]);
     // Sign in again leaves the step without a request.
     assert.equal(form.capture(new AuthError('MFA_REQUIRED')), true); form=render(); form.restart(); form=render();
-    assert.equal(form.required, false); assert.equal(resends, 2);
+    assert.equal(form.required, false); assert.equal(resends, 3);
   } finally { delete globalThis.__mfaFixture; }
 });

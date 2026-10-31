@@ -1780,7 +1780,7 @@ export function useMfaContinuation(onDone?: () => void): MfaContinuation {
         const sent = await auth.resendMfaCode();
         setNotice(sent.delivery === 'sent'
           ? 'We emailed you a new code. Use the newest one; it still expires 5 minutes after you signed in.'
-          : 'A new code is on its way. Use the newest one when it arrives.');
+          : 'We could not confirm delivery. If a new code arrives, use that one. Requesting it does not extend this sign-in step.');
       } catch (reason: unknown) {
         setError(authErrorMessage(reason));
       } finally {

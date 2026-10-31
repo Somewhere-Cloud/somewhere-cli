@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.38.8
+
+### Changed
+
+- The starter that `somewhere init` writes no longer shows a whole-page loading
+  screen ("Checking your session…"). Until sign-in is known, the app frame
+  renders at once with the app's name and no account controls.
+- The starter pins `@somewhere-cloud/sdk` 0.14.0 (the minimal template
+  `^0.14.0`). With 0.14.0 the platform's early session script starts the
+  sign-in check while the page is still loading.
+
 ## 0.38.7
 
 ### Changed

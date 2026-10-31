@@ -127,3 +127,16 @@ for (const [signal, code] of [['SIGINT', 130], ['SIGTERM', 143]]) {
     await assertTreeGone(p);
   });
 }
+
+// When the group still has members after the final wait, the run says some
+// processes may still be running instead of claiming they stopped. (A process
+// that survives KILL cannot be built portably here, so this checks the wording
+// the timeout and interrupt paths use for that case.)
+test('a stop that could not be confirmed is reported as uncertain, never as stopped', async () => {
+  const { timedOutMessage, stopIncompleteMessage } = await import('../dist/lib/typecheck.js');
+  assert.match(timedOutMessage('project'), /and was stopped\./);
+  const uncertain = timedOutMessage('project', { stopIncomplete: { pid: 4242 } });
+  assert.match(uncertain, /was stopped, but some typecheck processes did not stop and may still be running \(process group 4242\)/);
+  assert.doesNotMatch(uncertain, /and was stopped\./);
+  assert.match(stopIncompleteMessage(4242), /ps -g 4242/);
+});

@@ -475,7 +475,7 @@ export function previewOversizeRefusal(oversize: Array<{ path: string; bytes: nu
   return [
     `Nothing in this save was sent: ${oversize.length === 1 ? 'this file is' : 'these files are'} over the ${formatBytes(MAX_FILE_SIZE)} per-file limit:`,
     ...oversize.map((entry) => `  ${entry.path} (${formatBytes(entry.bytes)})`),
-    'Your last preview is unchanged. Make the file smaller, or add it to .somewhereignore, then save again; the held changes are sent with that save.',
+    'Your last preview is unchanged. Make the file smaller (or add it to .somewhereignore), then save an app file again: the held changes are sent with the next save the watcher sees. Editing .somewhereignore alone is not a save it sees.',
   ].join('\n');
 }
 

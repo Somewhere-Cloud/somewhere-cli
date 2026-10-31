@@ -226,7 +226,7 @@ async function startDeployCheck(projectDir: string): Promise<DeployCheckResult> 
   const run = await runBounded(command, [...args, '--project', config, '--pretty', 'false'], projectDir, { onAbort: cleanup });
   cleanup();
   const out = run.out;
-  if (run.timedOut) return { ok: false, findings: [], typescript, checkedFiles: checked.length, error: timedOutMessage('npx') };
+  if (run.timedOut) return { ok: false, findings: [], typescript, checkedFiles: checked.length, error: timedOutMessage('npx', run) };
   if (run.error) return { ok: false, findings: [], typescript, checkedFiles: checked.length, error: run.error.message };
   const { findings, problems } = parseDeployOutput(out, projectDir, collected.functions);
   // A config/global error, or a non-zero exit with no located diagnostic

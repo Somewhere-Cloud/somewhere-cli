@@ -194,7 +194,8 @@ test('deploy --json times out with one structured error and unknown-outcome guid
     // The request may have been applied: never "retry", always read back first.
     assert.equal(payload.deployment_outcome, 'unknown');
     assert.match(payload.message, /Its outcome is unknown/);
-    assert.match(payload.message, /somewhere call project_deploys/);
+    assert.match(payload.message, /this CLI cannot confirm what happened to it/);
+    assert.doesNotMatch(payload.message, /settles/);
     assert.doesNotMatch(payload.message, /not applied|before retrying/i);
   });
 });

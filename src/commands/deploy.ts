@@ -1740,18 +1740,23 @@ export function outcomeUnknown(err: unknown): boolean {
   return RETRYABLE_DEPLOY_CODES.has(err.code) && err.meta.notSent !== true;
 }
 
-/** The deploy request may have been applied and no answer was read. The
- *  outcome stays unknown until the platform's deploy history settles it. */
+/** The deploy request may have been applied and no answer was read. Nothing
+ *  the CLI can read ties a deploy-history entry to this exact request (history
+ *  entries carry no request or trace id), so the outcome stays unconfirmed: a
+ *  later entry may be another actor's deploy, and client and server clocks
+ *  differ. History is offered for investigation only, never as a signal to
+ *  deploy again. */
 export function formatUnknownDeployOutcomeExplanation(err: CliApiError, projectId: string, startedAt: string): string {
   const what = err.meta.responseBodyIncomplete ? 'got a response that was cut off before its result could be read'
     : err.code === 'TIMEOUT' ? 'timed out' : err.code === 'SERVER_SLOW' ? 'stalled waiting for the server' : 'lost its connection';
+  const ids = [err.meta.requestId ? `request ${err.meta.requestId}` : '', err.meta.traceId ? `trace ${err.meta.traceId}` : ''].filter(Boolean);
   return [
-    `The deploy request ${what} after it may have reached the platform. Its outcome is unknown: it may have gone live, may have been refused, or may still be running. It was not sent again.`,
+    `The deploy request ${what} after it may have reached the platform. Its outcome is unknown: it may have gone live, may have been refused, or may still be running. It was not sent again, and this CLI cannot confirm what happened to it.`,
     '',
-    'Next steps:',
-    `  Read the deploy history: somewhere call project_deploys '${JSON.stringify({ project_id: projectId })}' lists finished deploys (success or rejected) with their times. An entry after ${startedAt} settles this deploy's outcome.`,
-    '  Do not deploy again until it does: a second deploy can race this one if it is still running.',
-    '  If no entry appears, the outcome cannot be confirmed from here; keep the reference below when you ask for help.',
+    'What you can do:',
+    `  Look, for investigation only: somewhere call project_deploys '${JSON.stringify({ project_id: projectId })}' lists the project's recent deploys. No entry there is tied to this request, and deploys by anyone else can appear in it, so a later entry does not show what happened to this one.`,
+    `  Ask for help with this reference so the platform can find this exact request: project ${projectId}, sent at ${startedAt} (this machine's clock)${ids.length ? `, ${ids.join(', ')}` : ''}.`,
+    '  Deploying again is your call; nothing here says this request has finished, and a deploy sent while it may still be running can race it.',
   ].join('\n');
 }
 

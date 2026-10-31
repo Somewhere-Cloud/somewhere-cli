@@ -53,10 +53,14 @@ function run(args, apiUrl = `http://127.0.0.1:${server.address().port}/v1`, extr
 }
 
 function assertUnknownOutcome(out) {
-  assert.match(out, /Its outcome is unknown: it may have gone live, may have been refused, or may still be running\. It was not sent again\./);
-  assert.match(out, /somewhere call project_deploys '\{"project_id":"proj_fixture"\}'/);
-  assert.match(out, /Do not deploy again until it does/);
-  assert.doesNotMatch(out, /Check your network and retry|NOT applied|not a server rejection|retrying once|deploy again;/);
+  assert.match(out, /Its outcome is unknown: it may have gone live, may have been refused, or may still be running\. It was not sent again, and this CLI cannot confirm what happened to it\./);
+  assert.match(out, /Look, for investigation only: somewhere call project_deploys '\{"project_id":"proj_fixture"\}'/);
+  // Collision case: another actor's deploy can land in history while this one
+  // still runs, and clocks differ. No history entry is ever offered as this
+  // request's outcome or as permission to deploy again.
+  assert.match(out, /No entry there is tied to this request, and deploys by anyone else can appear in it, so a later entry does not show what happened to this one\./);
+  assert.match(out, /Ask for help with this reference so the platform can find this exact request: project proj_fixture, sent at \S+ \(this machine's clock\)/);
+  assert.doesNotMatch(out, /settles|until it does|entry after|Check your network and retry|NOT applied|not a server rejection|retrying once/);
 }
 
 for (const args of [['deploy'], ['deploy', '--force', '--yes'], ['deploy', '--scope', 'functions']]) {
@@ -91,6 +95,7 @@ test('headers arrive, then the body is cut off: unknown outcome, not resent', as
   assert.equal(payload.deployment_outcome, 'unknown');
   assert.equal(payload.request_id, 'req_fixture');
   assert.match(payload.message, /got a response that was cut off before its result could be read/);
+  assert.match(payload.message, /request req_fixture/, 'the reference names the request id the response carried');
   assertUnknownOutcome(payload.message);
 });
 

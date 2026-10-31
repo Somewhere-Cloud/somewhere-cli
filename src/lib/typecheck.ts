@@ -204,7 +204,12 @@ export function typecheckTimeoutMs(): number {
   return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 300_000;
 }
 
-export interface BoundedResult { code: number | null; out: string; stdout: string; error?: Error; timedOut: boolean }
+export interface BoundedResult {
+  code: number | null; out: string; stdout: string; error?: Error; timedOut: boolean;
+  /** Set when a stopped run's process group still had members after the
+   *  final wait: some of its processes may still be running. */
+  stopIncomplete?: { pid: number };
+}
 
 /** How long a stopped child tree gets after TERM before KILL, and after KILL
  *  before the run is reported. */
@@ -214,12 +219,15 @@ const STOP_GRACE_MS = 2_000;
  * Run a typecheck child (tsc, or npx fetching it) with a deadline.
  *
  * POSIX: the child leads its own process group. A timeout, Ctrl-C or TERM
- * sends TERM to the whole group, waits for it to empty, sends KILL to whatever
- * ignored TERM, and waits again, so no descendant outlives the command. A
- * group is only signalled while it still has members, and no timer survives
- * the run, so a recycled PID or group is never signalled later.
- * Windows: the tree is stopped with `taskkill /T /F` (not exercised by this
- * CLI's tests). `onAbort` runs before the CLI exits on Ctrl-C/TERM, for the
+ * sends TERM to that group, waits (bounded) for it to empty, sends KILL to
+ * what remains, and waits (bounded) again. This reaches descendants that stay
+ * in the group; one that moved to another group or session is not reached.
+ * If the group still has members after the final wait, the run reports that
+ * some processes may still be running instead of claiming they stopped.
+ * The group is signalled only after a membership check and no timer outlives
+ * the run, which narrows (does not eliminate) the chance of signalling a
+ * recycled group id. Windows: `taskkill /T /F` (not exercised by this CLI's
+ * tests). `onAbort` runs before the CLI exits on Ctrl-C/TERM, for the
  * caller's temporary files.
  */
 export function runBounded(
@@ -245,7 +253,7 @@ export function runBounded(
       resolve({ code: null, out: '', stdout: '', error: err instanceof Error ? err : new Error(String(err)), timedOut: false });
       return;
     }
-    let out = '', stdout = '', timedOut = false, closed = false, settled = false, aborting = false, stopping: Promise<void> | null = null;
+    let out = '', stdout = '', timedOut = false, closed = false, settled = false, aborting = false, stopping: Promise<boolean> | null = null, stopIncomplete = false;
     let closeCode: number | null = null, spawnError: Error | undefined;
     const pid = child.pid;
     const treeAlive = (): boolean => {
@@ -267,12 +275,13 @@ export function runBounded(
       while (treeAlive() && Date.now() < until) await new Promise((r) => setTimeout(r, 50));
       return !treeAlive();
     };
-    const stopTree = (): Promise<void> => {
+    /** Resolves false when the group still had members after the final wait. */
+    const stopTree = (): Promise<boolean> => {
       stopping ??= (async () => {
         signalTree('SIGTERM');
-        if (await waitEmpty(STOP_GRACE_MS)) return;
+        if (await waitEmpty(STOP_GRACE_MS)) return true;
         signalTree('SIGKILL');
-        await waitEmpty(STOP_GRACE_MS);
+        return waitEmpty(STOP_GRACE_MS);
       })();
       return stopping;
     };
@@ -284,13 +293,15 @@ export function runBounded(
       clearTimeout(timer);
       process.off('SIGINT', onInt);
       process.off('SIGTERM', onTerm);
-      resolve({ code: closeCode, out, stdout, timedOut, ...(spawnError ? { error: spawnError } : {}) });
+      resolve({ code: closeCode, out, stdout, timedOut, ...(spawnError ? { error: spawnError } : {}),
+        ...(stopIncomplete && pid ? { stopIncomplete: { pid } } : {}) });
     };
     const onSignal = (exitCode: number) => {
       if (aborting) return;
       aborting = true;
       clearTimeout(timer);
-      void stopTree().then(() => {
+      void stopTree().then((gone) => {
+        if (!gone && pid) process.stderr.write(`${stopIncompleteMessage(pid)}\n`);
         try { options.onAbort?.(); } finally { process.exit(exitCode); }
       });
     };
@@ -300,7 +311,8 @@ export function runBounded(
     process.on('SIGTERM', onTerm);
     const timer = setTimeout(() => {
       timedOut = true;
-      void stopTree().then(async () => {
+      void stopTree().then(async (gone) => {
+        stopIncomplete = !gone;
         // A descendant holding the output pipes can delay 'close'; the tree is
         // gone, so report after a bounded wait either way.
         const until = Date.now() + STOP_GRACE_MS;
@@ -320,9 +332,15 @@ export function runBounded(
   });
 }
 
-export function timedOutMessage(via: TscInvocation['via']): string {
+/** Said instead of "stopped" when processes may have survived the stop. */
+export function stopIncompleteMessage(pid: number): string {
+  return `Some typecheck processes did not stop and may still be running (process group ${pid}); check with \`ps -g ${pid}\` and stop them if they are.`;
+}
+
+export function timedOutMessage(via: TscInvocation['via'], run?: Pick<BoundedResult, 'stopIncomplete'>): string {
   const seconds = Math.round(typecheckTimeoutMs() / 1000);
-  return `The typecheck did not finish within ${seconds}s and was stopped${via === 'npx' ? ' (fetching TypeScript with npx needs the npm registry)' : ''}. `
+  const stopped = run?.stopIncomplete ? `was stopped, but ${stopIncompleteMessage(run.stopIncomplete.pid).replace(/^Some/, 'some')}` : 'was stopped.';
+  return `The typecheck did not finish within ${seconds}s and ${stopped}${via === 'npx' ? ' (Fetching TypeScript with npx needs the npm registry.)' : ''} `
     + 'Set SOMEWHERE_TYPECHECK_TIMEOUT_MS to allow longer.';
 }
 
@@ -397,7 +415,7 @@ async function runTypecheckWith(
     // TypeScript resolves JSONC, inherited configs and explicit files itself.
     // Preserve that complete file set, adding only our declaration and schema.
     const config = await runBounded(command, [...args, '--project', SCAFFOLD_TSCONFIG_FILENAME, '--showConfig'], projectDir);
-    if (config.timedOut) return { ok: false, errors: [], via, raw: config.out, spawnError: timedOutMessage(via) };
+    if (config.timedOut) return { ok: false, errors: [], via, raw: config.out, spawnError: timedOutMessage(via, config) };
     if (config.error || config.code !== 0) {
       return { ok: false, errors: [], via, raw: config.out,
         ...(config.error ? { spawnError: config.error.message } : {}) };
@@ -428,7 +446,7 @@ async function runTypecheckWith(
 
   const run = await runBounded(command, fullArgs, projectDir, { onAbort: cleanup });
   cleanup();
-  if (run.timedOut) return { ok: false, errors: [], via, raw: run.out, spawnError: timedOutMessage(via) };
+  if (run.timedOut) return { ok: false, errors: [], via, raw: run.out, spawnError: timedOutMessage(via, run) };
   if (run.error) return { ok: false, errors: [], via, raw: run.out, spawnError: run.error.message };
   const allErrors = parseTscOutput(run.out);
   // Drop locally-unresolvable bare-import diagnostics (they resolve on

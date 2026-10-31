@@ -11,7 +11,7 @@ const PACKAGE_JSON = `{
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@somewhere-cloud/sdk": "^0.13.0",
+    "@somewhere-cloud/sdk": "^0.14.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-router-dom": "^7.9.5"

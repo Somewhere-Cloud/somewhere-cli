@@ -155,18 +155,21 @@ test('every combination separates types, services, hooks, pages and presentation
     // App.tsx routes; it neither fetches nor renders forms.
     const app = read('src/App.tsx');
     assert.doesNotMatch(app, /fetch\(|<form|<input|somewhere:data/);
-    assert.match(app, /session\.status === 'loading'\) return <LoadingScreen /);
+    // No whole-page loading screen: before the server answers, the app's frame
+    // renders at once, without account controls (tsk_c09746b9).
+    assert.match(app, /session\.status === 'loading' \|\| session\.status === 'signing-out'\) \{\n {4}return \(\n {6}<AppShell appName=\{APP_NAME\} homeLink=\{linkTo\(ROUTES\.home\)\} busy>/);
     assert.match(app, /session\.status === 'signed-out'\) return <SignInPage \/>/);
     assert.match(app, /<PrivateRoutes key=\{session\.user\.id\}/, 'private subtree is keyed by the verified user');
 
     const all = Object.values(collectFiles(dir).files).join('\n');
+    assert.doesNotMatch(all, /LoadingScreen|Checking your session/, `${label}: no whole-page loading screen`);
     assert.doesNotMatch(all, /\bany\b/);
     assert.doesNotMatch(all, /localStorage|sessionStorage|Authorization|Bearer|accessToken|refreshToken|getSession|useSession/);
     assert.doesNotMatch(all, /user_id|owner_id|\.owner\b|where: \{ *user/, `${label}: no client-side owner filters`);
     assert.doesNotMatch(all, /fonts\.googleapis|@import url|https?:\/\/[^\s'"`]*\.(woff2?|ttf)/, `${label}: no remote fonts`);
     const pkg = JSON.parse(read('package.json'));
     assert.deepEqual(Object.keys(pkg.dependencies).sort(), ['@somewhere-cloud/sdk', 'react', 'react-dom']);
-    assert.equal(pkg.dependencies['@somewhere-cloud/sdk'], '0.13.0', 'the SDK release with identity-only auth and explicit billing observations');
+    assert.equal(pkg.dependencies['@somewhere-cloud/sdk'], '0.14.0', 'the SDK release whose client adopts the early session check');
     assert.equal(pkg.scripts.build, undefined);
   }
 });
@@ -576,7 +579,7 @@ test('MFA continuation is shared by password, magic-link and invitation landings
     assert.match(starter.read('src/auth/magic-link.ts'), /window\.location\.replace\(target\.current\)/);
     assert.doesNotMatch(starter.read('src/auth/useMfaContinuation.ts') + starter.read('src/ui/MfaStep.tsx'), /mfa_token|localStorage|sessionStorage|fetch\(|console\./);
     assert.match(starter.read('src/ui/MfaStep.tsx'), /autoComplete="one-time-code"/);
-    assert.equal(JSON.parse(starter.read('package.json')).dependencies['@somewhere-cloud/sdk'], '0.13.0', 'the SDK release with identity-only auth and explicit billing observations');
+    assert.equal(JSON.parse(starter.read('package.json')).dependencies['@somewhere-cloud/sdk'], '0.14.0', 'the SDK release whose client adopts the early session check');
   }
   const starter = generate('auth','headless');
   let state = [], cursor = 0, calls = [], done = 0;

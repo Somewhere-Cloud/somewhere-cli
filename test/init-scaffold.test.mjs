@@ -49,11 +49,11 @@ function generateGreen() {
   return { dir, result };
 }
 
-test('auth template SDK defaults adopt 0.13.0 identity-only auth with explicit billing observations and preserve exact versus caret policy', () => {
+test('auth template SDK defaults adopt 0.14.0 (the client adopts the early session check) and preserve exact versus caret policy', () => {
   const selection = { requested: ['auth'], added: [], modules: ['auth'], ui: 'styled' };
   for (const [files, expected] of [
-    [createFeatureTemplate(selection, { appName: 'Starter' }), '0.13.0'],
-    [createHappyPathTemplate(), '^0.13.0'],
+    [createFeatureTemplate(selection, { appName: 'Starter' }), '0.14.0'],
+    [createHappyPathTemplate(), '^0.14.0'],
   ]) {
     const manifest = JSON.parse(files.find((file) => file.path === 'package.json').content);
     assert.equal(manifest.dependencies['@somewhere-cloud/sdk'], expected);
@@ -114,7 +114,7 @@ test('minimal starter is a small typed frontend, function, and schema', () => {
 
   const pkg = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'));
   assert.deepEqual(pkg.dependencies, {
-    '@somewhere-cloud/sdk': '0.13.0',
+    '@somewhere-cloud/sdk': '0.14.0',
     react: '19.2.7',
     'react-dom': '19.2.7',
   });
@@ -246,9 +246,15 @@ test('default starter is the auth module: SDK client, packaged handler, hooks, r
   assert.match(hooks, /auth\.signUp\(credentials\)/);
   const app = readFileSync(join(dir, 'src/App.tsx'), 'utf8');
   assert.doesNotMatch(app, /fetch\(/, 'components never fetch; services do');
-  assert.match(app, /Checking your session/, 'a visible loading state, never a blank gate');
+  // Never a blank gate and never a whole-page loading screen: the app's frame
+  // (its name, no account controls) renders before the session is known.
+  assert.match(app, /<AppShell appName=\{APP_NAME\} homeLink=\{linkTo\(ROUTES\.home\)\} busy>/);
+  assert.doesNotMatch(app, /LoadingScreen|Checking your session/);
+  const shell = readFileSync(join(dir, 'src/ui/AppShell.tsx'), 'utf8');
+  assert.match(shell, /account\?: AccountSummary/);
+  assert.match(shell, /\{account \? \(/, 'no account controls until the session is known');
   const pkg = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'));
-  assert.equal(pkg.dependencies['@somewhere-cloud/sdk'], '0.13.0');
+  assert.equal(pkg.dependencies['@somewhere-cloud/sdk'], '0.14.0');
   for (const version of [...Object.values(pkg.dependencies), ...Object.values(pkg.devDependencies)]) {
     assert.match(version, /^\d+\.\d+\.\d+$/, `dependency is not pinned: ${version}`);
   }
@@ -405,7 +411,7 @@ test('one generated template consumes the SDK auth adapter and server data/files
   assert.match('JWT rotation remains SDK-owned.', authMechanicsTerms);
 
   const packageJson = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'));
-  assert.equal(packageJson.dependencies['@somewhere-cloud/sdk'], '^0.13.0');
+  assert.equal(packageJson.dependencies['@somewhere-cloud/sdk'], '^0.14.0');
   assert.equal(packageJson.scripts.build, undefined);
 
   const approvedAuthGuidance =

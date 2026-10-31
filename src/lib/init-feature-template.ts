@@ -22,7 +22,7 @@ const PACKAGE_JSON = `{
     "typecheck": "somewhere typecheck"
   },
   "dependencies": {
-    "@somewhere-cloud/sdk": "0.13.0",
+    "@somewhere-cloud/sdk": "0.14.0",
     "react": "19.2.7",
     "react-dom": "19.2.7"
   },
@@ -440,19 +440,28 @@ export function usePathname(): string {
 
 const APP = `import type { User } from '../types/auth';
 import { useAuthState } from './auth/hooks';
+import { APP_NAME } from './config';
 import { HomePage } from './pages/HomePage';
 import { NotFoundPage } from './pages/NotFoundPage';
 import { SignInPage } from './pages/SignInPage';
-import { ROUTES, usePathname } from './routes';
-import { LoadingScreen, SessionUnavailable } from './ui/feedback';
+import { linkTo, ROUTES, usePathname } from './routes';
+import { AppShell } from './ui/AppShell';
+import { SessionUnavailable } from './ui/feedback';
 
 // Routing and the sign-in boundary. This gate is UX: the server and
 // db/schema.ts decide what each request may read or write.
 export function App() {
   const session = useAuthState();
 
-  if (session.status === 'loading') return <LoadingScreen label="Checking your session…" />;
-  if (session.status === 'signing-out') return <LoadingScreen label="Signing out…" />;
+  // Before the server has answered, the app's frame shows at once, with no
+  // account and no full-page loading screen; the page fills in on the answer.
+  if (session.status === 'loading' || session.status === 'signing-out') {
+    return (
+      <AppShell appName={APP_NAME} homeLink={linkTo(ROUTES.home)} busy>
+        {session.status === 'signing-out' ? <p role="status">Signing out…</p> : null}
+      </AppShell>
+    );
+  }
   if (session.status === 'signed-out') return <SignInPage />;
   if (session.status === 'unavailable') {
     return <SessionUnavailable keepsWork={false} checkStatus={session.checkStatus} retrying={session.retrying} onRetry={session.retry} />;
@@ -1951,15 +1960,6 @@ export function NotFoundPage({ user }: { user: User }) {
 
 const STYLED_FEEDBACK = `import type { ReactNode } from 'react';
 
-export function LoadingScreen({ label }: { label: string }) {
-  return (
-    <main className="loading" aria-busy="true">
-      <span className="spinner" aria-hidden="true" />
-      <p role="status">{label}</p>
-    </main>
-  );
-}
-
 export function Alert({ children, action }: { children: ReactNode; action?: ReactNode }) {
   return (
     <div className="alert" role="alert">
@@ -2044,25 +2044,30 @@ export interface AccountSummary {
 interface AppShellProps {
   appName: string;
   homeLink: LinkProps;
-  account: AccountSummary;
-  children: ReactNode;
+  /** Absent while the session is not known yet (App.tsx): no account controls. */
+  account?: AccountSummary;
+  /** The page is waiting on the server. */
+  busy?: boolean;
+  children?: ReactNode;
 }
 
-export function AppShell({ appName, homeLink, account, children }: AppShellProps) {
+export function AppShell({ appName, homeLink, account, busy, children }: AppShellProps) {
   return (
     <div className="shell">
       <a className="skip-link" href="#content">Skip to content</a>
       <header className="topbar">
         <a className="brand" {...homeLink}>{appName}</a>
-        <div className="account">
-          <span className="account__label" title={account.label}>{account.label}</span>
-          <button type="button" className="button button--quiet" onClick={account.onSignOut} disabled={account.signingOut}>
-            {account.signingOut ? 'Signing out…' : 'Sign out'}
-          </button>
-        </div>
+        {account ? (
+          <div className="account">
+            <span className="account__label" title={account.label}>{account.label}</span>
+            <button type="button" className="button button--quiet" onClick={account.onSignOut} disabled={account.signingOut}>
+              {account.signingOut ? 'Signing out…' : 'Sign out'}
+            </button>
+          </div>
+        ) : null}
       </header>
-      {account.error ? <p className="error topbar__error" role="alert">{account.error}</p> : null}
-      <main id="content" className="content" tabIndex={-1}>{children}</main>
+      {account?.error ? <p className="error topbar__error" role="alert">{account.error}</p> : null}
+      <main id="content" className="content" tabIndex={-1} aria-busy={busy || undefined}>{children}</main>
     </div>
   );
 }
@@ -2153,10 +2158,6 @@ export function NotesBoard({ notes }: { notes: NotesController }) {
 
 const PLAIN_FEEDBACK = `import type { ReactNode } from 'react';
 
-export function LoadingScreen({ label }: { label: string }) {
-  return <main aria-busy="true"><p role="status">{label}</p></main>;
-}
-
 export function Alert({ children, action }: { children: ReactNode; action?: ReactNode }) {
   return <div role="alert"><p>{children}</p>{action}</div>;
 }
@@ -2220,22 +2221,29 @@ export interface AccountSummary {
 interface AppShellProps {
   appName: string;
   homeLink: LinkProps;
-  account: AccountSummary;
-  children: ReactNode;
+  /** Absent while the session is not known yet (App.tsx): no account controls. */
+  account?: AccountSummary;
+  /** The page is waiting on the server. */
+  busy?: boolean;
+  children?: ReactNode;
 }
 
-export function AppShell({ appName, homeLink, account, children }: AppShellProps) {
+export function AppShell({ appName, homeLink, account, busy, children }: AppShellProps) {
   return (
     <>
       <header>
-        <a {...homeLink}>{appName}</a>{' '}
-        <span>{account.label}</span>{' '}
-        <button type="button" onClick={account.onSignOut} disabled={account.signingOut}>
-          {account.signingOut ? 'Signing out…' : 'Sign out'}
-        </button>
-        {account.error ? <p role="alert">{account.error}</p> : null}
+        <a {...homeLink}>{appName}</a>
+        {account ? (
+          <>
+            {' '}<span>{account.label}</span>{' '}
+            <button type="button" onClick={account.onSignOut} disabled={account.signingOut}>
+              {account.signingOut ? 'Signing out…' : 'Sign out'}
+            </button>
+            {account.error ? <p role="alert">{account.error}</p> : null}
+          </>
+        ) : null}
       </header>
-      <main>{children}</main>
+      <main aria-busy={busy || undefined}>{children}</main>
     </>
   );
 }

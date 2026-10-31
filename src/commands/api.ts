@@ -2,7 +2,7 @@ import { Command } from 'commander';
 import { createReadStream } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import { extname, resolve } from 'node:path';
-import { ApiClient, CliApiError, incompleteResponseFailure, LONG_CALL_TIMEOUT_MS } from '../lib/client.js';
+import { ApiClient, CliApiError, incompleteResponseFailure, LONG_CALL_TIMEOUT_MS, API_BASE_URL } from '../lib/client.js';
 import { getToken } from '../lib/config.js';
 import { operationLabel } from '../lib/repro-packet.js';
 import { error, noteFailure, platformErrorEnvelope, printJson, printSupportPacketRecovery } from '../lib/output.js';
@@ -206,8 +206,11 @@ export function registerApi(program: Command) {
  * request carries the token anywhere. A leading /v1 is accepted and dropped,
  * a missing leading slash is added, and the query string is kept.
  */
-export function normalizeApiPath(input: string): { path: string } | { error: string } {
+export function normalizeApiPath(input: string, apiBase: string = API_BASE_URL): { path: string } | { error: string } {
   const refuse = (why: string) => ({ error: `Not sent: ${why}. Give a path under the API, such as /projects or /projects?limit=5.` });
+  // URL parsing silently strips tab/LF/CR (so "..<TAB>" becomes ".."); refuse
+  // every control character instead of guessing how a parser reads it.
+  if (/[\u0000-\u001F\u007F]/.test(input)) return refuse('the path must not contain control characters such as tabs or line breaks');
   if (/^[a-z][a-z0-9+.-]*:/i.test(input)) return refuse('`somewhere api` takes a path, not a full URL');
   if (input.startsWith('//') || input.includes('\\')) return refuse('the path must not start with // or contain a backslash');
   if (input.includes('#')) return refuse('the path must not contain a fragment (#)');
@@ -223,7 +226,17 @@ export function normalizeApiPath(input: string): { path: string } | { error: str
     }
   }
   const withoutPrefix = segments[0] === 'v1' ? segments.slice(1) : segments;
-  return { path: `/${withoutPrefix.join('/')}${query}` };
+  const path = `/${withoutPrefix.join('/')}${query}`;
+  // The final check is on the URL the request will use, not the text: same
+  // origin, and the path still under the API base path.
+  let base: URL, target: URL;
+  try { base = new URL(apiBase); target = new URL(`${apiBase.replace(/\/$/, '')}${path}`); }
+  catch { return refuse('the path does not form a valid URL'); }
+  const basePath = base.pathname.replace(/\/$/, '');
+  if (target.origin !== base.origin || (target.pathname !== basePath && !target.pathname.startsWith(`${basePath}/`))) {
+    return refuse('the path resolves outside the API');
+  }
+  return { path };
 }
 
 function dataFileContentType(path: string): string {

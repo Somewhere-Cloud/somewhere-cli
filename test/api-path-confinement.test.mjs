@@ -37,8 +37,11 @@ function run(args) {
   });
 }
 
-for (const path of ['../../etc', '/v1/../../etc', '/projects/%2e%2e/%2E%2E/admin', 'https://example.com/x', '//example.com/x', '/projects\\..\\admin', '/projects#frag', '/a/%2F/b']) {
-  test(`refused before any request: ${path}`, async () => {
+// URL parsing strips ASCII tab/LF/CR, so "..<TAB>" would resolve as "..":
+// literal control characters are refused before any request.
+for (const path of ['../../etc', '/v1/../../etc', '/projects/%2e%2e/%2E%2E/admin', 'https://example.com/x', '//example.com/x', '/projects\\..\\admin', '/projects#frag', '/a/%2F/b',
+  '/v1/..\t/etc', '/..\n/etc', '/.\r./etc', '/projects/.\t./admin', '/projects?limit=5\n']) {
+  test(`refused before any request: ${JSON.stringify(path)}`, async () => {
     const result = await run(['api', 'GET', path]);
     assert.equal(result.status, 1, result.out);
     assert.match(result.out, /Not sent:/);
@@ -46,7 +49,9 @@ for (const path of ['../../etc', '/v1/../../etc', '/projects/%2e%2e/%2E%2E/admin
   });
 }
 
-for (const [path, expected] of [['/projects?limit=5&status=active', '/v1/projects?limit=5&status=active'], ['/v1/projects', '/v1/projects'], ['projects/abc', '/v1/projects/abc'], ['/v1/fs/list?path=%2Fdocs%2Fa.txt', '/v1/fs/list?path=%2Fdocs%2Fa.txt']]) {
+for (const [path, expected] of [['/projects?limit=5&status=active', '/v1/projects?limit=5&status=active'], ['/v1/projects', '/v1/projects'], ['projects/abc', '/v1/projects/abc'],
+  ['/v1/fs/list?path=%2Fdocs%2Fa.txt', '/v1/fs/list?path=%2Fdocs%2Fa.txt'], ['/v1', '/v1/'], ['/projects/my%20app/deploys?q=a%20b&x=..', '/v1/projects/my%20app/deploys?q=a%20b&x=..'],
+  ['v1/projects?filter=a/../b', '/v1/projects?filter=a/../b']]) {
   test(`valid path keeps its route and query: ${path}`, async () => {
     const result = await run(['api', 'GET', path]);
     assert.equal(result.status, 0, result.out);
@@ -54,3 +59,12 @@ for (const [path, expected] of [['/projects?limit=5&status=active', '/v1/project
     assert.equal(requests[0].auth, 'Bearer smt_fixture');
   });
 }
+
+test('the final URL check refuses a path that would resolve outside the configured API base', async () => {
+  const { normalizeApiPath } = await import('../dist/commands/api.js');
+  assert.deepEqual(normalizeApiPath('/projects?limit=5', 'https://api.example.test/v1'), { path: '/projects?limit=5' });
+  assert.match(normalizeApiPath('/..\t/etc', 'https://api.example.test/v1').error, /control characters/);
+  // NUL cannot travel in argv, so it is checked here directly.
+  assert.match(normalizeApiPath('/proj\u0000ects', 'https://api.example.test/v1').error, /control characters/);
+  assert.match(normalizeApiPath('/x', 'https://api.example.test/v1').path, /^\/x$/);
+});

@@ -31,8 +31,8 @@ export function registerLogs(program: Command) {
     .option('--json', 'Print logs as newline-delimited JSON objects')
     .action(async (project: string | undefined, opts) => {
       // A bad --tail is refused, never silently replaced (pfb_7b36450727ee).
-      if (!/^\d+$/.test(String(opts.tail)) || Number(opts.tail) < 1) {
-        error(`--tail must be a whole number of lines, 1 or more (got "${String(opts.tail)}").`);
+      if (!/^\d+$/.test(String(opts.tail)) || !Number.isSafeInteger(Number(opts.tail)) || Number(opts.tail) < 1) {
+        error(`--tail must be a whole number of lines, from 1 to ${Number.MAX_SAFE_INTEGER} (got "${String(opts.tail)}").`);
         process.exit(1);
       }
       const token = getToken();

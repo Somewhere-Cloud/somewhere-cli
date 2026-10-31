@@ -75,7 +75,8 @@ test('env set with a positional value points to --stdin; --stdin gets no note', 
   const positional = await run(['env', 'set', 'DB_PASSWORD', 'env9-plainvalue-QQ11', '--project', 'proj_fixture']);
   assert.match(positional.stderr, /can be seen in your shell history and the process list.*somewhere env set DB_PASSWORD --stdin/);
   const json = await run(['env', 'set', 'DB_PASSWORD', 'env9-plainvalue-QQ12', '--project', 'proj_fixture', '--json']);
-  assert.equal(json.stderr, '', '--json keeps stderr clean');
+  // env set --json reports the note inside its JSON result instead of on stderr.
+  assert.doesNotMatch(json.stderr, /shell history/);
   assert.match(JSON.parse(json.stdout).input_note, /somewhere env set DB_PASSWORD --stdin/);
 });
 

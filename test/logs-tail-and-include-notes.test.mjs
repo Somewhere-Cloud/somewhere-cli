@@ -47,20 +47,22 @@ function run(args, files = {}) {
   });
 }
 
-for (const tail of ['abc', '-5', '0', '2.5']) {
+for (const tail of ['abc', '-5', '0', '2.5', '9007199254740993', '99999999999999999999999', '1e3']) {
   test(`logs --tail ${tail} is refused before any request`, async () => {
     const result = await run(['logs', '--tail', tail]);
     assert.equal(result.status, 1, result.out);
-    assert.match(result.out, /--tail must be a whole number of lines, 1 or more/);
+    assert.match(result.out, /--tail must be a whole number of lines, from 1 to 9007199254740991/);
     assert.deepEqual(requests, []);
   });
 }
 
-test('logs --tail 50 asks for 50', async () => {
-  const result = await run(['logs', '--tail', '50']);
-  assert.equal(result.status, 0, result.out);
-  assert.match(requests[0].url, /[?&]limit=50(&|$)/);
-});
+for (const tail of ['50', '9007199254740991']) {
+  test(`logs --tail ${tail} asks for exactly ${tail}`, async () => {
+    const result = await run(['logs', '--tail', tail]);
+    assert.equal(result.status, 0, result.out);
+    assert.match(requests[0].url, new RegExp(`[?&]limit=${tail}(&|$)`));
+  });
+}
 
 test('--include entries and "!" lines that cannot publish what they name say so; nothing new is uploaded', async () => {
   const result = await run(['deploy', '--dry-run', '--json',

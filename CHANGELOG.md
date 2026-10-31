@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.38.9
+
+### Fixed
+
+- The sign-in code step in the starter that `somewhere init` writes now asks
+  for the 6-digit code from the email (heading "Check your email"), instead of
+  an "Authenticator or backup code". "Send a new code" requests a fresh code a
+  minute after each send and never sends automatically; the newest code is the
+  one to use, and a new code does not extend the 5-minute step. Refusals (send
+  limit, lockout, expired step, failed send) show the platform's own message.
+  "Sign in again" leaves the step.
+- The feature and minimal starters pin `@somewhere-cloud/sdk` 0.14.1, which
+  provides `resendMfaCode()`.
+
 ## 0.38.8
 
 ### Changed

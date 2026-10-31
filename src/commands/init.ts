@@ -95,7 +95,7 @@ export function registerInit(program: Command) {
         + '(typecheck, deploy, verify). Sign-in and invitation links (sw.auth.invite) open\n'
         + '/auth/magic, which the starter routes before the sign-in gate.\n'
         + '`--template minimal` includes the SDK and auth route without sign-in screens.\n'
-        + 'New starters and --bare also install six agent skills in .agents/skills, pinned by skills-lock.json.\n'
+        + `New starters and --bare also install ${skillNames(BUNDLED_SKILLS_PACK).length} agent skills in .agents/skills, pinned by skills-lock.json.\n`
         + '\nA directory that already holds an app (package.json, index.html, src/, …) is\n'
         + 'linked and left untouched. A directory holding only other files (notes, a stray\n'
         + 'file) is refused before anything is created. Use --bare only to bring your own\n'

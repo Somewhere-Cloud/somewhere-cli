@@ -17,6 +17,10 @@ npx @somewhere-cloud/cli deploy
 From a project folder, that single command deploys anonymously when no account
 is configured and prints the live URL, claim URL, and expiry.
 
+The package installs the `somewhere` command and the short alias `sw`. It also
+installs `cli`, the name `npx @somewhere-cloud/cli` resolves to; use
+`somewhere` or `sw` in scripts.
+
 This package was published as `@somewhere-tech/cli` through 0.37.85; those
 versions stay installable.
 
@@ -25,7 +29,7 @@ versions stay installable.
 ```bash
 somewhere login          # Optional: OAuth in browser, stores API key (init/deploy work without it)
 somewhere init           # Create project, write .somewhere.json
-somewhere dev            # Serve your app on localhost, compiled by the platform
+somewhere dev            # Frontend hot reload on localhost; API calls go to your deployed project
 somewhere deploy         # Deploy current directory
 somewhere logs           # Stream logs
 somewhere open           # Open in browser
@@ -49,9 +53,8 @@ For optional after-edit checking, explicitly run `somewhere hooks install --host
 | `somewhere project create <name>` | Create a new project |
 | `somewhere project view [name]` | Show project details |
 | `somewhere project delete <name>` | Delete with email confirmation |
-| `somewhere dev` | Serve your app on localhost, compiled by the platform's own compiler; save a file and the page updates in milliseconds |
-| `somewhere preview` | Run your app on the platform instead of your machine — every save goes to a private URL, and production is untouched until you promote |
-| `somewhere dev <cmd...>` | Run your own command locally with the project's env vars injected |
+| `somewhere dev` | Frontend hot reload on localhost with your project's own Vite; API requests go to your deployed project |
+| `somewhere preview` | Run your whole app on the platform — every save goes to a private URL, and production is untouched until you promote |
 | `somewhere deploy` | Deploy current directory to linked project |
 | `somewhere deploy --dry-run` | Preview the deploy diff without shipping |
 | `somewhere deploy --scope functions` | Deploy backend only (leave the site untouched) |
@@ -92,12 +95,14 @@ The CLI configures every MCP host (Claude Code, Cursor, Codex) to use the **stdi
 
 ## Init flow
 
-`somewhere init` creates a project on the platform and writes two files:
+`somewhere init` writes its starter into the current directory, which should be
+empty, and prints that directory's path. Signed in, it also creates a project on
+the platform and writes **`.somewhere.json`** (project ID, name, subdomain), which
+the CLI reads to know which project you're working on. Signed out, it writes the
+starter only, and `somewhere deploy` creates a temporary project.
 
-- **`.somewhere.json`** — project ID, name, subdomain. The CLI reads this to know which project you're working on.
-- **`.mcp.json`** — optional MCP server config pointing at the `somewhere mcp` stdio bridge. Supporting hosts connect the same tools in context using your live login; the CLI itself never needs it. No token baked into the file, no manual config.
-
-After init, `claude "build me a booking app"` works immediately.
+Init writes no MCP configuration; `somewhere mcp install <host>` connects an
+agent host when you want one.
 
 ## Deploy
 
@@ -150,10 +155,10 @@ somewhere deploy --force --yes        # overwrite remote edits intentionally
 
 ## Development: `somewhere dev`
 
-`somewhere dev` serves your app on localhost and compiles it with the
-platform's own compiler — the same one that compiles your deploy — so what
-renders locally is what deploy produces, not a lookalike built by a second
-toolchain. Save a file and the page updates in milliseconds.
+`somewhere dev` is frontend hot reload. It serves your frontend on localhost
+with the project's own Vite, and sends API requests to your deployed project,
+so pages talk to the backend that is live. Save a frontend file and the page
+updates.
 
 ```bash
 somewhere dev              # serve on http://localhost:8787
@@ -161,29 +166,19 @@ somewhere dev --port 3000  # pick the port
 somewhere dev --open       # open the browser once it is serving
 ```
 
-There is no dev version of your app. From the first file you are building the
-production app against real data: `api/` functions run in local Node, and
-`sw.db`, `sw.fs`, `sw.ai` and `sw.auth` inside them call your real project.
-Same app, same data, same build. Functions run on your machine's Node during
-the loop rather than on the platform's runtime, so a deploy is still what
-proves a function in production.
+It needs a signed-in, linked project that has been deployed at least once, and
+the frontend's dependencies installed (`npm install`). Backend code — `api/`
+functions and `db/schema.ts` — runs only on the platform: change it with
+`somewhere deploy`, or work on the whole app with `somewhere preview`. There is
+no local function runtime.
 
-Nothing to install and nothing to build first. Your app's dependencies resolve
-from the project's `node_modules` when it exists, and otherwise from a cache
-the CLI manages for you. A compile error prints the file and line in the
-terminal and shows on the page, with the last working page still underneath; a
-function that throws returns its stack trace.
-
-Environment variables come from a `.env` in the project directory. Run
-`somewhere env pull` to write the list of keys the project expects (values stay
-on the platform), then fill in the ones you want locally. `somewhere dev`
-names any key the project expects that has no local value.
+`somewhere dev` runs none of your own commands; extra arguments are refused.
 
 ## `somewhere preview`
 
 There are two loops, and they are named after where the app runs.
-`somewhere dev` runs it on your machine. `somewhere preview` runs it on the
-platform.
+`somewhere dev` serves the frontend from your machine against the deployed
+backend. `somewhere preview` runs the whole app on the platform.
 
 `somewhere preview` sends every save to a private URL, reachable only by you
 until you share the link. The build is the one production would get. The
@@ -211,18 +206,10 @@ published has nothing for the first one to build on. On such a project
 consent up front in a script), and every preview after that stays private to you
 and never changes what is live.
 
-`somewhere preview` is included on the Builder, Pro and Scale plans. `somewhere
-dev` runs the same app on your machine on every plan, and deploying is
-unaffected on every plan.
-
-`somewhere dev --cloud` still starts the same loop and points you at the new
-name. `somewhere dev --local` is accepted and does what bare `somewhere dev`
-does.
-
-### Running your own command
-
-`somewhere dev <cmd...>` runs a command of your choosing with the project's
-environment variables injected — for example `somewhere dev npm run dev`.
+Whether your plan includes `somewhere preview` comes from the platform: when it
+does not, the command says so and names the plans that do (see
+https://somewhere.cloud/pricing). `somewhere dev` and deploying work on every
+plan.
 
 ## Client-side code: use the SDK
 
@@ -243,14 +230,14 @@ Inside deployed functions you use the `sw` runtime directly (`sw.db.query(...)`,
 ## What the CLI does NOT do
 
 - No hosting or running production code (the platform does that)
-- No build step before deploy — **deploy raw source; the platform compiles it.** `somewhere dev` compiles locally to serve the loop, using the platform's own compiler, and never asks you to run a build
+- No build step before deploy — **deploy raw source; the platform compiles it.** `somewhere dev` serves the frontend with your project's Vite for hot reload only
 - No application AI calls (the `advisor` command only exposes the platform-help expert)
 - No workspace management (dashboard)
 - No billing (dashboard)
 
 ## Requirements
 
-Node.js >= 18
+Node.js >= 22.19.0. On an older Node.js every command stops with a message naming the required version.
 
 ## License
 

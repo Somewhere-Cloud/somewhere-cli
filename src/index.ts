@@ -150,6 +150,12 @@ program.addHelpText('after', '\nRun somewhere <command> --help for full command 
 // startup latency to every command. Kick it off, parse immediately; if it resolves
 // before the process exits (the common cache-hit path is instant) it prints on
 // exit, otherwise it silently lags to the next invocation.
+// A reader that closed stdout early (`somewhere docs | head -1`) is a local
+// closed pipe, not a failure of the command: stop quietly, as Unix tools do.
+process.stdout.on('error', (err: NodeJS.ErrnoException) => {
+  if (err.code === 'EPIPE') process.exit(0);
+  throw err;
+});
 collectNotices(process.argv)
   .then((notices) => {
     if (notices.length) process.on('exit', () => process.stderr.write('\n' + notices.join('\n') + '\n'));

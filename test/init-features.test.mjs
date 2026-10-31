@@ -169,7 +169,7 @@ test('every combination separates types, services, hooks, pages and presentation
     assert.doesNotMatch(all, /fonts\.googleapis|@import url|https?:\/\/[^\s'"`]*\.(woff2?|ttf)/, `${label}: no remote fonts`);
     const pkg = JSON.parse(read('package.json'));
     assert.deepEqual(Object.keys(pkg.dependencies).sort(), ['@somewhere-cloud/sdk', 'react', 'react-dom']);
-    assert.equal(pkg.dependencies['@somewhere-cloud/sdk'], '0.14.0', 'the SDK release whose client adopts the early session check');
+    assert.equal(pkg.dependencies['@somewhere-cloud/sdk'], '0.14.1', 'the SDK release with resendMfaCode for the emailed sign-in code');
     assert.equal(pkg.scripts.build, undefined);
   }
 });
@@ -579,32 +579,71 @@ test('MFA continuation is shared by password, magic-link and invitation landings
     assert.match(starter.read('src/auth/magic-link.ts'), /window\.location\.replace\(target\.current\)/);
     assert.doesNotMatch(starter.read('src/auth/useMfaContinuation.ts') + starter.read('src/ui/MfaStep.tsx'), /mfa_token|localStorage|sessionStorage|fetch\(|console\./);
     assert.match(starter.read('src/ui/MfaStep.tsx'), /autoComplete="one-time-code"/);
-    assert.equal(JSON.parse(starter.read('package.json')).dependencies['@somewhere-cloud/sdk'], '0.14.0', 'the SDK release whose client adopts the early session check');
+    assert.equal(JSON.parse(starter.read('package.json')).dependencies['@somewhere-cloud/sdk'], '0.14.1', 'the SDK release with resendMfaCode for the emailed sign-in code');
+  }
+  // pfb_81de8a132833: the step asks for the emailed 6-digit code and can ask for a new one.
+  for (const [features, ui] of [['auth','styled'],['magic-link','headless']]) {
+    const view = generate(features, ui).read('src/ui/MfaStep.tsx');
+    assert.match(view, /6-digit code from the email/);
+    assert.match(view, /We emailed you a 6-digit sign-in code/);
+    assert.match(view, /continuation\.resend\(\)/);
+    assert.match(view, /Send a new code/);
+    assert.match(view, /role="status"/);
+    assert.doesNotMatch(view, /Authenticator|backup code/i);
   }
   const starter = generate('auth','headless');
-  let state = [], cursor = 0, calls = [], done = 0;
-  class AuthError extends Error { constructor(code) { super(code); this.code = code; } }
-  const auth = { async completeMfa(input) { calls.push(input); if (input.code === 'wrong') throw new Error('Incorrect code.'); } };
+  let state = [], refs = [], cursor = 0, refCursor = 0, calls = [], resends = 0, done = 0, resendReply = null;
+  const timers = [];
+  class AuthError extends Error { constructor(code, message = code) { super(message); this.code = code; } }
+  const auth = {
+    async completeMfa(input) { calls.push(input); if (input.code === '000000') throw new Error('That code is not correct.'); },
+    async resendMfaCode() { resends++; if (resendReply instanceof Error) throw resendReply; return resendReply; },
+  };
   globalThis.__mfaFixture = {
     AuthError, useAuth: () => auth,
     useState(initial) { const slot = cursor++; if (!(slot in state)) state[slot] = initial; return [state[slot], value => { state[slot] = value; }]; },
+    useRef(initial) { const slot = refCursor++; if (!(slot in refs)) refs[slot] = { current: initial }; return refs[slot]; },
+    setTimeout: (fn) => { timers.push(fn); return timers.length; }, clearTimeout: () => {},
     authErrorMessage: reason => reason.message,
   };
   try {
     const emitted = ts.transpileModule(starter.read('src/auth/useMfaContinuation.ts'), { compilerOptions: { module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022 } }).outputText
       .replace(/^import .*;$/gm, '') + '\n';
     const fixturePath = join(starter.dir,'mfa-fixture.mjs');
-    writeFileSync(fixturePath, 'const { useState, AuthError, useAuth, authErrorMessage } = globalThis.__mfaFixture;\n' + emitted);
+    writeFileSync(fixturePath, 'const { useState, useRef, AuthError, useAuth, authErrorMessage, setTimeout, clearTimeout } = globalThis.__mfaFixture;\n' + emitted);
     const { useMfaContinuation } = await import(fixturePath);
-    const render = () => { cursor=0; return useMfaContinuation(() => {done++;}); };
+    const render = () => { cursor=0; refCursor=0; return useMfaContinuation(() => {done++;}); };
     let form = render();
     assert.equal(form.capture(new Error('ordinary failure')), false);
     assert.equal(form.capture(new AuthError('MFA_REQUIRED')), true);
     form = render(); assert.equal(form.required,true);
-    form.setCode('wrong'); form=render(); await form.submit();
-    form=render(); assert.equal(form.error,'Incorrect code.'); assert.equal(form.required,true); assert.equal(form.code,''); assert.equal(done,0);
-    form.setCode(' backup-code '); form=render(); await form.submit();
+    assert.equal(form.resendReady, false, 'the code just sent: a new one waits a minute');
+    await form.resend(); assert.equal(resends, 0, 'nothing is sent before the wait ends');
+    // Not 6 digits: refused locally, no request.
+    form.setCode('backup-code'); form=render(); await form.submit();
+    form=render(); assert.equal(form.error,'Enter the 6-digit code from the email.'); assert.deepEqual(calls, []);
+    // A wrong code: the platform's message, still on the step.
+    form.setCode('000000'); form=render(); await form.submit();
+    form=render(); assert.equal(form.error,'That code is not correct.'); assert.equal(form.required,true); assert.equal(form.code,''); assert.equal(done,0);
+    // The wait ends; ask for a new code (one request), then the rate limit.
+    timers.shift()(); form=render(); assert.equal(form.resendReady, true);
+    resendReply = { sent: true, delivery: 'sent', expires_in: 240 };
+    await form.resend(); form=render();
+    assert.equal(resends, 1);
+    assert.match(form.notice, /We emailed you a new code\. Use the newest one/);
+    assert.equal(form.error, null); assert.equal(form.resendReady, false, 'waits again after a send');
+    timers.shift()(); form=render();
+    resendReply = new AuthError('AUTH_MFA_SEND_LIMITED', 'A code was sent recently. Wait before asking for another one.');
+    await form.resend(); form=render();
+    assert.equal(resends, 2);
+    assert.equal(form.error, 'A code was sent recently. Wait before asking for another one.');
+    assert.equal(form.notice, null); assert.equal(form.resendReady, false);
+    // Spaces are ignored; the right code finishes sign-in.
+    form.setCode(' 123 456 '); form=render(); await form.submit();
     form=render(); assert.equal(form.required,false); assert.equal(form.code,''); assert.equal(done,1);
-    assert.deepEqual(calls,[{code:'wrong'},{code:'backup-code'}]);
+    assert.deepEqual(calls,[{code:'000000'},{code:'123456'}]);
+    // Sign in again leaves the step without a request.
+    assert.equal(form.capture(new AuthError('MFA_REQUIRED')), true); form=render(); form.restart(); form=render();
+    assert.equal(form.required, false); assert.equal(resends, 2);
   } finally { delete globalThis.__mfaFixture; }
 });

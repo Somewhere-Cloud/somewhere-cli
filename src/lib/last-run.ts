@@ -1,4 +1,4 @@
-import { mkdirSync, renameSync, writeFileSync } from 'node:fs';
+import { lstatSync, mkdirSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Command } from 'commander';
 import { cliConfigDir } from './config.js';
@@ -19,6 +19,35 @@ export interface LocalRunRecord {
   exit_code: number;
   timestamp: string;
   cli_version: string;
+}
+
+const RUN_RECORD_FILES = ['last-run.json', 'last-run.json.tmp'];
+
+/**
+ * Remove this CLI's run record before anything else runs (tsk_d8eac29404da).
+ * CLI versions before 0.38.6 saved command arguments and output in it, so an
+ * upgrade must not leave that file in place while a command runs. The file is
+ * never read, copied or printed: only lstat'ed and unlinked. A symlink is
+ * removed itself; its target is never followed or touched. Only these two
+ * files in the configured config directory are touched (login and session
+ * files are not). A file that cannot be removed is reported by path and error
+ * code only. The exit writer then saves the metadata-only record.
+ */
+export function removeStaleRunRecord(dir: string = cliConfigDir()): void {
+  for (const name of RUN_RECORD_FILES) {
+    const path = join(dir, name);
+    try {
+      if (lstatSync(path).isDirectory()) {
+        process.stderr.write(`Could not remove ${path}: it is a directory, not this CLI's run record. Check it yourself.\n`);
+        continue;
+      }
+      unlinkSync(path);
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code;
+      if (code === 'ENOENT' || code === 'ENOTDIR') continue;
+      process.stderr.write(`Could not remove ${path} (${code ?? 'error'}). Older CLI versions may have saved command arguments and output there; delete it yourself.\n`);
+    }
+  }
 }
 
 /** The registered command path and the option names given on the command line. */

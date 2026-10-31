@@ -48,9 +48,13 @@ import { collectNotices } from './lib/notify/index.js';
 import { startupNotice } from './lib/startup-notice.js';
 import { error, info, printJsonError, setFailureHook, setJsonOutputMode, stripAnsi } from './lib/output.js';
 import { loadProjectConfig } from './lib/config.js';
-import { noteLastRunCommand, recordLastRun } from './lib/last-run.js';
+import { noteLastRunCommand, recordLastRun, removeStaleRunRecord } from './lib/last-run.js';
 import { recoverClaimHandoff } from './lib/claim-handoff.js';
 import { helpSummary } from './lib/help-summary.js';
+
+// First, before any command, help, version or usage error can run: remove a run
+// record an older CLI may have filled with argument values (tsk_d8eac29404da).
+removeStaleRunRecord();
 
 const pkg = JSON.parse(
   readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'package.json'), 'utf8'),

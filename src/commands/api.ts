@@ -2,7 +2,7 @@ import { Command } from 'commander';
 import { createReadStream } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import { extname, resolve } from 'node:path';
-import { ApiClient, CliApiError, incompleteResponseFailure, LONG_CALL_TIMEOUT_MS } from '../lib/client.js';
+import { ApiClient, CliApiError, incompleteResponseFailure, LONG_CALL_TIMEOUT_MS, API_BASE_URL } from '../lib/client.js';
 import { getToken } from '../lib/config.js';
 import { operationLabel } from '../lib/repro-packet.js';
 import { error, noteFailure, platformErrorEnvelope, printJson, printSupportPacketRecovery } from '../lib/output.js';
@@ -53,7 +53,18 @@ export function registerApi(program: Command) {
         }
       }
 
-      const apiPath = path.startsWith('/v1/') ? path.slice(3) : path;
+      // An unsupported or malformed method is refused here, not reported later
+      // as a network problem (pfb_c1845661960e).
+      if (!API_METHODS.has(method.toUpperCase())) {
+        error(`Not sent: "${method.replace(/[\u0000-\u001F\u007F]/g, '?')}" is not a supported method. Use one of: ${[...API_METHODS].join(', ')}.`);
+        process.exit(1);
+      }
+      const normalized = normalizeApiPath(path);
+      if ('error' in normalized) {
+        error(normalized.error);
+        process.exit(1);
+      }
+      const apiPath = normalized.path;
       const withOperation = (cause: unknown): unknown => {
         if (cause instanceof CliApiError && !('operation' in cause)) {
           Object.defineProperty(cause, 'operation', { value: operationLabel(method, apiPath), enumerable: false });
@@ -192,6 +203,48 @@ export function registerApi(program: Command) {
         process.exit(1);
       }
     });
+}
+
+const API_METHODS = new Set(['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']);
+
+/**
+ * Keep a raw API call inside the configured API origin and its /v1 prefix
+ * (pfb_8cef4606e9a3). A full URL, a protocol-relative or backslash path, a
+ * fragment, or any `.`/`..` segment (percent-encoded too) is refused before a
+ * request carries the token anywhere. A leading /v1 is accepted and dropped,
+ * a missing leading slash is added, and the query string is kept.
+ */
+export function normalizeApiPath(input: string, apiBase: string = API_BASE_URL): { path: string } | { error: string } {
+  const refuse = (why: string) => ({ error: `Not sent: ${why}. Give a path under the API, such as /projects or /projects?limit=5.` });
+  // URL parsing silently strips tab/LF/CR (so "..<TAB>" becomes ".."); refuse
+  // every control character instead of guessing how a parser reads it.
+  if (/[\u0000-\u001F\u007F]/.test(input)) return refuse('the path must not contain control characters such as tabs or line breaks');
+  if (/^[a-z][a-z0-9+.-]*:/i.test(input)) return refuse('`somewhere api` takes a path, not a full URL');
+  if (input.startsWith('//') || input.includes('\\')) return refuse('the path must not start with // or contain a backslash');
+  if (input.includes('#')) return refuse('the path must not contain a fragment (#)');
+  const queryAt = input.indexOf('?');
+  const rawPath = queryAt === -1 ? input : input.slice(0, queryAt);
+  const query = queryAt === -1 ? '' : input.slice(queryAt);
+  const segments = rawPath.split('/').filter((segment, i) => !(i === 0 && segment === ''));
+  for (const segment of segments) {
+    let decoded: string;
+    try { decoded = decodeURIComponent(segment); } catch { return refuse('the path has an invalid percent-encoding'); }
+    if (decoded === '.' || decoded === '..' || decoded.includes('/') || decoded.includes('\\')) {
+      return refuse('the path must not contain . or .. segments or encoded slashes');
+    }
+  }
+  const withoutPrefix = segments[0] === 'v1' ? segments.slice(1) : segments;
+  const path = `/${withoutPrefix.join('/')}${query}`;
+  // The final check is on the URL the request will use, not the text: same
+  // origin, and the path still under the API base path.
+  let base: URL, target: URL;
+  try { base = new URL(apiBase); target = new URL(`${apiBase.replace(/\/$/, '')}${path}`); }
+  catch { return refuse('the path does not form a valid URL'); }
+  const basePath = base.pathname.replace(/\/$/, '');
+  if (target.origin !== base.origin || (target.pathname !== basePath && !target.pathname.startsWith(`${basePath}/`))) {
+    return refuse('the path resolves outside the API');
+  }
+  return { path };
 }
 
 function dataFileContentType(path: string): string {

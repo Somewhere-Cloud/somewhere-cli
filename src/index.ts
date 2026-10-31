@@ -48,7 +48,7 @@ import { collectNotices } from './lib/notify/index.js';
 import { startupNotice } from './lib/startup-notice.js';
 import { error, info, printJsonError, setFailureHook, setJsonOutputMode, stripAnsi } from './lib/output.js';
 import { loadProjectConfig } from './lib/config.js';
-import { recordLastRun } from './lib/last-run.js';
+import { noteLastRunCommand, recordLastRun } from './lib/last-run.js';
 import { recoverClaimHandoff } from './lib/claim-handoff.js';
 import { helpSummary } from './lib/help-summary.js';
 
@@ -61,7 +61,7 @@ const program = new Command()
   .description('CLI for somewhere.cloud')
   .version(pkg.version);
 
-recordLastRun(process.argv.slice(2));
+recordLastRun(pkg.version);
 const jsonOutputRequested = process.argv.includes('--json');
 setJsonOutputMode(jsonOutputRequested);
 
@@ -70,6 +70,7 @@ setJsonOutputMode(jsonOutputRequested);
 const startedAt = Date.now();
 let commandNames: string[] = [];
 program.hook('preAction', (_self, action) => {
+  noteLastRunCommand(action);
   const names: string[] = [];
   for (let at: Command | null = action; at && at.parent; at = at.parent) names.unshift(at.name());
   commandNames = names;

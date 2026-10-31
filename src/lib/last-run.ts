@@ -1,43 +1,59 @@
 import { mkdirSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import type { Command } from 'commander';
 import { cliConfigDir } from './config.js';
-import { normalizeLastRun, type LastRunRecord } from './advisor-context.js';
 
-const TAIL_LIMIT = 4_000;
-
-function appendTail(current: string, chunk: unknown): string {
-  const text = typeof chunk === 'string' ? chunk : Buffer.isBuffer(chunk) ? chunk.toString() : String(chunk);
-  const combined = current + text;
-  return combined.length <= TAIL_LIMIT ? combined : combined.slice(-TAIL_LIMIT);
+/**
+ * The local record of the last command (~/.somewhere/last-run.json, mode 600).
+ *
+ * Built from an allowlist by construction (pfb_04b5a285eed0): the registered
+ * command path, the names of the options given on the command line, the exit
+ * code and when it ran. Operand values, option values, request bodies and
+ * command output are never recorded, so a secret passed as an argument (an env
+ * value, SQL, a JSON payload) or printed by the command cannot reach the file.
+ * Nothing in the CLI sends this file anywhere.
+ */
+export interface LocalRunRecord {
+  command: string;
+  options: string[];
+  exit_code: number;
+  timestamp: string;
+  cli_version: string;
 }
 
-/** Capture one invocation without changing command output or command failure behavior. */
-export function recordLastRun(argv: string[]): void {
-  let stdout = '';
-  let stderr = '';
-  const originalStdoutWrite = process.stdout.write.bind(process.stdout);
-  const originalStderrWrite = process.stderr.write.bind(process.stderr);
-  process.stdout.write = ((chunk: unknown, ...args: unknown[]) => {
-    stdout = appendTail(stdout, chunk);
-    return originalStdoutWrite(chunk as never, ...(args as never[]));
-  }) as typeof process.stdout.write;
-  process.stderr.write = ((chunk: unknown, ...args: unknown[]) => {
-    stderr = appendTail(stderr, chunk);
-    return originalStderrWrite(chunk as never, ...(args as never[]));
-  }) as typeof process.stderr.write;
+/** The registered command path and the option names given on the command line. */
+export function describeInvocation(action: Command): { command: string; options: string[] } {
+  const names: string[] = [];
+  for (let at: Command | null = action; at && at.parent; at = at.parent) names.unshift(at.name());
+  const options = action.options
+    .filter((option) => action.getOptionValueSource(option.attributeName()) === 'cli')
+    .map((option) => option.long ?? option.short ?? '')
+    .filter(Boolean)
+    .sort();
+  return { command: names.join(' '), options };
+}
 
+let invocation: { command: string; options: string[] } | null = null;
+
+/** Called once the command is known (commander preAction). */
+export function noteLastRunCommand(action: Command): void {
+  invocation = describeInvocation(action);
+}
+
+/** Write the record when the process exits, without changing command output or failure behavior. */
+export function recordLastRun(cliVersion: string): void {
   process.once('exit', (exitCode) => {
     try {
       const dir = cliConfigDir();
       mkdirSync(dir, { recursive: true, mode: 0o700 });
-      const record: LastRunRecord = normalizeLastRun({
-        command: argv[0] ?? 'somewhere',
-        args: argv.slice(1),
+      const record: LocalRunRecord = {
+        // A usage error never reaches a command: no command and no options.
+        command: invocation?.command ?? '',
+        options: invocation?.options ?? [],
         exit_code: exitCode ?? process.exitCode ?? 0,
-        stdout_tail: stdout,
-        stderr_tail: stderr,
         timestamp: new Date().toISOString(),
-      });
+        cli_version: cliVersion,
+      };
       const path = join(dir, 'last-run.json');
       const temporary = join(dir, 'last-run.json.tmp');
       writeFileSync(temporary, JSON.stringify(record) + '\n', { mode: 0o600 });

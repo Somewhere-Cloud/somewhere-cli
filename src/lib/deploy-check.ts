@@ -68,6 +68,24 @@ interface TscInvocation { command: string; args: string[] }
 
 /** The project's own TypeScript when it is exactly the deploy's version,
  *  otherwise that version through npx. Never a different version. */
+/** The TypeScript version installed in the project, if any. */
+export function projectTypeScriptVersion(projectDir: string): string | null {
+  try {
+    const version = (JSON.parse(readFileSync(join(projectDir, 'node_modules', 'typescript', 'package.json'), 'utf8')) as { version?: unknown }).version;
+    return typeof version === 'string' && version ? version : null;
+  } catch { return null; }
+}
+
+/** The deploy check runs the deploy's own pinned TypeScript; when the project
+ *  does not have exactly that version it is fetched with npx. Said on stderr,
+ *  and true whether or not the project has another TypeScript
+ *  (pfb_d615d6b6c581). */
+export function announceDeployCheckFetch(projectDir: string): void {
+  const own = projectTypeScriptVersion(projectDir);
+  process.stderr.write(`The deploy check uses TypeScript ${DEPLOY_CHECK_TYPESCRIPT_VERSION}, the version deploys check with; `
+    + `${own ? `this project has ${own}` : 'this project has no TypeScript installed'}, so typescript@${DEPLOY_CHECK_TYPESCRIPT_VERSION} is fetched with npx (needs the npm registry; npm keeps it in its cache).\n`);
+}
+
 export function deployCheckTsc(projectDir: string, platform: NodeJS.Platform = process.platform): TscInvocation {
   try {
     const manifest = join(projectDir, 'node_modules', 'typescript', 'package.json');

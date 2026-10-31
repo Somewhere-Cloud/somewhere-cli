@@ -52,7 +52,7 @@ For optional after-edit checking, explicitly run `somewhere hooks install --host
 | `somewhere projects` | List all projects with status |
 | `somewhere project create <name>` | Create a new project |
 | `somewhere project view [name]` | Show project details |
-| `somewhere project delete <name>` | Delete with email confirmation |
+| `somewhere project delete <name>` | Delete a project and all its data. The first call returns a confirmation code (valid 10 minutes); run again with `--confirm-code <code>`, or type the project name when asked |
 | `somewhere dev` | Frontend hot reload on localhost with your project's own Vite; API requests go to your deployed project |
 | `somewhere preview` | Run your whole app on the platform — every save goes to a private URL, and production is untouched until you promote |
 | `somewhere deploy` | Deploy current directory to linked project |
@@ -78,7 +78,7 @@ For optional after-edit checking, explicitly run `somewhere hooks install --host
 | `somewhere open` | Open project URL in browser |
 | `somewhere open --dashboard` | Open the dashboard |
 | `somewhere api GET /v1/projects` | Raw API call with auto-auth |
-| `somewhere advisor "<question>"` | Ask the platform advisor anonymously; login adds linked-project context (`--json` for automation) |
+| `somewhere advisor "<question>"` | Ask the platform advisor; local context is attached only with `--file` (never the linked project or your last command) (`--json` for automation) |
 | `somewhere docs [topic]` | Read public text docs or an MCP manual topic such as `sw.db` (`--json` supported) |
 | `somewhere catalog` | Browse the live platform tool catalog (`--json` for the raw catalog) |
 | `somewhere mcp` | Run MCP server over stdio (proxies to mcp.somewhere.cloud) |

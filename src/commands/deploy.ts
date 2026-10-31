@@ -382,6 +382,19 @@ export function formatLinkedProjectNotFoundExplanation(linkedProjectId: string, 
   ].join('\n');
 }
 
+/** Signed out, no stored credential, and the deploy names an existing project. */
+export function formatSignedOutExistingTargetExplanation(projectId: string, fromLink: boolean): string {
+  return [
+    `${fromLink ? `This folder is linked to project ${projectId} (in .somewhere.json)` : `--project names project ${projectId}`}, but this machine is not signed in, and a new temporary workspace cannot deploy to an existing project. Nothing was created or sent.`,
+    '',
+    'Next steps:',
+    '  If the project is in your account, sign in with `somewhere login` (or save a token: printf %s "$SOMEWHERE_TOKEN" | somewhere auth set), then deploy again. The SOMEWHERE_TOKEN variable alone does not sign commands in.',
+    fromLink
+      ? '  Start a new temporary project instead: delete this folder\'s .somewhere.json, then run `somewhere deploy` again.'
+      : '  Start a new temporary project instead: run `somewhere deploy` without --project in a folder that is not linked.',
+  ].join('\n');
+}
+
 /** The stored temporary session expired before this deploy (tsk_8a68dfa2
  *  item 14). Built only from this machine's own record, so it says nothing
  *  about whether any project exists. */
@@ -648,6 +661,20 @@ export function registerDeploy(program: Command) {
         process.exit(1);
       }
 
+      // No stored credential at all, and the deploy names an existing project
+      // (--project or a folder link). A freshly minted temporary account owns
+      // no project, so minting one would only end in PROJECT_NOT_FOUND: say so
+      // before anything is created or sent (pfb_e653dbb1fa74).
+      const namedTarget = opts.project ? { projectId: String(opts.project), fromLink: false }
+        : (() => { const entry = findProjectConfigEntry(targetDir); return entry ? { projectId: entry.config.project_id, fromLink: true } : null; })();
+      // A dry run keeps its own pre-request refusal (formatDryRunNeedsProjectExplanation).
+      if (!storedConfig?.token && namedTarget && !opts.dryRun) {
+        const message = formatSignedOutExistingTargetExplanation(namedTarget.projectId, namedTarget.fromLink);
+        if (opts.json) printJsonError('SIGN_IN_REQUIRED', message, { project_id: namedTarget.projectId });
+        else console.error(message);
+        process.exit(1);
+      }
+
       // Anonymous deploy is the default first-touch path. A caller with no
       // saved credential should get a live app from `somewhere deploy`, not a
       // successful no-op that asks them to discover and rerun a hidden flag.
@@ -775,7 +802,11 @@ export function registerDeploy(program: Command) {
             }
           } catch (err) {
             powSpinner?.fail('Could not create a temporary session');
-            error(err instanceof Error ? err.message : String(err), err);
+            // The platform's typed error (code, status, retry, request ids): the
+            // same shape a signed-in deploy reports (pfb_011a9fd3f5f3).
+            const status = err instanceof CliApiError
+              ? ` ${dim(err.statusCode ? `[${err.code}, HTTP ${err.statusCode}]` : `[${err.code}]`)}` : '';
+            error(`${err instanceof Error ? err.message : String(err)}${status}`, err);
             process.exit(1);
           }
         }
@@ -961,7 +992,12 @@ export function registerDeploy(program: Command) {
 
       // --json keeps stdout for the deploy result alone; every local omission
       // still goes to stderr, by path and reason, so an agent can see it.
-      if (opts.json) printLocalOmissionsToStderr({ excluded, sensitive, skipped });
+      if (opts.json) printLocalOmissionsToStderr({ excluded, sensitive, skipped, notes: collected.notes });
+      else if (collected.notes.length) {
+        spinner?.stop();
+        for (const note of collected.notes) warn(`${note.source} had no effect: ${note.reason}.`);
+        if (process.stderr.isTTY) spinner?.start();
+      }
 
       // A deploy replaces the whole project, so a file we skip is DELETED from
       // production if it was there before. Never silent — surface every skip.
@@ -1876,7 +1912,7 @@ export function printExcludedFiles(
 
 /** The --json form of the omission notices: one stderr line per file, stdout
  *  untouched, paths and reasons only (never contents), in a fixed order. */
-export function printLocalOmissionsToStderr(omitted: Pick<CollectedFiles, 'excluded' | 'sensitive' | 'skipped'>): void {
+export function printLocalOmissionsToStderr(omitted: Pick<CollectedFiles, 'excluded' | 'sensitive' | 'skipped'> & { notes?: CollectedFiles['notes'] }): void {
   const groups: Array<[string, Array<{ path: string; reason: string }>]> = [
     ['not published', omitted.excluded],
     ['never uploaded', omitted.sensitive],
@@ -1887,6 +1923,7 @@ export function printLocalOmissionsToStderr(omitted: Pick<CollectedFiles, 'exclu
       process.stderr.write(`${label}: ${entry.path} — ${entry.reason}\n`);
     }
   }
+  for (const note of omitted.notes ?? []) process.stderr.write(`no effect: ${note.source} — ${note.reason}\n`);
 }
 
 /** Files held back by the sensitive-path policy (vendored deploy path policy).

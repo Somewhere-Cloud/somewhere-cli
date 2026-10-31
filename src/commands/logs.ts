@@ -30,6 +30,11 @@ export function registerLogs(program: Command) {
     .option('--follow', 'Keep polling for new logs')
     .option('--json', 'Print logs as newline-delimited JSON objects')
     .action(async (project: string | undefined, opts) => {
+      // A bad --tail is refused, never silently replaced (pfb_7b36450727ee).
+      if (!/^\d+$/.test(String(opts.tail)) || !Number.isSafeInteger(Number(opts.tail)) || Number(opts.tail) < 1) {
+        error(`--tail must be a whole number of lines, from 1 to ${Number.MAX_SAFE_INTEGER} (got "${String(opts.tail)}").`);
+        process.exit(1);
+      }
       const token = getToken();
       const client = new ApiClient(token);
 
@@ -58,7 +63,7 @@ export function registerLogs(program: Command) {
       const functionRoute = opts.function ?? opts.endpoint;
       const query: Record<string, string | number | undefined> = {
         project_id: projectId,
-        limit: parseInt(String(opts.tail), 10) || 20,
+        limit: Number(opts.tail),
         level: opts.level,
         source: opts.source,
         function: functionRoute,

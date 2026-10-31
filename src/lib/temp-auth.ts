@@ -5,8 +5,7 @@
  *  wired into the normal deploy flow. */
 
 import { createHash } from 'node:crypto';
-import { API_BASE_URL } from './client.js';
-import { fetchWithProxy } from './http.js';
+import { ApiClient, CliApiError } from './client.js';
 
 /** GET /v1/auth/pow/challenge response payload (unauthenticated). */
 export interface PowChallenge {
@@ -70,49 +69,30 @@ export function solvePow(nonce: string, difficulty: number): { suffix: string; h
   }
 }
 
-interface Envelope<T> {
-  ok: boolean;
-  data?: T;
-  error?: string;
-  message?: string;
-}
-
 /** Mint a temporary, no-login developer credential: GET the PoW challenge,
- *  solve it locally, POST the solution for a bearer key. `fetchImpl` is
- *  injectable so tests never touch
- *  the network. Throws a clear Error — including the server's own message
- *  where available — on any failure at either step. */
-export async function mintTempAccount(
-  fetchImpl: typeof fetchWithProxy = fetchWithProxy,
-): Promise<TempAccount> {
-  const challengeRes = await fetchImpl(`${API_BASE_URL}/auth/pow/challenge`);
-  const challengeBody = (await challengeRes.json()) as Envelope<PowChallenge>;
-  if (!challengeRes.ok || challengeBody.ok !== true || !challengeBody.data) {
-    throw new Error(
-      `Could not fetch a proof-of-work challenge: ${challengeBody.message ?? challengeBody.error ?? challengeRes.statusText}`,
-    );
+ *  solve it locally, POST the solution for a bearer key.
+ *
+ *  Both routes are public: the request carries no credential, never runs the
+ *  stored login's refresh, and is never resent. Failures are the platform's
+ *  typed errors (pfb_011a9fd3f5f3): CliApiError with the documented `code`
+ *  (RATE_LIMITED, INVALID_POW, TEMP_DEPLOYS_DISABLED, ...), HTTP status,
+ *  retry / retry_after_ms and request/trace ids, and INVALID_RESPONSE with
+ *  the status for a body that is not JSON. */
+export async function mintTempAccount(client: Pick<ApiClient, 'call'> = new ApiClient(null)): Promise<TempAccount> {
+  const challenge = await client.call<Partial<PowChallenge>>('GET', '/auth/pow/challenge', undefined, undefined, { refresh: false });
+  if (!challenge || typeof challenge.nonce !== 'string' || typeof challenge.difficulty !== 'number') {
+    throw new CliApiError('INVALID_RESPONSE', 'The proof-of-work challenge response had no nonce or difficulty.', 200);
   }
-  const challenge = challengeBody.data;
   const { suffix } = solvePow(challenge.nonce, challenge.difficulty);
 
-  const createRes = await fetchImpl(`${API_BASE_URL}/auth/temp-create`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ nonce: challenge.nonce, suffix }),
-  });
-  const createBody = (await createRes.json()) as Envelope<Record<string, unknown>>;
-  if (!createRes.ok || createBody.ok !== true || !createBody.data) {
-    throw new Error(
-      `Could not create a temporary session: ${createBody.message ?? createBody.error ?? createRes.statusText}`,
-    );
-  }
-
-  const data = createBody.data;
+  const data = await client.call<Record<string, unknown>>(
+    'POST', '/auth/temp-create', { nonce: challenge.nonce, suffix }, undefined, { refresh: false },
+  );
   // Prefer `key` (the field name every other stored CLI credential uses);
   // fall back to `access_token` — the contract names both.
-  const key = (data.key as string | undefined) ?? (data.access_token as string | undefined);
+  const key = (data?.key as string | undefined) ?? (data?.access_token as string | undefined);
   if (!key) {
-    throw new Error('Temp-create response had neither `key` nor `access_token`.');
+    throw new CliApiError('INVALID_RESPONSE', 'The temporary account response had neither `key` nor `access_token`.', 200);
   }
   return {
     key,

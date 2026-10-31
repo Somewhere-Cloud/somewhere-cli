@@ -392,7 +392,7 @@ export function runTypecheck(
  *  about to be fetched with npx: a network step that also writes npm's cache.
  *  The project's own dependencies are never installed. */
 export function announceNpxTypeScriptFetch(version: string): void {
-  process.stderr.write(`TypeScript is not installed in this project; fetching typescript@${version} with npx (needs the npm registry; npm keeps it in its cache). The project's dependencies are not installed.\n`);
+  process.stderr.write(`TypeScript is not installed in this project; fetching typescript@${version} with npx (needs the npm registry; npm keeps it in its cache). Nothing is installed into the project.\n`);
 }
 
 /** How this project's typecheck will get its compiler: 'npx' means a

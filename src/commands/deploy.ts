@@ -382,6 +382,19 @@ export function formatLinkedProjectNotFoundExplanation(linkedProjectId: string, 
   ].join('\n');
 }
 
+/** Signed out, no stored credential, and the deploy names an existing project. */
+export function formatSignedOutExistingTargetExplanation(projectId: string, fromLink: boolean): string {
+  return [
+    `${fromLink ? `This folder is linked to project ${projectId} (in .somewhere.json)` : `--project names project ${projectId}`}, but this machine is not signed in, and a new temporary workspace cannot deploy to an existing project. Nothing was created or sent.`,
+    '',
+    'Next steps:',
+    '  If the project is in your account, sign in with `somewhere login` (or save a token: printf %s "$SOMEWHERE_TOKEN" | somewhere auth set), then deploy again. The SOMEWHERE_TOKEN variable alone does not sign commands in.',
+    fromLink
+      ? '  Start a new temporary project instead: delete this folder\'s .somewhere.json, then run `somewhere deploy` again.'
+      : '  Start a new temporary project instead: run `somewhere deploy` without --project in a folder that is not linked.',
+  ].join('\n');
+}
+
 /** The stored temporary session expired before this deploy (tsk_8a68dfa2
  *  item 14). Built only from this machine's own record, so it says nothing
  *  about whether any project exists. */
@@ -645,6 +658,20 @@ export function registerDeploy(program: Command) {
         } else {
           console.error(message);
         }
+        process.exit(1);
+      }
+
+      // No stored credential at all, and the deploy names an existing project
+      // (--project or a folder link). A freshly minted temporary account owns
+      // no project, so minting one would only end in PROJECT_NOT_FOUND: say so
+      // before anything is created or sent (pfb_e653dbb1fa74).
+      const namedTarget = opts.project ? { projectId: String(opts.project), fromLink: false }
+        : (() => { const entry = findProjectConfigEntry(targetDir); return entry ? { projectId: entry.config.project_id, fromLink: true } : null; })();
+      // A dry run keeps its own pre-request refusal (formatDryRunNeedsProjectExplanation).
+      if (!storedConfig?.token && namedTarget && !opts.dryRun) {
+        const message = formatSignedOutExistingTargetExplanation(namedTarget.projectId, namedTarget.fromLink);
+        if (opts.json) printJsonError('SIGN_IN_REQUIRED', message, { project_id: namedTarget.projectId });
+        else console.error(message);
         process.exit(1);
       }
 

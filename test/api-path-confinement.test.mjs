@@ -68,3 +68,20 @@ test('the final URL check refuses a path that would resolve outside the configur
   assert.match(normalizeApiPath('/proj\u0000ects', 'https://api.example.test/v1').error, /control characters/);
   assert.match(normalizeApiPath('/x', 'https://api.example.test/v1').path, /^\/x$/);
 });
+
+// pfb_c1845661960e: an unsupported or malformed method is refused before any
+// request, not reported as a network problem.
+for (const method of ['TRACE', 'CONNECT', 'GE T', 'GET\r\nX-Injected: 1']) {
+  test(`unsupported method refused before any request: ${JSON.stringify(method)}`, async () => {
+    const result = await run(['api', method, '/projects']);
+    assert.equal(result.status, 1, result.out);
+    assert.match(result.out, /is not a supported method/);
+    assert.doesNotMatch(result.out, /NETWORK_ERROR|check your network/);
+    assert.deepEqual(requests, []);
+  });
+}
+test('lower-case supported methods still work', async () => {
+  const result = await run(['api', 'get', '/projects']);
+  assert.equal(result.status, 0, result.out);
+  assert.deepEqual(requests.map((r) => r.url), ['/v1/projects']);
+});

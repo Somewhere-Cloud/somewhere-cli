@@ -53,6 +53,12 @@ export function registerApi(program: Command) {
         }
       }
 
+      // An unsupported or malformed method is refused here, not reported later
+      // as a network problem (pfb_c1845661960e).
+      if (!API_METHODS.has(method.toUpperCase())) {
+        error(`Not sent: "${method.replace(/[\u0000-\u001F\u007F]/g, '?')}" is not a supported method. Use one of: ${[...API_METHODS].join(', ')}.`);
+        process.exit(1);
+      }
       const normalized = normalizeApiPath(path);
       if ('error' in normalized) {
         error(normalized.error);
@@ -198,6 +204,8 @@ export function registerApi(program: Command) {
       }
     });
 }
+
+const API_METHODS = new Set(['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']);
 
 /**
  * Keep a raw API call inside the configured API origin and its /v1 prefix

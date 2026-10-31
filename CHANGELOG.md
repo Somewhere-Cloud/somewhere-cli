@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.38.7
+
+### Changed
+
+- Before any command runs, the CLI deletes `last-run.json` (and
+  `last-run.json.tmp`) in the config directory (default `~/.somewhere`, or
+  `SOMEWHERE_CONFIG_DIR`). Versions before 0.38.6 saved command arguments and
+  output there in plain text. The file is never read or printed; only its path
+  and an error code are shown if it cannot be removed. At exit the CLI writes
+  the metadata-only record introduced in 0.38.6.
+- The `AGENTS.md` that `somewhere init` writes (default and `--bare`) points to
+  the declared-access recipes, readable with
+  `somewhere docs sw.db --section owner-or-member-and-parent-access`.
+
 ## 0.38.6
 
 ### Fixed

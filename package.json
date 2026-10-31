@@ -1,6 +1,6 @@
 {
   "name": "@somewhere-cloud/cli",
-  "version": "0.38.6",
+  "version": "0.38.7",
   "description": "CLI for somewhere.cloud — auth, projects, deploy, pull, promote, db, logs, env, MCP bridge.",
   "keywords": [
     "somewhere",

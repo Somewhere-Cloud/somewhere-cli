@@ -13,7 +13,7 @@ import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { formatReferenceCheckHint } from '../dist/commands/deploy.js';
+import { formatReferenceCheckHint, readSettledReferenceCheck, REFERENCE_CHECK_READ_DELAYS_MS } from '../dist/commands/deploy.js';
 import { chooseCallScope } from '../dist/commands/call.js';
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -59,7 +59,7 @@ function run(args, { cwd, env }) {
 }
 const sendJson = (res, status, payload) => { res.statusCode = status; res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify(payload)); };
 
-async function deploy(referenceCheck, extraArgs = []) {
+async function deploy(referenceCheck, extraArgs = [], deployLog = null) {
   const home = mkdtempSync(join(tmpdir(), 'sw-refcheck-home-'));
   const dir = mkdtempSync(join(tmpdir(), 'sw-refcheck-fixture-'));
   mkdirSync(join(home, '.somewhere'), { recursive: true });
@@ -71,6 +71,7 @@ async function deploy(referenceCheck, extraArgs = []) {
     req.on('end', () => {
       const path = req.url.split('?')[0];
       if (req.method === 'GET' && path === `/v1/projects/${PROJECT}/notices`) return sendJson(res, 200, { ok: true, data: { project_id: PROJECT, notices: [] } });
+      if (req.method === 'GET' && path === '/v1/deploy/log' && deployLog) return sendJson(res, 200, { ok: true, data: deployLog });
       if (req.method === 'POST' && path === '/v1/deploy') {
         return sendJson(res, 200, { ok: true, data: {
           project_id: PROJECT, url: 'https://refcheck-app.somewhere.site', version: 3, release_id: 'rel_3', active_release_id: 'rel_3',
@@ -112,4 +113,37 @@ test('--json output is unchanged: reference_check passes through, no hint text',
   const json = JSON.parse(r.stdout.slice(r.stdout.indexOf('{')));
   assert.equal(json.reference_check.status, 'pending');
   assert.doesNotMatch(r.stdout, /A reference check is running/);
+});
+
+// pfb_e477b6f2c280: the dry run prints the reference check's lines inline, so
+// the deploy prints them too once its after-live check settles.
+const TS_LINE = 'Type warning (TS2345) at api/seed.ts:3:7: Argument of type \'number\' is not assignable to parameter of type \'string\'. This finding will not block deploy, but it may break at runtime; a fix takes effect on the next deploy.';
+const pending = { project_id: PROJECT, version: 3, reference_check: { status: 'pending' } };
+
+test('settled check: reads the log until it settles and returns its lines', async () => {
+  const answers = [{ reference_check: { status: 'pending' } }, { warnings: [TS_LINE], reference_check: { status: 'checked', findings: 1 } }];
+  const reads = []; const waits = [];
+  const settled = await readSettledReferenceCheck(async (q) => { reads.push(q); return answers.shift(); }, pending, async (ms) => { waits.push(ms); });
+  assert.deepEqual(settled, { warnings: [TS_LINE] });
+  assert.deepEqual(reads, [{ project_id: PROJECT, version: 3 }, { project_id: PROJECT, version: 3 }]);
+  assert.deepEqual(waits, REFERENCE_CHECK_READ_DELAYS_MS.slice(0, 2));
+});
+
+test('still pending, unreadable, unavailable, or nothing pending: null, so the hint prints', async () => {
+  let reads = 0;
+  assert.equal(await readSettledReferenceCheck(async () => { reads++; return { reference_check: { status: 'pending' } }; }, pending, async () => {}), null);
+  assert.equal(reads, REFERENCE_CHECK_READ_DELAYS_MS.length, 'bounded: one read per delay');
+  assert.equal(await readSettledReferenceCheck(async () => { throw new Error('offline'); }, pending, async () => {}), null);
+  assert.equal(await readSettledReferenceCheck(async () => assert.fail('no read'), { ...pending, reference_check: { status: 'checked' } }, async () => {}), null);
+  let unavailableReads = 0;
+  assert.equal(await readSettledReferenceCheck(async () => { unavailableReads++; return { reference_check: { status: 'unavailable' } }; }, pending, async () => {}), null);
+  assert.equal(unavailableReads, 1, 'unavailable is final: no further reads');
+});
+
+test('a real deploy prints the settled check\'s lines instead of the hint', async () => {
+  const r = await deploy({ status: 'pending', requested_at: '2026-10-31T19:49:09.699Z' }, [], { version: 3, warnings: [TS_LINE], reference_check: { status: 'checked', findings: 1 } });
+  const out = r.stdout + r.stderr;
+  assert.equal(r.status, 0, out);
+  assert.equal(out.split(TS_LINE).length - 1, 1, out);
+  assert.doesNotMatch(out, /project_deploy_log/);
 });

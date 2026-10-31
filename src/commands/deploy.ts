@@ -1296,6 +1296,19 @@ export function registerDeploy(program: Command) {
         if (result.runtime_fixes && result.runtime_fixes.length > 0) {
           for (const fix of result.runtime_fixes) success(fix.message);
         }
+        // The dry run prints the reference check's lines; so does the deploy
+        // once its after-live check settles (pfb_e477b6f2c280). Beside a real
+        // login the CLI's own credentials cannot read the throwaway project.
+        const settledReference = opts.json || (tempSession && besideRealLogin)
+          ? null
+          : await readSettledReferenceCheck(
+              (query) => client.call<DeployLogRead>('GET', '/deploy/log', undefined, query),
+              result,
+            );
+        if (settledReference) {
+          const shown = new Set([...(result.warnings ?? []), ...warningsInBuildLog(result.build_log)].map(normalizeWarning));
+          for (const w of settledReference.warnings) if (!shown.has(normalizeWarning(w))) warn(w);
+        }
 
         if (tempSession) {
           // Every anonymous deploy ends with stable, machine-scannable labels.
@@ -1333,7 +1346,7 @@ export function registerDeploy(program: Command) {
             }
           }
           // Beside a real login the CLI's own credentials cannot read the throwaway project.
-          const tempCheckHint = besideRealLogin ? null : formatReferenceCheckHint(result, loadProjectConfig()?.project_id === projectId);
+          const tempCheckHint = besideRealLogin || settledReference ? null : formatReferenceCheckHint(result, loadProjectConfig()?.project_id === projectId);
           if (tempCheckHint) info(tempCheckHint);
           info(
             besideRealLogin
@@ -1354,7 +1367,7 @@ export function registerDeploy(program: Command) {
             // (commands/browser.ts → loadProjectConfig()), which is not always
             // the directory this deploy targeted.
             const cwdConfig = loadProjectConfig();
-            const checkHint = formatReferenceCheckHint(result, Boolean(cwdConfig && projectId && cwdConfig.project_id === projectId));
+            const checkHint = settledReference ? null : formatReferenceCheckHint(result, Boolean(cwdConfig && projectId && cwdConfig.project_id === projectId));
             if (checkHint) info(checkHint);
             for (const line of formatNextActions(
               nextActions({
@@ -1508,6 +1521,43 @@ export interface DeployResult {
  * project is named unless this directory's link already selects it, because
  * `call` defaults to the linked project.
  */
+export interface DeployLogRead {
+  warnings?: string[];
+  reference_check?: { status?: string } | null;
+}
+
+/** Waits before each deploy-log read; the after-live check takes about a second. */
+export const REFERENCE_CHECK_READ_DELAYS_MS = [1500, 1500, 3000];
+
+/**
+ * Read this version's deploy log until the after-live reference check is
+ * `checked`, at most once per delay, and return the log's warnings. Null
+ * otherwise (still pending, unreadable, or `unavailable`, which the platform
+ * also records when there was nothing to check); the caller then prints the
+ * read-it-later hint.
+ */
+export async function readSettledReferenceCheck(
+  read: (query: { project_id: string; version: number }) => Promise<DeployLogRead>,
+  result: DeployResult,
+  sleep: (ms: number) => Promise<void> = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+): Promise<{ warnings: string[] } | null> {
+  if (result.reference_check?.status !== 'pending') return null;
+  if (typeof result.version !== 'number' || !Number.isFinite(result.version) || !result.project_id) return null;
+  for (const delay of REFERENCE_CHECK_READ_DELAYS_MS) {
+    await sleep(delay);
+    let log: DeployLogRead;
+    try {
+      log = await read({ project_id: result.project_id, version: result.version });
+    } catch {
+      return null;
+    }
+    const status = log.reference_check?.status;
+    if (status === 'checked') return { warnings: Array.isArray(log.warnings) ? log.warnings : [] };
+    if (status !== 'pending') return null;
+  }
+  return null;
+}
+
 export function formatReferenceCheckHint(
   result: DeployResult,
   linkedHere: boolean,

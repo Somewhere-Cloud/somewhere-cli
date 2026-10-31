@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { spawn } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -86,6 +86,19 @@ test('expired temporary session + linked folder, --json: structured, no request'
   assert.equal(out.error, 'TEMPORARY_SESSION_EXPIRED');
   assert.equal(out.temp_expires_at, expiredAt);
   assert.deepEqual(requests, []);
+});
+
+test('expired temporary session + unlinked folder: one-line note, replaced only after a successful mint (tsk_97979518)', async () => {
+  requests.length = 0;
+  const { app, configDir } = fixture({ config: expiredTemp });
+  const r = await run(['deploy'], app, configDir);
+  // The stub refuses the proof-of-work challenge: an unknown failure.
+  assert.equal(r.status, 1, r.stdout + r.stderr);
+  assert.ok(r.stdout.includes(`The temporary session on this machine expired at ${expiredAt}; starting a new one.`), r.stdout);
+  assert.doesNotMatch(r.stdout + r.stderr, /Temporary session expired\. Run/);
+  assert.deepEqual(requests, ['GET /auth/pow/challenge']);
+  // Nothing was minted, so the stored session is left exactly as it was.
+  assert.deepEqual(JSON.parse(readFileSync(join(configDir, 'config.json'), 'utf8')), expiredTemp);
 });
 
 test('signed in, nothing linked: names the one-command recoveries and creates nothing', async () => {

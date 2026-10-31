@@ -175,3 +175,88 @@ test('vendored runtime declaration matches the platform source', { skip: platfor
   const output = execFileSync(process.execPath, [script, platformSource, '--check'], { encoding: 'utf8' });
   assert.match(output, /parity verified/);
 });
+
+// An auth-required endpoint's user always has an email, as requireUser and the
+// docs promise; the 0.38.5 vendored bundle (pre-1055) still typed it
+// string | null | undefined. Optional auth keeps a nullable user, and a wrong
+// use of the email is still refused.
+test('auth-required endpoint user.email is a string; optional auth and wrong uses are refused', async t => {
+  const ok = await project(t, `export const me = sw.endpoint({
+  auth: 'required',
+  handler: async ({ user }) => {
+    const email: string = user.email;
+    return { email: email.toLowerCase() };
+  },
+});
+`);
+  assert.equal(ok.ok, true, ok.raw);
+  const refused = await project(t, `export const optional = sw.endpoint({
+  auth: 'optional',
+  handler: async ({ user }) => {
+    const email: string = user.email;
+    return { email };
+  },
+});
+export const wrong = sw.endpoint({
+  auth: 'required',
+  handler: async ({ user }) => {
+    const count: number = user.email;
+    return { count };
+  },
+});
+`);
+  assert.equal(refused.ok, false);
+  assert.deepEqual(refused.errors.map(error => [error.line, error.code]), [[4, 'TS2322'], [4, 'TS18047'], [11, 'TS2322']], refused.raw);
+  assert.match(refused.raw, /\(11,\d+\): error TS2322: Type 'string' is not assignable to type 'number'/);
+});
+
+// Typed transaction intents (platform 77995b96): intents name declared tables
+// and columns, as sw.db.insert/update do; an undeclared table or column is
+// refused at typecheck instead of at run time.
+test('sw.db.server.tx intents typecheck against declared tables; undeclared tables and columns are refused', async t => {
+  const ok = await project(t, `export default async function (req: Request, sw: SomewhereRuntimeContext) {
+  const id = '1';
+  const results = await sw.db.server.tx([
+    { op: 'insert', table: 'rounds', values: { title: 'First round' } },
+    { op: 'update', table: 'rounds', increment: { votes: 1 }, where: { id } },
+    { op: 'remove', table: 'rounds', where: { id } },
+  ]);
+  return Response.json({ n: results.length });
+}
+`);
+  assert.equal(ok.ok, true, ok.raw);
+  const refused = await project(t, `export default async function (req: Request, sw: SomewhereRuntimeContext) {
+  await sw.db.server.tx([{ op: 'insert', table: 'nonexistent', values: { title: 'x' } }]);
+  await sw.db.server.tx([{ op: 'insert', table: 'rounds', values: { title: 'x', nope: 1 } }]);
+  return new Response(null);
+}
+`);
+  assert.equal(refused.ok, false);
+  assert.deepEqual([...new Set(refused.errors.map(error => error.line))], [2, 3], refused.raw);
+});
+
+// Pending group invitations (platform 77995b96): a repeat invite to a pending
+// address reports not_sent with what is known about the one email, and pending
+// invitations can be listed. A narrower assumption about that state is refused.
+test('pending group invitations: not_sent email_state and invitations() typecheck; a narrower assumption is refused', async t => {
+  const ok = await project(t, `export default async function (req: Request, sw: SomewhereRuntimeContext) {
+  const invited = await sw.groups.invite(req, 'grp_1', { email: 'x@example.test', role: 'member', redirect_uri: '/join' });
+  if (invited.error) return Response.json(invited.error, { status: invited.error.status });
+  const state: 'sent' | 'queued' | 'unknown' | 'starting' | 'not_sent' | undefined = invited.data.email_state;
+  const pending = await sw.groups.invitations(req, 'grp_1', { limit: 10 });
+  if (pending.error) return Response.json(pending.error, { status: pending.error.status });
+  const rows = pending.data.items.map(row => ({ id: row.invite_id, email: row.email, expires: row.expires_at, state: row.email_state }));
+  return Response.json({ delivery: invited.data.delivery, state, rows, next: pending.data.next_cursor });
+}
+`);
+  assert.equal(ok.ok, true, ok.raw);
+  const refused = await project(t, `export default async function (req: Request, sw: SomewhereRuntimeContext) {
+  const pending = await sw.groups.invitations(req, 'grp_1');
+  if (pending.error) return new Response(null);
+  const state: 'sent' = pending.data.items[0].email_state;
+  return Response.json({ state });
+}
+`);
+  assert.equal(refused.ok, false);
+  assert.deepEqual(refused.errors.map(error => [error.line, error.code]), [[4, 'TS2322']], refused.raw);
+});

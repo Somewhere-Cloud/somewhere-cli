@@ -48,10 +48,19 @@
     "expected": []
   },
   {
-    "name": "directory index handler from DocQA race",
+    "name": "directory index handler from DocQA race serves the folder path (tsk_746516)",
     "files": {},
     "functions": {
       "api/docs/index.ts": "export default async function(req, sw) { return Response.json({ ok: true }); }"
+    },
+    "expected": []
+  },
+  {
+    "name": "index handler beside a same-path handler is named before the deploy refuses it",
+    "files": {},
+    "functions": {
+      "api/docs/index.ts": "export default async function(req, sw) { return Response.json({ ok: true }); }",
+      "api/docs.ts": "export default async function(req, sw) { return Response.json({ ok: true }); }"
     },
     "expected": [
       {
@@ -183,7 +192,7 @@
     "expected": []
   },
   {
-    "name": "an awaited sw.email.send in a for\u2026of, a braceless for and a while loop waits for each delivery",
+    "name": "an awaited sw.email.send in a for…of, a braceless for and a while loop waits for each delivery",
     "files": {},
     "functions": {
       "api/close.ts": "export default async function(req, sw) {\n  const { data: members } = await sw.db.server.from('members');\n  for (const m of members) {\n    await sw.email.send({ to: m.email, subject: 'Round closed', text: 'Thanks' });\n  }\n  return Response.json({ ok: true });\n}",
@@ -299,7 +308,7 @@
     "name": "user-email-scan: paging listUsers then an exact-email find (benchmark team app, original)",
     "files": {},
     "functions": {
-      "api/_lib/team.ts": "import type { SomewhereRuntimeContext } from '@somewhere-tech/sdk/server';\n\n/** Find an existing app user by email (pages the directory; no search-by-email API exists). */\nexport async function findUserByEmail(sw: SomewhereRuntimeContext, email: string) {\n  const want = email.trim().toLowerCase();\n  let cursor: string | undefined;\n  for (let i = 0; i < 50; i++) {\n    const page = await sw.auth.server.listUsers({ limit: 200, cursor });\n    const hit = page.users.find((u: { email?: string | null }) => (u.email ?? '').toLowerCase() === want);\n    if (hit) return hit as { id: string; email: string };\n    if (!page.next_cursor) return null;\n    cursor = page.next_cursor;\n  }\n  return null;\n}\n"
+      "api/_lib/team.ts": "import type { SomewhereRuntimeContext } from '@somewhere-cloud/sdk/server';\n\n/** Find an existing app user by email (pages the directory; no search-by-email API exists). */\nexport async function findUserByEmail(sw: SomewhereRuntimeContext, email: string) {\n  const want = email.trim().toLowerCase();\n  let cursor: string | undefined;\n  for (let i = 0; i < 50; i++) {\n    const page = await sw.auth.server.listUsers({ limit: 200, cursor });\n    const hit = page.users.find((u: { email?: string | null }) => (u.email ?? '').toLowerCase() === want);\n    if (hit) return hit as { id: string; email: string };\n    if (!page.next_cursor) return null;\n    cursor = page.next_cursor;\n  }\n  return null;\n}\n"
     },
     "expected": [
       {
@@ -313,7 +322,7 @@
     "name": "user-email-scan: the supported listUsers({ emails }) lookup passes (benchmark team app, updated)",
     "files": {},
     "functions": {
-      "api/_lib/team.ts": "import type { SomewhereRuntimeContext } from '@somewhere-tech/sdk/server';\n\n/** Find an existing app user by exact email (sw.auth.server.listUsers({ emails }), see docs sw.auth). */\nexport async function findUserByEmail(sw: SomewhereRuntimeContext, email: string) {\n  const { users } = await sw.auth.server.listUsers({ emails: [email.trim()] });\n  const hit = users[0] as { id: string; email: string } | undefined;\n  return hit ?? null;\n}\n"
+      "api/_lib/team.ts": "import type { SomewhereRuntimeContext } from '@somewhere-cloud/sdk/server';\n\n/** Find an existing app user by exact email (sw.auth.server.listUsers({ emails }), see docs sw.auth). */\nexport async function findUserByEmail(sw: SomewhereRuntimeContext, email: string) {\n  const { users } = await sw.auth.server.listUsers({ emails: [email.trim()] });\n  const hit = users[0] as { id: string; email: string } | undefined;\n  return hit ?? null;\n}\n"
     },
     "expected": []
   },
@@ -366,6 +375,105 @@
     "files": {},
     "functions": {
       "api/member.ts": "export default async function (req, sw) {\n  const { email } = await req.json();\n  const { users } = await sw.auth.server.listUsers({ emails: [email] });\n  const exact = users.find((u) => (u.email ?? '').toLowerCase() === email.toLowerCase());\n  return Response.json({ id: exact?.id ?? null });\n}\n"
+    },
+    "expected": []
+  },
+  {
+    "name": "sw.endpoint body chooses the owner of a server write",
+    "files": {
+      "db/schema.ts": "import { schema, table, id, text, owner, member, anyOf, serverOnly } from 'somewhere/db';\nexport default schema({\n notes: table({ id: id(), body: text() }, { scope: owner() }),\n bookings: table({ id: id(), slot: text() }, { scope: anyOf(owner({ column: 'booker_id' }), member({ group: 'id', membership: 'booking_access', member_user: 'user_id', member_group: 'booking_id', operations: ['read'] })) }),\n booking_access: table({ id: id(), booking_id: text(), user_id: text() }, { scope: serverOnly() })\n});"
+    },
+    "functions": {
+      "api/notes.ts": "export default sw.endpoint({\n  auth: 'required',\n  body: { body: 'string', user_id: 'string' },\n  handler: async ({ body }, sw) => {\n    await sw.db.server.insert('notes', { body: body.body, user_id: body.user_id });\n    return { ok: true };\n  },\n});"
+    },
+    "expected": [
+      {
+        "rule": "somewhere/request-ownership",
+        "file": "api/notes.ts",
+        "line": 5
+      }
+    ]
+  },
+  {
+    "name": "sw.endpoint with the caller as owner passes",
+    "files": {
+      "db/schema.ts": "import { schema, table, id, text, owner, member, anyOf, serverOnly } from 'somewhere/db';\nexport default schema({\n notes: table({ id: id(), body: text() }, { scope: owner() }),\n bookings: table({ id: id(), slot: text() }, { scope: anyOf(owner({ column: 'booker_id' }), member({ group: 'id', membership: 'booking_access', member_user: 'user_id', member_group: 'booking_id', operations: ['read'] })) }),\n booking_access: table({ id: id(), booking_id: text(), user_id: text() }, { scope: serverOnly() })\n});"
+    },
+    "functions": {
+      "api/notes.ts": "export default sw.endpoint({\n  auth: 'required',\n  body: { body: 'string' },\n  handler: async ({ body, user }, sw) => {\n    await sw.db.server.insert('notes', { body: body.body, user_id: user.id });\n    return { ok: true };\n  },\n});"
+    },
+    "expected": []
+  },
+  {
+    "name": "sw.endpoint renamed input chooses the owner",
+    "files": {
+      "db/schema.ts": "import { schema, table, id, text, owner, member, anyOf, serverOnly } from 'somewhere/db';\nexport default schema({\n notes: table({ id: id(), body: text() }, { scope: owner() }),\n bookings: table({ id: id(), slot: text() }, { scope: anyOf(owner({ column: 'booker_id' }), member({ group: 'id', membership: 'booking_access', member_user: 'user_id', member_group: 'booking_id', operations: ['read'] })) }),\n booking_access: table({ id: id(), booking_id: text(), user_id: text() }, { scope: serverOnly() })\n});"
+    },
+    "functions": {
+      "api/notes.ts": "export default sw.endpoint({\n  auth: 'required',\n  handler: async (input, sw) => {\n    await sw.db.server.insert('notes', { body: 'x', user_id: input.body.user_id });\n    return { ok: true };\n  },\n});"
+    },
+    "expected": [
+      {
+        "rule": "somewhere/request-ownership",
+        "file": "api/notes.ts",
+        "line": 4
+      }
+    ]
+  },
+  {
+    "name": "server tx step takes user_id from the request",
+    "files": {
+      "db/schema.ts": "import { schema, table, id, text, owner, member, anyOf, serverOnly } from 'somewhere/db';\nexport default schema({\n notes: table({ id: id(), body: text() }, { scope: owner() }),\n bookings: table({ id: id(), slot: text() }, { scope: anyOf(owner({ column: 'booker_id' }), member({ group: 'id', membership: 'booking_access', member_user: 'user_id', member_group: 'booking_id', operations: ['read'] })) }),\n booking_access: table({ id: id(), booking_id: text(), user_id: text() }, { scope: serverOnly() })\n});"
+    },
+    "functions": {
+      "api/notes.ts": "export default async function(req, sw) {\n  const body = await req.json();\n  await sw.db.server.tx([\n    { op: 'insert', table: 'notes', values: { body: body.body, user_id: body.user_id } },\n  ]);\n  return Response.json({ ok: true });\n}"
+    },
+    "expected": [
+      {
+        "rule": "somewhere/request-ownership",
+        "file": "api/notes.ts",
+        "line": 4
+      }
+    ]
+  },
+  {
+    "name": "server tx steps take a custom owner column from the request, literal and accumulator",
+    "files": {
+      "db/schema.ts": "import { schema, table, id, text, owner, member, anyOf, serverOnly } from 'somewhere/db';\nexport default schema({\n notes: table({ id: id(), body: text() }, { scope: owner() }),\n bookings: table({ id: id(), slot: text() }, { scope: anyOf(owner({ column: 'booker_id' }), member({ group: 'id', membership: 'booking_access', member_user: 'user_id', member_group: 'booking_id', operations: ['read'] })) }),\n booking_access: table({ id: id(), booking_id: text(), user_id: text() }, { scope: serverOnly() })\n});"
+    },
+    "functions": {
+      "api/book.ts": "export default async function(req, sw) {\n  const body = await req.json();\n  const intents = [];\n  intents.push({ op: 'insert', table: 'bookings', values: { id: 'b1', slot: body.slot, booker_id: body.booker_id } });\n  intents.push({ table: 'bookings', op: 'update', set: { booker_id: body.booker_id }, where: { id: 'b1' } });\n  await sw.db.server.tx(intents);\n  return Response.json({ ok: true });\n}"
+    },
+    "expected": [
+      {
+        "rule": "somewhere/request-ownership",
+        "file": "api/book.ts",
+        "line": 4
+      },
+      {
+        "rule": "somewhere/request-ownership",
+        "file": "api/book.ts",
+        "line": 5
+      }
+    ]
+  },
+  {
+    "name": "server tx booking with owner from the caller and provider resolved server-side passes",
+    "files": {
+      "db/schema.ts": "import { schema, table, id, text, owner, member, anyOf, serverOnly } from 'somewhere/db';\nexport default schema({\n notes: table({ id: id(), body: text() }, { scope: owner() }),\n bookings: table({ id: id(), slot: text() }, { scope: anyOf(owner({ column: 'booker_id' }), member({ group: 'id', membership: 'booking_access', member_user: 'user_id', member_group: 'booking_id', operations: ['read'] })) }),\n booking_access: table({ id: id(), booking_id: text(), user_id: text() }, { scope: serverOnly() })\n});"
+    },
+    "functions": {
+      "api/book.ts": "export default async function(req, sw) {\n  const user = await sw.auth.requireUser(req);\n  const body = await req.json();\n  const [slot] = (await sw.db.server.from('slots', { where: { id: body.slot_id } })).data;\n  await sw.db.server.tx([\n    { op: 'insert', table: 'bookings', values: { id: 'b1', slot: body.slot_id, booker_id: user.id } },\n    { op: 'insert', table: 'booking_access', values: { id: 'a1', booking_id: 'b1', user_id: slot.provider_id } },\n  ]);\n  return Response.json({ ok: true });\n}"
+    },
+    "expected": []
+  },
+  {
+    "name": "caller tx steps are not server writes",
+    "files": {
+      "db/schema.ts": "import { schema, table, id, text, owner, member, anyOf, serverOnly } from 'somewhere/db';\nexport default schema({\n notes: table({ id: id(), body: text() }, { scope: owner() }),\n bookings: table({ id: id(), slot: text() }, { scope: anyOf(owner({ column: 'booker_id' }), member({ group: 'id', membership: 'booking_access', member_user: 'user_id', member_group: 'booking_id', operations: ['read'] })) }),\n booking_access: table({ id: id(), booking_id: text(), user_id: text() }, { scope: serverOnly() })\n});"
+    },
+    "functions": {
+      "api/notes.ts": "export default async function(req, sw) {\n  const body = await req.json();\n  await sw.db.tx([{ op: 'insert', table: 'notes', values: { body: body.body } }]);\n  return Response.json({ ok: true });\n}"
     },
     "expected": []
   }

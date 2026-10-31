@@ -276,6 +276,24 @@ export function updateTokens(
   });
 }
 
+/** A stored temporary credential whose own expiry time has passed. A missing
+ *  or unreadable expiry is not treated as expired. */
+export function temporaryConfigExpired(
+  config: CliConfig | null,
+  nowMs = Date.now(),
+): config is CliConfig & { temporary: true; temp_expires_at: string } {
+  if (!config?.temporary || !config.temp_expires_at) return false;
+  const expiresMs = new Date(config.temp_expires_at).getTime();
+  return Number.isFinite(expiresMs) && expiresMs <= nowMs;
+}
+
+/** A stored credential that is not locally known to be expired. Says nothing
+ *  about whether the platform still accepts it. Read WITHOUT `getToken()`,
+ *  whose "Not logged in" / "Temporary session expired" paths exit the process. */
+export function hasUsableCredential(config: CliConfig | null = loadConfig()): boolean {
+  return Boolean(config?.token) && !temporaryConfigExpired(config);
+}
+
 export function getToken(): string {
   const config = loadConfig();
   // A temporary (--temporary, tsk_35674c33) credential carries its own
@@ -284,7 +302,7 @@ export function getToken(): string {
   // temp-aware copy (re-mint vs. real login) instead of the bare
   // "Not logged in" message, which would send a dev to `somewhere login`
   // when they never signed up in the first place.
-  if (config?.temporary && config.temp_expires_at && new Date(config.temp_expires_at).getTime() <= Date.now()) {
+  if (temporaryConfigExpired(config)) {
     error(
       'Temporary session expired. Run somewhere deploy --temporary for a new one, or somewhere login to keep your work.',
     );

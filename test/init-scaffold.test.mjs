@@ -49,10 +49,10 @@ function generateGreen() {
   return { dir, result };
 }
 
-test('auth template SDK defaults adopt 0.14.0 (the client adopts the early session check) and preserve exact versus caret policy', () => {
+test('auth template SDK defaults adopt 0.14.1 (resendMfaCode for the emailed sign-in code) and preserve exact versus caret policy', () => {
   const selection = { requested: ['auth'], added: [], modules: ['auth'], ui: 'styled' };
   for (const [files, expected] of [
-    [createFeatureTemplate(selection, { appName: 'Starter' }), '0.14.0'],
+    [createFeatureTemplate(selection, { appName: 'Starter' }), '0.14.1'],
     [createHappyPathTemplate(), '^0.14.0'],
   ]) {
     const manifest = JSON.parse(files.find((file) => file.path === 'package.json').content);
@@ -114,7 +114,7 @@ test('minimal starter is a small typed frontend, function, and schema', () => {
 
   const pkg = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'));
   assert.deepEqual(pkg.dependencies, {
-    '@somewhere-cloud/sdk': '0.14.0',
+    '@somewhere-cloud/sdk': '0.14.1',
     react: '19.2.7',
     'react-dom': '19.2.7',
   });
@@ -254,7 +254,7 @@ test('default starter is the auth module: SDK client, packaged handler, hooks, r
   assert.match(shell, /account\?: AccountSummary/);
   assert.match(shell, /\{account \? \(/, 'no account controls until the session is known');
   const pkg = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'));
-  assert.equal(pkg.dependencies['@somewhere-cloud/sdk'], '0.14.0');
+  assert.equal(pkg.dependencies['@somewhere-cloud/sdk'], '0.14.1');
   for (const version of [...Object.values(pkg.dependencies), ...Object.values(pkg.devDependencies)]) {
     assert.match(version, /^\d+\.\d+\.\d+$/, `dependency is not pinned: ${version}`);
   }

@@ -22,7 +22,7 @@ const PACKAGE_JSON = `{
     "typecheck": "somewhere typecheck"
   },
   "dependencies": {
-    "@somewhere-cloud/sdk": "0.14.0",
+    "@somewhere-cloud/sdk": "0.14.1",
     "react": "19.2.7",
     "react-dom": "19.2.7"
   },
@@ -104,10 +104,20 @@ export type CredentialsMode = 'sign-in' | 'sign-up';
 export interface MfaContinuation {
   required: boolean;
   code: string;
+  /** Checking the code. */
   pending: boolean;
+  /** Asking for a new code. */
+  resending: boolean;
+  /** False for a minute after each code is sent: the platform sends at most one a minute. */
+  resendReady: boolean;
   error: string | null;
+  /** What happened to the last request for a new code. */
+  notice: string | null;
   setCode(value: string): void;
   submit(): Promise<void>;
+  resend(): Promise<void>;
+  /** Leave this step and go back to signing in with the password. */
+  restart(): void;
   capture(reason: unknown): boolean;
 }
 
@@ -1696,41 +1706,97 @@ export function AssistantPanel({ assistant }: { assistant: AssistantController }
 // ---------------------------------------------------------------------- pages
 // One set of pages for both UI modes: hooks in, typed values and callbacks out.
 
-const MFA_HOOK = `import { useState } from 'react';
+const MFA_HOOK = `import { useRef, useState } from 'react';
 import { AuthError } from '@somewhere-cloud/sdk/auth';
 import { useAuth } from '@somewhere-cloud/sdk/react';
 import type { MfaContinuation } from '../../types/auth';
 import { authErrorMessage } from '../services/auth';
+
+// Sign-in codes are emailed: 6 digits, valid 5 minutes from the password step
+// (a new code does not extend that). The platform sends at most one code a
+// minute and 5 an hour per account, so "Send a new code" waits a minute after
+// each send. Nothing is sent automatically, one request runs at a time, and a
+// code is never stored or logged.
+const RESEND_WAIT_MS = 60_000;
 
 export function useMfaContinuation(onDone?: () => void): MfaContinuation {
   const auth = useAuth();
   const [required, setRequired] = useState(false);
   const [code, setCode] = useState('');
   const [pending, setPending] = useState(false);
+  const [resending, setResending] = useState(false);
+  const [resendReady, setResendReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const busy = useRef(false);
+  const waitBeforeResend = () => {
+    if (timer.current) clearTimeout(timer.current);
+    setResendReady(false);
+    timer.current = setTimeout(() => setResendReady(true), RESEND_WAIT_MS);
+  };
   return {
-    required, code, pending, error, setCode,
+    required, code, pending, resending, resendReady, error, notice, setCode,
     capture(reason) {
       if (!(reason instanceof AuthError) || reason.code !== 'MFA_REQUIRED') return false;
       setRequired(true);
       setCode('');
       setError(null);
+      setNotice(null);
+      waitBeforeResend(); // the first code was just sent
       return true;
     },
     async submit() {
-      if (pending || !code.trim()) return;
+      if (busy.current) return;
+      const digits = code.replace(/\\s+/g, '');
+      if (!/^\\d{6}$/.test(digits)) {
+        setError('Enter the 6-digit code from the email.');
+        return;
+      }
+      busy.current = true;
       setPending(true);
       setError(null);
+      setNotice(null);
       try {
-        await auth.completeMfa({ code: code.trim() });
+        await auth.completeMfa({ code: digits });
         setRequired(false);
+        if (timer.current) clearTimeout(timer.current);
         onDone?.();
       } catch (reason: unknown) {
         setError(authErrorMessage(reason));
       } finally {
         setCode('');
         setPending(false);
+        busy.current = false;
       }
+    },
+    async resend() {
+      if (busy.current || !resendReady) return;
+      busy.current = true;
+      setResending(true);
+      setError(null);
+      setNotice(null);
+      try {
+        const sent = await auth.resendMfaCode();
+        setNotice(sent.delivery === 'sent'
+          ? 'We emailed you a new code. Use the newest one; it still expires 5 minutes after you signed in.'
+          : 'We could not confirm delivery. If a new code arrives, use that one. Requesting it does not extend this sign-in step.');
+      } catch (reason: unknown) {
+        setError(authErrorMessage(reason));
+      } finally {
+        setCode('');
+        setResending(false);
+        busy.current = false;
+        waitBeforeResend();
+      }
+    },
+    restart() {
+      if (busy.current) return;
+      if (timer.current) clearTimeout(timer.current);
+      setRequired(false);
+      setCode('');
+      setError(null);
+      setNotice(null);
     },
   };
 }
@@ -1739,18 +1805,28 @@ export function useMfaContinuation(onDone?: () => void): MfaContinuation {
 const MFA_VIEW = `import type { MfaContinuation } from '../../types/auth';
 
 export function MfaStep({ continuation }: { continuation: MfaContinuation }) {
+  const busy = continuation.pending || continuation.resending;
   return (
     <main className="loading">
       <form className="panel auth__form" onSubmit={(event) => { event.preventDefault(); void continuation.submit(); }}>
-        <h1 className="panel__title">Finish signing in</h1>
+        <h1 className="panel__title">Check your email</h1>
+        <p>We emailed you a 6-digit sign-in code. It expires 5 minutes after you signed in.</p>
         <div className="field">
-          <label className="field__label" htmlFor="mfa-code"><span>Authenticator or backup code</span></label>
-          <input id="mfa-code" className="control" autoComplete="one-time-code" inputMode="numeric" autoFocus value={continuation.code}
-            disabled={continuation.pending} onChange={(event) => continuation.setCode(event.target.value)} />
+          <label className="field__label" htmlFor="mfa-code"><span>6-digit code from the email</span></label>
+          <input id="mfa-code" className="control" autoComplete="one-time-code" inputMode="numeric" maxLength={8} autoFocus value={continuation.code}
+            disabled={busy} onChange={(event) => continuation.setCode(event.target.value)} />
         </div>
         {continuation.error ? <p className="error" role="alert">{continuation.error}</p> : null}
-        <button type="submit" className="button" disabled={continuation.pending || !continuation.code.trim()} aria-busy={continuation.pending}>
+        {continuation.notice ? <p role="status">{continuation.notice}</p> : null}
+        <button type="submit" className="button" disabled={busy || !continuation.code.trim()} aria-busy={continuation.pending}>
           {continuation.pending ? 'Signing in…' : 'Finish signing in'}
+        </button>
+        <button type="button" className="button button--secondary" disabled={busy || !continuation.resendReady} aria-busy={continuation.resending}
+          onClick={() => void continuation.resend()}>
+          {continuation.resending ? 'Sending…' : continuation.resendReady ? 'Send a new code' : 'Send a new code (available in a minute)'}
+        </button>
+        <button type="button" className="button button--secondary" disabled={busy} onClick={() => continuation.restart()}>
+          Sign in again
         </button>
       </form>
     </main>
@@ -2366,7 +2442,7 @@ export interface MagicLinkRequest {
 /**
  * The /auth/magic page the emailed link opens. verifying: the one-time token
  * is being exchanged for the session. failed: it was missing, already used,
- * expired or revoked. mfa: waiting for an authenticator or backup code.
+ * expired or revoked. mfa: waiting for the 6-digit code emailed to the user.
  * On success the page leaves.
  */
 export type MagicLinkLanding =

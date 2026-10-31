@@ -775,7 +775,11 @@ export function registerDeploy(program: Command) {
             }
           } catch (err) {
             powSpinner?.fail('Could not create a temporary session');
-            error(err instanceof Error ? err.message : String(err), err);
+            // The platform's typed error (code, status, retry, request ids): the
+            // same shape a signed-in deploy reports (pfb_011a9fd3f5f3).
+            const status = err instanceof CliApiError
+              ? ` ${dim(err.statusCode ? `[${err.code}, HTTP ${err.statusCode}]` : `[${err.code}]`)}` : '';
+            error(`${err instanceof Error ? err.message : String(err)}${status}`, err);
             process.exit(1);
           }
         }
@@ -961,7 +965,12 @@ export function registerDeploy(program: Command) {
 
       // --json keeps stdout for the deploy result alone; every local omission
       // still goes to stderr, by path and reason, so an agent can see it.
-      if (opts.json) printLocalOmissionsToStderr({ excluded, sensitive, skipped });
+      if (opts.json) printLocalOmissionsToStderr({ excluded, sensitive, skipped, notes: collected.notes });
+      else if (collected.notes.length) {
+        spinner?.stop();
+        for (const note of collected.notes) warn(`${note.source} had no effect: ${note.reason}.`);
+        if (process.stderr.isTTY) spinner?.start();
+      }
 
       // A deploy replaces the whole project, so a file we skip is DELETED from
       // production if it was there before. Never silent — surface every skip.
@@ -1876,7 +1885,7 @@ export function printExcludedFiles(
 
 /** The --json form of the omission notices: one stderr line per file, stdout
  *  untouched, paths and reasons only (never contents), in a fixed order. */
-export function printLocalOmissionsToStderr(omitted: Pick<CollectedFiles, 'excluded' | 'sensitive' | 'skipped'>): void {
+export function printLocalOmissionsToStderr(omitted: Pick<CollectedFiles, 'excluded' | 'sensitive' | 'skipped'> & { notes?: CollectedFiles['notes'] }): void {
   const groups: Array<[string, Array<{ path: string; reason: string }>]> = [
     ['not published', omitted.excluded],
     ['never uploaded', omitted.sensitive],
@@ -1887,6 +1896,7 @@ export function printLocalOmissionsToStderr(omitted: Pick<CollectedFiles, 'exclu
       process.stderr.write(`${label}: ${entry.path} — ${entry.reason}\n`);
     }
   }
+  for (const note of omitted.notes ?? []) process.stderr.write(`no effect: ${note.source} — ${note.reason}\n`);
 }
 
 /** Files held back by the sensitive-path policy (vendored deploy path policy).

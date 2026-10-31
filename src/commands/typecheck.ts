@@ -3,7 +3,7 @@ import chokidar from 'chokidar';
 import { existsSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 import ora from '../lib/spinner.js';
-import { DEPLOY_CHECK_TYPESCRIPT_VERSION, deployCheckTsc, runDeployCheck, type DeployCheckResult } from '../lib/deploy-check.js';
+import { DEPLOY_CHECK_TYPESCRIPT_VERSION, announceDeployCheckFetch, deployCheckTsc, runDeployCheck, type DeployCheckResult } from '../lib/deploy-check.js';
 import { IGNORE } from '../lib/files.js';
 import { AGENT_HOSTS, isAgentHost, runAgentHook } from '../lib/agent-hooks.js';
 import { bold, dim, error, info, printJson, red, success, teal, warn } from '../lib/output.js';
@@ -52,7 +52,7 @@ export function registerTypecheck(program: Command) {
       }
 
       if (opts.deploy) {
-        if (/^npx(\.cmd)?$/.test(deployCheckTsc(dir).command)) announceNpxTypeScriptFetch(DEPLOY_CHECK_TYPESCRIPT_VERSION);
+        if (/^npx(\.cmd)?$/.test(deployCheckTsc(dir).command)) announceDeployCheckFetch(dir);
         const check = async () => {
           const result = await runDeployCheck(dir);
           if (opts.json) printJson(result);

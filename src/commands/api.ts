@@ -53,7 +53,12 @@ export function registerApi(program: Command) {
         }
       }
 
-      const apiPath = path.startsWith('/v1/') ? path.slice(3) : path;
+      const normalized = normalizeApiPath(path);
+      if ('error' in normalized) {
+        error(normalized.error);
+        process.exit(1);
+      }
+      const apiPath = normalized.path;
       const withOperation = (cause: unknown): unknown => {
         if (cause instanceof CliApiError && !('operation' in cause)) {
           Object.defineProperty(cause, 'operation', { value: operationLabel(method, apiPath), enumerable: false });
@@ -192,6 +197,33 @@ export function registerApi(program: Command) {
         process.exit(1);
       }
     });
+}
+
+/**
+ * Keep a raw API call inside the configured API origin and its /v1 prefix
+ * (pfb_8cef4606e9a3). A full URL, a protocol-relative or backslash path, a
+ * fragment, or any `.`/`..` segment (percent-encoded too) is refused before a
+ * request carries the token anywhere. A leading /v1 is accepted and dropped,
+ * a missing leading slash is added, and the query string is kept.
+ */
+export function normalizeApiPath(input: string): { path: string } | { error: string } {
+  const refuse = (why: string) => ({ error: `Not sent: ${why}. Give a path under the API, such as /projects or /projects?limit=5.` });
+  if (/^[a-z][a-z0-9+.-]*:/i.test(input)) return refuse('`somewhere api` takes a path, not a full URL');
+  if (input.startsWith('//') || input.includes('\\')) return refuse('the path must not start with // or contain a backslash');
+  if (input.includes('#')) return refuse('the path must not contain a fragment (#)');
+  const queryAt = input.indexOf('?');
+  const rawPath = queryAt === -1 ? input : input.slice(0, queryAt);
+  const query = queryAt === -1 ? '' : input.slice(queryAt);
+  const segments = rawPath.split('/').filter((segment, i) => !(i === 0 && segment === ''));
+  for (const segment of segments) {
+    let decoded: string;
+    try { decoded = decodeURIComponent(segment); } catch { return refuse('the path has an invalid percent-encoding'); }
+    if (decoded === '.' || decoded === '..' || decoded.includes('/') || decoded.includes('\\')) {
+      return refuse('the path must not contain . or .. segments or encoded slashes');
+    }
+  }
+  const withoutPrefix = segments[0] === 'v1' ? segments.slice(1) : segments;
+  return { path: `/${withoutPrefix.join('/')}${query}` };
 }
 
 function dataFileContentType(path: string): string {

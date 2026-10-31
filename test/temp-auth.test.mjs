@@ -33,59 +33,33 @@ test('solvePow — difficulty 12 returns a suffix whose recomputed sha256 verifi
   assert.ok(leadingZeroBits(recomputed) >= 12);
 });
 
-test('mintTempAccount — GET challenge then POST create with {nonce, suffix}, envelope unwrapped', async () => {
+// mintTempAccount runs through an ApiClient (unauthenticated in production);
+// a fake client here records each call. HTTP envelopes, typed errors and
+// non-JSON bodies are covered end to end in deploy-anonymous-errors.test.mjs.
+function fakeClient(responses) {
   const calls = [];
-  const fetchImpl = async (url, init) => {
-    calls.push({ url: String(url), init });
-    if (String(url).endsWith('/auth/pow/challenge')) {
-      return {
-        ok: true,
-        statusText: 'OK',
-        json: async () => ({
-          ok: true,
-          data: {
-            nonce: 'tmpc_abc',
-            difficulty: 1,
-            algorithm: 'sha256',
-            input: 'tmpc_abc:<suffix>',
-            expires_at: '2026-07-02T13:00:00.000Z',
-            ttl_seconds: 600,
-          },
-        }),
-      };
-    }
-    if (String(url).endsWith('/auth/temp-create')) {
-      return {
-        ok: true,
-        statusText: 'OK',
-        json: async () => ({
-          ok: true,
-          data: {
-            access_token: 'smt_fallback_should_not_be_used',
-            key: 'smt_temp_123',
-            key_prefix: 'smt_temp',
-            key_id: 'key_1',
-            scopes: ['projects', 'deploy'],
-            expires_at: '2026-07-02T16:00:00.000Z',
-            ttl_seconds: 10800,
-            claim_token: 'swtc_xyz',
-            claim_url: 'https://somewhere.cloud/claim?token=swtc_xyz',
-          },
-        }),
-      };
-    }
-    throw new Error(`unexpected fetch: ${url}`);
-  };
+  return { calls, call: async (method, path, body, query, opts) => {
+    calls.push({ method, path, body, opts });
+    const reply = responses[path];
+    if (reply instanceof Error) throw reply;
+    return reply;
+  } };
+}
+const CHALLENGE = { nonce: 'tmpc_abc', difficulty: 1, algorithm: 'sha256', input: 'tmpc_abc:<suffix>', expires_at: '2026-07-02T13:00:00.000Z', ttl_seconds: 600 };
 
-  const account = await mintTempAccount(fetchImpl);
-
-  assert.equal(calls.length, 2);
-  assert.match(calls[0].url, /\/auth\/pow\/challenge$/);
-  assert.equal(calls[0].init, undefined); // plain GET, no init object
-  assert.match(calls[1].url, /\/auth\/temp-create$/);
-  assert.equal(calls[1].init.method, 'POST');
-  assert.deepEqual(JSON.parse(calls[1].init.body), { nonce: 'tmpc_abc', suffix: expectedSuffix('tmpc_abc', 1) });
-
+test('mintTempAccount — GET challenge then POST create with {nonce, suffix}, never refreshing a stored login', async () => {
+  const client = fakeClient({
+    '/auth/pow/challenge': CHALLENGE,
+    '/auth/temp-create': {
+      access_token: 'smt_fallback_should_not_be_used', key: 'smt_temp_123', key_prefix: 'smt_temp', key_id: 'key_1',
+      scopes: ['projects', 'deploy'], expires_at: '2026-07-02T16:00:00.000Z', ttl_seconds: 10800,
+      claim_token: 'swtc_xyz', claim_url: 'https://somewhere.cloud/claim?token=swtc_xyz',
+    },
+  });
+  const account = await mintTempAccount(client);
+  assert.deepEqual(client.calls.map((c) => [c.method, c.path]), [['GET', '/auth/pow/challenge'], ['POST', '/auth/temp-create']]);
+  assert.deepEqual(client.calls[1].body, { nonce: 'tmpc_abc', suffix: expectedSuffix('tmpc_abc', 1) });
+  assert.ok(client.calls.every((c) => c.opts?.refresh === false));
   // `key` is preferred over `access_token` when both are present.
   assert.equal(account.key, 'smt_temp_123');
   assert.equal(account.claim_url, 'https://somewhere.cloud/claim?token=swtc_xyz');
@@ -93,62 +67,17 @@ test('mintTempAccount — GET challenge then POST create with {nonce, suffix}, e
 });
 
 test('mintTempAccount — falls back to access_token when key is absent', async () => {
-  const fetchImpl = async (url) => {
-    if (String(url).endsWith('/auth/pow/challenge')) {
-      return {
-        ok: true,
-        json: async () => ({
-          ok: true,
-          data: { nonce: 'n', difficulty: 1, algorithm: 'sha256', input: 'n:<suffix>', expires_at: 'x', ttl_seconds: 600 },
-        }),
-      };
-    }
-    return {
-      ok: true,
-      json: async () => ({
-        ok: true,
-        data: {
-          access_token: 'smt_only_access_token',
-          scopes: [],
-          expires_at: 'x',
-          ttl_seconds: 10800,
-          claim_token: 'swtc_1',
-          claim_url: 'https://somewhere.cloud/claim?token=swtc_1',
-        },
-      }),
-    };
-  };
-  const account = await mintTempAccount(fetchImpl);
-  assert.equal(account.key, 'smt_only_access_token');
-});
-
-test('mintTempAccount — propagates the server error message on challenge failure', async () => {
-  const fetchImpl = async () => ({
-    ok: false,
-    statusText: 'Too Many Requests',
-    json: async () => ({ ok: false, error: 'RATE_LIMITED', message: 'slow down' }),
+  const client = fakeClient({
+    '/auth/pow/challenge': { ...CHALLENGE, nonce: 'n' },
+    '/auth/temp-create': { access_token: 'smt_only_access_token', scopes: [], expires_at: 'x', ttl_seconds: 10800, claim_token: 'swtc_1', claim_url: 'https://somewhere.cloud/claim?token=swtc_1' },
   });
-  await assert.rejects(() => mintTempAccount(fetchImpl), /slow down/);
+  assert.equal((await mintTempAccount(client)).key, 'smt_only_access_token');
 });
 
-test('mintTempAccount — propagates the server error message on create failure', async () => {
-  const fetchImpl = async (url) => {
-    if (String(url).endsWith('/auth/pow/challenge')) {
-      return {
-        ok: true,
-        json: async () => ({
-          ok: true,
-          data: { nonce: 'n', difficulty: 1, algorithm: 'sha256', input: 'n:<suffix>', expires_at: 'x', ttl_seconds: 600 },
-        }),
-      };
-    }
-    return {
-      ok: false,
-      statusText: 'Bad Request',
-      json: async () => ({ ok: false, error: 'INVALID_SOLUTION', message: 'proof-of-work did not verify' }),
-    };
-  };
-  await assert.rejects(() => mintTempAccount(fetchImpl), /proof-of-work did not verify/);
+test('mintTempAccount — a challenge without nonce/difficulty is a typed INVALID_RESPONSE, not a solve attempt', async () => {
+  const client = fakeClient({ '/auth/pow/challenge': { unexpected: true } });
+  await assert.rejects(() => mintTempAccount(client), (err) => err.code === 'INVALID_RESPONSE');
+  assert.equal(client.calls.length, 1);
 });
 
 // Recompute the same suffix search the module does, purely to build the

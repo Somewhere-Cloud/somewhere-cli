@@ -1,5 +1,5 @@
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
-import { extname, join, relative } from 'node:path';
+import { extname, isAbsolute, join, relative } from 'node:path';
 import { DATA_DECLARATION_FILE, FILES_DECLARATION_FILE, GENERATED_DATA_HEADER } from './declared-data.js';
 import {
   excludedRootFileReason,
@@ -106,6 +106,10 @@ export interface CollectedFiles {
    *  `skipped`). Deploy and preview refuse on these before any request
    *  (oversizeRefusal): uploading without them would delete the live copy. */
   oversize: Array<{ path: string; bytes: number }>;
+  /** Opt-ins that changed nothing: an --include entry or a "!" line in
+   *  .somewhereignore that cannot publish what it names. Said, never silent
+   *  (pfb_7b36450727ee); the upload policy itself is unchanged. */
+  notes: Array<{ source: string; reason: string }>;
   /** Root files held back because they are not part of the app (notes, logs,
    *  transcripts). Always printed by name — see printExcludedFiles. */
   excluded: Array<{ path: string; reason: string }>;
@@ -129,7 +133,7 @@ export interface CollectOptions {
 /** Walk a directory tree and bucket every file into static / binary / function,
  *  applying the same path remapping the deploy command uses. */
 export function collectFiles(baseDir: string, options: CollectOptions = {}): CollectedFiles {
-  const out: CollectedFiles = { files: {}, binaryFiles: {}, functions: {}, skipped: [], oversize: [], excluded: [], sensitive: [] };
+  const out: CollectedFiles = { files: {}, binaryFiles: {}, functions: {}, skipped: [], oversize: [], notes: [], excluded: [], sensitive: [] };
   const ignore = loadDeployIgnore(baseDir);
   const candidates: string[] = [];
   const sizes = new Map<string, number>();
@@ -212,6 +216,14 @@ export function collectFiles(baseDir: string, options: CollectOptions = {}): Col
     classifyInto(out, baseDir, relPath, options.readBinary !== false);
   }
   out.oversize.sort((a, b) => a.path.localeCompare(b.path));
+
+  for (const raw of options.include ?? []) {
+    const reason = includeHadNoEffect(baseDir, raw.trim(), publish);
+    if (reason) out.notes.push({ source: `--include ${raw.trim()}`, reason });
+  }
+  for (const line of ignore.unreachableReincludes) {
+    out.notes.push({ source: `.somewhereignore line "${line}"`, reason: 'a "!" line cannot publish a dotfile or a file blocked by the sensitive-path policy, so this line has no effect' });
+  }
   return out;
 }
 
@@ -322,7 +334,11 @@ interface DeployIgnoreRule {
 }
 
 class DeployIgnoreMatcher {
-  constructor(private readonly rules: DeployIgnoreRule[]) {}
+  constructor(
+    private readonly rules: DeployIgnoreRule[],
+    /** "!" lines in .somewhereignore naming a dotfile or sensitive file. */
+    readonly unreachableReincludes: string[] = [],
+  ) {}
 
   ignores(relPath: string, isDirectory: boolean): boolean {
     let ignored = false;
@@ -346,16 +362,23 @@ class DeployIgnoreMatcher {
 
 function loadDeployIgnore(baseDir: string): DeployIgnoreMatcher {
   const rules: DeployIgnoreRule[] = [];
+  const unreachable: string[] = [];
   for (const fileName of ['.gitignore', '.somewhereignore']) {
     const path = join(baseDir, fileName);
     if (!existsSync(path)) continue;
     const lines = readFileSync(path, 'utf8').split(/\r?\n/);
     for (const raw of lines) {
       const rule = parseIgnoreRule(raw);
-      if (rule) rules.push(rule);
+      if (!rule) continue;
+      rules.push(rule);
+      if (fileName === '.somewhereignore' && rule.negate) {
+        const named = raw.trim().slice(1).trim().replace(/\\/g, '/').replace(/^\/+/, '').replace(/\/+$/, '');
+        const last = named.split('/').pop() ?? '';
+        if ((last.startsWith('.') && last !== '.well-known') || isSensitiveDeployPath(named)) unreachable.push(raw.trim());
+      }
     }
   }
-  return new DeployIgnoreMatcher(rules);
+  return new DeployIgnoreMatcher(rules, unreachable);
 }
 
 function parseIgnoreRule(raw: string): DeployIgnoreRule | null {
@@ -445,6 +468,17 @@ export function oversizeRefusal(collected: Pick<CollectedFiles, 'oversize'>): st
     ...collected.oversize.map((entry) => `  ${entry.path} (${formatBytes(entry.bytes)})`),
     'Make the file smaller, or keep it out of the deploy on purpose: add it to .somewhereignore (or .gitignore) or move it out of this folder, then run the command again.',
   ].join('\n');
+}
+
+/** Why an --include entry published nothing, or null when it did. */
+function includeHadNoEffect(baseDir: string, raw: string, published: string[]): string | null {
+  const path = toDeployPath(raw).replace(/^\.\//, '').replace(/\/+$/, '');
+  if (!path || isAbsolute(raw) || path === '..' || path.startsWith('../')) return 'it is outside this project folder; --include takes a path inside it';
+  if (!existsSync(join(baseDir, path))) return 'there is no such file or folder in this project';
+  if (published.some((p) => p === path || p.startsWith(`${path}/`))) return null;
+  if (isSensitiveDeployPath(path)) return 'it is blocked by the sensitive-path policy, which --include does not override';
+  if (path.split('/').some((seg) => IGNORE.has(seg) || (seg.startsWith('.') && seg !== '.well-known'))) return 'dotfiles and tool folders are never published, and --include does not override that';
+  return 'it is kept out by .gitignore or .somewhereignore, which --include does not override';
 }
 
 /**

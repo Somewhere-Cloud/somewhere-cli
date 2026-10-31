@@ -32,10 +32,16 @@ export const LONG_CALL_TIMEOUT_MS = 10 * 60_000;
 export class ApiClient {
   /** Mutable: the refresh-on-401 path swaps in a fresh access key in place so
    *  the retry (and every later call on this instance) uses the new token. */
-  private token: string;
+  /** null: an unauthenticated client (no Authorization header, never a
+   *  stored-login refresh), for the public anonymous-deploy routes. */
+  private token: string | null;
 
-  constructor(token: string) {
+  constructor(token: string | null) {
     this.token = token;
+  }
+
+  private authHeader(): Record<string, string> {
+    return this.token === null ? {} : { Authorization: `Bearer ${this.token}` };
   }
 
   /** Run a one-off script against the project's live DEV bindings via the
@@ -85,7 +91,7 @@ export class ApiClient {
         const label = operationLabel(method, path);
         if (label) Object.defineProperty(err, 'operation', { value: label, enumerable: false });
       }
-      if (!(err instanceof CliApiError) || err.code !== 'API_KEY_EXPIRED' || opts?.refresh === false) throw err;
+      if (!(err instanceof CliApiError) || err.code !== 'API_KEY_EXPIRED' || opts?.refresh === false || this.token === null) throw err;
       const refreshed = await this.refreshAccessKey(opts?.timeoutMs);
       // refreshAccessKey now THROWS a clear re-login error when it can't refresh
       // (no refresh token, or a dead one); a false return is only the rare
@@ -114,7 +120,7 @@ export class ApiClient {
     },
   ): Promise<UndiciResponse> {
     let response = await this.requestStream(method, path, bodyFactory, opts);
-    if (response.status !== 401) return response;
+    if (response.status !== 401 || this.token === null) return response;
 
     let code: string | undefined;
     try {
@@ -162,7 +168,7 @@ export class ApiClient {
       return await undiciFetch(url, {
         method,
         headers: {
-          Authorization: `Bearer ${this.token}`,
+          ...this.authHeader(),
           ...opts?.headers,
         },
         body: bodyFactory?.(),
@@ -264,7 +270,7 @@ export class ApiClient {
     }
 
     const headers: Record<string, string> = {
-      Authorization: `Bearer ${this.token}`,
+      ...this.authHeader(),
       Accept: 'application/json',
     };
 
@@ -426,7 +432,7 @@ export class ApiClient {
     opts?: { timeoutMs?: number; captureIncompleteBody?: true },
   ): Promise<{ status: number; ok: boolean; body: string; headers: Record<string, string> }> {
     const url = `${API_BASE_URL}${path}`;
-    const headers: Record<string, string> = { Authorization: `Bearer ${this.token}` };
+    const headers: Record<string, string> = { ...this.authHeader() };
     let reqBody: string | undefined;
     if (body !== undefined) {
       headers['Content-Type'] = 'application/json';

@@ -173,6 +173,12 @@ export function registerEnv(program: Command) {
         error('--purpose must be at most 240 characters.');
         process.exit(1);
       }
+      // A positional value is visible in shell history and the process list
+      // (pfb_04b5a285eed0): say so, pointing to --stdin. Text mode: stderr;
+      // --json: an additive input_note field, keeping stderr clean.
+      const inputNote = opts.stdin ? null
+        : `A value passed as an argument can be seen in your shell history and the process list. To keep it out, pipe it in: printf %s "$VALUE" | somewhere env set ${key} --stdin`;
+      if (inputNote && !opts.json) process.stderr.write(`Note: ${inputNote}\n`);
       const value = opts.stdin ? readFileSync(0, 'utf8').replace(/\r?\n$/, '') : positionalValue!;
       const client = new ApiClient(getToken());
       const pid = resolveProjectId(opts.project);
@@ -188,7 +194,7 @@ export function registerEnv(program: Command) {
           ...(opts.purpose !== undefined ? { purpose: opts.purpose } : {}),
         });
         if (opts.json) {
-          printJson(result);
+          printJson(inputNote ? { ...result, input_note: inputNote } : result);
           return;
         }
         // The platform does not say whether the key already existed, so "set"

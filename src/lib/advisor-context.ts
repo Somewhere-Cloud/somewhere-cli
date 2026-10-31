@@ -62,13 +62,3 @@ export function contextNotice(context: AdvisorContext | undefined): string {
     ? `Advisor context attached: explicitly selected file ${context.file.path}.`
     : 'Advisor context not attached; use --file to attach a redacted excerpt.';
 }
-
-export function normalizeLastRun(record: LastRunRecord): LastRunRecord {
-  return {
-    ...record,
-    command: redactAdvisorText(record.command),
-    args: record.args.map((arg) => redactAdvisorText(arg)),
-    stdout_tail: tail(redactAdvisorText(record.stdout_tail), TAIL_LIMIT),
-    stderr_tail: tail(redactAdvisorText(record.stderr_tail), TAIL_LIMIT),
-  };
-}

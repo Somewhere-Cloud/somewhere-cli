@@ -8,7 +8,7 @@
  *   2. the CLI checkout's TypeScript during development/tests (a devDependency)
  *   3. `npx -y typescript` as a last resort
  */
-import { spawn, spawnSync } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { createRequire } from 'node:module';
@@ -169,29 +169,15 @@ export function planDeclaredTypePackages(projectDir: string): DeclaredTypesPlan 
   return { specs, missing };
 }
 
-function npmInstallTypePackages(specs: string[], projectDir: string): void {
-  const result = spawnSync(
-    process.platform === 'win32' ? 'npm.cmd' : 'npm',
-    ['install', '--no-save', '--no-audit', '--no-fund', '--loglevel', 'error', ...specs],
-    {
-      cwd: projectDir,
-      stdio: 'ignore',
-      shell: process.platform === 'win32',
-    },
-  );
-  if (result.error) throw result.error;
-  if (result.status !== 0) throw new Error(`npm install exited ${result.status}`);
-}
-
 /**
- * Resolve declared-but-missing type packages. Fail-OPEN by contract: if the
- * install cannot run (offline, no npm, a private registry) the typecheck still
- * proceeds and reports whatever tsc finds. This step may never be the reason a
- * check does not happen.
+ * Resolve declared-but-missing type packages with a caller-supplied installer.
+ * The CLI's own commands never install into a project (tsk_97979518,
+ * pfb_8f0f7cdd04a1): they refuse with missingTypePackagesMessage instead.
+ * Fail-open: an installer that throws never blocks the check.
  */
 export function ensureDeclaredTypePackages(
   projectDir: string,
-  install: TypePackageInstaller = npmInstallTypePackages,
+  install: TypePackageInstaller,
 ): DeclaredTypesPlan & { installed: boolean } {
   const plan = planDeclaredTypePackages(projectDir);
   if (plan.specs.length === 0) return { ...plan, installed: false };
@@ -201,6 +187,83 @@ export function ensureDeclaredTypePackages(
   } catch {
     return { ...plan, installed: false };
   }
+}
+
+/** Why a check did not run: declared type packages are not installed. The
+ *  typecheck never installs them itself (it would change the project tree and
+ *  run package scripts). */
+export function missingTypePackagesMessage(missing: string[], projectDir: string): string {
+  return `Not checked: this project's declared type packages are not installed (${missing.join(', ')}). `
+    + `somewhere typecheck does not install packages. Install the project's dependencies (npm install in ${projectDir}), then run it again.`;
+}
+
+/** Longest a typecheck child may run before it and its children are stopped.
+ *  SOMEWHERE_TYPECHECK_TIMEOUT_MS overrides it. */
+export function typecheckTimeoutMs(): number {
+  const parsed = Number(process.env.SOMEWHERE_TYPECHECK_TIMEOUT_MS);
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 300_000;
+}
+
+export interface BoundedResult { code: number | null; out: string; stdout: string; error?: Error; timedOut: boolean }
+
+/**
+ * Run a typecheck child (tsc, or npx fetching it) with a deadline. On POSIX it
+ * gets its own process group so a timeout or Ctrl-C stops npx's children too,
+ * never leaving an orphan; on Windows the direct child is stopped.
+ */
+export function runBounded(command: string, args: string[], cwd: string, timeoutMs = typecheckTimeoutMs()): Promise<BoundedResult> {
+  return new Promise((resolve) => {
+    const group = process.platform !== 'win32';
+    let child: ReturnType<typeof spawn>;
+    try {
+      child = spawn(command, args, {
+        cwd, env: process.env, stdio: ['ignore', 'pipe', 'pipe'], detached: group,
+        // Windows: tsc.cmd / npx.cmd are batch shims, and since Node 18.20/20.12
+        // (CVE-2024-27980) spawning a .cmd/.bat without a shell throws EINVAL.
+        // The bundled path runs node directly (process.execPath) and must NOT
+        // shell — its arg is a resolved file path that a shell could mis-split.
+        shell: /\.(cmd|bat)$/i.test(command),
+      });
+    } catch (err) {
+      resolve({ code: null, out: '', stdout: '', error: err instanceof Error ? err : new Error(String(err)), timedOut: false });
+      return;
+    }
+    let out = '', stdout = '', timedOut = false, done = false;
+    const stop = (signal: NodeJS.Signals) => {
+      try {
+        if (group && child.pid) process.kill(-child.pid, signal);
+        else child.kill(signal);
+      } catch { /* already gone */ }
+    };
+    const onSignal = (signal: NodeJS.Signals) => { stop('SIGTERM'); process.exit(signal === 'SIGINT' ? 130 : 143); };
+    const onInt = () => onSignal('SIGINT');
+    const onTerm = () => onSignal('SIGTERM');
+    process.once('SIGINT', onInt);
+    process.once('SIGTERM', onTerm);
+    const timer = setTimeout(() => {
+      timedOut = true;
+      stop('SIGTERM');
+      setTimeout(() => stop('SIGKILL'), 2_000).unref();
+    }, timeoutMs);
+    const finish = (result: Omit<BoundedResult, 'out' | 'stdout' | 'timedOut'>) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      process.off('SIGINT', onInt);
+      process.off('SIGTERM', onTerm);
+      resolve({ ...result, out, stdout, timedOut });
+    };
+    child.stdout?.on('data', (d: Buffer) => { out += d.toString(); stdout += d.toString(); });
+    child.stderr?.on('data', (d: Buffer) => (out += d.toString()));
+    child.on('error', (error: Error) => finish({ code: null, error }));
+    child.on('close', (code: number | null) => finish({ code }));
+  });
+}
+
+export function timedOutMessage(via: TscInvocation['via']): string {
+  const seconds = Math.round(typecheckTimeoutMs() / 1000);
+  return `The typecheck did not finish within ${seconds}s and was stopped${via === 'npx' ? ' (fetching TypeScript with npx needs the npm registry)' : ''}. `
+    + 'Set SOMEWHERE_TYPECHECK_TIMEOUT_MS to allow longer.';
 }
 
 /**
@@ -238,24 +301,39 @@ export function runTypecheck(
     const message = error instanceof Error ? error.message : String(error);
     return Promise.resolve({ ok: false, errors: [{ file: 'db/schema.ts', line: 1, column: 1, code: 'SCHEMA_DECLARATION_INVALID', message }], via: 'bundled', raw: message });
   }
-  // Declared type packages first, so the FIRST check is a real verdict rather
-  // than a report that the tree is not installed yet.
-  if (options.installTypePackages !== false) {
+  // Only a caller-supplied installer resolves declared type packages; the
+  // default never installs into the project.
+  if (options.installTypePackages) {
     ensureDeclaredTypePackages(projectDir, options.installTypePackages);
   }
   const { command, args, via } = resolveTsc(projectDir);
+  return runTypecheckWith(projectDir, command, args, via, declaredData);
+}
+
+/** How this project's typecheck will get its compiler: 'npx' means a
+ *  network fetch of TypeScript, which commands announce before running. */
+export function typecheckCompilerSource(projectDir: string): TscInvocation['via'] {
+  return resolveTsc(projectDir).via;
+}
+
+async function runTypecheckWith(
+  projectDir: string,
+  command: string,
+  args: string[],
+  via: TscInvocation['via'],
+  declaredData: LocalDeclaredData | undefined,
+): Promise<TypecheckResult> {
   // --pretty false → stable, parseable one-line diagnostics regardless of TTY.
   const fullArgs = typecheckArgs(args);
   let overlay: string | undefined;
   if (declaredData) {
     // TypeScript resolves JSONC, inherited configs and explicit files itself.
     // Preserve that complete file set, adding only our declaration and schema.
-    const config = spawnSync(command, [...args, '--project', SCAFFOLD_TSCONFIG_FILENAME, '--showConfig'], {
-      cwd: projectDir, encoding: 'utf8', shell: /\.(cmd|bat)$/i.test(command),
-    });
-    if (config.error || config.status !== 0) {
-      return Promise.resolve({ ok: false, errors: [], via, raw: config.stdout + config.stderr,
-        ...(config.error ? { spawnError: config.error.message } : {}) });
+    const config = await runBounded(command, [...args, '--project', SCAFFOLD_TSCONFIG_FILENAME, '--showConfig'], projectDir);
+    if (config.timedOut) return { ok: false, errors: [], via, raw: config.out, spawnError: timedOutMessage(via) };
+    if (config.error || config.code !== 0) {
+      return { ok: false, errors: [], via, raw: config.out,
+        ...(config.error ? { spawnError: config.error.message } : {}) };
     }
     try {
       const parsed = JSON.parse(config.stdout) as { files?: unknown };
@@ -276,67 +354,26 @@ export function runTypecheck(
       fullArgs[args.length + 1] = relative(projectDir, overlay);
     } catch (error) {
       if (overlay) rmSync(overlay, { force: true });
-      return Promise.resolve({ ok: false, errors: [], via, raw: error instanceof Error ? error.message : String(error) });
+      return { ok: false, errors: [], via, raw: error instanceof Error ? error.message : String(error) };
     }
   }
   const cleanup = () => { if (overlay) rmSync(overlay, { force: true }); };
 
-  return new Promise((resolve) => {
-    let child;
-    try {
-      child = spawn(command, fullArgs, {
-        cwd: projectDir,
-        env: process.env,
-        stdio: ['ignore', 'pipe', 'pipe'],
-        // Windows: tsc.cmd / npx.cmd are batch shims, and since Node 18.20/20.12
-        // (CVE-2024-27980) spawning a .cmd/.bat without a shell throws EINVAL.
-        // The bundled path runs node directly (process.execPath) and must NOT
-        // shell — its arg is a resolved file path that a shell could mis-split.
-        shell: /\.(cmd|bat)$/i.test(command),
-      });
-    } catch (err) {
-      cleanup();
-      resolve({
-        ok: false,
-        errors: [],
-        via,
-        raw: '',
-        spawnError: err instanceof Error ? err.message : String(err),
-      });
-      return;
-    }
-
-    let out = '';
-    child.stdout?.on('data', (d: Buffer) => (out += d.toString()));
-    child.stderr?.on('data', (d: Buffer) => (out += d.toString()));
-
-    child.on('error', (err: Error) => {
-      cleanup();
-      resolve({ ok: false, errors: [], via, raw: out, spawnError: err.message });
-    });
-
-    child.on('close', (code: number | null) => {
-      cleanup();
-      const allErrors = parseTscOutput(out);
-      // Drop locally-unresolvable bare-import diagnostics (they resolve on
-      // deploy via esm.sh) so they don't bury the real bugs. Undefined symbols
-      // (TS2304) survive the filter.
-      const errors = allErrors.filter((e) => !UNRESOLVED_DEP_CODES.has(e.code)
-        || /['"]somewhere(?::data|:files|\/db)['"]/.test(e.message));
-
-      // tsc exits non-zero whenever it emits diagnostics. If it failed but we
-      // parsed NONE (a config/crash failure, not type errors), don't claim
-      // "clean" — surface it via raw output so the user sees something's wrong.
-      const unexplainedFailure = code !== 0 && allErrors.length === 0;
-
-      resolve({
-        ok: errors.length === 0 && !unexplainedFailure,
-        errors,
-        via,
-        raw: out,
-      });
-    });
-  });
+  const run = await runBounded(command, fullArgs, projectDir);
+  cleanup();
+  if (run.timedOut) return { ok: false, errors: [], via, raw: run.out, spawnError: timedOutMessage(via) };
+  if (run.error) return { ok: false, errors: [], via, raw: run.out, spawnError: run.error.message };
+  const allErrors = parseTscOutput(run.out);
+  // Drop locally-unresolvable bare-import diagnostics (they resolve on
+  // deploy via esm.sh) so they don't bury the real bugs. Undefined symbols
+  // (TS2304) survive the filter.
+  const errors = allErrors.filter((e) => !UNRESOLVED_DEP_CODES.has(e.code)
+    || /['"]somewhere(?::data|:files|\/db)['"]/.test(e.message));
+  // tsc exits non-zero whenever it emits diagnostics. If it failed but we
+  // parsed NONE (a config/crash failure, not type errors), don't claim
+  // "clean" — surface it via raw output so the user sees something's wrong.
+  const unexplainedFailure = run.code !== 0 && allErrors.length === 0;
+  return { ok: errors.length === 0 && !unexplainedFailure, errors, via, raw: run.out };
 }
 
 /** Where this module lives — used by tests that need the CLI package root. */

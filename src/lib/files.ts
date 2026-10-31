@@ -102,6 +102,10 @@ export interface CollectedFiles {
    *  replacement, so a silent skip DELETES the file from production — the caller
    *  must surface these, not drop them quietly. */
   skipped: Array<{ path: string; reason: string }>;
+  /** Files that would be published but exceed MAX_FILE_SIZE (also listed in
+   *  `skipped`). Deploy and preview refuse on these before any request
+   *  (oversizeRefusal): uploading without them would delete the live copy. */
+  oversize: Array<{ path: string; bytes: number }>;
   /** Root files held back because they are not part of the app (notes, logs,
    *  transcripts). Always printed by name — see printExcludedFiles. */
   excluded: Array<{ path: string; reason: string }>;
@@ -125,10 +129,11 @@ export interface CollectOptions {
 /** Walk a directory tree and bucket every file into static / binary / function,
  *  applying the same path remapping the deploy command uses. */
 export function collectFiles(baseDir: string, options: CollectOptions = {}): CollectedFiles {
-  const out: CollectedFiles = { files: {}, binaryFiles: {}, functions: {}, skipped: [], excluded: [], sensitive: [] };
+  const out: CollectedFiles = { files: {}, binaryFiles: {}, functions: {}, skipped: [], oversize: [], excluded: [], sensitive: [] };
   const ignore = loadDeployIgnore(baseDir);
   const candidates: string[] = [];
-  walk(baseDir, baseDir, out, ignore, candidates);
+  const sizes = new Map<string, number>();
+  walk(baseDir, baseDir, out, ignore, candidates, sizes);
 
   // ── Root publish surface (tsk_c166924f) ─────────────────────────────────
   // Split the candidates into "definitely the app" and "root files nothing
@@ -170,7 +175,7 @@ export function collectFiles(baseDir: string, options: CollectOptions = {}): Col
 
   // Published text files only; a sensitive file is never a candidate, so its
   // contents are never read here.
-  const corpusFiles = (paths: string[]) => paths.filter(isReferenceCorpusPath).map((relPath) => {
+  const corpusFiles = (paths: string[]) => paths.filter((relPath) => isReferenceCorpusPath(relPath) && (sizes.get(relPath) ?? 0) <= MAX_FILE_SIZE).map((relPath) => {
     try {
       return [relPath, readFileSync(join(baseDir, relPath), 'utf-8')] as const;
     } catch {
@@ -195,7 +200,18 @@ export function collectFiles(baseDir: string, options: CollectOptions = {}): Col
     out.sensitive.sort((a, b) => a.path.localeCompare(b.path));
   }
 
-  for (const relPath of publish) classifyInto(out, baseDir, relPath, options.readBinary !== false);
+  // Size is judged only for files that would be published, after the ignore,
+  // privacy and test rules: a large note or log that stays local is not refused.
+  for (const relPath of publish) {
+    const bytes = sizes.get(relPath) ?? 0;
+    if (bytes > MAX_FILE_SIZE) {
+      out.oversize.push({ path: relPath, bytes });
+      out.skipped.push({ path: relPath, reason: `${formatBytes(bytes)} exceeds the ${formatBytes(MAX_FILE_SIZE)} per-file limit` });
+      continue;
+    }
+    classifyInto(out, baseDir, relPath, options.readBinary !== false);
+  }
+  out.oversize.sort((a, b) => a.path.localeCompare(b.path));
   return out;
 }
 
@@ -205,6 +221,7 @@ function walk(
   out: CollectedFiles,
   ignore: DeployIgnoreMatcher,
   candidates: string[],
+  sizes: Map<string, number>,
 ) {
   for (const entry of readdirSync(currentDir, { withFileTypes: true })) {
     const fullPath = join(currentDir, entry.name);
@@ -225,7 +242,7 @@ function walk(
       continue;
     }
     if (entry.isDirectory()) {
-      walk(baseDir, fullPath, out, ignore, candidates);
+      walk(baseDir, fullPath, out, ignore, candidates, sizes);
       continue;
     }
     if (!entry.isFile()) continue;
@@ -239,15 +256,7 @@ function walk(
     // Uploading a local copy would introduce duplicate or stale client types.
     if ((entry.name === DATA_DECLARATION_FILE || entry.name === FILES_DECLARATION_FILE)
       && readFileSync(fullPath, 'utf8').startsWith(GENERATED_DATA_HEADER)) continue;
-    const size = statSync(fullPath).size;
-    if (size > MAX_FILE_SIZE) {
-      out.skipped.push({
-        path: relPath,
-        reason: `${formatBytes(size)} exceeds the ${formatBytes(MAX_FILE_SIZE)} per-file limit`,
-      });
-      continue;
-    }
-
+    sizes.set(relPath, statSync(fullPath).size);
     candidates.push(relPath);
   }
 }
@@ -425,6 +434,19 @@ function escapeRegExp(ch: string): string {
 
 /** Refusal text when published source names a held-back credentials file, or
  *  null. Names paths only; never the file's contents. */
+/** A file that would be published is over the per-file limit. Deploying
+ *  without it would remove the live copy, so nothing is sent (tsk_97979518,
+ *  pfb_9c4d1d7fc75c). Deliberate exclusions (.somewhereignore, .gitignore)
+ *  are how a large local file stays out. */
+export function oversizeRefusal(collected: Pick<CollectedFiles, 'oversize'>): string | null {
+  if (collected.oversize.length === 0) return null;
+  return [
+    `Nothing was sent. ${collected.oversize.length === 1 ? 'This file is' : 'These files are'} over the ${formatBytes(MAX_FILE_SIZE)} per-file limit and would be left out, which removes any copy already live:`,
+    ...collected.oversize.map((entry) => `  ${entry.path} (${formatBytes(entry.bytes)})`),
+    'Make the file smaller, or keep it out of the deploy on purpose: add it to .somewhereignore (or .gitignore) or move it out of this folder, then run the command again.',
+  ].join('\n');
+}
+
 export function sensitiveReferenceRefusal(collected: Pick<CollectedFiles, 'sensitive'>): string | null {
   const referenced = collected.sensitive.filter((entry) => entry.referencedBy.length > 0);
   if (referenced.length === 0) return null;

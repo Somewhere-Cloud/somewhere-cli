@@ -95,6 +95,7 @@ export function registerInit(program: Command) {
         + '(typecheck, deploy, verify). Sign-in and invitation links (sw.auth.invite) open\n'
         + '/auth/magic, which the starter routes before the sign-in gate.\n'
         + '`--template minimal` includes the SDK and auth route without sign-in screens.\n'
+        + 'Signed in, a new starter\'s pinned dependencies are installed with npm install (network; package install scripts run). Signed out, nothing is installed.\n'
         + `New starters and --bare also install ${skillNames(BUNDLED_SKILLS_PACK).length} agent skills in .agents/skills, pinned by skills-lock.json.\n`
         + '\nA directory that already holds an app (package.json, index.html, src/, …) is\n'
         + 'linked and left untouched. A directory holding only other files (notes, a stray\n'
@@ -337,7 +338,7 @@ export function registerInit(program: Command) {
             info(`Modules: ${describeSelection(selection)}`);
             for (const [area, where] of Object.entries(extensionPoints(selection))) console.log(`  ${area}: ${where}`);
           }
-          info('Installing pinned dependencies with `npm install`…');
+          info('Installing the starter\'s pinned dependencies with `npm install` (downloads from the npm registry and runs package install scripts)…');
           await installInitDependencies({ cwd: dir, quiet: false });
           success('Dependencies installed');
         } else if (opts.bare) {

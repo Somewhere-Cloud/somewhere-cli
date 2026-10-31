@@ -13,12 +13,12 @@
  * Measured on four real apps against the deploy's own check roots, findings
  * were identical; that is evidence for those apps, not a guarantee for all.
  */
-import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 import { collectFiles } from './files.js';
+import { runBounded, timedOutMessage } from './typecheck.js';
 
 export interface DeployCheckFinding {
   /** 'reference': an undefined name; 'type': an advisory shape mistake. */
@@ -167,20 +167,20 @@ process.once('exit', () => { for (const cleanup of pendingCleanups) cleanup(); }
 /** Run the deploy's reference check over `projectDir`. Writes only a
  *  uniquely named dot-prefixed config and directory in the project root
  *  (outside the deploy's file set), removed when the check ends. */
-export function runDeployCheck(projectDir: string): Promise<DeployCheckResult> {
+export async function runDeployCheck(projectDir: string): Promise<DeployCheckResult> {
   try {
-    return startDeployCheck(projectDir);
+    return await startDeployCheck(projectDir);
   } catch (error) {
     // Reading the project or writing the temporary files failed (a file
     // renamed mid-walk, an unreadable tsconfig): the check did not run.
-    return Promise.resolve({
+    return {
       ok: false, findings: [], typescript: DEPLOY_CHECK_TYPESCRIPT_VERSION, checkedFiles: 0,
       error: error instanceof Error ? error.message : String(error),
-    });
+    };
   }
 }
 
-function startDeployCheck(projectDir: string): Promise<DeployCheckResult> {
+async function startDeployCheck(projectDir: string): Promise<DeployCheckResult> {
   const typescript = DEPLOY_CHECK_TYPESCRIPT_VERSION;
   const collected = collectFiles(projectDir);
   const graph: Record<string, string> = {};
@@ -188,7 +188,7 @@ function startDeployCheck(projectDir: string): Promise<DeployCheckResult> {
     if (contract.isReferenceSource(path)) graph[path] = text;
   }
   const checked = Object.keys(graph);
-  if (checked.length === 0) return Promise.resolve({ ok: true, findings: [], typescript, checkedFiles: 0 });
+  if (checked.length === 0) return { ok: true, findings: [], typescript, checkedFiles: 0 };
 
   const tsconfigPath = join(projectDir, 'tsconfig.json');
   const own = projectCompilerOptions(existsSync(tsconfigPath) ? readFileSync(tsconfigPath, 'utf8') : undefined);
@@ -221,41 +221,22 @@ function startDeployCheck(projectDir: string): Promise<DeployCheckResult> {
   }
 
   const { command, args } = deployCheckTsc(projectDir);
-  return new Promise((resolveResult) => {
-    let out = '';
-    let child;
-    try {
-      child = spawn(command, [...args, '--project', config, '--pretty', 'false'], {
-        cwd: projectDir,
-        stdio: ['ignore', 'pipe', 'pipe'],
-        shell: /\.(cmd|bat)$/i.test(command),
-      });
-    } catch (error) {
-      cleanup();
-      resolveResult({ ok: false, findings: [], typescript, checkedFiles: checked.length, error: error instanceof Error ? error.message : String(error) });
-      return;
-    }
-    child.stdout?.on('data', (d: Buffer) => (out += d.toString()));
-    child.stderr?.on('data', (d: Buffer) => (out += d.toString()));
-    child.on('error', (error: Error) => {
-      cleanup();
-      resolveResult({ ok: false, findings: [], typescript, checkedFiles: checked.length, error: error.message });
-    });
-    child.on('close', (code: number | null) => {
-      cleanup();
-      const { findings, problems } = parseDeployOutput(out, projectDir, collected.functions);
-      // A config/global error, or a non-zero exit with no located diagnostic
-      // at all, is a failure to run, never a verdict, even beside findings.
-      if (problems.length > 0) {
-        resolveResult({ ok: false, findings, typescript, checkedFiles: checked.length, error: problems.join('\n') });
-        return;
-      }
-      if (code !== 0 && !out.split(/\r?\n/).some((line) => DIAGNOSTIC.test(line.trim()))) {
-        resolveResult({ ok: false, findings, typescript, checkedFiles: checked.length, error: out.trim() || `tsc exited ${code}` });
-        return;
-      }
-      resolveResult({ ok: findings.length === 0, findings, typescript, checkedFiles: checked.length });
-    });
-  });
+  // Bounded, with its process group stopped on timeout or Ctrl-C: an npx
+  // fetch of TypeScript never hangs or outlives the command (pfb_8f0f7cdd04a1).
+  const run = await runBounded(command, [...args, '--project', config, '--pretty', 'false'], projectDir);
+  cleanup();
+  const out = run.out;
+  if (run.timedOut) return { ok: false, findings: [], typescript, checkedFiles: checked.length, error: timedOutMessage('npx') };
+  if (run.error) return { ok: false, findings: [], typescript, checkedFiles: checked.length, error: run.error.message };
+  const { findings, problems } = parseDeployOutput(out, projectDir, collected.functions);
+  // A config/global error, or a non-zero exit with no located diagnostic
+  // at all, is a failure to run, never a verdict, even beside findings.
+  if (problems.length > 0) {
+    return { ok: false, findings, typescript, checkedFiles: checked.length, error: problems.join('\n') };
+  }
+  if (run.code !== 0 && !out.split(/\r?\n/).some((line) => DIAGNOSTIC.test(line.trim()))) {
+    return { ok: false, findings, typescript, checkedFiles: checked.length, error: out.trim() || `tsc exited ${run.code}` };
+  }
+  return { ok: findings.length === 0, findings, typescript, checkedFiles: checked.length };
 }
 

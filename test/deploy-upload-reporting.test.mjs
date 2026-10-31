@@ -194,6 +194,9 @@ test('non-TTY deploy prints collection once across all preflight warnings and ke
     const json = await run(['deploy', '--json'], { cwd: dir, env });
     assert.equal(json.status, 0, json.all);
     assert.deepEqual(JSON.parse(json.stdout), deployData);
-    assert.equal(json.stderr, '', 'JSON deploy must not emit progress or preflight warnings');
+    // No progress or preflight prose; only the local omissions, one line each by
+    // path and reason, so a --json caller still learns what stayed local (pfb_b141efbfc449).
+    assert.deepEqual(json.stderr.trim().split('\n').map((line) => line.split(' — ')[0]),
+      ['not published: NOTES.md', 'not published: tests/note.txt', 'not uploaded: linked.html'], json.all);
   });
 });

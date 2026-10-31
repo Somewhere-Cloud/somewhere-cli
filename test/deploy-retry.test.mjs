@@ -151,7 +151,7 @@ test('deploy prints determinate progress while a healthy upload is still running
   });
 });
 
-test('deploy --json times out with one structured error and retry guidance', async () => {
+test('deploy --json times out with one structured error and unknown-outcome guidance', async () => {
   const HOME = mkdtempSync(join(tmpdir(), 'sw-deploy-timeout-json-home-'));
   const fixtureDir = mkdtempSync(join(tmpdir(), 'sw-deploy-timeout-json-fixture-'));
   writeConfig(HOME);
@@ -190,6 +190,10 @@ test('deploy --json times out with one structured error and retry guidance', asy
     assert.equal(deployCalls, 2);
     const payload = JSON.parse(result.stdout);
     assert.equal(payload.error, 'TIMEOUT');
-    assert.match(payload.message, /check `somewhere status` before retrying/i);
+    // The request may have been applied: never "retry", always read back first.
+    assert.equal(payload.deployment_outcome, 'unknown');
+    assert.match(payload.message, /may or may not have gone live/);
+    assert.match(payload.message, /`somewhere status`/);
+    assert.doesNotMatch(payload.message, /not applied|before retrying/i);
   });
 });

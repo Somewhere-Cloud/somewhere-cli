@@ -10,7 +10,7 @@ import ora from '../lib/spinner.js';
 import { ApiClient, CliApiError, LONG_CALL_TIMEOUT_MS } from '../lib/client.js';
 import { buildErrorSummary, isBuildError, renderBuildError } from '../lib/build-errors.js';
 import { getToken, loadProjectConfig, readSourceBase, saveSourceBase } from '../lib/config.js';
-import { IGNORE, classifyKey, collectFiles, sensitiveReferenceRefusal } from '../lib/files.js';
+import { IGNORE, classifyKey, collectFiles, oversizeRefusal, sensitiveReferenceRefusal } from '../lib/files.js';
 import { isSensitiveDeployPath } from '../lib/vendor/deploy-paths.js';
 import { bold, dim, error, green, info, printJson, printJsonError, red, success, teal, warn, yellow } from '../lib/output.js';
 import { showProjectNotices } from '../lib/project-notices.js';
@@ -659,6 +659,12 @@ async function runHotDeploy(opts: { project?: string; publishFirst?: boolean; js
   if (sensitiveRefusal) {
     if (opts.json) printJsonError('SENSITIVE_FILE_REFERENCED', sensitiveRefusal);
     else error(sensitiveRefusal);
+    process.exit(1);
+  }
+  const sizeRefusal = oversizeRefusal(collected);
+  if (sizeRefusal) {
+    if (opts.json) printJsonError('FILE_TOO_LARGE', sizeRefusal);
+    else error(sizeRefusal);
     process.exit(1);
   }
   await showProjectNotices(client, projectId);

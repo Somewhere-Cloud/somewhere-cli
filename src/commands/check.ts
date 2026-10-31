@@ -9,7 +9,7 @@ import { collectFiles, formatBytes, sensitiveReferenceRefusal, type CollectedFil
 import { shellQuote } from '../lib/next-actions.js';
 import { printExcludedFiles, printSensitiveFiles } from './deploy.js';
 import { MISSING_TSCONFIG_GUIDANCE } from './typecheck.js';
-import { ensureDeclaredTypePackages, runTypecheck, type TypecheckResult } from '../lib/typecheck.js';
+import { missingTypePackagesMessage, planDeclaredTypePackages, runTypecheck, typecheckCompilerSource, type TypecheckResult } from '../lib/typecheck.js';
 import { bold, dim, error, green, info, printJson, red, success, warn, yellow } from '../lib/output.js';
 
 /** A single diagnostic from the server-side dry compile. Same file:line shape
@@ -224,8 +224,10 @@ export async function runLocalPreflight(
   targetDir: string,
   collected: CollectedFiles,
   typecheck: (dir: string) => Promise<TypecheckResult> = async (dir) => {
-    ensureDeclaredTypePackages(dir);
-    return runTypecheck(dir, { installTypePackages: false });
+    // Read-only, like `somewhere typecheck`: never installs into the project.
+    const missing = planDeclaredTypePackages(dir).missing;
+    if (missing.length) return { ok: false, errors: [], via: typecheckCompilerSource(dir), raw: '', spawnError: missingTypePackagesMessage(missing, dir) };
+    return runTypecheck(dir);
   },
 ): Promise<LocalPreflightResult> {
   const files =

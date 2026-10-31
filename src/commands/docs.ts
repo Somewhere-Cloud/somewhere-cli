@@ -307,9 +307,17 @@ export function findPublicDocsPage(
 }
 
 async function fetchPublicManifestWithGroups(): Promise<{ pages: PublicDocsPage[]; groups: PublicDocsGroup[]; aliases: Record<string, string> }> {
-  const res = await fetch(DOCS_BASE + PUBLIC_MANIFEST_PATH, {
-    headers: { 'User-Agent': 'somewhere-cli' },
-  });
+  let res: Awaited<ReturnType<typeof fetch>>;
+  try {
+    res = await fetch(DOCS_BASE + PUBLIC_MANIFEST_PATH, {
+      headers: { 'User-Agent': 'somewhere-cli' },
+    });
+  } catch (cause) {
+    // A bare "fetch failed" names neither the host nor the reason (pfb_a2e65d951e62).
+    const inner = (cause as { cause?: { code?: string; message?: string } })?.cause;
+    const reason = inner?.code ?? inner?.message ?? (cause instanceof Error ? cause.message : String(cause));
+    throw new Error(`Could not reach ${DOCS_BASE} (${reason}) — check your connection. The docs are public and need no login.`);
+  }
   if (!res.ok) {
     throw new Error(`Could not fetch ${DOCS_BASE}${PUBLIC_MANIFEST_PATH} (HTTP ${res.status}).`);
   }

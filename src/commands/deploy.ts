@@ -30,7 +30,7 @@ import {
   type StoredTempSession,
 } from '../lib/config.js';
 import { httpsOrigin } from '../lib/project-urls.js';
-import { collectFiles, formatBytes, sensitiveReferenceRefusal, type CollectedFiles } from '../lib/files.js';
+import { collectFiles, formatBytes, oversizeRefusal, sensitiveReferenceRefusal, type CollectedFiles } from '../lib/files.js';
 import { mintTempAccount } from '../lib/temp-auth.js';
 import { ensureClaimHandoff } from '../lib/claim-handoff.js';
 import { dim, error, green, info, platformErrorEnvelope, printJson, printJsonError, red, success, teal, warn, yellow } from '../lib/output.js';
@@ -349,7 +349,7 @@ export function formatSignedInUnlinkedExplanation(): string {
     'No project is linked to this folder. You are signed in, so deploy will not create or pick a project in your account on its own.',
     '',
     'Next steps:',
-    '  New project: run `somewhere init --bare --name <name>` (creates it in your account and links this folder; writes no files), then `somewhere deploy`.',
+    '  New project: run `somewhere init --bare --name <name>` (creates it in your account and links this folder; adds .somewhere.json, AGENTS.md/CLAUDE.md and agent skills, no app source), then `somewhere deploy`.',
     '  Existing project: run `somewhere init --link --project <name-or-id>` (list yours with `somewhere projects`), or deploy once with `somewhere deploy --project <name-or-id>`.',
   ].join('\n');
 }
@@ -577,7 +577,7 @@ export function registerDeploy(program: Command) {
       '--verify [flow.json]',
       'After the deploy is live, run one browser verification flow at desktop and phone size. Omit the file for the default health check.',
     )
-    .option('--json', 'Print the raw deploy response as JSON')
+    .option('--json', 'Print the raw deploy response as JSON on stdout; files left out locally are listed on stderr by path and reason')
     .option('--timing', 'Print collection, upload, release, activation, and verification timings')
     .action(async (dir: string | undefined, opts) => {
       // performance.now() counts from process start, so this is the real
@@ -606,6 +606,14 @@ export function registerDeploy(program: Command) {
       if (sensitiveRefusal) {
         if (opts.json) printJsonError('SENSITIVE_FILE_REFERENCED', sensitiveRefusal);
         else error(sensitiveRefusal);
+        process.exit(1);
+      }
+      // A published file over the per-file limit would be left out, deleting
+      // its live copy: refuse before any request (dry runs included).
+      const sizeRefusal = oversizeRefusal(collected);
+      if (sizeRefusal) {
+        if (opts.json) printJsonError('FILE_TOO_LARGE', sizeRefusal);
+        else error(sizeRefusal);
         process.exit(1);
       }
       if (
@@ -951,6 +959,10 @@ export function registerDeploy(program: Command) {
         if (process.stderr.isTTY) spinner?.start();
       }
 
+      // --json keeps stdout for the deploy result alone; every local omission
+      // still goes to stderr, by path and reason, so an agent can see it.
+      if (opts.json) printLocalOmissionsToStderr({ excluded, sensitive, skipped });
+
       // A deploy replaces the whole project, so a file we skip is DELETED from
       // production if it was there before. Never silent — surface every skip.
       if (skipped.length && !opts.json) {
@@ -1005,6 +1017,8 @@ export function registerDeploy(program: Command) {
       // The platform answered the deploy (or dry run); a later failure is not
       // a refused deploy, so it never gets the relink advice below.
       let deployAnswered = false;
+      // When the deploy request went out, for unknown-outcome readback.
+      let deployRequestStartedAt = new Date().toISOString();
       // The target came from this folder's link, not --project or a project
       // created just now: a not-found then means the link itself is stale.
       const targetFromLink = !opts.project && Boolean(linkedProjectEntry) && projectId === linkedProjectEntry?.config.project_id;
@@ -1101,6 +1115,7 @@ export function registerDeploy(program: Command) {
         }
 
         const requestStartedAt = performance.now();
+        deployRequestStartedAt = new Date().toISOString();
         const preparationMs = requestStartedAt - collectionEndedAt;
         const result = await callDeployWithRetry<DeployResult>(client, body, {
           spinner,
@@ -1370,6 +1385,22 @@ export function registerDeploy(program: Command) {
             printJson({ ok: false, error: err.code, message, ...(err.data ?? {}), ...(firstAttempt ? { first_attempt_outcome: 'unknown', first_attempt_failure: firstAttempt } : {}) });
           } else {
             console.error(message);
+          }
+          process.exit(1);
+        }
+        // No answer to a request that may have been applied: never "not
+        // applied", never a blind retry (pfb_47695233e613).
+        if (!opts.dryRun && outcomeUnknown(err)) {
+          const unknown = err as CliApiError;
+          const message = formatUnknownDeployOutcomeExplanation(unknown, String(projectId), deployRequestStartedAt);
+          if (opts.json) {
+            const reference = { ...(unknown.meta.requestId ? { request_id: unknown.meta.requestId } : {}), ...(unknown.meta.traceId ? { trace_id: unknown.meta.traceId } : {}) };
+            printJson({ ok: false, error: unknown.code, deployment_outcome: 'unknown', message, project_id: projectId, request_started_at: deployRequestStartedAt, ...reference });
+          } else {
+            spinner?.fail('Deploy outcome unknown');
+            console.error(message);
+            const reference = formatErrorReference(unknown.meta);
+            if (reference) info(dim(reference));
           }
           process.exit(1);
         }
@@ -1673,9 +1704,16 @@ async function callDeployWithRetry<T>(
       if (attempt >= DEPLOY_MAX_ATTEMPTS) throw err;
 
       if (!isRetryableDeployError(err)) throw err;
+      // A request that may have reached the server is never resent: no
+      // platform contract makes a second identical deploy safe while the first
+      // may still be running (pfb_47695233e613). Only a connection that never
+      // opened, or the platform's own retry: true, is sent again.
+      if (outcomeUnknown(err)) throw err;
       // Only the CLI's own verdicts leave the first attempt's outcome unknown;
       // a platform retry: true says that attempt changed nothing.
-      transportFailure = err instanceof CliApiError && RETRYABLE_DEPLOY_CODES.has(err.code) ? err.code : null;
+      // Only an unknown first outcome makes a later stale refusal ambiguous; a
+      // connection that never opened sent nothing.
+      transportFailure = outcomeUnknown(err) ? (err as CliApiError).code : null;
       const waitMs = retryWaitMs(err);
       if (!opts.json) {
         opts.spinner?.stop();
@@ -1691,6 +1729,35 @@ async function callDeployWithRetry<T>(
   }
 
   throw new CliApiError('DEPLOY_RETRY_EXHAUSTED', 'Deploy retry exhausted.', 0);
+}
+
+/** The request may have reached the server and no authoritative answer was
+ *  read: a timeout or dropped connection after the connection opened, or a
+ *  response whose body was cut off or never finished. */
+export function outcomeUnknown(err: unknown): boolean {
+  if (!(err instanceof CliApiError)) return false;
+  if (err.meta.responseBodyIncomplete === true) return true;
+  return RETRYABLE_DEPLOY_CODES.has(err.code) && err.meta.notSent !== true;
+}
+
+/** The deploy request may have been applied and no answer was read. Nothing
+ *  the CLI can read ties a deploy-history entry to this exact request (history
+ *  entries carry no request or trace id), so the outcome stays unconfirmed: a
+ *  later entry may be another actor's deploy, and client and server clocks
+ *  differ. History is offered for investigation only, never as a signal to
+ *  deploy again. */
+export function formatUnknownDeployOutcomeExplanation(err: CliApiError, projectId: string, startedAt: string): string {
+  const what = err.meta.responseBodyIncomplete ? 'got a response that was cut off before its result could be read'
+    : err.code === 'TIMEOUT' ? 'timed out' : err.code === 'SERVER_SLOW' ? 'stalled waiting for the server' : 'lost its connection';
+  const ids = [err.meta.requestId ? `request ${err.meta.requestId}` : '', err.meta.traceId ? `trace ${err.meta.traceId}` : ''].filter(Boolean);
+  return [
+    `The deploy request ${what} after it may have reached the platform. Its outcome is unknown: it may have gone live, may have been refused, or may still be running. It was not sent again, and this CLI cannot confirm what happened to it.`,
+    '',
+    'What you can do:',
+    `  Look, for investigation only: somewhere call project_deploys '${JSON.stringify({ project_id: projectId })}' lists the project's recent deploys. No entry there is tied to this request, and deploys by anyone else can appear in it, so a later entry does not show what happened to this one.`,
+    `  Ask for help with this reference so the platform can find this exact request: project ${projectId}, sent at ${startedAt} (this machine's clock)${ids.length ? `, ${ids.join(', ')}` : ''}.`,
+    '  Deploying again is your call; nothing here says this request has finished, and a deploy sent while it may still be running can race it.',
+  ].join('\n');
 }
 
 function deployTimeoutMs(): number {
@@ -1805,6 +1872,21 @@ export function printExcludedFiles(
     ),
   );
   if (remember) markPublishNoticeSeen(targetDir);
+}
+
+/** The --json form of the omission notices: one stderr line per file, stdout
+ *  untouched, paths and reasons only (never contents), in a fixed order. */
+export function printLocalOmissionsToStderr(omitted: Pick<CollectedFiles, 'excluded' | 'sensitive' | 'skipped'>): void {
+  const groups: Array<[string, Array<{ path: string; reason: string }>]> = [
+    ['not published', omitted.excluded],
+    ['never uploaded', omitted.sensitive],
+    ['not uploaded', omitted.skipped],
+  ];
+  for (const [label, entries] of groups) {
+    for (const entry of [...entries].sort((a, b) => a.path.localeCompare(b.path))) {
+      process.stderr.write(`${label}: ${entry.path} — ${entry.reason}\n`);
+    }
+  }
 }
 
 /** Files held back by the sensitive-path policy (vendored deploy path policy).

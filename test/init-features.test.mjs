@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { createServer } from 'node:http';
 import {
   existsSync,
@@ -397,8 +397,16 @@ test('notes service validates, reports zero-change updates and maps a vanished r
   delete globalThis.__notesFixture;
 });
 
-// runTypecheck installs the declared @types packages with npm, which installs
-// the starter's pinned dependencies too, so this checks against the real,
+// The typecheck never installs (read-only, pfb_8f0f7cdd04a1); this test installs
+// the starter's pinned dependencies itself, the way a developer runs npm install.
+const installStarter = (specs, cwd) => {
+  const done = spawnSync(process.platform === 'win32' ? 'npm.cmd' : 'npm',
+    ['install', '--no-save', '--no-audit', '--no-fund', '--loglevel', 'error', ...specs],
+    { cwd, stdio: 'ignore', shell: process.platform === 'win32' });
+  if (done.error) throw done.error;
+  if (done.status !== 0) throw new Error(`npm install exited ${done.status}`);
+};
+// The install brings the starter's pinned dependencies too, so this checks against the real,
 // published SDK the starter pins. SOMEWHERE_TEST_SDK_TARBALL points it at a
 // local `npm pack` instead (an SDK change that is not published yet).
 const sdkTarball = process.env.SOMEWHERE_TEST_SDK_TARBALL;
@@ -411,7 +419,7 @@ test('every combination typechecks against the SDK and the generated somewhere:d
       pkg.dependencies['@somewhere-cloud/sdk'] = `file:${sdkTarball}`;
       writeFileSync(pkgPath, JSON.stringify(pkg, null, 2));
     }
-    const result = await runTypecheck(dir);
+    const result = await runTypecheck(dir, { installTypePackages: installStarter });
     assert.equal(result.ok, true, `${features}/${ui}\n${result.raw}`);
     // Runtime types are always generated; somewhere:data only with a schema.
     assert.equal(/declare module "somewhere:data"/.test(readFileSync(join(dir, 'src/__somewhere_data.d.ts'), 'utf8')), features.includes('private-data'));

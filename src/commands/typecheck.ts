@@ -3,11 +3,12 @@ import chokidar from 'chokidar';
 import { existsSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 import ora from '../lib/spinner.js';
-import { DEPLOY_CHECK_TYPESCRIPT_VERSION, runDeployCheck, type DeployCheckResult } from '../lib/deploy-check.js';
+import { DEPLOY_CHECK_TYPESCRIPT_VERSION, deployCheckTsc, runDeployCheck, type DeployCheckResult } from '../lib/deploy-check.js';
 import { IGNORE } from '../lib/files.js';
 import { AGENT_HOSTS, isAgentHost, runAgentHook } from '../lib/agent-hooks.js';
 import { bold, dim, error, info, printJson, red, success, teal, warn } from '../lib/output.js';
-import { ensureDeclaredTypePackages, runTypecheck, type TypecheckResult } from '../lib/typecheck.js';
+import { announceNpxTypeScriptFetch, missingTypePackagesMessage, planDeclaredTypePackages, runTypecheck, typecheckCompilerSource, type TypecheckResult } from '../lib/typecheck.js';
+import { TYPECHECK_TYPESCRIPT_VERSION } from '../lib/typecheck-version.js';
 
 export const MISSING_TSCONFIG_GUIDANCE =
   'No tsconfig.json here to typecheck against. Add a local tsconfig.json for a new app, or run `somewhere pull` for an existing deployed app.';
@@ -19,6 +20,8 @@ export function registerTypecheck(program: Command) {
       'Check a source project with `tsc --noEmit`. ' +
         'Reports TypeScript errors with file:line before deploy. ' +
         'Requires a local tsconfig.json; add one for a new app, or run `somewhere pull` for an existing deployed app. ' +
+        'It never installs the project\'s dependencies: if the project declares type packages that are not installed, it says so and stops; run npm install first. ' +
+        'Without TypeScript in the project it fetches TypeScript with npx (network; npm caches it) and says so on stderr. Every run stops after SOMEWHERE_TYPECHECK_TIMEOUT_MS (default 300000). ' +
         'With --deploy, runs the deploy\'s advisory reference check instead (the files a deploy uploads, its generated types, ' +
         `options and TypeScript ${DEPLOY_CHECK_TYPESCRIPT_VERSION}) against the packages installed here; no tsconfig.json needed. ` +
         'It reports a narrower set than the default project check, which stays the stricter of the two.',
@@ -49,6 +52,7 @@ export function registerTypecheck(program: Command) {
       }
 
       if (opts.deploy) {
+        if (/^npx(\.cmd)?$/.test(deployCheckTsc(dir).command)) announceNpxTypeScriptFetch(DEPLOY_CHECK_TYPESCRIPT_VERSION);
         const check = async () => {
           const result = await runDeployCheck(dir);
           if (opts.json) printJson(result);
@@ -75,27 +79,40 @@ export function registerTypecheck(program: Command) {
         process.exit(1);
       }
 
+      // Read-only: a project whose declared type packages are not installed is
+      // not checked (tsc would report the missing tree as code errors), and the
+      // command never installs them itself.
+      const notInstalled = (): TypecheckResult | null => {
+        const missing = planDeclaredTypePackages(dir).missing;
+        return missing.length
+          ? { ok: false, errors: [], via: typecheckCompilerSource(dir), raw: '', spawnError: missingTypePackagesMessage(missing, dir) }
+          : null;
+      };
+      // Fetching TypeScript with npx is a network step: say so (on stderr)
+      // right before a check that will fetch it.
+      let announced = false;
+      const announceFetch = () => {
+        if (announced || typecheckCompilerSource(dir) !== 'npx') return;
+        announced = true;
+        announceNpxTypeScriptFetch(TYPECHECK_TYPESCRIPT_VERSION);
+      };
+
       if (opts.watch) {
         return watchAndRun(dir, async () => {
-          const result = await runTypecheck(dir);
+          const refused = notInstalled();
+          if (!refused) announceFetch();
+          const result = refused ?? await runTypecheck(dir);
           if (opts.json) printJson(result);
           else reportTypecheck(result);
           return result;
         });
       }
 
-      const spinner = opts.json ? null : ora('Typechecking (tsc --noEmit)...').start();
-      // Type packages this project declares but has not installed yet are a
-      // missing tree, not a code error. Resolve them so the FIRST check is a
-      // real verdict; runTypecheck is then told not to repeat the step.
-      if (spinner) spinner.text = 'Checking declared type packages...';
-      const resolved = ensureDeclaredTypePackages(dir);
-      if (spinner) spinner.text = 'Typechecking (tsc --noEmit)...';
-      const result = await runTypecheck(dir, { installTypePackages: false });
+      const refused = notInstalled();
+      if (!refused) announceFetch();
+      const spinner = opts.json || refused ? null : ora('Typechecking (tsc --noEmit)...').start();
+      const result = refused ?? await runTypecheck(dir);
       spinner?.stop();
-      if (!opts.json && resolved.installed) {
-        info(dim(`Resolved declared type packages: ${resolved.missing.join(', ')}`));
-      }
 
       if (opts.json) {
         printJson(result);
@@ -109,8 +126,11 @@ export function registerTypecheck(program: Command) {
 /** Print the local TypeScript check verdict. */
 export function reportTypecheck(result: TypecheckResult): void {
   if (result.spawnError) {
-    error(`Could not run the typechecker: ${result.spawnError}`);
-    info(dim('Install TypeScript (`npm i -D typescript`) or ensure `npx` is on PATH.'));
+    // A refusal (missing type packages) or a stopped run says what happened in
+    // its own words; the install hint is only for a compiler that could not start.
+    const couldNotStart = /ENOENT|EACCES|not found/i.test(result.spawnError);
+    error(couldNotStart ? `Could not run the typechecker: ${result.spawnError}` : result.spawnError);
+    if (couldNotStart) info(dim('Install TypeScript (`npm i -D typescript`) or ensure `npx` is on PATH.'));
     return;
   }
 
@@ -206,7 +226,8 @@ function watchAndRun(dir: string, check: () => Promise<unknown>): void {
     if (timer) clearTimeout(timer);
     timer = setTimeout(() => void run(), WATCH_DEBOUNCE_MS);
   }).on('ready', () => void run());
-  // Ctrl-C exits through process.exit so a check in flight removes its files.
-  process.once('SIGINT', () => process.exit(130));
+  // Ctrl-C with no check running exits here. A check in flight is stopped by
+  // its own runner first (its tree, then its temporary files), which exits 130.
+  process.once('SIGINT', () => { if (!running) process.exit(130); });
   info(dim(`Watching ${dir} — checks re-run after each save while this command runs. Ctrl-C to stop.`));
 }

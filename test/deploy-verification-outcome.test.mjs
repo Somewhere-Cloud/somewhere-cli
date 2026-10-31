@@ -123,7 +123,7 @@ test('unknown deployment transport outcome never saves or claims a live release'
   const result = await fixture({ mode: 'unknown' });
   assert.equal(result.status, 1); assert.deepEqual(result.state, result.initial);
   const output = JSON.parse(result.stdout);
-  assert.equal(output.error, 'NETWORK_ERROR'); assert.equal(output.deployment_outcome, undefined);
+  assert.equal(output.error, 'NETWORK_ERROR'); assert.equal(output.deployment_outcome, 'unknown'); // never 'live'
   assert.equal(result.requests.some(r => r === 'POST /v1/browser/test'), false);
 });
 for (const json of [false, true]) test(`passing verification keeps its success exit (${json ? 'JSON' : 'text'})`, async () => {

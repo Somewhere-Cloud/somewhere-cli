@@ -4,6 +4,7 @@
 // load (StrictMode runs the effect twice), the token leaves the address bar
 // before the request, only a same-origin redirect is followed, and a failure or
 // an unknown outcome is shown, never retried.
+import { spawnSync } from 'node:child_process';
 import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
@@ -92,6 +93,16 @@ function transpile(code) {
   return ts.transpileModule(code, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText;
 }
 
+// The typecheck never installs (read-only, pfb_8f0f7cdd04a1); this test installs
+// the starter's pinned dependencies itself, the way a developer runs npm install.
+const installStarter = (specs, cwd) => {
+  const done = spawnSync(process.platform === 'win32' ? 'npm.cmd' : 'npm',
+    ['install', '--no-save', '--no-audit', '--no-fund', '--loglevel', 'error', ...specs],
+    { cwd, stdio: 'ignore', shell: process.platform === 'win32' });
+  if (done.error) throw done.error;
+  if (done.status !== 0) throw new Error(`npm install exited ${done.status}`);
+};
+
 /** The generated auth starter, its pinned SDK installed, and the landing hook
  *  and auth client compiled to modules that import the real SDK. */
 async function prepareStarter(ui) {
@@ -103,7 +114,7 @@ async function prepareStarter(ui) {
     pkg.dependencies['@somewhere-cloud/sdk'] = `file:${process.env.SOMEWHERE_TEST_SDK_TARBALL}`;
     writeFileSync(pkgPath, JSON.stringify(pkg, null, 2));
   }
-  const checked = await runTypecheck(dir);
+  const checked = await runTypecheck(dir, { installTypePackages: installStarter });
   assert.equal(checked.ok, true, checked.raw);
   const sdkAuth = join(dir, 'node_modules', '@somewhere-cloud', 'sdk', 'dist', 'esm', 'auth', 'index.js');
   assert.ok(existsSync(sdkAuth), 'the starter installs its pinned SDK');

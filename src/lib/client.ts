@@ -330,6 +330,9 @@ export class ApiClient {
           'No HTTP response was received (this is a connection problem, not a server rejection). ' +
           'Check your network and retry; for large deploys a flaky connection can drop the upload mid-request.',
         0,
+        undefined,
+        undefined,
+        code && NOT_SENT_CAUSES.has(code) ? { notSent: true } : {},
       );
     }
     // Every platform reply carries both ids (worker middleware/logging.ts):
@@ -486,7 +489,14 @@ export interface CliApiErrorMeta {
   retryAfterMs?: number;
   /** Headers arrived but no complete response body was read; never an automatic retry. */
   responseBodyIncomplete?: true;
+  /** NETWORK_ERROR only: the connection was never opened (refused, DNS
+   *  failure, connect timeout), so no request reached the server. */
+  notSent?: true;
 }
+
+/** Transport failures that happen before a connection exists: the request
+ *  body cannot have been sent. Anything else may have been. */
+const NOT_SENT_CAUSES = new Set(['ECONNREFUSED', 'ENOTFOUND', 'EAI_AGAIN', 'UND_ERR_CONNECT_TIMEOUT']);
 
 export class CliApiError extends Error {
   /** Original body-reader failure, retained only so raw command output stays unchanged. */

@@ -85,5 +85,13 @@ export const SKILLS_POINTER = `Skills: \`${SKILLS_DIR}/\` — `
   + skillNames(BUNDLED_SKILLS_PACK).map((name) => `\`${name}\``).join(', ')
   + '. Read the skill that matches the task. `somewhere skills status` inspects the installed pack; `somewhere skills update` updates unmodified files.';
 
-export const INIT_AGENTS_MD = `# somewhere.cloud project contract\n${SKILLS_POINTER}\n${AGENT_WORKFLOW}\n`;
+/** One line pointing agents at the declared-access recipes (tsk_d433436b): in
+ *  the testing lane's experiment all three agents given it moved from
+ *  serverOnly() plus hand-written checks to declared access. Kept outside
+ *  AGENT_WORKFLOW, which is a byte mirror of the platform's agent workflow. */
+export const DECLARED_ACCESS_POINTER = 'Access rules: before choosing `serverOnly()` plus hand-written checks, read the declared-access recipes: '
+  + 'teams, creator-or-owner and parent rows in `somewhere docs sw.db --section owner-or-member-and-parent-access`; '
+  + 'bookings and help desks in `somewhere docs sw.db --section provider-or-booker-and-owner-or-staff-recipes`.';
+
+export const INIT_AGENTS_MD = `# somewhere.cloud project contract\n${SKILLS_POINTER}\n${DECLARED_ACCESS_POINTER}\n${AGENT_WORKFLOW}\n`;
 export const INIT_CLAUDE_MD = 'Read AGENTS.md for project instructions.\n';

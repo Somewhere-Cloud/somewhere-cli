@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.38.11
+
+### Changed
+
+- `somewhere init`: the starter's `AGENTS.md` public-form example declares its
+  request body schema with `sw.endpoint`, and the agent workflow text is
+  re-synced to the platform's.
+
+### Fixed
+
+- `somewhere deploy-check --json` keeps the platform's error code, message and
+  request id instead of replacing them with `CLI_ERROR`.
+
 ## 0.38.10
 
 ### Added

@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.38.10
+
+### Added
+
+- `somewhere ai keys --project <project>` (also `list`, `ls`),
+  `somewhere ai keys set <anthropic|openai> --project <project> [--stdin]` and
+  `somewhere ai keys remove <anthropic|openai> --project <project>` (alias `rm`)
+  manage a project's own AI provider keys. `--project` is required on all
+  three; the destination is never taken from the linked folder.
+- The key is never a command-line argument: `set` reads it from a hidden
+  prompt or, with `--stdin`, from a pipe. Unknown options and stray values are
+  refused without being repeated, and a key is checked locally (not empty, no
+  spaces or line breaks, at most 4096 characters) before any request.
+- Until the platform serves the key-status read, `ai keys` reports
+  `AI_KEY_STATUS_UNAVAILABLE` instead of an empty list; `set` and `remove`
+  work now.
+
 ## 0.38.9
 
 ### Fixed

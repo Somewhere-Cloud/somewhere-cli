@@ -44,6 +44,7 @@ import { registerTestUsers } from './commands/test-users.js';
 import { registerSupport } from './commands/support.js';
 import { buildRecord, commandPath, writeLastError } from './lib/repro-packet.js';
 import { registerSkills } from './commands/skills.js';
+import { registerAi } from './commands/ai.js';
 import { collectNotices } from './lib/notify/index.js';
 import { startupNotice } from './lib/startup-notice.js';
 import { error, info, printJsonError, setFailureHook, setJsonOutputMode, stripAnsi } from './lib/output.js';
@@ -139,6 +140,7 @@ registerGit(program);
 registerCron(program);
 registerEmail(program);
 registerSkills(program);
+registerAi(program);
 
 // Configure only the root after registration: command help keeps its full contract.
 program.configureHelp({

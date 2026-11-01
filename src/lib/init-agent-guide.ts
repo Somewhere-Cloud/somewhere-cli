@@ -44,7 +44,7 @@ async ({ body, user, params }, sw) => value })\`; set \`auth\` (\`'required'\`,
 function (req: Request, sw: SomewhereRuntimeContext)\` returning a \`Response\`.
 Params: \`params.id\` there, \`sw.params.id\` bare.
 
-Data: \`id()\` is a random text key; use \`text()\` for references to it.
+Data: \`id()\` is a random text key on new tables (reference with \`text()\`); integer-id tables keep integers. The starter's \`id({ uuid: false })\` is deliberate.
 Declare tables in \`db/schema.ts\`; pages use \`somewhere:data\`
 (\`data.notes.list()\`, \`.create()\`, \`.update(id, …)\`) without API files.
 Use \`owner()\` for personal rows, \`group()\` for invited teams, \`appRole()\`
@@ -54,18 +54,23 @@ Keep fitting scopes when an exceptional write needs \`sw.db.server.tx\`.
 \`shared()\` gives signed-in reads and creator-only writes. \`client\` sets browser
 columns; \`publicRead: { where }\` admits visitors. Public-profile enquiries use
 \`client.intake\` (\`somewhere docs declared-data\`). Keep scopes and grants;
-functions handle authorized exceptional writes and side effects. Validate
-first: \`handle\` below is a public address its owner claimed:
+functions handle authorized exceptional writes and side effects. Declare the
+body schema (a missing or mistyped field is a 400); \`handle\` below is a
+public address its owner claimed:
 
 \`\`\`ts
-const { handle, title, from_email } = body as { handle?: unknown; title?: unknown; from_email?: unknown };
-if (typeof handle !== 'string' || typeof title !== 'string' || typeof from_email !== 'string'
-    || !title.trim() || title.length > 200 || /[\\r\\n]/.test(title)
-    || from_email.length > 254 || !/^[^\\s@]+@[^\\s@]+\$/.test(from_email)) return Response.json({ error: 'bad input' }, { status: 400 });
-const { data: [profile] } = await sw.db.server.from('profiles', { where: { handle }, limit: 1 });
-if (!profile) return Response.json({ error: 'unknown handle' }, { status: 404 });
-await sw.db.server.insert('entries', { user_id: profile.user_id, owner_email: profile.owner_email,
-  title: title.trim(), from_email, created_ms: Date.now() });
+export default sw.endpoint({
+  auth: 'none',
+  body: { handle: 'string', title: 'string', from_email: 'email' },
+  handler: async ({ body }, sw) => {
+    const title = body.title.trim();
+    if (!title || title.length > 200 || /[\\r\\n]/.test(title)) return Response.json({ error: 'bad title' }, { status: 400 });
+    const { data: [profile] } = await sw.db.server.from('profiles', { where: { handle: body.handle }, limit: 1 });
+    if (!profile) return Response.json({ error: 'unknown handle' }, { status: 404 });
+    await sw.db.server.insert('entries', { user_id: profile.user_id, owner_email: profile.owner_email,
+      title, from_email: body.from_email, created_ms: Date.now() });
+  },
+});
 \`\`\`
 
 Use the looked-up owner, never the body. Rate limits/alerts: \`recipe-signed-in-app\`.

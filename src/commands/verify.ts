@@ -5,6 +5,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { Command } from 'commander';
 import { ApiClient, CliApiError } from '../lib/client.js';
+import { browserRefusalData } from '../lib/browser-refusal.js';
 import { canonicalProjectRoot, getToken, loadConfig, loadProjectConfig, loadTempSession, tempProjectFor } from '../lib/config.js';
 import {
   normalizeBrowserActions,
@@ -102,7 +103,10 @@ export interface VerifyReport {
   verdict: string;
   target: string;
   viewports: Array<{ label: string; width: number; height: number; passed: boolean; final_url: string; refusal?: string }>;
-  refusals?: Array<VerifySignal<{ code: string; status: number; message: string }>>;
+  refusals?: Array<VerifySignal<{
+    code: string; status: number; message: string;
+    request_id?: string; retry?: boolean; retry_after_ms?: number; data?: Record<string, unknown>;
+  }>>;
   dialogs?: Array<VerifySignal<NonNullable<BrowserResult['dialogs']>[number]>>;
   dialogs_truncated?: true;
   dialog_actions_unused?: Array<VerifySignal<NonNullable<BrowserResult['dialog_actions_unused']>[number]>>;
@@ -779,11 +783,20 @@ export async function settleViewportRuns(
       // The platform's structured refusal detail (#726: data.invalid {path, limit_ms}) rides the
       // API envelope's `data`; keep only its shape-checked form so start_error_details can name it.
       const invalid = cause instanceof CliApiError ? safeInvalid(cause.data?.invalid) : undefined;
+      // The rest of the platform's verdict, as `browser --json` carries it
+      // (tsk_de3c2c25): request id, retry only when the platform said so
+      // (false stays false), and the allowlisted browser data.
+      const meta = cause instanceof CliApiError ? cause.meta : {};
+      const data = cause instanceof CliApiError ? browserRefusalData(cause.code, cause.statusCode, cause.data) : undefined;
       refusals.push({ viewport: viewport.label, detail: {
         code: cause instanceof CliApiError ? cause.code : 'BROWSER_REQUEST_FAILED',
         status: cause instanceof CliApiError ? cause.statusCode : 0,
         message: cause instanceof Error ? cause.message : String(cause),
         ...(invalid ? { invalid } : {}),
+        ...(meta.requestId ? { request_id: meta.requestId } : {}),
+        ...(typeof meta.retry === 'boolean' ? { retry: meta.retry } : {}),
+        ...(typeof meta.retryAfterMs === 'number' ? { retry_after_ms: meta.retryAfterMs } : {}),
+        ...(data ? { data } : {}),
       } });
     }
   });

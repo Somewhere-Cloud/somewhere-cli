@@ -2,6 +2,7 @@ import { dirname, resolve } from 'node:path';
 import { readFileSync } from 'node:fs';
 import { Command, InvalidArgumentError } from 'commander';
 import { ApiClient, CliApiError } from '../lib/client.js';
+import { reportBrowserRefusal } from '../lib/browser-refusal.js';
 import { getToken, loadProjectConfig } from '../lib/config.js';
 import { isLoopbackUrl, runLocalBrowser, type LocalBrowserReport } from '../lib/browser-run.js';
 import { dim, error, green, red, success, teal, yellow } from '../lib/output.js';
@@ -729,7 +730,7 @@ export function registerBrowser(program: Command) {
           else if (closed?.closed) success(`Closed browser session ${opts.close}${closeBody.project_id ? ` in project ${closeBody.project_id}` : ''}.`);
           else console.log(closed?.note ?? `No live browser session named ${opts.close}.`);
         } catch (err) {
-          error(err instanceof Error ? err.message : String(err), err);
+          reportBrowserRefusal(err instanceof Error ? err.message : String(err), err, { json: opts.json, textIds: true });
           process.exit(1);
         }
         return;
@@ -777,7 +778,7 @@ export function registerBrowser(program: Command) {
             user_id: await resolveAuthUser(client, typeof body.project_id === 'string' ? body.project_id : linked, opts.authUser),
           };
         } catch (err) {
-          error(err instanceof Error ? err.message : String(err), err);
+          reportBrowserRefusal(err instanceof Error ? err.message : String(err), err, { json: opts.json, textIds: true });
           process.exit(1);
         }
       }
@@ -800,8 +801,12 @@ export function registerBrowser(program: Command) {
           process.exit(1);
         }
         if (err instanceof CliApiError) {
-          error(
+          // --json carries the platform's code, status, request id, retry
+          // verdict and allowlisted data (tsk_de3c2c25); text keeps its one line.
+          reportBrowserRefusal(
             `${err.message} ${dim(`[${err.code}${err.statusCode ? `, HTTP ${err.statusCode}` : ''}]`)}`,
+            err,
+            { json: opts.json },
           );
         } else {
           error(err instanceof Error ? err.message : String(err), err);

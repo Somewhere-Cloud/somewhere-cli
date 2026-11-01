@@ -446,8 +446,11 @@ export function registerCheck(program: Command) {
           process.exit(1);
         }
         if (err instanceof CliApiError) {
+          // The error itself is the cause, so --json carries the platform's
+          // code and ids rather than CLI_ERROR (pfb_3769086f6aa7).
           error(
             `${err.message} ${dim(err.statusCode ? `[${err.code}, HTTP ${err.statusCode}]` : `[${err.code}]`)}`,
+            err,
           );
         } else {
           error(err instanceof Error ? err.message : String(err), err);

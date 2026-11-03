@@ -454,6 +454,9 @@ export function formatExplicitProjectBaseRequiredExplanation(ref: string): strin
   ].join('\n');
 }
 
+/** A canonical project id (uuid); slugs and subdomains are resolved first. */
+const CANONICAL_PROJECT_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 /** Resolve an explicit `--project <ref>` (uuid, slug or subdomain) to its
  *  canonical project id, or null when the ref cannot be resolved (the deploy
  *  itself then names the real error). Read-only. */
@@ -904,6 +907,14 @@ export function registerDeploy(program: Command) {
       // project is refused, never silently redirected. An unresolvable ref falls
       // through to the deploy itself, which names the real error.
       let explicitProjectId: string | null = null;
+      // The live-base read below depends only on the canonical project id. When the ref already IS one and this folder
+      // records no base for it, the read starts beside the resolve; its result is used only if the resolve confirms
+      // that same id, otherwise the serial read below runs exactly as before (tsk_11b822ce). The resolve still binds
+      // the target and refuses a mismatched link before anything is uploaded. readExplicitProjectLiveBase never rejects.
+      const earlyLiveBase = opts.project && projectId && !tempSession && !opts.force
+        && CANONICAL_PROJECT_ID.test(projectId) && !readSourceBase(targetProjectConfig, projectId)
+        ? { projectId, read: readExplicitProjectLiveBase(client, projectId) }
+        : null;
       if (opts.project && projectId && !tempSession) {
         explicitProjectId = await resolveExplicitProjectId(client, projectId);
         if (explicitProjectId) {
@@ -1107,7 +1118,9 @@ export function registerDeploy(program: Command) {
           // The folder has no record of a base but the caller named the target:
           // read its live release now and declare it; the server refuses the
           // deploy if another release lands first.
-          const liveBase = await readExplicitProjectLiveBase(client, explicitProjectId);
+          const liveBase = earlyLiveBase?.projectId === explicitProjectId
+            ? await earlyLiveBase.read
+            : await readExplicitProjectLiveBase(client, explicitProjectId);
           if (liveBase !== undefined) body.base_release_id = liveBase;
         }
         // After a publish, this folder matches the new release: record it where

@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.38.12
+
+### Changed
+
+- `somewhere deploy --project <id>` from a folder with no recorded base: when
+  `<id>` is already a canonical project id, the live release it deploys against
+  is read alongside the project lookup instead of after it. The lookup still
+  binds the target first, a folder linked to a different project is still
+  refused before anything is uploaded, and the read is used only when the
+  lookup confirms the same project.
+
 ## 0.38.11
 
 ### Changed

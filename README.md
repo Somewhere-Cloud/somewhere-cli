@@ -21,9 +21,6 @@ The package installs the `somewhere` command and the short alias `sw`. It also
 installs `cli`, the name `npx @somewhere-cloud/cli` resolves to; use
 `somewhere` or `sw` in scripts.
 
-This package was published as `@somewhere-tech/cli` through 0.37.85; those
-versions stay installable.
-
 ## Quick start
 
 ```bash
@@ -243,4 +240,4 @@ Node.js >= 22.19.0. On an older Node.js every command stops with a message namin
 
 ## License
 
-MIT © somewhere.tech
+MIT © Somewhere HQ, Inc.

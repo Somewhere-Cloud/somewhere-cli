@@ -680,8 +680,8 @@ export function registerBrowser(program: Command) {
       "Explicit URL to open — any public page, or a path on --project's origin.",
     )
     .option('--path <path>', 'Navigate to this path first (e.g. /login) before the other steps.')
-    .option('--wait <selector>', 'Wait for a CSS selector to become visible before capturing (legacy single-step flag).')
-    .option('--eval <js>', 'Evaluate JavaScript in the page and print its result (legacy single-step flag).')
+    .option('--wait <selector>', 'Wait for a CSS selector to become visible before capturing (single-step flag).')
+    .option('--eval <js>', 'Evaluate JavaScript in the page and print its result (single-step flag).')
     .option('--click <selector>', 'Click a visible CSS selector. Repeat to build an ordered action sequence.', collectClick)
     .option('--fill <selector=value>', "Fill an input, e.g. --fill '#email=a@b.co'. Repeatable.", collectFill)
     .option('--upload <selector=file>', "Attach a local file, e.g. --upload '#avatar=./photo.png'. The path is taken from the last '=', so attribute selectors work: --upload '[data-testid=file]=./shot.png'. Use <selector>::<file> when the path itself contains '='. Repeatable.", collectUpload)

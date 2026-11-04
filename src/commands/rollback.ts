@@ -12,6 +12,19 @@ interface RollbackResult {
   version: number;
   files_restored?: number | null;
   message?: string | null;
+  /** Tables and columns added since the target stay, with their data (null when none). */
+  database_notice?: string | null;
+}
+
+/** The "Version notes" lines: the platform's message, then its database
+ *  notice unless the message already says it word for word. */
+export function formatRollbackNotes(result: Pick<RollbackResult, 'message' | 'database_notice'>): string[] {
+  const message = typeof result.message === 'string' ? result.message.trim() : '';
+  const notice = typeof result.database_notice === 'string' ? result.database_notice.trim() : '';
+  return [
+    ...(message ? [`Version notes: ${message}`] : []),
+    ...(notice && !message.includes(notice) ? [`Version notes: ${notice}`] : []),
+  ];
 }
 
 export function formatRollbackSuccess(
@@ -107,7 +120,7 @@ export function registerRollback(program: Command) {
           return;
         }
         success(formatRollbackSuccess(r));
-        if (r.message) info(dim(`Version notes: ${r.message}`));
+        for (const line of formatRollbackNotes(r)) info(dim(line));
       } catch (err) {
         spinner?.fail('Rollback failed');
         const message = rollbackErrorMessage(err);

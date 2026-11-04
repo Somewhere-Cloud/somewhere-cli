@@ -81,7 +81,7 @@ export class ApiClient {
     query?: Record<string, string | number | undefined>,
     /** refresh: false checks THIS client's key only. The refresh path renews the
      *  stored login, which is a different credential from one being verified. */
-    opts?: { timeoutMs?: number; baseUrl?: string; refresh?: false },
+    opts?: { timeoutMs?: number; baseUrl?: string; refresh?: false; signal?: AbortSignal },
   ): Promise<T> {
     try {
       return await this.request<T>(method, path, body, query, opts);
@@ -257,7 +257,8 @@ export class ApiClient {
     path: string,
     body?: unknown,
     query?: Record<string, string | number | undefined>,
-    opts?: { timeoutMs?: number; baseUrl?: string },
+    /** signal: the caller may also abandon the request (it then fails like a timeout). */
+    opts?: { timeoutMs?: number; baseUrl?: string; signal?: AbortSignal },
   ): Promise<T> {
     let url = `${opts?.baseUrl ?? API_BASE_URL}${path}`;
     if (query) {
@@ -289,7 +290,7 @@ export class ApiClient {
         method,
         headers,
         body: reqBody,
-        signal: AbortSignal.timeout(timeoutMs),
+        signal: opts?.signal ? AbortSignal.any([AbortSignal.timeout(timeoutMs), opts.signal]) : AbortSignal.timeout(timeoutMs),
       }, timeoutMs);
     } catch (err) {
       // AbortSignal.timeout fired — no bytes back within the budget. Name it

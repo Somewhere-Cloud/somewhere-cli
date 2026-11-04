@@ -454,6 +454,26 @@ export function formatExplicitProjectBaseRequiredExplanation(ref: string): strin
   ].join('\n');
 }
 
+/** Bound on the prestart request; it answers at once, so this only caps a stalled connection. */
+export const DEPLOY_PRESTART_TIMEOUT_MS = 5_000;
+
+/**
+ * Prestart (tsk_a92c59b9, root decision 2026-11-04): ask the platform to start this project's compile container
+ * now, so a cold one boots while the files are packed and uploaded instead of after the upload arrives. The
+ * platform holds an instance it starts only until the deploy's compile (at most a minute) and only renews a warm
+ * one. Sent once and never awaited or retried. Every outcome is ignored, including an older platform's 404 and a
+ * refusal, which the deploy itself then reports. It never refreshes the login: the deploy's own calls do that.
+ */
+export function startDeployPrestart(client: ApiClient, projectId: string): () => void {
+  const abandon = new AbortController();
+  client.call('POST', '/deploy/prestart', { project_id: projectId }, undefined, {
+    timeoutMs: DEPLOY_PRESTART_TIMEOUT_MS, refresh: false, signal: abandon.signal,
+  }).catch(() => undefined);
+  // Once the deploy request has its answer the prestart has no purpose left; abandoning it keeps a stalled one
+  // from holding the process open.
+  return () => abandon.abort();
+}
+
 /** A canonical project id (uuid); slugs and subdomains are resolved first. */
 const CANONICAL_PROJECT_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -902,6 +922,10 @@ export function registerDeploy(program: Command) {
         deployStateEntry = linkedProjectEntry;
       }
 
+      // The target is known: let a cold compile container boot while the files are packed and uploaded
+      // (tsk_a92c59b9). Not for a dry run (nothing compiles) or a temporary workspace's new project.
+      const stopPrestart = projectId && !tempSession && !opts.dryRun ? startDeployPrestart(client, projectId) : () => undefined;
+
       // An explicit --project is bound to the VERIFIED current project before
       // anything is uploaded (founder 2026-10-23). A folder linked to a different
       // project is refused, never silently redirected. An unresolvable ref falls
@@ -1171,7 +1195,7 @@ export function registerDeploy(program: Command) {
           json: Boolean(opts.json),
           dryRun: false,
           baseText: spinner?.text ?? 'Deploying...',
-        });
+        }).finally(stopPrestart);
         deployAnswered = true;
         const requestMs = performance.now() - requestStartedAt;
 

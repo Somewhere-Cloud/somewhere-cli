@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.38.15
+
+### Changed
+
+- `somewhere deploy` (and the patch path) waits up to 5 s for the blank-page check
+  that runs after the platform answers (`post_live_render: pending`), reading the
+  settled result from `GET /deploy/log?release_id=`. A page the check finds blank
+  fails the deploy with `DEPLOY_BLANK_PAGE` and the rejection, instead of being
+  rolled back silently after the command returned.
+- `somewhere rollback` prints the database notice in its plain-text output: a
+  code-only rollback across a schema change says the tables and columns added
+  since stay, with their data, and the target version ignores them.
+
 ## 0.38.14
 
 ### Added

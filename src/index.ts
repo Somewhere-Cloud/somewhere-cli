@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -32,6 +33,7 @@ import { registerApi } from './commands/api.js';
 import { registerFs } from './commands/fs.js';
 import { registerMcp } from './commands/mcp.js';
 import { registerUpdate } from './commands/update.js';
+import { registerUpgrade } from './commands/upgrade.js';
 import { registerCall } from './commands/call.js';
 import { registerTasks } from './commands/tasks.js';
 import { registerFeedback } from './commands/feedback.js';
@@ -52,6 +54,22 @@ import { loadProjectConfig } from './lib/config.js';
 import { noteLastRunCommand, recordLastRun, removeStaleRunRecord } from './lib/last-run.js';
 import { recoverClaimHandoff } from './lib/claim-handoff.js';
 import { helpSummary } from './lib/help-summary.js';
+import { decidePin, PINNED_CHILD_ENV } from './lib/project-pin.js';
+import { CLI_VERSION } from './lib/version.js';
+
+// A project pinned to another CLI version says so in one line, and a pinned
+// version installed in its node_modules runs the command (tsk_a4641877).
+const pinned = decidePin(process.cwd(), CLI_VERSION, process.argv, process.env);
+if (pinned.notice) process.stderr.write(pinned.notice + '\n');
+if (pinned.delegate) {
+  const child = spawnSync(process.execPath, [pinned.delegate, ...process.argv.slice(2)], {
+    stdio: 'inherit',
+    env: { ...process.env, [PINNED_CHILD_ENV]: '1' },
+  });
+  if (child.error) throw child.error;
+  if (child.signal) process.kill(process.pid, child.signal);
+  process.exit(child.status ?? 1);
+}
 
 // First, before any command, help, version or usage error can run: remove a run
 // record an older CLI may have filled with argument values (tsk_d8eac29404da).
@@ -131,6 +149,7 @@ registerApi(program);
 registerFs(program);
 registerMcp(program);
 registerUpdate(program);
+registerUpgrade(program);
 registerCall(program);
 registerTasks(program);
 registerFeedback(program);
@@ -170,7 +189,7 @@ collectNotices(process.argv)
   .catch(() => {});
 try {
   const command = process.argv[2] || '';
-  const skipRecovery = ['lint', 'login', 'signup', 'logout', 'docs', '--help', '-h', '--version', '-V'].includes(command);
+  const skipRecovery = ['lint', 'upgrade', 'login', 'signup', 'logout', 'docs', '--help', '-h', '--version', '-V'].includes(command);
   const recovery = skipRecovery ? { kind: 'none' as const } : await recoverClaimHandoff();
   if (recovery.kind === 'recovered' && recovery.message && !jsonOutputRequested) info(recovery.message);
   if (recovery.kind === 'stale' && recovery.message) {

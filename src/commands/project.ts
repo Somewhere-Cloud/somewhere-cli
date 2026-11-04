@@ -1,3 +1,4 @@
+import { CLI_VERSION } from '../lib/version.js';
 import { Command } from 'commander';
 import prompts from 'prompts';
 import ora from '../lib/spinner.js';
@@ -44,6 +45,7 @@ export function registerProject(program: Command) {
         }>('POST', '/projects', {
           name,
           subdomain: opts.subdomain ?? name.toLowerCase().replace(/[^a-z0-9-]/g, '-'),
+          cli_version: CLI_VERSION,
         });
         spinner?.stop();
         if (opts.json) {

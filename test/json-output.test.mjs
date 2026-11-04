@@ -6,6 +6,7 @@ import { existsSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+const CLI_PACKAGE_VERSION = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 const distIndex = join(repoRoot, 'dist', 'index.js');
@@ -638,7 +639,8 @@ test('init --link --project links an exact existing project non-interactively', 
     assert.deepEqual(JSON.parse(result.stdout), { ...project, app_url: null });
     assert.deepEqual(
       JSON.parse(readFileSync(join(cwd, '.somewhere.json'), 'utf8')),
-      { project_id: project.id, name: project.name, subdomain: project.subdomain },
+      // A linked folder with no package.json pin records the CLI in .somewhere.json (tsk_a4641877).
+      { project_id: project.id, name: project.name, subdomain: project.subdomain, cli_version: CLI_PACKAGE_VERSION },
     );
   });
 });

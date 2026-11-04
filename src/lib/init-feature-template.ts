@@ -1,3 +1,4 @@
+import { CLI_VERSION } from './version.js';
 import type { InitScaffoldFile } from './init-scaffold.js';
 import type { InitSelection } from './init-features.js';
 import { INIT_AGENTS_MD, INIT_CLAUDE_MD } from './init-agent-guide.js';
@@ -27,6 +28,7 @@ const PACKAGE_JSON = `{
     "react-dom": "19.2.7"
   },
   "devDependencies": {
+    "@somewhere-cloud/cli": "${CLI_VERSION}",
     "@types/react": "19.2.2",
     "@types/react-dom": "19.2.2",
     "typescript": "5.9.3",

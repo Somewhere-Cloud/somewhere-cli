@@ -14,6 +14,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
+const CLI_PACKAGE_VERSION = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
 
 const source = Boolean(process.env.SOMEWHERE_TEST_SOURCE);
 const moduleRoot = source ? '../src' : '../dist';
@@ -555,12 +556,12 @@ test('--name is the display name and --subdomain the address of the new project'
   const run = await cli(['--name', 'Crew', '--subdomain', 'Crew-App', '--features', 'magic-link', '--json'], tempDir());
   assert.equal(run.status, 1, 'the fixture API refuses the create');
   assert.deepEqual(requests, ['POST /projects']);
-  assert.deepEqual(bodies, [{ name: 'Crew', subdomain: 'crew-app' }]);
+  assert.deepEqual(bodies, [{ name: 'Crew', subdomain: 'crew-app', cli_version: CLI_PACKAGE_VERSION }]);
 
   requests = [];
   bodies = [];
   await cli(['--name', 'crew-race', '--features', 'auth', '--json'], tempDir());
-  assert.deepEqual(bodies, [{ name: 'crew-race', subdomain: 'crew-race' }], 'without --subdomain it is derived from --name as before');
+  assert.deepEqual(bodies, [{ name: 'crew-race', subdomain: 'crew-race', cli_version: CLI_PACKAGE_VERSION }], 'without --subdomain it is derived from --name as before');
 
   requests = [];
   const linked = await cli(['--link', '--project', 'x', '--subdomain', 'y', '--json'], tempDir());

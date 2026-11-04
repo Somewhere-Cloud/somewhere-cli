@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.38.13
+
+### Changed
+
+- `somewhere init`: the starter's `AGENTS.md` points to `grant()` for sharing
+  your own rows with specific people (read-only sharing, co-authors):
+  `somewhere docs declared-data --section per-owner-sharing`. The agent
+  workflow names `anyOf(owner(), grant())` beside the other scopes, and the
+  green starter's access paragraph carries the same pointer.
+- The bundled skills pack is refreshed to the platform's current pack.
+
 ## 0.38.12
 
 ### Changed

@@ -149,6 +149,8 @@ it is not the default for your app's data. Choose fitting declared access
 before the first deploy: \`owner()\` for personal rows, \`group()\` for teams,
 and \`anyOf()\` for combined access. For booking and help-desk rules, read:
 \`somewhere docs sw.db --section provider-or-booker-and-owner-or-staff-recipes\`
+To share your own rows with specific people, read:
+\`somewhere docs declared-data --section per-owner-sharing\`
 
 \`\`\`sh
 somewhere typecheck

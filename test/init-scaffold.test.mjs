@@ -148,7 +148,8 @@ test('minimal starter is a small typed frontend, function, and schema', () => {
   const claude = readFileSync(join(dir, 'CLAUDE.md'), 'utf8');
   assert.equal(agents, `# somewhere.cloud project contract\n${SKILLS_POINTER}\n${DECLARED_ACCESS_POINTER}\n${AGENT_WORKFLOW}\n`);
   // 84 since tsk_5dbbc5a1: the public-form example declares its body schema with sw.endpoint.
-  assert.ok(agents.trimEnd().split('\n').length <= 84, 'AGENTS.md must stay within 84 lines');
+  // 86 since tsk_4af22ba8: the workflow names grant() for sharing your own rows with specific people.
+  assert.ok(agents.trimEnd().split('\n').length <= 86, 'AGENTS.md must stay within 86 lines');
   assert.equal(claude, 'Read AGENTS.md for project instructions.\n');
   assert.equal(claude.trimEnd().split('\n').length, 1);
 

@@ -18,6 +18,12 @@ const server = createServer((req, res) => {
   let body = '';
   req.on('data', (c) => { body += c; });
   req.on('end', () => {
+    // The prestart (tsk_a92c59b9) is its own request, answered at once; the deploy request is what is dropped.
+    if (req.method === 'POST' && req.url === '/v1/deploy/prestart') {
+      res.writeHead(202, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, data: { prestarted: true } }));
+      return;
+    }
     if (req.method === 'POST' && req.url.startsWith('/v1/deploy')) {
       deployPosts += 1;
       if (mode === 'drop') return req.socket.destroy(); // whole body read, then no answer

@@ -1156,7 +1156,8 @@ test('a folder with no recorded base gets BASE_REQUIRED explained and nothing is
     assert.equal(result.status, 1, `stdout:\n${result.stdout}\nstderr:\n${result.stderr}`);
     assert.match(result.stderr, /no record of which published version its files came from/);
     assert.match(result.stderr, /somewhere pull/);
-    assert.deepEqual(requests.filter((r) => !r.startsWith('GET /v1/projects')), ['POST /v1/deploy'], 'one deploy request; no source/status read to manufacture a base');
+    assert.deepEqual(requests.filter((r) => !r.startsWith('GET /v1/projects') && r !== 'POST /v1/deploy/prestart'), ['POST /v1/deploy'], 'one deploy request; no source/status read to manufacture a base');
+    assert.equal(requests.filter((r) => r === 'POST /v1/deploy/prestart').length, 1, 'one prestart (tsk_a92c59b9), which reads nothing');
     assert.equal(readProject(fixtureDir).source_base, undefined);
   });
 });

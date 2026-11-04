@@ -4,6 +4,7 @@ import { basename, resolve } from 'node:path';
 import prompts from 'prompts';
 import ora, { type Ora } from '../lib/spinner.js';
 import { ApiClient, CliApiError, formatErrorReference, LONG_CALL_TIMEOUT_MS } from '../lib/client.js';
+import { awaitPostLiveRender, POST_LIVE_RENDER_STILL_RUNNING, type PostLiveRenderRecord } from '../lib/post-live-render.js';
 import { isBuildError, renderBuildError } from '../lib/build-errors.js';
 import {
   getToken,
@@ -1199,6 +1200,17 @@ export function registerDeploy(program: Command) {
         deployAnswered = true;
         const requestMs = performance.now() - requestStartedAt;
 
+        // A release undone by a pointer move answers before its blank-page
+        // check (post_live_render: pending). Wait for it, before this folder
+        // records the release as its base: a blank page throws the same
+        // DEPLOY_BLANK_PAGE a gated deploy does (tsk_b9507144).
+        if (spinner) spinner.text = 'Checking the live page...';
+        const postLive = await awaitPostLiveRender(client, result.project_id ?? projectId ?? undefined, result);
+        if (postLive.kind === 'settled') {
+          result.post_live_render = postLive.post_live_render;
+          result.blank_page_check = postLive.blank_page_check;
+        }
+        const renderLine = formatPostLiveRenderLine(postLive);
         spinner?.stop();
         await settleNotices();
         const functionErrors = result.function_errors ?? [];
@@ -1269,6 +1281,7 @@ export function registerDeploy(program: Command) {
                 claim_connects_agent: tempSession.handoffReady === true,
               }
             : result;
+          if (postLive.kind === 'timeout') output.post_live_render = { status: 'pending', note: POST_LIVE_RENDER_STILL_RUNNING };
           printJson(verification || verificationError ? {
             ...output,
             deployment_outcome: 'live',
@@ -1343,6 +1356,7 @@ export function registerDeploy(program: Command) {
           } else {
             info(`Live URL not reported by the platform; \`somewhere project view ${formatted.projectRef ?? '<project>'}\` shows it.`);
           }
+          if (renderLine) warn(renderLine);
           info(`Claim URL: ${teal(tempSession.claimUrl)}`);
           if (tempSession.expiresAt) {
             info(formatTempExpiry(tempSession.expiresAt, tempSession.ttlSeconds));
@@ -1385,6 +1399,7 @@ export function registerDeploy(program: Command) {
           } else {
             success(formatted.liveMessage);
           }
+          if (renderLine) warn(renderLine);
           if (!hasFunctionErrors && !verificationFailed) {
             // Would a bare `somewhere browser` from HERE reach what was just
             // deployed? It resolves the link from the current directory only
@@ -1536,6 +1551,21 @@ export interface DeployResult {
   compiled_artifact_digest?: string | null;
   stage_timing_ms?: Record<string, number> | null;
   reference_check?: { status?: string } | null;
+  /** Present when the blank-page check runs after the answer (tsk_b9507144). */
+  post_live_render?: (PostLiveRenderRecord & { note?: string }) | null;
+  blank_page_check?: unknown;
+}
+
+/** The line a deploy prints about a blank-page check that ran after it
+ *  answered: still running at the deadline, passed with a warning, or could
+ *  not finish. A clean pass prints nothing. */
+export function formatPostLiveRenderLine(wait: Awaited<ReturnType<typeof awaitPostLiveRender>>): string | null {
+  if (wait.kind === 'timeout') return POST_LIVE_RENDER_STILL_RUNNING;
+  if (wait.kind !== 'settled') return null;
+  const record = wait.post_live_render;
+  if (record.status === 'warned' && record.warning) return record.warning;
+  if (record.status === 'error') return `live; the blank-page check could not finish${record.message ? ` (${record.message})` : ''}, see the deploy log`;
+  return null;
 }
 
 /**

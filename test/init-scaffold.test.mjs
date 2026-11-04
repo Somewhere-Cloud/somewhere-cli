@@ -22,7 +22,7 @@ const { createGreenTemplate } =
   await import(`${moduleRoot}/lib/init-green-template.${process.env.SOMEWHERE_TEST_SOURCE ? 'ts' : 'js'}`);
 const { createFeatureTemplate } =
   await import(`${moduleRoot}/lib/init-feature-template.${process.env.SOMEWHERE_TEST_SOURCE ? 'ts' : 'js'}`);
-const { AGENT_WORKFLOW, DECLARED_ACCESS_POINTER, SKILLS_POINTER } =
+const { AGENT_WORKFLOW, DECLARED_ACCESS_POINTER, PORTABILITY_POINTER, SKILLS_POINTER } =
   await import(`${moduleRoot}/lib/init-agent-guide.${process.env.SOMEWHERE_TEST_SOURCE ? 'ts' : 'js'}`);
 const { createHappyPathTemplate } =
   await import(`${moduleRoot}/lib/init-template.${process.env.SOMEWHERE_TEST_SOURCE ? 'ts' : 'js'}`);
@@ -146,10 +146,11 @@ test('minimal starter is a small typed frontend, function, and schema', () => {
 
   const agents = readFileSync(join(dir, 'AGENTS.md'), 'utf8');
   const claude = readFileSync(join(dir, 'CLAUDE.md'), 'utf8');
-  assert.equal(agents, `# somewhere.cloud project contract\n${SKILLS_POINTER}\n${DECLARED_ACCESS_POINTER}\n${AGENT_WORKFLOW}\n`);
+  assert.equal(agents, `# somewhere.cloud project contract\n${SKILLS_POINTER}\n${DECLARED_ACCESS_POINTER}\n${PORTABILITY_POINTER}\n${AGENT_WORKFLOW}\n`);
   // 84 since tsk_5dbbc5a1: the public-form example declares its body schema with sw.endpoint.
   // 86 since tsk_4af22ba8: the workflow names grant() for sharing your own rows with specific people.
-  assert.ok(agents.trimEnd().split('\n').length <= 86, 'AGENTS.md must stay within 86 lines');
+  // 87 since tsk_9b4a27f7: one line naming the data-and-code exits (pull, db dump, CSV, own PostgreSQL).
+  assert.ok(agents.trimEnd().split('\n').length <= 87, 'AGENTS.md must stay within 87 lines');
   assert.equal(claude, 'Read AGENTS.md for project instructions.\n');
   assert.equal(claude.trimEnd().split('\n').length, 1);
 

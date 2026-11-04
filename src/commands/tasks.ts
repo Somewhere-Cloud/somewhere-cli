@@ -117,7 +117,7 @@ async function runTaskTool(
 export function registerTasks(program: Command): void {
   const tasks = program
     .command('tasks')
-    .description('List, read, create, and update platform tasks');
+    .description('List, read, create, update, delete, and restore platform tasks');
 
   tasks
     .command('list')
@@ -272,5 +272,61 @@ export function registerTasks(program: Command): void {
         return;
       }
       await runTaskTool('tasks_update', args, opts.json, printTaskMutation);
+    });
+
+  tasks
+    .command('delete <task-id>')
+    .description('Delete a task that should never have existed; restorable for 30 days (board owner only)')
+    .option('-p, --project <project>', 'Project slug or ID; defaults to the linked project')
+    .requiredOption('--reason <text>', 'Why this task should never have existed')
+    .option('--json', 'Print the complete response as JSON')
+    .action(async (taskId: string, opts: ProjectOptions & { reason: string }) => {
+      await runTaskTool('tasks_delete', compactRecord([
+        ['project_id', resolveProjectRef(opts.project)], ['task_id', taskId], ['reason', opts.reason],
+      ]), opts.json, (value) => {
+        const data = unwrapPlatformData(value);
+        if (!isRecord(data) || typeof data.id !== 'string') { printJson(value); return; }
+        const purgeAt = typeof data.purge_at === 'number' ? new Date(data.purge_at).toISOString() : 'in 30 days';
+        console.log(`${teal(data.id)}  ${data.already_deleted ? 'was already deleted' : 'deleted'}`);
+        console.log(dim(`Restorable until ${purgeAt}: somewhere tasks restore ${data.id}`));
+      });
+    });
+
+  tasks
+    .command('restore <task-id>')
+    .description('Restore a deleted task with its comments and links (board owner only)')
+    .option('-p, --project <project>', 'Project slug or ID; defaults to the linked project')
+    .option('--reason <text>', 'Why it is being restored')
+    .option('--json', 'Print the complete response as JSON')
+    .action(async (taskId: string, opts: ProjectOptions & { reason?: string }) => {
+      await runTaskTool('tasks_restore', compactRecord([
+        ['project_id', resolveProjectRef(opts.project)], ['task_id', taskId], ['reason', opts.reason],
+      ]), opts.json, (value) => {
+        const data = unwrapPlatformData(value);
+        if (!isRecord(data) || typeof data.id !== 'string') { printJson(value); return; }
+        console.log(`${teal(data.id)}  restored`);
+        const missing = Array.isArray(data.not_restored) ? data.not_restored.filter(isRecord) : [];
+        for (const item of missing) console.log(dim(`Not restored: ${String(item.kind)} ${String(item.task_id)} — ${String(item.reason)}`));
+        console.log(dim(`Next: somewhere tasks get ${data.id}`));
+      });
+    });
+
+  tasks
+    .command('deleted')
+    .description('List deleted tasks that can still be restored (board owner only)')
+    .option('-p, --project <project>', 'Project slug or ID; defaults to the linked project')
+    .option('--json', 'Print the complete response as JSON')
+    .action(async (opts: ProjectOptions) => {
+      await runTaskTool('tasks_restore', compactRecord([['project_id', resolveProjectRef(opts.project)]]), opts.json, (value) => {
+        const data = unwrapPlatformData(value);
+        if (!Array.isArray(data)) throw new Error('tasks_restore returned an unexpected response.');
+        if (data.length === 0) { console.log(dim('No deleted tasks to restore.')); return; }
+        table(['ID', 'Title', 'Reason', 'Erased'], data.filter(isRecord).map((row) => [
+          typeof row.id === 'string' ? row.id : '—',
+          truncateText(row.title, 40),
+          truncateText(row.reason, 40),
+          typeof row.purge_at === 'number' ? new Date(row.purge_at).toISOString().slice(0, 10) : '—',
+        ]));
+      });
     });
 }

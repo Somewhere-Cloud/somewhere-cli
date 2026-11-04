@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.38.14
+
+### Added
+
+- `somewhere tasks delete <id> --reason <text>`, `somewhere tasks restore <id>
+  [--reason <text>]` and `somewhere tasks deleted`: delete a task from the
+  board, bring it back, and list deleted tasks. Only the board owner can use
+  them; anyone else is refused with `TASK_DELETE_FORBIDDEN`.
+
+### Changed
+
+- `somewhere deploy`: once the target project is known (a linked folder or
+  `--project`), the CLI asks the platform to start the project's compile
+  container while it packs and uploads, so a cold redeploy no longer waits for
+  that container after the upload. The request is sent once and never awaited;
+  any answer, including an older platform's 404, leaves the deploy unchanged.
+  `--dry-run` sends none.
+
 ## 0.38.13
 
 ### Changed

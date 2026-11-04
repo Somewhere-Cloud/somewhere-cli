@@ -47,4 +47,15 @@ test('task commands preserve explicit pagination and every retrieval option',asy
   assert.equal(calls.at(-1).args.view,'full');
   assert.equal(calls.length,5,'one tool call per command; no automatic page draining');
 });
+test('delete, restore and deleted call the task tools with the reason and project',async()=>{
+  let output=await run(['tasks','delete','tsk_1','--project','project','--reason','Duplicate'],{ok:true,data:{id:'tsk_1',deleted:true,purge_at:0}});
+  assert.deepEqual(calls.at(-1),{name:'tasks_delete',args:{project_id:'project',task_id:'tsk_1',reason:'Duplicate'}});
+  assert.match(output,/tsk_1  deleted/); assert.match(output,/somewhere tasks restore tsk_1/);
+  output=await run(['tasks','restore','tsk_1','--project','project'],{ok:true,data:{id:'tsk_1',restored:true,not_restored:[{kind:'link:blocks',task_id:'tsk_2',reason:'That task no longer exists.'}]}});
+  assert.deepEqual(calls.at(-1),{name:'tasks_restore',args:{project_id:'project',task_id:'tsk_1'}});
+  assert.match(output,/Not restored: link:blocks tsk_2/);
+  output=await run(['tasks','deleted','--project','project'],{ok:true,data:[{id:'tsk_1',title:'Dup',reason:'Duplicate',purge_at:0}]});
+  assert.deepEqual(calls.at(-1),{name:'tasks_restore',args:{project_id:'project'}});
+  assert.match(output,/tsk_1/);
+});
 test.after(()=>{hooks.deregister();delete globalThis.__tasksCall;delete globalThis.__tasksResponse;});

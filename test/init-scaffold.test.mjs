@@ -12,6 +12,7 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import test from 'node:test';
 import ts from 'typescript';
+const CLI_PACKAGE_VERSION = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
 
 const moduleRoot = process.env.SOMEWHERE_TEST_SOURCE ? '../src' : '../dist';
 const { canWriteInitScaffold, writeInitScaffold } =
@@ -119,6 +120,8 @@ test('minimal starter is a small typed frontend, function, and schema', () => {
     'react-dom': '19.2.7',
   });
   assert.deepEqual(pkg.devDependencies, {
+    // The starter records the CLI that wrote it (tsk_a4641877).
+    '@somewhere-cloud/cli': CLI_PACKAGE_VERSION,
     '@types/react': '19.2.2',
     '@types/react-dom': '19.2.2',
     typescript: '5.9.3',

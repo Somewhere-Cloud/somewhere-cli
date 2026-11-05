@@ -26,6 +26,7 @@
     "sw": "bin/somewhere.js"
   },
   "files": [
+    "CHANGELOG.md",
     "LICENSE",
     "README.md",
     "bin",

@@ -32,7 +32,9 @@ import {
 } from '../lib/config.js';
 import { httpsOrigin } from '../lib/project-urls.js';
 import { collectFiles, formatBytes, oversizeRefusal, sensitiveReferenceRefusal, type CollectedFiles } from '../lib/files.js';
+import { CLI_VERSION } from '../lib/version.js';
 import { mintTempAccount } from '../lib/temp-auth.js';
+import { recordPinIfMissing } from '../lib/project-pin.js';
 import { ensureClaimHandoff } from '../lib/claim-handoff.js';
 import { dim, error, green, info, platformErrorEnvelope, printJson, printJsonError, red, success, teal, warn, yellow } from '../lib/output.js';
 import type { CliConfig, ProjectConfig } from '../types.js';
@@ -881,7 +883,7 @@ export function registerDeploy(program: Command) {
             const created = await client.call<{ id: string; name: string; subdomain: string }>(
               'POST',
               '/projects',
-              { name, subdomain: name },
+              { name, subdomain: name, cli_version: CLI_VERSION },
             );
             createSpinner?.stop();
             targetProjectConfig = {
@@ -1227,6 +1229,12 @@ export function registerDeploy(program: Command) {
             );
           }
           rememberDeployedBase(result.active_release_id ?? result.release_id);
+          // The first deploy of a folder that records no CLI version pins the
+          // one that deployed it (never a throwaway beside a real login: the
+          // folder's .somewhere.json is the developer's own link).
+          if (!besideRealLogin && recordPinIfMissing(deployStateEntry?.dir ?? targetDir, CLI_VERSION) && !opts.json) {
+            info(`Recorded somewhere CLI ${CLI_VERSION} in .somewhere.json (cli_version). \`somewhere upgrade\` moves it.`);
+          }
           if (!tempSession && deployStateEntry && result.project_id === deployStateEntry.config.project_id) {
             saveProjectAppUrl(deployStateEntry.dir, deployStateEntry.config.project_id, httpsOrigin(result.url));
           }

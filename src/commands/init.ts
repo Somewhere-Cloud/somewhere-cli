@@ -31,6 +31,7 @@ import { createGreenTemplate } from '../lib/init-green-template.js';
 import { BUNDLED_SKILLS_PACK } from '../lib/skills-pack.generated.js';
 import { CLAUDE_SKILLS_DIR, SKILLS_DIR, SKILLS_LOCK, installSkills, readLock, skillNames } from '../lib/skills-pack.js';
 import { CLI_VERSION } from '../lib/version.js';
+import { readProjectPin, recordPinIfMissing } from '../lib/project-pin.js';
 import { createFeatureTemplate, extensionPoints } from '../lib/init-feature-template.js';
 import {
   describeSelection,
@@ -215,6 +216,7 @@ export function registerInit(program: Command) {
             success(`Local starter written to ${dir} (${scaffold.created.length} files); no account or project was created.`);
             if (expiredTemporaryAt) info(`Ignored the temporary session on this machine that expired at ${expiredTemporaryAt}; somewhere deploy starts a new one.`);
             reportSkills(skills);
+            reportPin(dir);
             info('Dependencies are not installed. Run npm install if you want to run it locally.');
             info('Next: somewhere deploy — publish with a temporary workspace, no login needed.');
             info('Quickstart: somewhere docs start');
@@ -292,7 +294,7 @@ export function registerInit(program: Command) {
           name: string;
           subdomain: string;
           slug: string;
-        }>('POST', '/projects', { name, subdomain });
+        }>('POST', '/projects', { name, subdomain, cli_version: CLI_VERSION });
         // The platform's answer, never a host built from the name or slug.
         const appUrl = await getAuthoritativeAppUrl(client, project.id).catch(() => null);
 
@@ -313,6 +315,7 @@ export function registerInit(program: Command) {
             writeBareGuide(dir);
             writeInitSkills(dir);
           }
+          recordPinIfMissing(dir, CLI_VERSION);
           printJson({ ...project, app_url: appUrl,
             ...(plan ? { selection: plan.selection, extension_points: extensionPoints(plan.selection) } : {}),
           });
@@ -350,6 +353,7 @@ export function registerInit(program: Command) {
         } else {
           info('Existing source preserved; starter files were not added.');
         }
+        reportPin(dir);
 
         console.log('');
         printNext({ stage: 'init', scaffolded: shouldScaffold });
@@ -493,12 +497,15 @@ export async function linkExisting(
 
   const project = result.projects.find((p) => p.id === projectId)!;
   const appUrl = await getAuthoritativeAppUrl(client, project.id).catch(() => null);
+  const recordedCli = loadProjectConfig(dir)?.cli_version;
   saveProjectConfig(dir, {
     project_id: project.id,
     name: project.name,
     subdomain: project.subdomain,
     ...(appUrl ? { app_url: appUrl } : {}),
+    ...(recordedCli ? { cli_version: recordedCli } : {}),
   });
+  recordPinIfMissing(dir, CLI_VERSION);
   if (!json) success(`.somewhere.json linked to ${teal(project.name)}`);
 
   // Standalone link keeps its explicit setup behavior; init never installs agent config.
@@ -526,6 +533,13 @@ export function writeInitSkills(dir: string): { version: string } | { kept: stri
     existsSync(join(dir, SKILLS_DIR, name)) || existsSync(join(dir, CLAUDE_SKILLS_DIR, name)));
   if (taken.length) return { kept: `Project skills ${taken.join(', ')} already exist` };
   return installSkills(dir, BUNDLED_SKILLS_PACK, { cli: CLI_VERSION, source: 'bundled' });
+}
+
+/** Say which CLI version this folder is now pinned to (tsk_a4641877). */
+function reportPin(dir: string): void {
+  recordPinIfMissing(dir, CLI_VERSION);
+  const pin = readProjectPin(dir);
+  if (pin) info(`Pinned to somewhere CLI ${teal(pin.spec)} (${pin.source}); \`somewhere upgrade\` moves it.`);
 }
 
 function reportSkills(result: ReturnType<typeof writeInitSkills>): void {

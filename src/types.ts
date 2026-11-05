@@ -57,6 +57,9 @@ export interface ProjectConfig {
   source_base?: SourceBaseState;
   /** Set once the deploy output has explained the publish surface (tsk_c166924f). */
   publish_notice_seen?: boolean;
+  /** The CLI version this folder is pinned to when its package.json does not
+   *  declare @somewhere-cloud/cli (lib/project-pin.ts, tsk_a4641877). */
+  cli_version?: string;
 }
 
 export interface SourceBaseState {

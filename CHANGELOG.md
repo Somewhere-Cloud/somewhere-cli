@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.38.19
+
+### Changed
+
+- `somewhere login --browser-callback` signs in with Google in the browser and
+  receives the key on a localhost port (this flag was `--legacy`; there is no
+  alias). The unused `--draft` alias is removed. Help and messages state what
+  the CLI does now.
+
 ## 0.38.18
 
 ### Changed

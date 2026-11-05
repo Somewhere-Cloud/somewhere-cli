@@ -12,6 +12,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import test from 'node:test';
+import { pinStarterToLocalCli } from './local-cli-pack.mjs';
 
 const source = Boolean(process.env.SOMEWHERE_TEST_SOURCE);
 const moduleRoot = source ? '../src' : '../dist';
@@ -108,6 +109,7 @@ const installStarter = (specs, cwd) => {
 async function prepareStarter(ui) {
   const dir = mkdtempSync(join(tmpdir(), 'sw-magic-journey-'));
   writeInitScaffold(dir, createFeatureTemplate(resolveInitSelection('auth', ui), { appName: 'Crew' }));
+  pinStarterToLocalCli(dir);
   if (process.env.SOMEWHERE_TEST_SDK_TARBALL) {
     const pkgPath = join(dir, 'package.json');
     const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'));

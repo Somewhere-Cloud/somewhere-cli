@@ -14,6 +14,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
+import { pinStarterToLocalCli } from './local-cli-pack.mjs';
 const CLI_PACKAGE_VERSION = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
 
 const source = Boolean(process.env.SOMEWHERE_TEST_SOURCE);
@@ -412,11 +413,13 @@ const installStarter = (specs, cwd) => {
 };
 // The install brings the starter's pinned dependencies too, so this checks against the real,
 // published SDK the starter pins. SOMEWHERE_TEST_SDK_TARBALL points it at a
-// local `npm pack` instead (an SDK change that is not published yet).
+// local `npm pack` instead (an SDK change that is not published yet). The CLI
+// pin always installs from this working tree (local-cli-pack.mjs).
 const sdkTarball = process.env.SOMEWHERE_TEST_SDK_TARBALL;
 test('every combination typechecks against the SDK and the generated somewhere:data declaration', async () => {
   for (const [features, ui] of COMBINATIONS) {
     const { dir } = generate(features, ui);
+    pinStarterToLocalCli(dir);
     if (sdkTarball) {
       const pkgPath = join(dir, 'package.json');
       const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'));

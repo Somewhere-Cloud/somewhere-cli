@@ -101,5 +101,12 @@ export const DECLARED_ACCESS_POINTER = 'Access rules: before choosing `serverOnl
   + 'bookings and help desks in `somewhere docs sw.db --section provider-or-booker-and-owner-or-staff-recipes`; '
   + 'sharing your own rows with specific people (read-only sharing, co-authors) in `somewhere docs declared-data --section per-owner-sharing`.';
 
-export const INIT_AGENTS_MD = `# somewhere.cloud project contract\n${SKILLS_POINTER}\n${DECLARED_ACCESS_POINTER}\n${AGENT_WORKFLOW}\n`;
+/** One line telling agents the app's data and code can leave (tsk_9b4a27f7):
+ *  an evaluating agent concluded the platform had no exits. Kept outside
+ *  AGENT_WORKFLOW, which is a byte mirror of the platform's agent workflow. */
+export const PORTABILITY_POINTER = 'Your data and code are yours: `somewhere pull` (source), `somewhere db dump` (raw SQL database as one .sql file), '
+  + 'one-table CSV export and attaching PostgreSQL in your own Neon account; managed-database tables are not in the dump or CSV yet. '
+  + 'Limits per path: `somewhere docs portability`.';
+
+export const INIT_AGENTS_MD = `# somewhere.cloud project contract\n${SKILLS_POINTER}\n${DECLARED_ACCESS_POINTER}\n${PORTABILITY_POINTER}\n${AGENT_WORKFLOW}\n`;
 export const INIT_CLAUDE_MD = 'Read AGENTS.md for project instructions.\n';

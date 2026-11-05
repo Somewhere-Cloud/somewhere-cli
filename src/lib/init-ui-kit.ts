@@ -300,7 +300,7 @@ code, kbd { font-family: var(--font-mono); font-size: 0.9em; }
 .notice--danger { border-left-color: var(--color-danger); }
 .notice__actions { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; }
 
-/* Legacy alert from feedback.tsx; Notice is preferred for new code. */
+/* Alert from feedback.tsx; Notice is preferred for new code. */
 .alert { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: center; justify-content: space-between; padding: var(--space-3) var(--space-4); border: 1px solid var(--color-danger); border-radius: var(--radius-control); color: var(--color-danger); background: var(--color-surface); }
 .alert p { margin: 0; }
 

@@ -33,9 +33,13 @@ test('canonical publisher alone publishes, serializes manual bootstrap and pins 
   assert.match(guard, /run: node scripts\/version-guard\.mjs/);
   assert.ok(publisher.indexOf('npm install -g') < publisher.indexOf('npm ci'));
   const publishAt = publisher.indexOf('npm publish --provenance --access public');
-  assert.match(publisher, /FIRST_VERSION_STAGE: \$\{\{ vars\.NPM_FIRST_VERSION_STAGE \}\}/);
-  assert.equal((publisher.match(/npm stage publish --provenance --access public/g) ?? []).length, 1);
-  assert.match(publisher, /steps\.publication\.outputs\.staged != 'true'/);
+  // Trusted publishing only: no npm token, no staging path, no registry-url placeholder token.
+  assert.doesNotMatch(publisher, /secrets\.|NODE_AUTH_TOKEN: |NPM_TOKEN: |npm stage|FIRST_VERSION_STAGE|registry-url/);
+  assert.match(publisher, /id-token: write/);
+  assert.match(publisher, /an npm token is set; this publisher authenticates only through OIDC/);
+  assert.ok(publisher.indexOf('already exists on npm') < publishAt, 'refuse an existing version before publishing');
+  assert.match(publisher, /npm view "@somewhere-cloud\/cli@\$EXPECTED_VERSION" dist\.integrity/);
+  assert.ok(publisher.indexOf('dist.integrity') > publisher.indexOf('run: node scripts/publish-release.mjs verify'), 'npm view resolves after registry verification');
   const verifyAt = publisher.indexOf('run: node scripts/publish-release.mjs verify');
   assert.ok(publishAt >= 0 && verifyAt > publishAt, 'publish then verify registry source/SRI/Sigstore');
   assert.match(publisher, /name: Verify published registry source, SRI and Sigstore\n        id: verification/);
@@ -50,10 +54,9 @@ test('canonical publisher alone publishes, serializes manual bootstrap and pins 
   assert.match(publisher, /SOURCE_SHA: \$\{\{ steps.final.outputs.published_head \}\}/);
 });
 
-test('automatic guard events cannot publish during scoped bootstrap', async () => {
+test('automatic guard events cannot publish; no secret reaches the publisher', async () => {
   assert.doesNotMatch(publisher, /^  (workflow_run|push):/m);
-  assert.match(publisher, /secrets\.NPM_CLOUD_BOOTSTRAP_TOKEN/);
-  assert.doesNotMatch(publisher, /secrets\.NPM_TOKEN/);
+  assert.doesNotMatch(publisher, /secrets\./);
   await assert.rejects(trigger(context()), /untrusted trigger/);
 });
 

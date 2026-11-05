@@ -30,7 +30,6 @@ export function registerProject(program: Command) {
     .description('Create a new project')
     .option('--subdomain <subdomain>', 'Custom subdomain')
     .option('--preview', 'Create without deploying to production')
-    .option('--draft', 'Deprecated alias for --preview')
     .option('--json', 'Print the raw project response as JSON')
     .action(async (name: string, opts) => {
       const client = new ApiClient(getToken());

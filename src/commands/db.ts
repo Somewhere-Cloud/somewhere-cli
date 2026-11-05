@@ -89,11 +89,11 @@ export function registerDb(program: Command) {
 
   db
     .command('apply-schema [path]', { hidden: true })
-    .description('Retired: edit db/schema.ts and deploy the complete app source')
+    .description('Schema changes ship with deploy: edit db/schema.ts and run somewhere deploy')
     .option('--project <id>', 'Project ID')
-    .option('--json', 'Print the retirement error as JSON')
+    .option('--json', 'Print the error as JSON')
     .action((_schemaPath: string | undefined, opts: { json?: boolean }) => {
-      const message = 'Standalone schema apply is retired. Edit db/schema.ts, then run somewhere deploy from the app root with the complete app source (or create a preview). Schema changes are applied with that release. Nothing was changed.';
+      const message = 'Schema changes ship with deploy: edit db/schema.ts, then run somewhere deploy from the app root with the complete app source (or create a preview). That release applies the schema. Nothing was changed.';
       if (opts.json) printJson({ ok: false, error: 'SCHEMA_APPLY_RETIRED', message });
       else error(`SCHEMA_APPLY_RETIRED: ${message}`);
       process.exitCode = 1;

@@ -2,7 +2,7 @@
  * tsk_0e9e13b8 (CLI half) — a stranger must be able to create an account.
  *
  * The blind run found no way in: `somewhere login` prints a device URL whose
- * page redirects straight to Google OAuth, `--legacy` does the same, and there
+ * page redirects straight to Google OAuth, `--browser-callback` does the same, and there
  * was no `signup` command at all. Someone without a Google or GitHub account
  * had no front door from the CLI.
  *

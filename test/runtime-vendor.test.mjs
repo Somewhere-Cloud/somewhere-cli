@@ -11,7 +11,7 @@ const manifest = JSON.parse(readFileSync(join(dir, 'VENDOR.json'), 'utf8'));
 test('only the browser probe, declared-data generator and source lint remain vendored and hash-covered', () => {
   assert.deepEqual(Object.keys(manifest.files), ['browser-probes.mjs']);
   assert.deepEqual(readdirSync(dir).sort(), [
-    'DECLARED-DATA-VENDOR.json', 'SOURCE-LINT-VENDOR.json', 'VENDOR.json', 'browser-probes.mjs', 'declared-data.cjs',
+    'DECLARED-DATA-VENDOR.json', 'PLATFORM-SOURCE.json', 'SOURCE-LINT-VENDOR.json', 'VENDOR.json', 'browser-probes.mjs', 'declared-data.cjs',
     'source-lint.cjs',
   ]);
   const dataManifest = JSON.parse(readFileSync(join(dir, 'DECLARED-DATA-VENDOR.json'), 'utf8'));

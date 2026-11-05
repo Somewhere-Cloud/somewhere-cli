@@ -45,7 +45,7 @@ export function removeStaleRunRecord(dir: string = cliConfigDir()): void {
     } catch (err) {
       const code = (err as NodeJS.ErrnoException).code;
       if (code === 'ENOENT' || code === 'ENOTDIR') continue;
-      process.stderr.write(`Could not remove ${path} (${code ?? 'error'}). Older CLI versions may have saved command arguments and output there; delete it yourself.\n`);
+      process.stderr.write(`Could not remove ${path} (${code ?? 'error'}). It can hold command arguments and output; delete it yourself.\n`);
     }
   }
 }

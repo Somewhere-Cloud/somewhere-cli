@@ -138,13 +138,13 @@ async function signupAction(): Promise<void> {
   info(dim('Once your account exists, run: somewhere login'));
 }
 
-async function loginAction(opts: { legacy?: boolean; signup?: boolean }): Promise<void> {
+async function loginAction(opts: { browserCallback?: boolean; signup?: boolean }): Promise<void> {
   if (opts.signup) {
     await signupAction();
     return;
   }
-  if (opts.legacy) {
-    await runLegacyLogin();
+  if (opts.browserCallback) {
+    await runBrowserCallbackLogin();
     return;
   }
   await runDeviceLogin();
@@ -197,7 +197,7 @@ export function registerAuth(program: Command) {
   program
     .command('login')
     .description('Authenticate with somewhere.cloud (no account yet? run `somewhere signup`)')
-    .option('--legacy', 'Use the localhost-callback flow instead of device code')
+    .option('--browser-callback', 'Sign in with Google in the browser and receive the key on a localhost port, instead of entering a device code')
     .option('--signup', 'Create a new account instead — opens the sign-up page')
     .action(loginAction);
 
@@ -318,7 +318,7 @@ export function registerAuth(program: Command) {
   auth
     .command('login')
     .description('Authenticate with somewhere.cloud (alias of `somewhere login`)')
-    .option('--legacy', 'Use the localhost-callback flow instead of device code')
+    .option('--browser-callback', 'Sign in with Google in the browser and receive the key on a localhost port, instead of entering a device code')
     .option('--signup', 'Create a new account instead — opens the sign-up page')
     .action(loginAction);
 
@@ -558,7 +558,7 @@ async function runDeviceLogin(): Promise<void> {
   }
 }
 
-async function runLegacyLogin(): Promise<void> {
+async function runBrowserCallbackLogin(): Promise<void> {
   for (const line of loginIntroLines()) console.log(line);
   const spinner = ora('Waiting for browser login…  (press Ctrl+C to cancel)').start();
   installCancelHandler(() => spinner);

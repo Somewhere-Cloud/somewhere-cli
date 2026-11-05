@@ -4,7 +4,7 @@ import test from 'node:test';
 
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
 
-test('CLI presents preview vocabulary and retains the load-bearing --draft alias', () => {
+test('CLI presents preview vocabulary and has no --draft alias', () => {
   const promote = read('src/commands/promote.ts');
   const dev = read('src/commands/dev.ts');
   const project = read('src/commands/project.ts');
@@ -20,7 +20,7 @@ test('CLI presents preview vocabulary and retains the load-bearing --draft alias
   assert.match(dev, /res\.preview_id \?\? res\.candidate_release_id/);
 
   assert.match(project, /option\('--preview', 'Create without deploying to production'\)/);
-  assert.match(project, /option\('--draft', 'Deprecated alias for --preview'\)/);
+  assert.doesNotMatch(project, /'--draft'/);
 });
 
 test('hosted preview remains separate from frontend dev; no local-runtime aliases survive', () => {

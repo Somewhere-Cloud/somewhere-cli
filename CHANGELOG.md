@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.38.18
+
+### Changed
+
+- `somewhere typecheck` and `somewhere lint` use the platform's current
+  schema parser, `somewhere/db` types and lint rules (tech c077686c).
+  `sw.db.insert(table, values, { onConflict: 'ignore' | 'update' })` and
+  `sw.db.tx` insert intents with the same `options` now type on every table a
+  signed-in caller writes: `owner()`, `shared()`, `member()`, `group()`,
+  `parent()`, `anyOf(owner(), …)` including `grant()`, and `allOf()`.
+  `onConflict: 'update'` is a type error where the platform refuses it: a
+  table whose rule never grants update, a per-row `grant()` shares table, a
+  table named `excluded`, and an insert with `idempotencyKey`.
+
 ## 0.38.17
 
 ### Fixed

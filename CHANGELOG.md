@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.38.17
+
+### Fixed
+
+- `somewhere typecheck` and `somewhere lint` accept `anyOf(owner(), grant(...))`,
+  the per-owner and per-row sharing forms in `somewhere docs declared-data`
+  (Per-owner sharing). Before, they refused it with "anyOf() accepts exactly one
+  owner() and one member(), group() or appRole()", and `grant` was missing from
+  the `somewhere/db` types, although deploy accepted the schema. The schema
+  parser, `somewhere/db` types and lint rules bundled in the CLI are now the
+  platform's current ones, so `grant()` forms that deploy refuses (inside
+  `allOf`, `update` without `read`, `delete`, no `operations`) are refused with
+  deploy's own messages.
+
 ## 0.38.16
 
 ### Added

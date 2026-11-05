@@ -60,22 +60,26 @@ var require_declared_data_contract = __commonJS({
       if (value.k === "o" && keys === "c,k" && identifier.test(value.c)) return { k: "o", c: value.c };
       if (value.k === "m" && keys === "k,m") {
         record2(value.m, label + ".member");
-        const { g, m, u, mg, o } = value.m;
+        const { g, m, u, mg, o, og } = value.m;
         const memberKeys = Object.keys(value.m).sort().join(",");
-        if (!["g,m,mg,u", "g,m,mg,o,u"].includes(memberKeys) || !identifier.test(m) || !identifier.test(u) || !Array.isArray(g) || !g.length || !Array.isArray(mg) || g.length !== mg.length || [...g, ...mg].some((field) => typeof field !== "string" || !identifier.test(field)) || o !== void 0 && (!Array.isArray(o) || JSON.stringify(o) !== JSON.stringify(["read", "create", "update", "delete"].filter((operation) => o.includes(operation))) || !o.includes("read") && (o.includes("update") || o.includes("delete")))) fail(label);
+        const grant = memberKeys === "g,m,mg,o,og,u" && og === true && Array.isArray(g) && Array.isArray(mg) && g[0] === "user_id" && mg[0] === "user_id" && (g.length === 1 || g.length === 2 && g[1] !== "user_id" && mg[1] !== "user_id" && mg[1] !== u) && u !== "user_id" && (JSON.stringify(o) === '["read"]' || JSON.stringify(o) === '["read","update"]');
+        if (!["g,m,mg,u", "g,m,mg,o,u"].includes(memberKeys) && !grant || !identifier.test(m) || !identifier.test(u) || !Array.isArray(g) || !g.length || !Array.isArray(mg) || g.length !== mg.length || [...g, ...mg].some((field) => typeof field !== "string" || !identifier.test(field)) || o !== void 0 && (!Array.isArray(o) || JSON.stringify(o) !== JSON.stringify(["read", "create", "update", "delete"].filter((operation) => o.includes(operation))) || !o.includes("read") && (o.includes("update") || o.includes("delete")))) fail(label);
         const normalizedOperations = o?.length === 4 ? void 0 : o;
-        return { k: "m", m: { g: [...g], m, u, mg: [...mg], ...normalizedOperations !== void 0 ? { o: [...normalizedOperations] } : {} } };
+        return { k: "m", m: { g: [...g], m, u, mg: [...mg], ...normalizedOperations !== void 0 ? { o: [...normalizedOperations] } : {}, ...og ? { og: true } : {} } };
       }
       if (value.k === "a" && keys === "k,p" && Array.isArray(value.p) && value.p.length === 2) {
         const left = policy(value.p[0], label), right = policy(value.p[1], label);
         if (left.k !== "o" || !["m", "g", "r"].includes(right.k)) fail(label);
+        if (right.k === "m" && right.m.og && left.c !== "user_id") fail(label);
         return { k: "a", p: [left, right] };
       }
       if (value.k === "n" && keys === "g,k,w") {
         const gate = policy(value.g, label), who = policy(value.w, label);
         if (!["m", "g", "r"].includes(gate.k) || !["o", "a"].includes(who.k)) fail(label);
+        if (gate.k === "m" && gate.m.og) fail(label);
         if (who.k === "a") {
           const x = who.p[1];
+          if (x.k === "m" && x.m.og) fail(label);
           const same = x.k === "r" || x.k === "g" && gate.k === "g" && x.c.toLowerCase() === gate.c.toLowerCase() || x.k === "m" && gate.k === "m" && x.m.m.toLowerCase() === gate.m.m.toLowerCase() && x.m.u.toLowerCase() === gate.m.u.toLowerCase() && JSON.stringify(x.m.g.map((c) => c.toLowerCase())) === JSON.stringify(gate.m.g.map((c) => c.toLowerCase())) && JSON.stringify(x.m.mg.map((c) => c.toLowerCase())) === JSON.stringify(gate.m.mg.map((c) => c.toLowerCase()));
           if (!same) fail(label);
         }
@@ -106,14 +110,14 @@ var require_declared_data_contract = __commonJS({
       }
       return roles;
     }
-    function policyMembershipTables(value, out) {
+    function policyMembershipTables(value, out, grants) {
       if (!value || typeof value !== "object") return;
-      if (value.k === "m" && value.m) out.add(value.m.m);
-      else if (value.k === "a") value.p.forEach((item) => policyMembershipTables(item, out));
+      if (value.k === "m" && value.m) (value.m.og === true ? grants : out).add(value.m.m);
+      else if (value.k === "a") value.p.forEach((item) => policyMembershipTables(item, out, grants));
       else if (value.k === "n") {
-        policyMembershipTables(value.g, out);
-        policyMembershipTables(value.w, out);
-      } else if (value.k === "p") policyMembershipTables(value.p, out);
+        policyMembershipTables(value.g, out, grants);
+        policyMembershipTables(value.w, out, grants);
+      } else if (value.k === "p") policyMembershipTables(value.p, out, grants);
     }
     function validateInsertReceiptCapability(value) {
       if (value !== void 0 && value !== "insert-v1") fail("insert receipt capability");
@@ -126,7 +130,17 @@ var require_declared_data_contract = __commonJS({
       record2(scopes, "scopes");
       const tables = [];
       const membershipTables = new Set(Object.values(schema).filter((table) => table && table.member).map((table) => table.member.m));
-      for (const table of Object.values(schema)) if (table?.policy) policyMembershipTables(table.policy, membershipTables);
+      const grantTables = /* @__PURE__ */ new Set();
+      for (const table of Object.values(schema)) if (table?.policy) policyMembershipTables(table.policy, membershipTables, grantTables);
+      for (const name of grantTables) {
+        const grant = schema[name];
+        if (!grant || intents[name] !== "scoped" || scopes[name] !== "user_id" || grant.visitors || grant.policy || grant.member || grant.client?.links || grant.client?.intake || grant.client?.identity === "visitor") fail(`${name} owner grant authority`);
+      }
+      const grantRules = Object.entries(schema).flatMap(([name, table]) => table?.policy?.k === "a" && table.policy.p?.[1]?.k === "m" && table.policy.p[1].m?.og === true ? [{ name, table, m: table.policy.p[1].m }] : []);
+      for (const rule of grantRules.filter((rule2) => rule2.m.g.length === 2)) {
+        const shares = schema[rule.m.m], row = rule.m.mg[1];
+        if (grantRules.filter((other) => other.m.m === rule.m.m).length !== 1 || rule.table.primaryKey !== rule.m.g[1] || !shares?.columns?.some((column) => column?.n === row) || Array.isArray(shares.client?.update) && shares.client.update.includes(row)) fail(`${rule.m.m} row grant authority`);
+      }
       for (const name of Object.keys(schema).sort()) {
         const table = schema[name];
         record2(table, `table ${name}`);
@@ -802,7 +816,7 @@ interface SomewhereAppRoleGrant {
   user_id: string;
   role: SomewhereAppRole;
   granted_by: string;
-  grant_source: 'platform_admin' | 'delegation';
+  grant_source: 'platform_admin' | 'delegation' | 'email_domain';
   created_at: number;
 }
 
@@ -871,7 +885,7 @@ type SomewhereGroupsResult<T> = { data: T; error: null } | { data: null; error: 
  */
 interface SomewhereGroups {
   create(req: Request, input: { name: string }): Promise<SomewhereGroupsResult<SomewhereGroupDetail>>;
-  /** Also completes (and reports) up to 3 of the signed-in user's invitations not yet confirmed at sign-in. */
+  /** Also completes (and reports) up to 10 of the signed-in user's invitations not yet confirmed at sign-in. */
   list(req: Request, opts?: SomewhereGroupsPageOptions): Promise<SomewhereGroupsResult<SomewhereGroupsPage<SomewhereGroup> & { invitations: SomewhereGroupInvitationOutcome[] }>>;
   get(req: Request, groupId: string): Promise<SomewhereGroupsResult<SomewhereGroupDetail>>;
   members(req: Request, groupId: string, opts?: SomewhereGroupsPageOptions): Promise<SomewhereGroupsResult<SomewhereGroupsPage<SomewhereGroupMember>>>;
@@ -895,7 +909,7 @@ interface SomewhereGroups {
   appRoles: {
     list(req: Request, userId?: string, opts?: SomewhereGroupsPageOptions): Promise<SomewhereGroupsResult<SomewhereGroupsPage<SomewhereAppRoleGrant>>>;
     grant(req: Request, userId: string, role: SomewhereAppRole): Promise<SomewhereGroupsResult<SomewhereAppRoleGrant>>;
-    revoke(req: Request, userId: string, role: SomewhereAppRole): Promise<SomewhereGroupsResult<{ revoked: boolean }>>;
+    revoke(req: Request, userId: string, role: SomewhereAppRole): Promise<SomewhereGroupsResult<{ revoked: boolean; held_by?: 'email_domain'; domain?: string; message?: string }>>;
   };
 }
 
@@ -1424,35 +1438,31 @@ interface SomewhereRuntimeAuthModeration {
     user: { id: string; email: string; role: SomewhereAuthRole };
   }>;
 }
-// Replaces the inline mfa type in SomewhereRuntimeAuth (challenge/challengeWithCookie unchanged).
+// Email sign-in codes (tsk_8fe91eb5). Authenticator-app activation (reauthenticate*) answers 501 AUTH_FEATURE_UNAVAILABLE.
+type SomewhereMfaDelivery = 'sent' | 'pending' | 'unknown';
+interface SomewhereMfaCodeSent { challenge_id: string; delivery: SomewhereMfaDelivery; expires_in: number }
+type SomewhereMfaRecovery =
+  | { removal_pending: true; removes_at: string; wait_seconds: number; notice_resent?: boolean }
+  | { enrolled: false };
 interface SomewhereRuntimeAuthMfa {
   challenge(options: { mfa_token: string; code: string }): Promise<SomewhereAuthSession>;
   challengeWithCookie(options: { mfa_token: string; code: string }): Promise<{ user: SomewhereAuthUser }>;
-  enroll(options: { token: string }): Promise<{
-    secret: string; enrollment_id: string; otpauth_uri: string; issuer: string; account: string;
-  }>;
-  reauthenticate(options: { token: string; enrollment_id: string; method: 'password'; password: string }):
-    Promise<{ method: 'password'; activation_token: string; expires_in_seconds: number }>;
-  reauthenticate(options: { token: string; enrollment_id: string; method: 'email' }):
-    Promise<{ method: 'email'; challenge_id: string; expires_in_seconds: number; pending?: true }>;
-  verifyReauthentication(options: { token: string; enrollment_id: string; challenge_id: string; code: string }):
-    Promise<{ method: 'email'; activation_token: string; expires_in_seconds: number }>;
-  verify(options: { token: string; enrollment_id: string; activation_token: string; code: string }):
-    Promise<{ enabled: true; backup_codes: string[] }>;
-  unenroll(options: { token: string; code: string }): Promise<{ enabled: false }>;
-  // The same steps for the request's own session (cookie or Bearer). verifyWithCookie ends every session and clears the cookies.
-  enrollWithCookie(req: Request): Promise<{
-    secret: string; enrollment_id: string; otpauth_uri: string; issuer: string; account: string;
-  }>;
-  reauthenticateWithCookie(req: Request, options: { enrollment_id: string; method: 'password'; password: string }):
-    Promise<{ method: 'password'; activation_token: string; expires_in_seconds: number }>;
-  reauthenticateWithCookie(req: Request, options: { enrollment_id: string; method: 'email' }):
-    Promise<{ method: 'email'; challenge_id: string; expires_in_seconds: number; pending?: true }>;
-  verifyReauthenticationWithCookie(req: Request, options: { enrollment_id: string; challenge_id: string; code: string }):
-    Promise<{ method: 'email'; activation_token: string; expires_in_seconds: number }>;
-  verifyWithCookie(req: Request, options: { enrollment_id: string; activation_token: string; code: string }):
-    Promise<{ enabled: true; backup_codes: string[] }>;
-  unenrollWithCookie(req: Request, options: { code: string }): Promise<{ enabled: false }>;
+  resend(options: { mfa_token: string }): Promise<{ sent: boolean; delivery: SomewhereMfaDelivery; expires_in: number }>;
+  enroll(options: { token: string }): Promise<SomewhereMfaCodeSent | { enrolled: true; method: 'email' }>;
+  verify(options: { token: string; challenge_id: string; code: string }): Promise<{ enrolled: true; method: 'email' }>;
+  unenroll(options: { token: string; password: string }): Promise<SomewhereMfaCodeSent | { enrolled: false }>;
+  unenroll(options: { token: string; challenge_id: string; code: string }): Promise<{ enrolled: false }>;
+  recover(options: { email: string; password: string }): Promise<SomewhereMfaRecovery>;
+  cancelRecovery(options: { token: string }): Promise<{ outcome: 'cancelled' | 'already_closed' | 'completed'; message: string }>;
+  reauthenticate(options: { token: string; enrollment_id: string; method: 'password' | 'email'; password?: string }): Promise<never>;
+  verifyReauthentication(options: { token: string; enrollment_id: string; challenge_id: string; code: string }): Promise<never>;
+  // The same steps for the request's own session (cookie or Bearer). Turning codes on or off ends no session.
+  enrollWithCookie(req: Request): Promise<SomewhereMfaCodeSent | { enrolled: true; method: 'email' }>;
+  verifyWithCookie(req: Request, options: { challenge_id: string; code: string }): Promise<{ enrolled: true; method: 'email' }>;
+  unenrollWithCookie(req: Request, options: { password: string }): Promise<SomewhereMfaCodeSent | { enrolled: false }>;
+  unenrollWithCookie(req: Request, options: { challenge_id: string; code: string }): Promise<{ enrolled: false }>;
+  reauthenticateWithCookie(req: Request, options: { enrollment_id: string; method: 'password' | 'email'; password?: string }): Promise<never>;
+  verifyReauthenticationWithCookie(req: Request, options: { enrollment_id: string; challenge_id: string; code: string }): Promise<never>;
 }
 interface SomewhereRuntimeAuth {
   signup(options: SomewhereAuthSignupOptions): Promise<SomewhereAuthIssuedSession>;
@@ -4044,6 +4054,7 @@ var require_schema_types = __commonJS({
   interface Scope { readonly __somewhereScope: unique symbol }
   interface OwnerScope extends Scope { readonly __somewhereOwner: unique symbol }
   interface MemberScope extends Scope { readonly __somewhereMember: unique symbol }
+  interface GrantScope extends Scope { readonly __somewhereGrant: unique symbol }
   interface GroupScope extends Scope { readonly __somewhereGroup: unique symbol }
   interface AppRoleScope extends Scope { readonly __somewhereAppRole: unique symbol }
   interface AnyOfScope extends Scope { readonly __somewhereAnyOf: unique symbol }
@@ -4102,8 +4113,9 @@ function removed(): SomewhereSchemaDeclaration.ColumnMarker;
 function removedTable(): SomewhereSchemaDeclaration.TableMarker;
 function exported(): SomewhereSchemaDeclaration.TableMarker;
 `;
-    var policySignatures = `function anyOf(owner: SomewhereSchemaDeclaration.OwnerScope, other: SomewhereSchemaDeclaration.MemberScope | SomewhereSchemaDeclaration.GroupScope | SomewhereSchemaDeclaration.AppRoleScope): SomewhereSchemaDeclaration.AnyOfScope;
-function anyOf(other: SomewhereSchemaDeclaration.MemberScope | SomewhereSchemaDeclaration.GroupScope | SomewhereSchemaDeclaration.AppRoleScope, owner: SomewhereSchemaDeclaration.OwnerScope): SomewhereSchemaDeclaration.AnyOfScope;
+    var policySignatures = `function grant(options: { table: string; grantee: string; row?: string; operations: readonly ['read'] | readonly ['read', 'update'] }): SomewhereSchemaDeclaration.GrantScope;
+function anyOf(owner: SomewhereSchemaDeclaration.OwnerScope, other: SomewhereSchemaDeclaration.GrantScope | SomewhereSchemaDeclaration.MemberScope | SomewhereSchemaDeclaration.GroupScope | SomewhereSchemaDeclaration.AppRoleScope): SomewhereSchemaDeclaration.AnyOfScope;
+function anyOf(other: SomewhereSchemaDeclaration.GrantScope | SomewhereSchemaDeclaration.MemberScope | SomewhereSchemaDeclaration.GroupScope | SomewhereSchemaDeclaration.AppRoleScope, owner: SomewhereSchemaDeclaration.OwnerScope): SomewhereSchemaDeclaration.AnyOfScope;
 function allOf(gate: SomewhereSchemaDeclaration.MemberScope | SomewhereSchemaDeclaration.GroupScope | SomewhereSchemaDeclaration.AppRoleScope, who: SomewhereSchemaDeclaration.OwnerScope | SomewhereSchemaDeclaration.AnyOfScope): SomewhereSchemaDeclaration.Scope;
 function parent(options: { via: string; table?: string }): SomewhereSchemaDeclaration.Scope;
 function group(options?: { column?: string; roles?: Partial<Record<'read' | 'create' | 'update' | 'delete', string[]>> }): SomewhereSchemaDeclaration.GroupScope;
@@ -4306,6 +4318,9 @@ function isCanonicalBigintText(value) {
 }
 
 // worker/src/utils/db-schema-deploy/client-permissions.ts
+function tableAllowsClientWrites(table) {
+  return Boolean(table.client && (table.client.create !== null || table.client.update !== null || table.client.delete || table.client.intake !== void 0));
+}
 function parseClientPermissions(value, columns, scope) {
   const fail = (message) => ({ ok: false, message });
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -4839,6 +4854,23 @@ function validateBindings(input, tableInfo, errors) {
   }
 }
 
+// worker/src/utils/authority/role-domain-map.ts
+var ROLE_NAME_PATTERN = /^[a-z][a-z0-9_]{0,63}$/;
+var EMAIL_DOMAIN_PATTERN = /^(?=.{4,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z][a-z0-9-]{0,61}[a-z0-9]$/;
+function validRoleDomainMap(value) {
+  return !!value && typeof value === "object" && !Array.isArray(value) && Object.entries(value).every(([role, domain]) => ROLE_NAME_PATTERN.test(role) && typeof domain === "string" && EMAIL_DOMAIN_PATTERN.test(domain));
+}
+var ROLE_DOMAIN_MAP_JS = `
+      function __sw_structRoleDomains(value) {
+        if (!value || typeof value !== 'object' || __sw_arrayIsArray(value)) return false;
+        const roles = __sw_keys(value);
+        for (let i = 0; i < roles.length; i++) {
+          const domain = value[roles[i]];
+          if (!__sw_reMatch(${ROLE_NAME_PATTERN}, roles[i]) || typeof domain !== 'string' || !__sw_reMatch(${EMAIL_DOMAIN_PATTERN}, domain)) return false;
+        }
+        return true;
+      }`;
+
 // worker/src/utils/authority/scope-enforcement.ts
 var SAFE_SCOPE_IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*$/;
 var GROUP_ROLE_NAME = /^[a-z][a-z0-9_]{0,63}$/;
@@ -4859,7 +4891,9 @@ function validBakedMemberScope(value) {
   const operations = member.o;
   const operationOrder = ["read", "create", "update", "delete"];
   const validOperations = operations === void 0 || Array.isArray(operations) && JSON.stringify(operations) === JSON.stringify(operationOrder.filter((operation) => operations.includes(operation))) && (operations.includes("read") || !operations.includes("update") && !operations.includes("delete"));
-  return (memberKeys === "g,m,mg,u" || memberKeys === "g,m,mg,o,u") && validOperations && Array.isArray(member.g) && member.g.length > 0 && member.g.every(ident) && Array.isArray(member.mg) && member.mg.length === member.g.length && member.mg.every(ident) && ident(member.m) && ident(member.u);
+  const g = member.g, mg = member.mg;
+  const grant = memberKeys === "g,m,mg,o,og,u" && member.og === true && Array.isArray(g) && Array.isArray(mg) && g[0] === "user_id" && mg[0] === "user_id" && (g.length === 1 || g.length === 2 && g[1] !== "user_id" && mg[1] !== "user_id" && mg[1] !== member.u) && member.u !== "user_id" && (JSON.stringify(operations) === '["read"]' || JSON.stringify(operations) === '["read","update"]');
+  return (memberKeys === "g,m,mg,u" || memberKeys === "g,m,mg,o,u" || grant) && validOperations && Array.isArray(member.g) && member.g.length > 0 && member.g.every(ident) && Array.isArray(member.mg) && member.mg.length === member.g.length && member.mg.every(ident) && ident(member.m) && ident(member.u);
 }
 var MAX_PARENT_EDGES = 4;
 function pinShape(policy) {
@@ -4873,7 +4907,7 @@ function sameAllOfRelation(gate, x) {
   if (x.k !== "m" || gate.k !== "m") return false;
   const a = gate.m;
   const b = x.m;
-  return lower(a.m) === lower(b.m) && lower(a.u) === lower(b.u) && a.g.length === b.g.length && a.g.every((column, i) => lower(column) === lower(b.g[i])) && a.mg.length === b.mg.length && a.mg.every((column, i) => lower(column) === lower(b.mg[i]));
+  return !a.og && !b.og && lower(a.m) === lower(b.m) && lower(a.u) === lower(b.u) && a.g.length === b.g.length && a.g.every((column, i) => lower(column) === lower(b.g[i])) && a.mg.length === b.mg.length && a.mg.every((column, i) => lower(column) === lower(b.mg[i]));
 }
 function validBakedPolicy(value, root = true, edges = 0) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
@@ -4886,7 +4920,7 @@ function validBakedPolicy(value, root = true, edges = 0) {
   }
   if (node.k === "a") {
     const second = node.p?.[1]?.k;
-    return exactKeys(node, ["k", "p"]) && Array.isArray(node.p) && node.p.length === 2 && node.p[0]?.k === "o" && validBakedPolicy(node.p[0], false) && (second === "m" ? validBakedPolicy(node.p[1], false) : (second === "g" || second === "r") && validBakedPolicy(node.p[1], true));
+    return exactKeys(node, ["k", "p"]) && Array.isArray(node.p) && node.p.length === 2 && node.p[0]?.k === "o" && validBakedPolicy(node.p[0], false) && (!(node.p[1]?.k === "m" && node.p[1].m?.og) || node.p[0].c === "user_id") && (second === "m" ? validBakedPolicy(node.p[1], false) : (second === "g" || second === "r") && validBakedPolicy(node.p[1], true));
   }
   if (root && node.k === "n") {
     if (!ALLOF_POLICY_ADMITTED || !exactKeys(node, ["k", "g", "w"])) return false;
@@ -4894,7 +4928,7 @@ function validBakedPolicy(value, root = true, edges = 0) {
     const who = node.w;
     if (!gate || !who) return false;
     const gateMember = gate.m;
-    const gateValid = gate.k === "m" ? validBakedPolicy(gate, false) && gateMember?.o !== void 0 : (gate.k === "g" || gate.k === "r") && validBakedPolicy(gate, true);
+    const gateValid = gate.k === "m" ? validBakedPolicy(gate, false) && gateMember?.o !== void 0 && !gateMember.og : (gate.k === "g" || gate.k === "r") && validBakedPolicy(gate, true);
     if (!gateValid) return false;
     if (who.k === "o") return validBakedPolicy(who, false);
     const whoBranches = who.p;
@@ -4912,7 +4946,9 @@ function validBakedPolicy(value, root = true, edges = 0) {
     return exactKeys(node, ["k", "c", "roles", "generation"]) && ident(node.c) && validGroupRoles(node.roles) && Number.isSafeInteger(node.generation) && node.generation >= 1;
   }
   if (root && node.k === "r") {
-    return exactKeys(node, ["k", "roles", "generation"]) && validGroupRoles(node.roles) && Number.isSafeInteger(node.generation) && node.generation >= 1;
+    const domains = node.d;
+    const validDomains = domains === void 0 || validRoleDomainMap(domains);
+    return (exactKeys(node, ["k", "roles", "generation"]) || exactKeys(node, ["k", "roles", "generation", "d"])) && validDomains && validGroupRoles(node.roles) && Number.isSafeInteger(node.generation) && node.generation >= 1;
   }
   return false;
 }
@@ -5033,7 +5069,8 @@ function bakedPolicyFromDeclared(value, depth = 0, edges = 0, underParent = fals
     if (depth !== 0 && !underParent || node.policies[0]?.kind !== "owner" || second !== "member" && second !== "group" && second !== "app_role") return null;
     const left = bakedPolicyFromDeclared(node.policies[0], depth + 1);
     const right = bakedPolicyFromDeclared(node.policies[1], depth + 1, edges, second !== "member");
-    return left && right ? { k: "a", p: [left, right] } : null;
+    const baked = left && right ? { k: "a", p: [left, right] } : null;
+    return baked && validBakedPolicy(pinShape(baked), true, edges) ? baked : null;
   }
   if (node.kind === "all_of") {
     if (depth !== 0 && !underParent) return null;
@@ -5125,7 +5162,143 @@ function bakedMemberFromDeclared(scope, explicitOperations = false) {
     if (JSON.stringify(operations) !== JSON.stringify(allowed.filter((operation) => operations.includes(operation))) || !operations.includes("read") && (operations.includes("update") || operations.includes("delete"))) return null;
     o = operations.length === allowed.length && !explicitOperations ? void 0 : [...operations];
   }
-  return { g, m: s.membership.toLowerCase(), u: s.memberUser.toLowerCase(), mg, ...o !== void 0 ? { o } : {} };
+  if (s.ownerGrant !== void 0 && s.ownerGrant !== true) return null;
+  const member = { g, m: s.membership.toLowerCase(), u: s.memberUser.toLowerCase(), mg, ...o !== void 0 ? { o } : {}, ...s.ownerGrant ? { og: true } : {} };
+  return validBakedMemberScope(member) ? member : null;
+}
+
+// worker/src/utils/db-schema-deploy/extract-schema-grants.ts
+function readGrantScope(r, table, line, fail) {
+  r.expectPunct("(", "after grant");
+  r.expectPunct("{", "in grant options");
+  let membership, grantee, row;
+  let operations;
+  const seen = /* @__PURE__ */ new Set();
+  while (!r.tryPunct("}")) {
+    const key = r.readKey("in grant options");
+    if (seen.has(key.name)) fail(key.line, `Duplicate grant option "${key.name}".`);
+    seen.add(key.name);
+    r.expectPunct(":", "after grant option");
+    if (key.name === "table" || key.name === "grantee" || key.name === "row") {
+      const value = r.readLiteral("in grant options");
+      if (typeof value !== "string" || !/^[a-zA-Z_][a-zA-Z0-9_]{0,63}$/.test(value)) fail(key.line, "grant table, grantee and row must be column/table identifiers.");
+      if (key.name === "table") membership = value.toLowerCase();
+      else if (key.name === "grantee") grantee = value.toLowerCase();
+      else row = value.toLowerCase();
+    } else if (key.name === "operations") {
+      const ops = [];
+      r.expectPunct("[", "in grant operations");
+      while (!r.tryPunct("]")) {
+        const op = r.readLiteral("in grant operations");
+        if (op !== "read" && op !== "update") fail(key.line, "grant operations allow only read and update.");
+        if (ops.includes(op)) fail(key.line, "Duplicate grant operation.");
+        ops.push(op);
+        if (!r.tryPunct(",")) {
+          r.expectPunct("]", "closing grant operations");
+          break;
+        }
+      }
+      if (!ops.includes("read")) fail(key.line, "grant operations require read; update alone is not allowed.");
+      operations = ops.includes("update") ? ["read", "update"] : ["read"];
+    } else fail(key.line, `Unknown grant option "${key.name}". Allowed: table, grantee, row, operations.`);
+    if (!r.tryPunct(",")) {
+      r.expectPunct("}", "closing grant options");
+      break;
+    }
+  }
+  r.tryPunct(",");
+  r.expectPunct(")", "closing grant");
+  if (!membership || !grantee || !operations || grantee === "user_id") fail(line, `grant() on "${table}" requires table, a grantee column distinct from managed user_id, and explicit operations.`);
+  if (row !== void 0 && (row === "user_id" || row === grantee)) fail(line, `grant() on "${table}": row names the shares column holding the shared row's id, distinct from user_id and the grantee.`);
+  return { kind: "member", group: ["user_id"], membership, memberUser: grantee, memberGroup: row === void 0 ? ["user_id"] : ["user_id", row], operations, ownerGrant: true };
+}
+function resolveGrantRowKeys(scope, key, table, line, fail) {
+  const visit = (node) => {
+    if (node.kind === "member" && node.ownerGrant && node.memberGroup.length === 2 && node.group.length === 1) {
+      if (key === void 0) fail(line, `grant() with row on "${table}" needs the table's one id() key: each share names one row by it.`);
+      node.group = ["user_id", key.toLowerCase()];
+    } else if (node.kind === "any_of") node.policies.forEach(visit);
+    else if (node.kind === "all_of") {
+      visit(node.gate);
+      visit(node.who);
+    }
+  };
+  if (scope.kind === "policy") visit(scope.policy);
+}
+function validateDeclaredMemberships(tables, tableByName, knownColumns, errors) {
+  const memberPolicies = (scope) => {
+    const out = [];
+    const visit = (node) => {
+      if (node.kind === "member") out.push(node);
+      else if (node.kind === "any_of") node.policies.forEach(visit);
+      else if (node.kind === "all_of") {
+        visit(node.gate);
+        visit(node.who);
+      }
+    };
+    if (scope.kind === "member") out.push(scope);
+    else if (scope.kind === "policy") visit(scope.policy);
+    return out;
+  };
+  for (const t of tables) {
+    for (const sc of memberPolicies(t.scope)) {
+      const own = knownColumns(t);
+      for (const g of sc.group) {
+        if (!own.has(g)) {
+          errors.push(
+            `Table "${t.name}" is member-scoped on "${g}", but "${g}" is not one of its declared columns. The group-key columns must be real columns on the table.`
+          );
+        }
+      }
+      const membershipTable = tableByName.get(sc.membership);
+      if (!membershipTable) {
+        errors.push(
+          `Table "${t.name}" is member-scoped through the membership table "${sc.membership}", which is not declared in db/schema.ts. The membership table must be a managed table in the same schema.`
+        );
+        continue;
+      }
+      const membershipCols = knownColumns(membershipTable);
+      if (sc.ownerGrant) {
+        if (membershipTable.scope.kind !== "owner" || membershipTable.scope.column !== "user_id" || membershipTable.scope.visitors) {
+          errors.push(`Grant table "${sc.membership}" must use owner() with managed user_id and authenticated owners.`);
+        }
+        if (membershipTable.client?.intake || membershipTable.client?.links) errors.push(`Grant table "${sc.membership}" cannot expose public intake or row links; only its authenticated owner manages grants.`);
+        const grantee = membershipTable.columns.find((column) => column.name === sc.memberUser);
+        if (!grantee || grantee.helper !== "text" || grantee.nullable) errors.push(`Grant grantee "${sc.membership}"."${sc.memberUser}" must be a required text column.`);
+        if (sc.memberGroup.length === 2) {
+          const row = membershipTable.columns.find((column) => column.name === sc.memberGroup[1]);
+          const key = t.columns.find((column) => column.name === sc.group[1]);
+          const keyHelper = key?.helper === "id" ? key.uuid ? "text" : "integer" : null;
+          if (!row || row.nullable || row.helper !== keyHelper) {
+            errors.push(`Grant row "${sc.membership}"."${sc.memberGroup[1]}" must be a required ${keyHelper ?? "id-typed"} column holding a "${t.name}" id.`);
+          } else if (row.hasDefault || row.references !== t.name || row.onDelete !== "cascade") {
+            errors.push(`Grant row "${sc.membership}"."${sc.memberGroup[1]}" must reference its row with no default: ${sc.memberGroup[1]}: ${keyHelper}({ references: '${t.name}', onDelete: 'cascade' }).`);
+          }
+          if (membershipTable.client?.update?.includes(sc.memberGroup[1])) {
+            errors.push(`Grant row "${sc.membership}"."${sc.memberGroup[1]}" cannot be in client.update: a share names one row for its life. Delete the share and create another.`);
+          }
+          const users = tables.filter((other) => memberPolicies(other.scope).some((m) => m.ownerGrant && m.membership === sc.membership));
+          if (users.length !== 1 || memberPolicies(t.scope).filter((m) => m.ownerGrant && m.membership === sc.membership).length !== 1) {
+            errors.push(`Grant table "${sc.membership}" names rows of "${t.name}", so it serves only that one grant() rule. Declare another shares table for other grants.`);
+          }
+        }
+      } else if (tableAllowsClientWrites(membershipTable)) {
+        errors.push(`Table "${sc.membership}" grants membership access to "${t.name}" and cannot allow client writes; membership changes go through a server function.`);
+      }
+      if (!membershipCols.has(sc.memberUser)) {
+        errors.push(
+          `The membership table "${sc.membership}" (for member-scoped "${t.name}") has no "${sc.memberUser}" column named in member({ member_user }).`
+        );
+      }
+      for (const mg of sc.ownerGrant ? [] : sc.memberGroup) {
+        if (!membershipCols.has(mg)) {
+          errors.push(
+            `The membership table "${sc.membership}" (for member-scoped "${t.name}") has no "${mg}" column named in member({ member_group }).`
+          );
+        }
+      }
+    }
+  }
 }
 
 // worker/src/utils/db-schema-deploy/schema-constants.ts
@@ -6219,8 +6392,9 @@ function resolveAppRoleScopes(tables, appRoles, errors) {
 }
 
 // worker/src/utils/db-schema-deploy/extract-schema-roles.ts
+var EMAIL_DOMAIN = EMAIL_DOMAIN_PATTERN;
 var GROUP_KEYS = ["roles", "adminGrantableRoles"];
-var APP_ROLE_KEYS = ["grantableBy"];
+var APP_ROLE_KEYS = ["grantableBy", "emailDomain"];
 function readStringList2(r, fail, ctx) {
   const open = r.peek();
   if (open.kind !== "punct" || open.value !== "[") fail(open.line, `${ctx} must be a list of quoted role names, such as ['viewer'].`);
@@ -6264,7 +6438,7 @@ function readAppRoles(r, fail) {
     const key = r.readKey("for an app role name");
     if (out.some((role2) => role2.name === key.name)) fail(key.line, `app role "${key.name}" is declared twice.`);
     r.expectPunct(":", `after app role "${key.name}"`);
-    r.expectPunct("{", `opening app role "${key.name}", which takes { grantableBy: [...] }`);
+    r.expectPunct("{", `opening app role "${key.name}", which takes { grantableBy: [...], emailDomain: '...' }`);
     const role = { name: key.name, grantableBy: [] };
     const seen = /* @__PURE__ */ new Set();
     while (!r.tryPunct("}")) {
@@ -6275,7 +6449,16 @@ function readAppRoles(r, fail) {
       if (seen.has(opt.name)) fail(opt.line, `app role "${key.name}" declares ${opt.name} twice.`);
       seen.add(opt.name);
       r.expectPunct(":", `after appRoles.${key.name}.${opt.name}`);
-      role.grantableBy = readStringList2(r, fail, `appRoles.${key.name}.grantableBy`);
+      if (opt.name === "emailDomain") {
+        const t = r.next();
+        if (t.kind !== "string") fail(t.line, `appRoles.${key.name}.emailDomain must be one quoted domain, such as 'example.com'.`);
+        if (!EMAIL_DOMAIN.test(t.value)) {
+          fail(t.line, `appRoles.${key.name}.emailDomain "${t.value}" must be one lowercase domain such as 'example.com': no "@", no wildcard, no scheme or path. Users whose verified email is at exactly that domain hold the role; subdomains are other domains.`);
+        }
+        role.emailDomain = t.value;
+      } else {
+        role.grantableBy = readStringList2(r, fail, `appRoles.${key.name}.grantableBy`);
+      }
       if (!r.tryPunct(",")) {
         r.expectPunct("}", `closing app role "${key.name}"`);
         break;
@@ -6295,18 +6478,31 @@ function canonicalRoleVocabulary(groups, appRoles) {
     v: 1,
     groupRoles: sorted2(groups?.roles ?? []),
     adminGrantableGroupRoles: sorted2(groups?.adminGrantableRoles ?? []),
-    appRoles: [...appRoles ?? []].sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0).map((role) => ({ name: role.name, grantableBy: sorted2(role.grantableBy) }))
+    appRoles: [...appRoles ?? []].sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0).map((role) => ({ name: role.name, grantableBy: sorted2(role.grantableBy), ...role.emailDomain ? { emailDomain: role.emailDomain } : {} }))
   };
 }
 function validateDeclaredRoles(groups, appRoles) {
   const delegation = /* @__PURE__ */ Object.create(null);
   for (const role of appRoles ?? []) delegation[role.name] = role.grantableBy;
-  return roleVocabularyErrors({
+  return [...emailDomainRoleErrors(appRoles ?? []), ...roleVocabularyErrors({
     groupRoles: groups?.roles ?? [],
     adminGrantableGroupRoles: groups?.adminGrantableRoles ?? [],
     appRoles: (appRoles ?? []).map((role) => role.name),
     appRoleDelegation: delegation
-  });
+  })];
+}
+function emailDomainRoleErrors(appRoles) {
+  const errors = [];
+  const byDomain = new Set(appRoles.filter((role) => role.emailDomain !== void 0).map((role) => role.name));
+  for (const role of appRoles) {
+    if (role.emailDomain !== void 0 && !EMAIL_DOMAIN.test(role.emailDomain)) errors.push(`appRoles.${role.name}.emailDomain is not one lowercase domain.`);
+    for (const grantor of role.grantableBy) {
+      if (byDomain.has(grantor)) {
+        errors.push(`appRoles.${role.name}.grantableBy names "${grantor}", which is held by email domain. A role held by email domain cannot grant other roles; list a role that is granted explicitly.`);
+      }
+    }
+  }
+  return errors;
 }
 
 // worker/src/utils/db-schema-deploy/extract-schema-options.ts
@@ -6396,6 +6592,7 @@ var SCHEMA_CALLABLE = /* @__PURE__ */ new Set([
   ...TABLE_MARKER_HELPERS,
   "schema",
   "table",
+  "grant",
   "removed",
   "hasMany",
   "belongsTo",
@@ -6510,10 +6707,10 @@ function tokenize(source) {
 var Reader = class {
   constructor(tokens, options = {}) {
     this.tokens = tokens;
-    this.bareIdIsText = !options.legacyIntegerIdDefault;
+    this.bareIdIsText = (table) => !options.legacyIntegerIdDefault && !options.integerKeyTables?.has(table.toLowerCase());
   }
   pos = 0;
-  /** What a bare id() declares: a random text key, or (legacy retained source) an integer. */
+  /** What a bare id() on this table declares: a random text key, or an integer (ExtractSchemaOptions). */
   bareIdIsText;
   peek() {
     return this.tokens[this.pos];
@@ -6681,7 +6878,7 @@ function readColumn(r, tableName, rawName, line) {
   const col = {
     name,
     helper,
-    uuid: helper === "id" && r.bareIdIsText,
+    uuid: helper === "id" && r.bareIdIsText(tableName),
     nullable: false,
     hasDefault: false,
     default: null,
@@ -6918,7 +7115,7 @@ function readPolicyMember(r, tableName, line) {
   if (scope.kind !== "member") throw new SchemaTsError(`line ${line}: invalid member() policy.`);
   return scope;
 }
-var ANY_OF_FORMS = "anyOf() accepts exactly one owner() and one member(), group() or appRole().";
+var ANY_OF_FORMS = "anyOf() accepts exactly one owner() and one member(), grant(), group() or appRole().";
 function readAnyOfBranch(r, tableName, which) {
   const tok = r.expectIdent(`for the ${which} policy in anyOf() on table "${tableName}"`);
   const failAt = (at, message) => {
@@ -6926,6 +7123,7 @@ function readAnyOfBranch(r, tableName, which) {
   };
   if (tok.value === "owner") return readPolicyOwner(r, tableName, tok.line);
   if (tok.value === "member") return readPolicyMember(r, tableName, tok.line);
+  if (tok.value === "grant") return readGrantScope(r, tableName, tok.line, failAt);
   if (tok.value === "group") return readGroupScope(r, tableName, tok.line, failAt);
   if (tok.value === "appRole") return readAppRoleScope(r, tableName, tok.line, failAt);
   throw new SchemaTsError(`line ${tok.line}: ${ANY_OF_FORMS}`);
@@ -6941,6 +7139,7 @@ function readAnyOfScope(r, tableName, line) {
   if (owners.length !== 1) throw new SchemaTsError(`line ${line}: ${ANY_OF_FORMS}`);
   const owner = owners[0];
   const other = firstPolicy.kind === "owner" ? secondPolicy : firstPolicy;
+  if (other.kind === "member" && other.ownerGrant && owner.column !== DEFAULT_OWNER_COLUMN) throw new SchemaTsError(`line ${line}: grant() requires owner() with managed user_id.`);
   return { kind: "policy", policy: { kind: "any_of", policies: [owner, other] } };
 }
 var ALL_OF_FORMS = "allOf() takes a gate \u2014 member(), group() or appRole() \u2014 and then owner() or anyOf(owner(), ...).";
@@ -6968,6 +7167,7 @@ function readAllOfScope(r, tableName, line) {
   r.tryPunct(",");
   r.expectPunct(")", "closing allOf()");
   const x = who.kind === "any_of" ? who.policies[1] : null;
+  if (x?.kind === "member" && x.ownerGrant) throw new SchemaTsError(`line ${line}: grant() belongs in anyOf(owner(), grant()), not allOf().`);
   for (const node of [gate, ...x ? [x] : []]) {
     if (node.kind !== "member") continue;
     if (!explicitMemberOperations.has(node)) {
@@ -7203,6 +7403,9 @@ function readTable(r, rawName, nameLine) {
       if (key.name === "scope") {
         if (scope) throw new SchemaTsError(`line ${key.line}: table "${rawName}" declares "scope" twice.`);
         scope = readScope(r, rawName);
+        resolveGrantRowKeys(scope, idCols[0]?.name, rawName, key.line, (at, message) => {
+          throw new SchemaTsError(`line ${at}: ${message}`);
+        });
       } else if (key.name === "indexes") {
         if (indexEntries) throw new SchemaTsError(`line ${key.line}: table "${rawName}" declares "indexes" twice.`);
         indexEntries = readColumnLists(r, rawName, "indexes");
@@ -7434,55 +7637,7 @@ function extractSchemaTs(source, options = {}) {
     };
     resolveAppRoleScopes(tables, appRoles, errors);
     resolveGroupsAndParents(tables, tableByName, privatePolicy, groupRoles, errors);
-    const memberPolicies = (scope) => {
-      const out = [];
-      const visit = (node) => {
-        if (node.kind === "member") out.push(node);
-        else if (node.kind === "any_of") node.policies.forEach(visit);
-        else if (node.kind === "all_of") {
-          visit(node.gate);
-          visit(node.who);
-        }
-      };
-      if (scope.kind === "member") out.push(scope);
-      else if (scope.kind === "policy") visit(scope.policy);
-      return out;
-    };
-    for (const t of tables) {
-      for (const sc of memberPolicies(t.scope)) {
-        const own = knownColumns(t);
-        for (const g of sc.group) {
-          if (!own.has(g)) {
-            errors.push(
-              `Table "${t.name}" is member-scoped on "${g}", but "${g}" is not one of its declared columns. The group-key columns must be real columns on the table.`
-            );
-          }
-        }
-        const membershipTable = tableByName.get(sc.membership);
-        if (!membershipTable) {
-          errors.push(
-            `Table "${t.name}" is member-scoped through the membership table "${sc.membership}", which is not declared in db/schema.ts. The membership table must be a managed table in the same schema.`
-          );
-          continue;
-        }
-        const membershipCols = knownColumns(membershipTable);
-        if (membershipTable.client && (membershipTable.client.create !== null || membershipTable.client.update !== null || membershipTable.client.delete || membershipTable.client.intake !== void 0)) {
-          errors.push(`Table "${sc.membership}" grants membership access to "${t.name}" and cannot allow client writes; membership changes go through a server function.`);
-        }
-        if (!membershipCols.has(sc.memberUser)) {
-          errors.push(
-            `The membership table "${sc.membership}" (for member-scoped "${t.name}") has no "${sc.memberUser}" column named in member({ member_user }).`
-          );
-        }
-        for (const mg of sc.memberGroup) {
-          if (!membershipCols.has(mg)) {
-            errors.push(
-              `The membership table "${sc.membership}" (for member-scoped "${t.name}") has no "${mg}" column named in member({ member_group }).`
-            );
-          }
-        }
-      }
-    }
+    validateDeclaredMemberships(tables, tableByName, knownColumns, errors);
     validateDeclaredRelations(tables, tableByName, knownColumns, (table) => removedTables.includes(table) ? "removedTable()" : exportedTables.includes(table) ? "exported()" : null, errors);
     validateRowLinks(tables, tableByName, errors);
     validateIntake(tables, tableByName, errors);
@@ -7490,7 +7645,7 @@ function extractSchemaTs(source, options = {}) {
       errors.push(...fileErrors);
       validateFileCollections(fileCollections, (name) => {
         const t = tableByName.get(name);
-        return t ? { columns: knownColumns(t), clientWrites: Boolean(t.client && (t.client.create !== null || t.client.update !== null || t.client.delete || t.client.intake !== void 0)), parentTarget: fileParentTarget(t) } : null;
+        return t ? { columns: knownColumns(t), clientWrites: tableAllowsClientWrites(t), parentTarget: fileParentTarget(t) } : null;
       }, errors);
     }
     if (groupRoles || appRoles) errors.push(...validateDeclaredRoles(groupRoles, appRoles));
@@ -7601,7 +7756,10 @@ function declaredRolesFromSource(files) {
   if (source === void 0) return void 0;
   const parsed = extractSchemaTs(source);
   if (!parsed.ok || !parsed.declaration.groups && !parsed.declaration.appRoles) return void 0;
-  return JSON.stringify(canonicalRoleVocabulary(parsed.declaration.groups, parsed.declaration.appRoles));
+  return JSON.stringify(canonicalRoleVocabulary(
+    parsed.declaration.groups,
+    parsed.declaration.appRoles?.map((role) => ({ name: role.name, grantableBy: role.grantableBy }))
+  ));
 }
 
 // declared-data-vendor-entry.js
@@ -7619,8 +7777,8 @@ var checkerContract = __toESM(require_checker_contract());
 var import_runtime_types = __toESM(require_runtime_types());
 var import_generated_declarations = __toESM(require_generated_declarations());
 var import_generated_declarations_render = __toESM(require_generated_declarations_render());
-function referenceCheckDeclaredTables(graphFiles) {
-  const authority = schemaAuthorityFromSource(graphFiles);
+function referenceCheckDeclaredTables(graphFiles, schemaOptions = {}) {
+  const authority = schemaAuthorityFromSource(graphFiles, schemaOptions);
   return authority ? (0, import_runtime_types.declaredTablesDeclaration)(authority) : void 0;
 }
 function referenceCheckDeclarations(graphFiles) {

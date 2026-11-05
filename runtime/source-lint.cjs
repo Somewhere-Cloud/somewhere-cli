@@ -105,22 +105,26 @@ var require_declared_data_contract = __commonJS({
       if (value.k === "o" && keys === "c,k" && identifier.test(value.c)) return { k: "o", c: value.c };
       if (value.k === "m" && keys === "k,m") {
         record(value.m, label + ".member");
-        const { g, m, u, mg, o } = value.m;
+        const { g, m, u, mg, o, og } = value.m;
         const memberKeys = Object.keys(value.m).sort().join(",");
-        if (!["g,m,mg,u", "g,m,mg,o,u"].includes(memberKeys) || !identifier.test(m) || !identifier.test(u) || !Array.isArray(g) || !g.length || !Array.isArray(mg) || g.length !== mg.length || [...g, ...mg].some((field) => typeof field !== "string" || !identifier.test(field)) || o !== void 0 && (!Array.isArray(o) || JSON.stringify(o) !== JSON.stringify(["read", "create", "update", "delete"].filter((operation) => o.includes(operation))) || !o.includes("read") && (o.includes("update") || o.includes("delete")))) fail(label);
+        const grant = memberKeys === "g,m,mg,o,og,u" && og === true && Array.isArray(g) && Array.isArray(mg) && g[0] === "user_id" && mg[0] === "user_id" && (g.length === 1 || g.length === 2 && g[1] !== "user_id" && mg[1] !== "user_id" && mg[1] !== u) && u !== "user_id" && (JSON.stringify(o) === '["read"]' || JSON.stringify(o) === '["read","update"]');
+        if (!["g,m,mg,u", "g,m,mg,o,u"].includes(memberKeys) && !grant || !identifier.test(m) || !identifier.test(u) || !Array.isArray(g) || !g.length || !Array.isArray(mg) || g.length !== mg.length || [...g, ...mg].some((field) => typeof field !== "string" || !identifier.test(field)) || o !== void 0 && (!Array.isArray(o) || JSON.stringify(o) !== JSON.stringify(["read", "create", "update", "delete"].filter((operation) => o.includes(operation))) || !o.includes("read") && (o.includes("update") || o.includes("delete")))) fail(label);
         const normalizedOperations = o?.length === 4 ? void 0 : o;
-        return { k: "m", m: { g: [...g], m, u, mg: [...mg], ...normalizedOperations !== void 0 ? { o: [...normalizedOperations] } : {} } };
+        return { k: "m", m: { g: [...g], m, u, mg: [...mg], ...normalizedOperations !== void 0 ? { o: [...normalizedOperations] } : {}, ...og ? { og: true } : {} } };
       }
       if (value.k === "a" && keys === "k,p" && Array.isArray(value.p) && value.p.length === 2) {
         const left = policy(value.p[0], label), right = policy(value.p[1], label);
         if (left.k !== "o" || !["m", "g", "r"].includes(right.k)) fail(label);
+        if (right.k === "m" && right.m.og && left.c !== "user_id") fail(label);
         return { k: "a", p: [left, right] };
       }
       if (value.k === "n" && keys === "g,k,w") {
         const gate = policy(value.g, label), who = policy(value.w, label);
         if (!["m", "g", "r"].includes(gate.k) || !["o", "a"].includes(who.k)) fail(label);
+        if (gate.k === "m" && gate.m.og) fail(label);
         if (who.k === "a") {
           const x = who.p[1];
+          if (x.k === "m" && x.m.og) fail(label);
           const same = x.k === "r" || x.k === "g" && gate.k === "g" && x.c.toLowerCase() === gate.c.toLowerCase() || x.k === "m" && gate.k === "m" && x.m.m.toLowerCase() === gate.m.m.toLowerCase() && x.m.u.toLowerCase() === gate.m.u.toLowerCase() && JSON.stringify(x.m.g.map((c) => c.toLowerCase())) === JSON.stringify(gate.m.g.map((c) => c.toLowerCase())) && JSON.stringify(x.m.mg.map((c) => c.toLowerCase())) === JSON.stringify(gate.m.mg.map((c) => c.toLowerCase()));
           if (!same) fail(label);
         }
@@ -151,14 +155,14 @@ var require_declared_data_contract = __commonJS({
       }
       return roles;
     }
-    function policyMembershipTables(value, out) {
+    function policyMembershipTables(value, out, grants) {
       if (!value || typeof value !== "object") return;
-      if (value.k === "m" && value.m) out.add(value.m.m);
-      else if (value.k === "a") value.p.forEach((item) => policyMembershipTables(item, out));
+      if (value.k === "m" && value.m) (value.m.og === true ? grants : out).add(value.m.m);
+      else if (value.k === "a") value.p.forEach((item) => policyMembershipTables(item, out, grants));
       else if (value.k === "n") {
-        policyMembershipTables(value.g, out);
-        policyMembershipTables(value.w, out);
-      } else if (value.k === "p") policyMembershipTables(value.p, out);
+        policyMembershipTables(value.g, out, grants);
+        policyMembershipTables(value.w, out, grants);
+      } else if (value.k === "p") policyMembershipTables(value.p, out, grants);
     }
     function validateInsertReceiptCapability(value) {
       if (value !== void 0 && value !== "insert-v1") fail("insert receipt capability");
@@ -171,7 +175,17 @@ var require_declared_data_contract = __commonJS({
       record(scopes, "scopes");
       const tables = [];
       const membershipTables = new Set(Object.values(schema).filter((table) => table && table.member).map((table) => table.member.m));
-      for (const table of Object.values(schema)) if (table?.policy) policyMembershipTables(table.policy, membershipTables);
+      const grantTables = /* @__PURE__ */ new Set();
+      for (const table of Object.values(schema)) if (table?.policy) policyMembershipTables(table.policy, membershipTables, grantTables);
+      for (const name of grantTables) {
+        const grant = schema[name];
+        if (!grant || intents[name] !== "scoped" || scopes[name] !== "user_id" || grant.visitors || grant.policy || grant.member || grant.client?.links || grant.client?.intake || grant.client?.identity === "visitor") fail(`${name} owner grant authority`);
+      }
+      const grantRules = Object.entries(schema).flatMap(([name, table]) => table?.policy?.k === "a" && table.policy.p?.[1]?.k === "m" && table.policy.p[1].m?.og === true ? [{ name, table, m: table.policy.p[1].m }] : []);
+      for (const rule of grantRules.filter((rule2) => rule2.m.g.length === 2)) {
+        const shares = schema[rule.m.m], row = rule.m.mg[1];
+        if (grantRules.filter((other) => other.m.m === rule.m.m).length !== 1 || rule.table.primaryKey !== rule.m.g[1] || !shares?.columns?.some((column) => column?.n === row) || Array.isArray(shares.client?.update) && shares.client.update.includes(row)) fail(`${rule.m.m} row grant authority`);
+      }
       for (const name of Object.keys(schema).sort()) {
         const table = schema[name];
         record(table, `table ${name}`);
@@ -1244,6 +1258,9 @@ var VERIFY_SIGNUP_FETCH_PROLOGUE = "    const verifySignup = await __sw_captureV
 var SENSITIVE_PARAMS = [
   "access_token",
   "refresh_token",
+  // OAuth callbacks carry one-use credentials even when validation refuses them.
+  "code",
+  "state",
   // A creator or link secret belongs only in a request body; a stray query copy is never kept.
   "creator_secret",
   "secret",
@@ -1260,7 +1277,7 @@ var SENSITIVE_PARAMS = [
   "dsn",
   "password"
 ];
-var PARAM_RE = new RegExp(`([?&](?:${SENSITIVE_PARAMS.join("|")})=)[^&\\s]*`, "gi");
+var SENSITIVE_PARAM_NAMES = new Set(SENSITIVE_PARAMS);
 
 // shared/draft-execution-authority.ts
 var DRAFT_PLATFORM_SERVICE_BINDING = "PLATFORM_API";
@@ -1526,9 +1543,13 @@ var DB_TYPED_ERRORS_JS = `      // The REST bridge's refusal as the caller sees 
         // because one row targets a group the caller cannot write to.
         const guard = msg.match(/SW_(MEMBERSHIP_REQUIRED|POLICY_AUTHORITY_REQUIRED)/);
         if (guard) {
-          const refused = new Error(guard[1] === 'MEMBERSHIP_REQUIRED'
+          // A single write raises it too: a per-row share's guard (query-sql.ts grantRow) or a parent()
+          // move only a grant() would allow.
+          const refused = new Error(label !== 'sw.db.tx' && guard[1] === 'POLICY_AUTHORITY_REQUIRED'
+            ? label + ': the access policy of this table does not permit this change by the signed-in user. Nothing was written.'
+            : guard[1] === 'MEMBERSHIP_REQUIRED'
             ? 'sw.db.tx: an insert targets a group the signed-in user is not a member of. Nothing in the transaction was written.'
-            : 'sw.db.tx: the access policy of this table does not permit an insert by the signed-in user. Nothing in the transaction was written.');
+            : 'sw.db.tx: the access policy of a table does not permit one of these changes by the signed-in user. Nothing in the transaction was written.');
           refused.code = guard[1];
           refused.status = 403;
           refused.__sw_expose = true;
@@ -2802,8 +2823,53 @@ function buildPlatformContext(env, request, runtimeFetch = fetch, outboundFetch 
     const media = /^\\/v1\\/(?:ai\\/(?:tts|generate-image|remove-background)|render\\/(?:screenshot|pdf)|web\\/scrape|browser\\/test)$/.test(path);
     const mutation = state && media && method === 'POST';
     if (mutation) { state.generation++; state.pending++; state.envelope = null; }
-    try { return await __sw_platformFetchInner(path, opts); }
+    const signal = opts && opts.signal;
+    const stateForDeadline = signal ? { dispatched: false } : null;
+    const started = signal ? Date.now() : 0;
+    const preparedOpts = signal ? Object.assign({}, opts, { __sw_deadlineState: stateForDeadline }) : opts;
+    try { return await __sw_platformFetchInner(path, preparedOpts); }
+    catch (err) {
+      if (signal && !stateForDeadline.dispatched && err && err.code === 'PLATFORM_CALL_CANCELLED') {
+        __sw_recordPlatformCall(path, started, undefined);
+      }
+      throw err;
+    }
     finally { if (mutation) { state.pending--; state.envelope = null; } }
+  }
+  // Cancellation stops waiting; a request already sent may still complete.
+  // Nothing is retried, and cancelled preparation never starts a request.
+  function __sw_platformBound(signal, work, state) {
+    if (!signal) return work();
+    function cancelled() {
+      const err = new Error('The platform call stopped waiting. Check its outcome before trying again.');
+      err.code = 'PLATFORM_CALL_CANCELLED';
+      err.status = 504;
+      err.retry = false;
+      err.outcome = state && state.dispatched ? 'unknown' : 'not_attempted';
+      return err;
+    }
+    if (signal.aborted) return Promise.reject(cancelled());
+    return new Promise(function (resolve, reject) {
+      let settled = false;
+      function finish(fn, value) {
+        if (settled) return;
+        settled = true;
+        signal.removeEventListener('abort', abort);
+        fn(value);
+      }
+      function abort() { finish(reject, cancelled()); }
+      signal.addEventListener('abort', abort, { once: true });
+      if (signal.aborted) { abort(); return; }
+      try { Promise.resolve(work()).then(function (value) { finish(resolve, value); }, function (err) { finish(reject, err); }); }
+      catch (err) { finish(reject, err); }
+    });
+  }
+  async function __sw_platformJSONBody(response, signal) {
+    try { return await __sw_platformBound(signal, function () { return response.json(); }, { dispatched: true }); }
+    catch (err) {
+      if (err && err.code === 'PLATFORM_CALL_CANCELLED') throw err;
+      return null;
+    }
   }
   async function __sw_platformFetchInner(path, opts) {
     opts = opts || {};
@@ -2816,7 +2882,7 @@ function buildPlatformContext(env, request, runtimeFetch = fetch, outboundFetch 
     const __sw_spanStart = Date.now();
     // Inside a job or cron delivery every platform call names its job, so the
     // platform refuses it once that job has ended (middleware/job-invocation-fence.ts).
-    const __sw_jobMarker = opts.__swFenceExempt ? null : await __sw_jobInvocationMarker();
+    const __sw_jobMarker = opts.__swFenceExempt ? null : await __sw_platformBound(opts.signal, function () { return __sw_jobInvocationMarker(); }, opts.__sw_deadlineState);
     const headers = {
       ...(opts.headers || {}),
       ...(__sw_jobMarker || {}),
@@ -2860,12 +2926,15 @@ function buildPlatformContext(env, request, runtimeFetch = fetch, outboundFetch 
         __sw_fetchStart = Date.now();
         __sw_prepMs = __sw_fetchStart - __sw_spanStart;
       }
-      __sw_response = await __sw_runtimeFetch(platformBase + path, {
+      __sw_response = await __sw_platformBound(opts.signal, function () {
+        if (opts.__sw_deadlineState) opts.__sw_deadlineState.dispatched = true;
+        return __sw_runtimeFetch(platformBase + path, {
         method: __sw_method,
         headers,
         body: opts.body,
         ...(opts.signal ? { signal: opts.signal } : {}),
-      });
+        });
+      }, opts.__sw_deadlineState);
       if (__sw_serverTiming) __sw_fetchMs = Date.now() - __sw_fetchStart;
     } catch (err) {
       if (__sw_serverTiming) __sw_fetchMs = Date.now() - __sw_fetchStart;
@@ -2931,8 +3000,7 @@ function buildPlatformContext(env, request, runtimeFetch = fetch, outboundFetch 
 
   async function platformJSON(path, opts) {
     const r = await platformFetch(path, opts);
-    let data;
-    try { data = await r.json(); } catch { data = null; }
+    const data = await __sw_platformJSONBody(r, opts && opts.signal);
     if (!r.ok || !data || data.ok === false) {
       throw __sw_platformError(r, data);
     }
@@ -3036,7 +3104,7 @@ function buildPlatformContext(env, request, runtimeFetch = fetch, outboundFetch 
         });
         if (ingest) {
           let result = null;
-          try { result = await response.json(); } catch (_) {}
+          result = await __sw_platformJSONBody(response, controller.signal);
           const queued = result && typeof result.queued === 'number' ? result.queued : 0;
           const dropped = result && typeof result.dropped === 'number' ? result.dropped : null;
           if (response.status === 202 && dropped === 0) return;
@@ -3048,8 +3116,8 @@ function buildPlatformContext(env, request, runtimeFetch = fetch, outboundFetch 
           throw failure;
         }
         if (!response.ok) throw new Error('Console log delivery was refused.');
-        const result = await response.json();
-        if (!result.data || result.data.failed || result.data.unknown) {
+        const result = await __sw_platformJSONBody(response, controller.signal);
+        if (!result || !result.data || result.data.failed || result.data.unknown) {
           throw new Error('Console log delivery could not be confirmed.');
         }
       } finally { clearTimeout(timeout); }
@@ -3061,9 +3129,14 @@ function buildPlatformContext(env, request, runtimeFetch = fetch, outboundFetch 
   // itself lives in the sw.rateLimit fragment.
   // The platform's counter: one increment, answered with the count it reached.
   async function __sw_rateLimitAsk(key, max, windowSeconds) {
+    // Rate-limit checks stop waiting after five seconds.
+    // An unconfirmed increment is never retried.
+    const controller = new AbortController();
+    const timer = setTimeout(function () { controller.abort(); }, 5000);
     try {
       return await platformJSON('/v1/rate-limit/check', {
         method: 'POST',
+        signal: controller.signal,
         body: JSON.stringify({
           project_id: projectId,
           key,
@@ -3086,7 +3159,7 @@ function buildPlatformContext(env, request, runtimeFetch = fetch, outboundFetch 
         };
       }
       throw e;
-    }
+    } finally { clearTimeout(timer); }
   }
 
   // Remember what the platform answered for this key's window. A refusal
@@ -4694,6 +4767,12 @@ var DB_STRUCTURED_EXECUTION_JS = `      async function __sw_structExec(label, ir
         // Zero rows back means the EXISTS was false: the verified user does not
         // belong to the group this row targets. Surface it as an explicit 403
         // BEFORE any realtime publish \u2014 the row never landed.
+        // A per-row share names a row its creator does not own (query-sql.ts grantRow guard).
+        if (ir.kind === 'insert' && (ir.scope.mode === 'user' || ir.scope.mode === 'server') && ir.scope.grantRow && ir.onConflict === undefined && rows.length === 0) {
+          __sw_structThrow403('POLICY_AUTHORITY_REQUIRED', ir.scope.mode === 'server'
+            ? 'sw.db.server.insert on "' + ir.table.name + '": a share can name only a "' + ir.scope.grantRow.t + '" row its user_id owns.'
+            : 'sw.db.insert on "' + ir.table.name + '": a share can name only a "' + ir.scope.grantRow.t + '" row the signed-in user owns.');
+        }
         if (ir.kind === 'insert' && (ir.scope.mode === 'member' || ir.scope.mode === 'policy') && rows.length === 0) {
           __sw_structThrow403(ir.scope.mode === 'policy' ? 'POLICY_AUTHORITY_REQUIRED' : 'MEMBERSHIP_REQUIRED',
             ir.scope.mode === 'policy' ? 'sw.db.insert on "' + ir.table.name + '": the proposed row is outside your declared private policy.'
@@ -5118,6 +5197,7 @@ function renderPolicySql(request) {
     return renderPolicySql({
       render: "predicate",
       principal: r.principal,
+      emailDomain: r.emailDomain,
       table: r.table,
       physical: r.physical,
       policy: { k: "m", m: r.member },
@@ -5128,10 +5208,11 @@ function renderPolicySql(request) {
   }
   if (r.render === "insert") {
     if (r.policy && r.policy.k === "n") {
-      renderPolicySql({ render: "predicate", principal: r.principal, table: r.table, physical: r.physical, policy: r.policy, operation: "read", qualifier: null, proposed: null });
+      renderPolicySql({ render: "predicate", principal: r.principal, emailDomain: r.emailDomain, table: r.table, physical: r.physical, policy: r.policy, operation: "read", qualifier: null, proposed: null });
       const gateInsert = renderPolicySql({
         render: "predicate",
         principal: r.principal,
+        emailDomain: r.emailDomain,
         table: r.table,
         physical: r.physical,
         policy: r.policy.g,
@@ -5139,7 +5220,7 @@ function renderPolicySql(request) {
         qualifier: null,
         proposed: r.proposed
       });
-      const whoInsert = r.policy.w.k === "o" ? { sql: "1", params: [] } : renderPolicySql({ render: "insert", principal: r.principal, table: r.table, physical: r.physical, policy: r.policy.w, proposed: r.proposed });
+      const whoInsert = r.policy.w.k === "o" ? { sql: "1", params: [] } : renderPolicySql({ render: "insert", principal: r.principal, emailDomain: r.emailDomain, table: r.table, physical: r.physical, policy: r.policy.w, proposed: r.proposed });
       const insertParams = [];
       for (let i = 0; i < gateInsert.params.length; i++) insertParams.push(gateInsert.params[i]);
       for (let i = 0; i < whoInsert.params.length; i++) insertParams.push(whoInsert.params[i]);
@@ -5148,13 +5229,17 @@ function renderPolicySql(request) {
     const anyOf = r.policy && r.policy.k === "a";
     const branch = anyOf && Array.isArray(r.policy.p) ? r.policy.p[1] : null;
     if (anyOf && (!branch || branch.k !== "m" && branch.k !== "g" && branch.k !== "r")) throw new Error("policy-sql: invalid anyOf policy");
+    if (branch?.k === "m" && branch.m?.og) {
+      renderPolicySql({ render: "predicate", principal: r.principal, table: r.table, physical: r.physical, policy: r.policy, operation: "read", qualifier: null, proposed: null });
+      return { sql: "1", params: [] };
+    }
     if (branch && branch.k === "r") {
       if (typeof r.principal !== "string" || r.principal.length === 0) throw new Error("policy-sql: invalid principal");
-      renderPolicySql({ render: "predicate", principal: r.principal, table: r.table, physical: r.physical, policy: branch, operation: "read", qualifier: null, proposed: null });
+      renderPolicySql({ render: "predicate", principal: r.principal, emailDomain: r.emailDomain, table: r.table, physical: r.physical, policy: branch, operation: "read", qualifier: null, proposed: null });
       return { sql: "1", params: [] };
     }
     if (branch && branch.k === "g") {
-      renderPolicySql({ render: "predicate", principal: r.principal, table: r.table, physical: r.physical, policy: branch, operation: "read", qualifier: null, proposed: null });
+      renderPolicySql({ render: "predicate", principal: r.principal, emailDomain: r.emailDomain, table: r.table, physical: r.physical, policy: branch, operation: "read", qualifier: null, proposed: null });
       let found = 0;
       let groupValue = null;
       for (let j = 0; j < r.proposed.length; j++) {
@@ -5176,6 +5261,7 @@ function renderPolicySql(request) {
     return renderPolicySql({
       render: "predicate",
       principal: r.principal,
+      emailDomain: r.emailDomain,
       table: r.table,
       physical: r.physical,
       policy: anyOf ? r.policy.p[1] : r.policy,
@@ -5210,6 +5296,7 @@ function renderPolicySql(request) {
       return renderPolicySql({
         render: "predicate",
         principal: r.principal,
+        emailDomain: r.emailDomain,
         table: r.table,
         physical: r.physical,
         policy: r.policy,
@@ -5228,6 +5315,7 @@ function renderPolicySql(request) {
     return renderPolicySql({
       render: "predicate",
       principal: r.principal,
+      emailDomain: r.emailDomain,
       table: r.table,
       physical: r.physical,
       policy: r.policy,
@@ -5235,6 +5323,34 @@ function renderPolicySql(request) {
       qualifier: null,
       proposed: r.proposed
     });
+  }
+  if (r.render === "membership") {
+    const team = r.policy;
+    if (!team || team.k !== "m" && team.k !== "g") throw new Error("policy-sql: membership is a member or group policy");
+    if (r.principalRef !== void 0 && r.principalRef !== "link_maker") throw new Error("policy-sql: invalid principal reference");
+    const byMaker = r.principalRef === "link_maker";
+    const principal = byMaker ? "link_maker" : r.principal;
+    const who = byMaker ? renderPolicySql({ render: "ident", name: "__sw_lg" }).sql + "." + renderPolicySql({ render: "ident", name: "created_by" }).sql : "?";
+    const rowRef = r.qualifier ? renderPolicySql({ render: "ident", name: r.qualifier }).sql : null;
+    let member;
+    const keys = [];
+    if (team.k === "m") {
+      renderPolicySql({ render: "predicate", principal, emailDomain: r.emailDomain, table: r.table, physical: r.physical, policy: team, operation: null, qualifier: r.qualifier, proposed: null, edge: r.edge });
+      const groupsOfWho = [];
+      for (let i = 0; i < team.m.mg.length; i++) groupsOfWho.push(renderPolicySql({ render: "ident", name: team.m.mg[i] }).sql);
+      for (let i = 0; i < team.m.g.length; i++) keys.push((rowRef ? rowRef + "." : "") + renderPolicySql({ render: "ident", name: team.m.g[i] }).sql);
+      member = (keys.length === 1 ? keys[0] : "(" + keys.join(", ") + ")") + " IN (SELECT " + groupsOfWho.join(", ") + " FROM " + renderPolicySql({ render: "table", name: team.m.m, physical: r.physical }).sql + " WHERE " + renderPolicySql({ render: "ident", name: team.m.u }).sql + " = " + who + ")";
+    } else {
+      renderPolicySql({ render: "predicate", principal, emailDomain: r.emailDomain, table: r.table, physical: r.physical, policy: team, operation: "read", qualifier: r.qualifier, proposed: null, edge: r.edge });
+      const members = renderPolicySql({ render: "ident", name: "__sw_gm" }).sql;
+      const groups = renderPolicySql({ render: "ident", name: "__sw_g" }).sql;
+      const rowGroup = (rowRef ? rowRef : renderPolicySql({ render: "table", name: r.table, physical: r.physical }).sql) + "." + renderPolicySql({ render: "ident", name: team.c }).sql;
+      keys.push(rowGroup);
+      member = "EXISTS (SELECT 1 FROM " + renderPolicySql({ render: "ident", name: "_sw_group_members" }).sql + " AS " + members + " JOIN " + renderPolicySql({ render: "ident", name: "_sw_groups" }).sql + " AS " + groups + " ON " + groups + '."id" = ' + members + '."group_id" WHERE ' + members + '."group_id" = ' + rowGroup + " AND " + members + '."user_id" = ' + who + ")";
+    }
+    let sql = "(";
+    for (let i = 0; i < keys.length; i++) sql += keys[i] + " IS NULL OR ";
+    return { sql: sql + member + ")", params: byMaker ? [] : [r.principal] };
   }
   if (r.render !== "predicate") throw new Error("policy-sql: unknown render kind");
   const policy = r.policy;
@@ -5253,6 +5369,11 @@ function renderPolicySql(request) {
     const m = policy.m;
     if (!m || !Array.isArray(m.g) || !Array.isArray(m.mg) || m.g.length === 0 || m.g.length !== m.mg.length) {
       throw new Error("policy-sql: invalid member scope");
+    }
+    if (m.og !== void 0) {
+      const perRow = m.g.length === 2 && m.g[1] !== "user_id" && m.mg[1] !== "user_id" && m.mg[1] !== m.u;
+      if (m.og !== true || m.g[0] !== "user_id" || m.mg[0] !== "user_id" || m.g.length !== 1 && !perRow || m.u === "user_id" || JSON.stringify(m.o) !== '["read"]' && JSON.stringify(m.o) !== '["read","update"]') throw new Error("policy-sql: invalid owner grant");
+      if (proposed || !operation) return { sql: "0", params: [] };
     }
     if (operation && m.o !== void 0) {
       let allowed = false;
@@ -5303,8 +5424,16 @@ function renderPolicySql(request) {
     if ((policy.p[1].k === "g" || policy.p[1].k === "r") && (proposed || !operation)) {
       throw new Error("policy-sql: an anyOf group or app-role branch needs an operation on an existing row");
     }
-    const left = renderPolicySql({ render: "predicate", principal: r.principal, table: r.table, physical: r.physical, policy: policy.p[0], operation: r.operation, qualifier, proposed, edge: r.edge });
-    const right = renderPolicySql({ render: "predicate", principal: r.principal, table: r.table, physical: r.physical, policy: policy.p[1], operation: r.operation, qualifier, proposed, edge: r.edge });
+    let left = renderPolicySql({ render: "predicate", principal: r.principal, emailDomain: r.emailDomain, table: r.table, physical: r.physical, policy: policy.p[0], operation: r.operation, qualifier, proposed, edge: r.edge });
+    if (policy.p[1].k === "m" && policy.p[1].m.og && policy.p[0].c !== "user_id") throw new Error("policy-sql: grant requires managed owner");
+    if (policy.p[1].k === "m" && !policy.p[1].m.og || policy.p[1].k === "g") {
+      const team = proposed ? renderPolicySql({ render: "predicate", principal: r.principal, emailDomain: r.emailDomain, table: r.table, physical: r.physical, policy: policy.p[1], operation: null, qualifier, proposed, edge: r.edge }) : renderPolicySql({ render: "membership", principal: r.principal, emailDomain: r.emailDomain, table: r.table, physical: r.physical, policy: policy.p[1], qualifier, edge: r.edge });
+      const gated = [];
+      for (let i = 0; i < left.params.length; i++) gated.push(left.params[i]);
+      for (let i = 0; i < team.params.length; i++) gated.push(team.params[i]);
+      left = { sql: "(" + left.sql + " AND " + team.sql + ")", params: gated };
+    }
+    const right = renderPolicySql({ render: "predicate", principal: r.principal, emailDomain: r.emailDomain, table: r.table, physical: r.physical, policy: policy.p[1], operation: r.operation, qualifier, proposed, edge: r.edge });
     for (let i = 0; i < left.params.length; i++) params.push(left.params[i]);
     for (let i = 0; i < right.params.length; i++) params.push(right.params[i]);
     return { sql: "(" + left.sql + " OR " + right.sql + ")", params };
@@ -5315,7 +5444,7 @@ function renderPolicySql(request) {
     if (!gate || gate.k !== "m" && gate.k !== "g" && gate.k !== "r") {
       throw new Error("policy-sql: an allOf gate is a member, group or app-role policy");
     }
-    if (gate.k === "m" && (!gate.m || gate.m.o === void 0)) throw new Error("policy-sql: allOf needs explicit operations");
+    if (gate.k === "m" && (!gate.m || gate.m.o === void 0 || gate.m.og)) throw new Error("policy-sql: allOf needs explicit operations");
     if (!who || who.k !== "o" && who.k !== "a") throw new Error("policy-sql: allOf who is owner() or anyOf(owner(), ...)");
     if (who.k === "a") {
       const x = Array.isArray(who.p) && who.p.length === 2 ? who.p[1] : null;
@@ -5325,7 +5454,7 @@ function renderPolicySql(request) {
         compatible = String(x.c).toLowerCase() === String(gate.c).toLowerCase() && x.generation === gate.generation;
       }
       if (x.k === "m" && gate.k === "m") {
-        if (!x.m || x.m.o === void 0) throw new Error("policy-sql: allOf needs explicit operations");
+        if (!x.m || x.m.o === void 0 || x.m.og) throw new Error("policy-sql: allOf needs explicit operations");
         const a = gate.m;
         const b = x.m;
         compatible = String(a.m).toLowerCase() === String(b.m).toLowerCase() && String(a.u).toLowerCase() === String(b.u).toLowerCase() && Array.isArray(a.g) && Array.isArray(b.g) && Array.isArray(a.mg) && Array.isArray(b.mg) && a.g.length === b.g.length && a.mg.length === b.mg.length;
@@ -5340,14 +5469,14 @@ function renderPolicySql(request) {
     if (operation !== "read" && operation !== "create" && operation !== "update" && operation !== "delete") {
       throw new Error("policy-sql: an allOf policy needs an operation");
     }
-    const gateSql = renderPolicySql({ render: "predicate", principal: r.principal, table: r.table, physical: r.physical, policy: gate, operation, qualifier, proposed: null, edge: r.edge });
-    const whoSql = renderPolicySql({ render: "predicate", principal: r.principal, table: r.table, physical: r.physical, policy: who, operation, qualifier, proposed: null, edge: r.edge });
+    const gateSql = renderPolicySql({ render: "predicate", principal: r.principal, emailDomain: r.emailDomain, table: r.table, physical: r.physical, policy: gate, operation, qualifier, proposed: null, edge: r.edge });
+    const whoSql = renderPolicySql({ render: "predicate", principal: r.principal, emailDomain: r.emailDomain, table: r.table, physical: r.physical, policy: who, operation, qualifier, proposed: null, edge: r.edge });
     for (let i = 0; i < gateSql.params.length; i++) params.push(gateSql.params[i]);
     for (let i = 0; i < whoSql.params.length; i++) params.push(whoSql.params[i]);
     let sql = "(" + gateSql.sql + " AND " + whoSql.sql + ")";
     if (operation === "update" || operation === "delete") {
-      const gateRead = renderPolicySql({ render: "predicate", principal: r.principal, table: r.table, physical: r.physical, policy: gate, operation: "read", qualifier, proposed: null, edge: r.edge });
-      const whoRead = renderPolicySql({ render: "predicate", principal: r.principal, table: r.table, physical: r.physical, policy: who, operation: "read", qualifier, proposed: null, edge: r.edge });
+      const gateRead = renderPolicySql({ render: "predicate", principal: r.principal, emailDomain: r.emailDomain, table: r.table, physical: r.physical, policy: gate, operation: "read", qualifier, proposed: null, edge: r.edge });
+      const whoRead = renderPolicySql({ render: "predicate", principal: r.principal, emailDomain: r.emailDomain, table: r.table, physical: r.physical, policy: who, operation: "read", qualifier, proposed: null, edge: r.edge });
       for (let i = 0; i < gateRead.params.length; i++) params.push(gateRead.params[i]);
       for (let i = 0; i < whoRead.params.length; i++) params.push(whoRead.params[i]);
       sql = "(" + sql + " AND (" + gateRead.sql + " AND " + whoRead.sql + "))";
@@ -5384,7 +5513,7 @@ function renderPolicySql(request) {
     } else {
       join = parentKey + " = " + (qualifier ? renderPolicySql({ render: "ident", name: qualifier }).sql : renderPolicySql({ render: "table", name: r.table, physical: r.physical }).sql) + "." + renderPolicySql({ render: "ident", name: policy.v }).sql;
     }
-    const inner = renderPolicySql({ render: "predicate", principal: r.principal, table: r.table, physical: r.physical, policy: policy.p, operation: r.operation, qualifier: alias, proposed: null, edge });
+    const inner = renderPolicySql({ render: "predicate", principal: r.principal, emailDomain: r.emailDomain, table: r.table, physical: r.physical, policy: policy.p, operation: r.operation, qualifier: alias, proposed: null, edge });
     for (let i = 0; i < inner.params.length; i++) params.push(inner.params[i]);
     return {
       sql: "EXISTS (SELECT 1 FROM " + renderPolicySql({ render: "table", name: policy.t, physical: r.physical }).sql + " AS " + aliasSql + " WHERE " + join + " AND " + inner.sql + ")",
@@ -5484,8 +5613,35 @@ function renderPolicySql(request) {
       marks.push("?");
       params.push(allowed[i]);
     }
+    let held = "EXISTS (SELECT 1 FROM " + renderPolicySql({ render: "ident", name: "_sw_app_role_grants" }).sql + " AS " + grants + " WHERE " + grants + '."user_id" = ? AND ' + grants + '."role" IN (' + marks.join(", ") + "))";
+    const domain = r.emailDomain;
+    if (domain !== null && domain !== void 0 && (typeof domain !== "string" || domain.length === 0 || domain.length > 253)) {
+      throw new Error("policy-sql: invalid email domain");
+    }
+    const baked = policy.d;
+    if (baked !== void 0) {
+      if (!baked || typeof baked !== "object" || Array.isArray(baked)) throw new Error("policy-sql: invalid app-role domains");
+      if (domain !== null && domain !== void 0) {
+        for (let i = 0; i < allowed.length; i++) {
+          if (Object.prototype.hasOwnProperty.call(baked, allowed[i]) && baked[allowed[i]] === domain) {
+            held = "(" + held + " OR 1)";
+            break;
+          }
+        }
+      }
+    } else if (domain !== null && domain !== void 0) {
+      const vocabulary = renderPolicySql({ render: "ident", name: "__sw_rv" }).sql;
+      const entry = renderPolicySql({ render: "ident", name: "__sw_re" }).sql;
+      const domainMarks = [];
+      for (let i = 0; i < allowed.length; i++) {
+        domainMarks.push("?");
+        params.push(allowed[i]);
+      }
+      params.push(domain);
+      held = "(" + held + " OR EXISTS (SELECT 1 FROM " + renderPolicySql({ render: "ident", name: "_sw_group_policy" }).sql + " AS " + vocabulary + ", json_each(" + vocabulary + `."vocabulary", '$.appRoles') AS ` + entry + " WHERE " + vocabulary + '."id" = 1 AND json_extract(' + entry + `."value", '$.name') IN (` + domainMarks.join(", ") + ") AND json_extract(" + entry + `."value", '$.emailDomain') = ?))`;
+    }
     return {
-      sql: "(EXISTS (SELECT 1 FROM " + renderPolicySql({ render: "ident", name: "_sw_group_policy" }).sql + " AS " + active + " WHERE " + active + '."id" = 1 AND ' + active + '."generation" = ?) AND EXISTS (SELECT 1 FROM ' + renderPolicySql({ render: "ident", name: "_sw_app_role_grants" }).sql + " AS " + grants + " WHERE " + grants + '."user_id" = ? AND ' + grants + '."role" IN (' + marks.join(", ") + ")))",
+      sql: "(EXISTS (SELECT 1 FROM " + renderPolicySql({ render: "ident", name: "_sw_group_policy" }).sql + " AS " + active + " WHERE " + active + '."id" = 1 AND ' + active + '."generation" = ?) AND ' + held + ")",
       params
     };
   }
@@ -5497,7 +5653,19 @@ function policyOwnerColumn(policy) {
   if (policy.k === "n") return policyOwnerColumn(policy.w);
   return null;
 }
-var POLICY_SQL_JS = "      const __sw_renderPolicySql = (" + renderPolicySql.toString() + ");\n      const __sw_policyOwnerColumn = (" + policyOwnerColumn.toString() + ");\n";
+function policyWithoutGrants(policy) {
+  if (policy.k === "a") {
+    const second = policy.p[1];
+    if (second.k === "m" && second.m.og) return policy.p[0];
+    return policy;
+  }
+  if (policy.k === "p") {
+    const inner = policyWithoutGrants(policy.p);
+    return inner === policy.p ? policy : { ...policy, p: inner };
+  }
+  return policy;
+}
+var POLICY_SQL_JS = "      const __sw_renderPolicySql = (" + renderPolicySql.toString() + ");\n      const __sw_policyOwnerColumn = (" + policyOwnerColumn.toString() + ");\n      const __sw_policyWithoutGrants = (" + policyWithoutGrants.toString() + ");\n";
 
 // worker/src/runtime/query-sql.ts
 function renderQuerySql(ir, principalId, returning, context) {
@@ -5513,6 +5681,26 @@ function renderQuerySql(ir, principalId, returning, context) {
   }
   if (ir.kind === "insert" || ir.kind === "update") {
     context.assertUniqueWriteColumns((ir.values || []).concat(ir.increments || []), "sw.db." + ir.kind);
+  }
+  if (ir.kind === "update" && ir.scope) {
+    const fixed = [];
+    if ((ir.scope.mode === "user" || ir.scope.mode === "server") && ir.scope.grantRow) fixed.push(ir.scope.grantRow.c);
+    if (ir.scope.mode === "server" && ir.scope.grantRow) fixed.push("user_id");
+    const grantBranch = ir.scope.mode === "policy" && ir.scope.policy.k === "a" ? ir.scope.policy.p[1] : null;
+    if (grantBranch && grantBranch.k === "m" && grantBranch.m.og && grantBranch.m.g.length === 2) fixed.push(grantBranch.m.g[1]);
+    const written = (ir.values || []).concat(ir.increments || []);
+    for (let i = 0; i < written.length; i++) {
+      for (let j = 0; j < fixed.length; j++) {
+        if (context.lower(written[i].column) !== context.lower(fixed[j])) continue;
+        let pinned = false;
+        const value = i < (ir.values || []).length ? written[i].value : void 0;
+        for (let k = 0; k < ir.where.length; k++) {
+          const w = ir.where[k];
+          if (value !== void 0 && w.op === "eq" && typeof w.column === "string" && context.lower(w.column) === context.lower(fixed[j]) && w.value === value) pinned = true;
+        }
+        if (!pinned) context.fail('sw.db.update: "' + written[i].column + '" ties a share to one row and cannot change. Delete the share and create another.');
+      }
+    }
   }
   const params = [];
   const helpers = {
@@ -5639,7 +5827,26 @@ function renderQuerySql(ir, principalId, returning, context) {
         else context.fail("sw.db: a linked row key must be a whole number or text.");
       } else key = "CAST(" + rowRef + " AS TEXT)";
       params.push(link.digest, link.epoch);
-      return "EXISTS (SELECT 1 FROM " + q("_sw_row_link_sessions") + " AS " + ls + " JOIN " + q("_sw_row_links") + " AS " + lg + " ON " + lg + "." + q("id") + " = " + ls + "." + q("grant_id") + " JOIN " + q("_sw_row_link_epochs") + " AS " + le + " ON " + le + "." + q("table_name") + " = " + lg + "." + q("table_name") + " WHERE " + ls + "." + q("token_digest") + " = ? AND " + ls + "." + q("expires_at") + " > unixepoch() AND " + lg + "." + q("id") + " = ? AND " + lg + "." + q("table_name") + " = ? AND " + lg + "." + q("row_key") + " = " + key + " AND " + lg + "." + q("revoked_at") + " IS NULL AND (" + lg + "." + q("expires_at") + " IS NULL OR " + lg + "." + q("expires_at") + " > unixepoch()) AND " + lg + "." + q("access") + (link.write ? " = 'edit'" : " IN ('read', 'edit')") + " AND " + le + "." + q("digest") + " = ? AND " + le + "." + q("epoch") + " = ? AND " + lg + "." + q("minted_epoch") + " = " + le + "." + q("epoch") + ")";
+      let team = "";
+      if (link.team) {
+        if (!link.team.key || typeof link.team.key !== "string" || !link.team.policy) context.fail("sw.db: invalid link authority.");
+        const lr = q("__sw_lr");
+        let rootKey = "?";
+        if (rowRef === null) params.push(rowValue);
+        else rootKey = rowRef;
+        const gate = context.renderPolicy({
+          render: "membership",
+          principal: null,
+          principalRef: "link_maker",
+          table: link.root,
+          physical: context.physicalMap(),
+          policy: link.team.policy,
+          qualifier: "__sw_lr"
+        });
+        for (let i = 0; i < gate.params.length; i++) params.push(gate.params[i]);
+        team = " AND EXISTS (SELECT 1 FROM " + context.renderPolicy({ render: "table", name: link.root, physical: context.physicalMap() }).sql + " AS " + lr + " WHERE " + lr + "." + q(link.team.key) + " = " + rootKey + " AND " + gate.sql + ")";
+      }
+      return "EXISTS (SELECT 1 FROM " + q("_sw_row_link_sessions") + " AS " + ls + " JOIN " + q("_sw_row_links") + " AS " + lg + " ON " + lg + "." + q("id") + " = " + ls + "." + q("grant_id") + " JOIN " + q("_sw_row_link_epochs") + " AS " + le + " ON " + le + "." + q("table_name") + " = " + lg + "." + q("table_name") + " WHERE " + ls + "." + q("token_digest") + " = ? AND " + ls + "." + q("expires_at") + " > unixepoch() AND " + lg + "." + q("id") + " = ? AND " + lg + "." + q("table_name") + " = ? AND " + lg + "." + q("row_key") + " = " + key + " AND " + lg + "." + q("revoked_at") + " IS NULL AND (" + lg + "." + q("expires_at") + " IS NULL OR " + lg + "." + q("expires_at") + " > unixepoch()) AND " + lg + "." + q("access") + (link.write ? " = 'edit'" : " IN ('read', 'edit')") + " AND " + le + "." + q("digest") + " = ? AND " + le + "." + q("epoch") + " = ? AND " + lg + "." + q("minted_epoch") + " = " + le + "." + q("epoch") + team + ")";
     },
     // Creator session (creator-authority.ts): ONE correlated EXISTS proving, in the statement, that this
     // creator session token is live for this exact unended creator grant, which holds THIS root row's
@@ -5708,8 +5915,21 @@ function renderQuerySql(ir, principalId, returning, context) {
           frags.push(privateBranch);
       }
       if (ir.kind === "update" && ir.scope.mode === "policy") {
-        const destination = context.renderPolicy({ render: "update_destination", principal: principalId, table: ir.table.name, physical: context.physicalMap(), policy: ir.scope.policy, proposed: ir.values || [] });
-        if (destination.sql)
+        const policy = ir.scope.policy;
+        const destination = context.renderPolicy({ render: "update_destination", principal: principalId, table: ir.table.name, physical: context.physicalMap(), policy, proposed: ir.values || [] });
+        const ownerOnly = destination.sql && policy.k === "p" ? context.withoutGrants(policy) : policy;
+        if (destination.sql && ownerOnly !== policy) {
+          const access = [];
+          for (let i = 0; i < ir.where.length; i++)
+            access.push(helpers.renderPredicate(ir.where[i]));
+          access.push(helpers.privateScopePredicate(ir.scope) || "1");
+          access.push(helpers.policySql(destination));
+          const owned = [
+            helpers.policyPredicate(ownerOnly, null, null, "update"),
+            helpers.policySql(context.renderPolicy({ render: "update_destination", principal: principalId, table: ir.table.name, physical: context.physicalMap(), policy: ownerOnly, proposed: ir.values || [] }))
+          ];
+          frags.push("(CASE WHEN NOT (" + access.join(" AND ") + ") THEN 0 WHEN (" + owned.join(" AND ") + ") THEN 1 ELSE json_extract('{}', 'SW_POLICY_AUTHORITY_REQUIRED') END)");
+        } else if (destination.sql)
           frags.push(helpers.policySql(destination));
       }
       for (let i = 0; i < (ir.increments || []).length; i++) {
@@ -5908,6 +6128,35 @@ function renderQuerySql(ir, principalId, returning, context) {
       sql = "INSERT INTO " + tableSql + " (" + colList + ") SELECT " + placeholders + " WHERE " + guard + context.returningSql(returning);
       return { sql, params };
     }
+    if ((ir.scope.mode === "user" || ir.scope.mode === "server") && ir.scope.grantRow) {
+      const grantRow = ir.scope.grantRow;
+      let named = 0;
+      let rowValue = null;
+      let owners = 0;
+      let shareOwner = ir.scope.mode === "user" ? principalId : null;
+      for (let i = 0; i < ir.values.length; i++) {
+        if (context.lower(ir.values[i].column) === context.lower(grantRow.c)) {
+          named++;
+          rowValue = ir.values[i].value;
+        }
+        if (ir.scope.mode === "server" && context.lower(ir.values[i].column) === "user_id") {
+          owners++;
+          shareOwner = ir.values[i].value;
+        }
+      }
+      if (named !== 1 || rowValue === null) context.fail('sw.db.insert: a share names the "' + grantRow.t + '" row it grants in "' + grantRow.c + '".');
+      if (ir.scope.mode === "server" && (owners !== 1 || shareOwner === null)) context.fail('sw.db.server.insert: a share names its owner in "user_id"; the owner must own the "' + grantRow.t + '" row it grants.');
+      if (ir.onConflict === "update") context.fail('sw.db.insert: a share cannot be updated on conflict; use onConflict: "ignore".');
+      for (let i = 0; i < ivals.length; i++)
+        params.push(ivals[i]);
+      const owned = "EXISTS (SELECT 1 FROM " + helpers.table(grantRow.t) + " WHERE " + q(grantRow.k) + " = ? AND " + q("user_id") + " = ?)";
+      params.push(rowValue, shareOwner);
+      const guard = ir.txGuard || ir.onConflict !== void 0 ? "CASE WHEN " + owned + " THEN 1 ELSE json_extract('{}', 'SW_POLICY_AUTHORITY_REQUIRED') END" : owned;
+      sql = "INSERT INTO " + tableSql + " (" + allCols.map(q).join(", ") + ") SELECT " + allCols.map(function() {
+        return "?";
+      }).join(", ") + " WHERE " + guard + (ir.onConflict === "ignore" ? " ON CONFLICT DO NOTHING" : "") + context.returningSql(returning);
+      return { sql, params };
+    }
     for (let i = 0; i < ivals.length; i++)
       params.push(ivals[i]);
     const visitorGuard = ir.scope.mode === "user" ? helpers.visitorPredicate() : null;
@@ -6035,6 +6284,7 @@ var DB_RENDER_IR_JS = `${POLICY_SQL_JS}${QUERY_SQL_JS}      // One write names e
           },
           renderPolicy: __sw_renderPolicySql,
           ownerColumn: __sw_policyOwnerColumn,
+          withoutGrants: __sw_policyWithoutGrants,
           returningSql: __sw_returningSql,
           assertUniqueWriteColumns: __sw_structAssertUniqueWriteColumns,
           fail: __sw_structThrow,
@@ -6631,13 +6881,32 @@ var DB_RELATIONS_JS = `      // \u2500\u2500 Composed joins (tsk_1186c9a) \u2500
       }
 `;
 
+// worker/src/utils/authority/role-domain-map.ts
+var ROLE_NAME_PATTERN = /^[a-z][a-z0-9_]{0,63}$/;
+var EMAIL_DOMAIN_PATTERN = /^(?=.{4,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z][a-z0-9-]{0,61}[a-z0-9]$/;
+var ROLE_DOMAIN_MAP_JS = `
+      function __sw_structRoleDomains(value) {
+        if (!value || typeof value !== 'object' || __sw_arrayIsArray(value)) return false;
+        const roles = __sw_keys(value);
+        for (let i = 0; i < roles.length; i++) {
+          const domain = value[roles[i]];
+          if (!__sw_reMatch(${ROLE_NAME_PATTERN}, roles[i]) || typeof domain !== 'string' || !__sw_reMatch(${EMAIL_DOMAIN_PATTERN}, domain)) return false;
+        }
+        return true;
+      }`;
+
 // worker/src/runtime/db-policy.ts
-var DB_POLICY_HELPERS_JS = `
+var DB_POLICY_HELPERS_JS = `${ROLE_DOMAIN_MAP_JS}
       function __sw_structPolicyIdent(value) { return typeof value === 'string' && value && __sw_reMatch(__SW_STRUCT_IDENT_RE, value); }
       function __sw_structPolicyMember(value) {
         if (!value || typeof value !== 'object') return false;
         const keys = __sw_keys(value).slice().sort().join(',');
-        if (keys !== 'g,m,mg,u' && keys !== 'g,m,mg,o,u') return false;
+        // Per-owner grant: g/mg ["user_id"]. Per-row: g ["user_id", key], mg ["user_id", row].
+        const grant = keys === 'g,m,mg,o,og,u' && value.og === true && __sw_arrayIsArray(value.g) && __sw_arrayIsArray(value.mg)
+          && value.g[0] === 'user_id' && value.mg[0] === 'user_id'
+          && (value.g.length === 1 || value.g.length === 2 && value.g[1] !== 'user_id' && value.mg[1] !== 'user_id' && value.mg[1] !== value.u)
+          && value.u !== 'user_id' && (JSON.stringify(value.o) === '["read"]' || JSON.stringify(value.o) === '["read","update"]');
+        if (keys !== 'g,m,mg,u' && keys !== 'g,m,mg,o,u' && !grant) return false;
         if (!__sw_arrayIsArray(value.g) || !__sw_arrayIsArray(value.mg) || value.g.length === 0 || value.g.length !== value.mg.length || !__sw_structPolicyIdent(value.m) || !__sw_structPolicyIdent(value.u)) return false;
         for (let i = 0; i < value.g.length; i++) if (!__sw_structPolicyIdent(value.g[i]) || !__sw_structPolicyIdent(value.mg[i])) return false;
         if (value.o !== undefined) {
@@ -6672,9 +6941,12 @@ var DB_POLICY_HELPERS_JS = `
         return true;
       }
       // An app-role leaf, pinned to the release's policy generation. Each
-      // present operation lists declared app roles; a missing one denies.
+      // present operation lists declared app roles; a missing one denies. The
+      // release's role -> verified email domain map (d) rides it when baked.
       function __sw_structPolicyRole(value) {
-        if (!value || typeof value !== 'object' || value.k !== 'r' || __sw_keys(value).slice().sort().join(',') !== 'generation,k,roles') return false;
+        if (!value || typeof value !== 'object' || value.k !== 'r') return false;
+        const leafKeys = __sw_keys(value).slice().sort().join(',');
+        if (leafKeys !== 'generation,k,roles' && (leafKeys !== 'd,generation,k,roles' || !__sw_structRoleDomains(value.d))) return false;
         if (typeof value.generation !== 'number' || !Number.isSafeInteger(value.generation) || value.generation < 1) return false;
         const roles = value.roles;
         if (!roles || typeof roles !== 'object' || __sw_arrayIsArray(roles)) return false;
@@ -6694,6 +6966,7 @@ var DB_POLICY_HELPERS_JS = `
         if (!value || typeof value !== 'object' || __sw_keys(value).slice().sort().join(',') !== 'k,p' || value.k !== 'a'
           || !__sw_arrayIsArray(value.p) || value.p.length !== 2 || !__sw_structPolicyLeaf(value.p[0]) || value.p[0].k !== 'o') return false;
         const second = value.p[1];
+        if (second && second.k === 'm' && second.m && second.m.og && value.p[0].c !== 'user_id') return false;
         return (__sw_structPolicyLeaf(second) && second.k === 'm') || __sw_structPolicyGroup(second) || __sw_structPolicyRole(second);
       }
       // allOf(gate, who) (AND permissions v1.1): gate is a member() leaf with
@@ -6705,7 +6978,7 @@ var DB_POLICY_HELPERS_JS = `
         if (!value || typeof value !== 'object' || __sw_keys(value).slice().sort().join(',') !== 'g,k,w' || value.k !== 'n') return false;
         const gate = value.g;
         const who = value.w;
-        const gateOk = (__sw_structPolicyLeaf(gate) && gate.k === 'm' && gate.m.o !== undefined) || __sw_structPolicyGroup(gate) || __sw_structPolicyRole(gate);
+        const gateOk = (__sw_structPolicyLeaf(gate) && gate.k === 'm' && gate.m.o !== undefined && !gate.m.og) || __sw_structPolicyGroup(gate) || __sw_structPolicyRole(gate);
         if (!gateOk) return false;
         if (__sw_structPolicyLeaf(who) && who.k === 'o') return true;
         if (!__sw_structPolicyAny(who)) return false;
@@ -6713,6 +6986,7 @@ var DB_POLICY_HELPERS_JS = `
         if (x.k === 'r') return true;
         if (x.k === 'g') return gate.k === 'g' && __sw_lower(x.c) === __sw_lower(gate.c) && x.generation === gate.generation;
         if (x.k !== 'm' || gate.k !== 'm' || x.m.o === undefined) return false;
+        if (x.m.og || gate.m.og) return false;
         if (__sw_lower(x.m.m) !== __sw_lower(gate.m.m) || __sw_lower(x.m.u) !== __sw_lower(gate.m.u)
           || x.m.g.length !== gate.m.g.length || x.m.mg.length !== gate.m.mg.length) return false;
         for (let i = 0; i < x.m.g.length; i++) if (__sw_lower(x.m.g[i]) !== __sw_lower(gate.m.g[i])) return false;
@@ -6732,6 +7006,23 @@ var DB_POLICY_HELPERS_JS = `
         const shape = __sw_structManagedShape(table);
         if (__sw_structResolveIntent(table) !== 'policy' || !shape || !__sw_own(shape, 'policy') || !__sw_structPolicyValid(shape.policy)) return null;
         return shape.policy;
+      }
+      // A per-row grant table (grant({ row })) and the one rule it serves: its shares name rows of t (key k) in c.
+      let __sw_structGrantRows;
+      function __sw_structGrantRowFor(table) {
+        if (!__sw_structGrantRows) {
+          __sw_structGrantRows = {};
+          const names = __sw_keys(SCHEMA);
+          for (let i = 0; i < names.length; i++) {
+            const policy = __sw_structResolvePolicy(names[i]);
+            const branch = policy && policy.k === 'a' ? policy.p[1] : null;
+            if (branch && branch.k === 'm' && branch.m.og === true && branch.m.g.length === 2) {
+              __sw_structGrantRows[__sw_lower(branch.m.m)] = { t: __sw_lower(names[i]), k: branch.m.g[1], c: branch.m.mg[1] };
+            }
+          }
+        }
+        const lc = __sw_lower(table);
+        return __sw_own(__sw_structGrantRows, lc) ? __sw_structGrantRows[lc] : undefined;
       }
       function __sw_structPolicyHasOwner(policy) {
         return policy.k === 'o' || policy.k === 'a' && (__sw_structPolicyHasOwner(policy.p[0]) || __sw_structPolicyHasOwner(policy.p[1]))
@@ -6776,6 +7067,9 @@ var DB_POLICY_HELPERS_JS = `
             }
             return;
           }
+          // A grant() branch correlates the managed owner (checked above) and, per row, the row's key,
+          // which the shared renderer keeps fixed (query-sql.ts), as the managed compiler does.
+          if (policy.p[1].k === 'm' && policy.p[1].m.og) return;
           __sw_structAssertPolicyWrite(cols, policy.p[1], verb, increments);
           return;
         }
@@ -6822,7 +7116,7 @@ var DB_POLICY_HELPERS_JS = `
         if (policy.k === 'a') {
           // The owner is stamped; an app-role branch has no placement, and a
           // group branch must name the group the row belongs to.
-          if (policy.p[1].k === 'r') return;
+          if (policy.p[1].k === 'r' || (policy.p[1].k === 'm' && policy.p[1].m.og)) return;
           if (policy.p[1].k === 'g') {
             for (let i = 0; i < cols.length; i++) if (__sw_lower(cols[i].column) === __sw_lower(policy.p[1].c) && typeof cols[i].value === 'string' && cols[i].value) return;
             __sw_structThrow403('POLICY_GROUP_REQUIRED', 'A group-scoped insert must name the group the row belongs to in "' + policy.p[1].c + '".');
@@ -8625,7 +8919,8 @@ ${DB_POLICY_RESOLVE_SCOPE_JS}        const member = __sw_structResolveMember(tab
         if (asServer === true || generatedRead) {
           // Explicit server code or the private generated selector has no local
           // principal. The managed API independently verifies the latter's token.
-          return { scope: generatedRead ? { mode: 'user', ownerColumn: ownerColumn } : { mode: 'server' }, principalId: undefined };
+          const serverGrantRow = generatedRead ? undefined : __sw_structGrantRowFor(table);
+          return { scope: generatedRead ? { mode: 'user', ownerColumn: ownerColumn } : serverGrantRow ? { mode: 'server', grantRow: serverGrantRow } : { mode: 'server' }, principalId: undefined };
         }
         const identity = await __sw_structRequestIdentity(allowPublicGuest);
         let id = identity && identity.id;
@@ -8660,7 +8955,8 @@ ${DB_POLICY_RESOLVE_SCOPE_JS}        const member = __sw_structResolveMember(tab
           err.__sw_expose = true;
           throw err;
         }
-        return { scope: { mode: 'user', ownerColumn: ownerColumn }, principalId: id };
+        const grantRow = __sw_structGrantRowFor(table);
+        return { scope: grantRow ? { mode: 'user', ownerColumn: ownerColumn, grantRow: grantRow } : { mode: 'user', ownerColumn: ownerColumn }, principalId: id };
       }
 
       // The scope argument is GONE (tsk_5b91e0e4): scoping is automatic and
@@ -9601,14 +9897,17 @@ var DB_COMPOSED_WRITES_JS = `      // Per-column conditions are ANDed. A bounded
         });
         return send(prepared);
       }
-      // Standalone exact-key caller writes share the browser's non-disclosing
-      // missing-row result. Bulk/conditional writes and atomic intents retain
-      // their zero-change contract; no existence probe bypasses authorization.
-      async function __sw_structExecCallerWrite(prepared, authority) {
+      // Standalone exact-key caller UPDATES share the browser's non-disclosing
+      // missing-row result. A caller REMOVE that matches nothing returns the
+      // zero-change result instead, like bulk/conditional writes (founder
+      // decision, tsk_b7f42808): a missing row and a row outside the caller's
+      // access give the same { data: [], count: 0, changes: 0 }, so neither
+      // reveals existence. No existence probe bypasses authorization.
+      async function __sw_structExecCallerWrite(prepared, authority, missThrows) {
         const ir = prepared.ir;
         const shape = __sw_structManagedShape(ir.table.name);
         const pk = shape && (shape.primaryKey !== undefined ? shape.primaryKey : shape.clientPrimaryKey);
-        const keyed = authority !== __sw_structServerNamespace && ir.scope.mode !== 'server'
+        const keyed = missThrows && authority !== __sw_structServerNamespace && ir.scope.mode !== 'server'
           && !(ir.scope.mode === 'unscoped' && prepared.principalId === undefined && __sw_structResolveIntent(ir.table.name) === 'server_only')
           && typeof pk === 'string' && ir.where.length === 1
           && ir.where[0].op === 'eq' && __sw_lower(ir.where[0].column) === __sw_lower(pk);
@@ -9618,11 +9917,11 @@ var DB_COMPOSED_WRITES_JS = `      // Per-column conditions are ANDed. A bounded
       }
       async function __sw_structUpdate(table, spec, authority) {
         const prepared = await __sw_structPrepareUpdate(table, spec, authority);
-        return __sw_structExecCallerWrite(prepared, authority);
+        return __sw_structExecCallerWrite(prepared, authority, true);
       }
       async function __sw_structRemove(table, spec, authority) {
         const prepared = await __sw_structPrepareRemove(table, spec, authority);
-        return __sw_structExecCallerWrite(prepared, authority);
+        return __sw_structExecCallerWrite(prepared, authority, false);
       }
 
       async function __sw_structTransaction(intents, authority) {
@@ -9647,7 +9946,8 @@ var DB_COMPOSED_WRITES_JS = `      // Per-column conditions are ANDed. A bounded
           // back (checked in the same transaction, after earlier intents).
           // Updates and removes are already limited to rows the caller may
           // reach by their WHERE predicate.
-          if (item.ir.kind === 'insert' && (item.ir.scope.mode === 'member' || item.ir.scope.mode === 'policy')) item.ir.txGuard = true;
+          if (item.ir.kind === 'insert' && (item.ir.scope.mode === 'member' || item.ir.scope.mode === 'policy'
+            || (item.ir.scope.mode === 'user' || item.ir.scope.mode === 'server') && item.ir.scope.grantRow)) item.ir.txGuard = true;
           // A transaction is never keyed: an explicit key on one of its inserts refuses before anything runs.
           if (item.idempotencyKey !== undefined) {
             throw __sw_keyedError('IDEMPOTENCY_UNSUPPORTED', 'sw.db.tx: an insert inside a transaction cannot take idempotencyKey. Nothing ran.', 400);
@@ -13593,16 +13893,14 @@ var AUTH_JS = `    auth: (function () {
           return invite;
         },
 
-        // MFA / TOTP. Enrollment is activated only after an independent,
-        // recent password or stored-email proof. challenge() remains the
-        // second-factor call after password /login returned mfa_required:true.
+        // Email sign-in codes (tsk_8fe91eb5). The app owner sets the policy ('off', 'optional', 'required') with a
+        // developer key. A user with the factor answers every password sign-in with { mfa_required: true,
+        // mfa_token, methods: ['email'] } and no session; challenge() (or challengeWithCookie) completes it with the
+        // code. The explicit forms send the user's JWT through userTokenJSON (project-bound); platformJSON would
+        // replace it with the developer key (pfb_ab7215b47cb9).
         mfa: {
-          // Begin enrolment. Caller must pass the user's JWT \u2014 MFA is
-          // always tied to a logged-in account. These explicit forms send it
-          // through userTokenJSON (project-bound); platformJSON would replace
-          // it with the developer key (pfb_ab7215b47cb9). Returns { secret,
-          // enrollment_id, otpauth_uri, issuer, account } \u2014 render otpauth_uri as a
-          // QR code in the UI.
+          // Turn codes on (policy 'optional' or 'required'): mails a code to the verified address.
+          // Resolves { challenge_id, delivery, expires_in }, or { enrolled: true } when already on.
           enroll(opts) {
             opts = opts || {};
             if (!opts.token) {
@@ -13612,9 +13910,10 @@ var AUTH_JS = `    auth: (function () {
             }
             return userTokenJSON('/v1/auth/mfa/enroll', opts.token, {
               method: 'POST',
-              body: JSON.stringify({}),
+              body: JSON.stringify({ method: 'email' }),
             });
           },
+          // Authenticator-app activation is not available: answers 501 AUTH_FEATURE_UNAVAILABLE.
           // Establish recent authority for the exact enrollment. Password
           // success returns activation_token directly. Email sends a code and
           // returns challenge_id for verifyReauthentication().
@@ -13650,29 +13949,22 @@ var AUTH_JS = `    auth: (function () {
               }),
             });
           },
-          // Confirm enrolment by submitting the first 6-digit code the
-          // authenticator generates plus the one-time activation authority.
-          // Returns { enabled:true, backup_codes:[...] } once.
+          // Confirm enrolment with the code enroll() mailed. Resolves { enrolled: true, method: 'email' }.
           verify(opts) {
             opts = opts || {};
-            if (!opts.token || !opts.enrollment_id || !opts.activation_token || !opts.code) {
-              const err = new Error('sw.auth.mfa.verify: token, enrollment_id, activation_token, and code are required');
+            if (!opts.token || !opts.challenge_id || !opts.code) {
+              const err = new Error('sw.auth.mfa.verify: token, challenge_id, and code are required');
               err.code = 'VALIDATION_ERROR';
               throw err;
             }
             return userTokenJSON('/v1/auth/mfa/verify', opts.token, {
               method: 'POST',
-              body: JSON.stringify({
-                enrollment_id: opts.enrollment_id,
-                activation_token: opts.activation_token,
-                code: opts.code,
-              }),
+              body: JSON.stringify({ challenge_id: opts.challenge_id, code: opts.code }),
             });
           },
           // Second-factor exchange after /login returned
-          // { mfa_required:true, mfa_token }. Code is either the 6-digit
-          // TOTP or a 10-char backup code. Returns the same shape as
-          // /login on success.
+          // { mfa_required:true, mfa_token }: the 6-digit code from the email.
+          // Returns the same shape as /login on success.
           challenge(opts) {
             opts = opts || {};
             if (!opts.mfa_token || !opts.code) {
@@ -13689,6 +13981,20 @@ var AUTH_JS = `    auth: (function () {
               }),
             });
           },
+          // Mail a new code for the same sign-in (60 s apart, 5 an hour per account). The sign-in keeps its
+          // original 5-minute expiry. Resolves { sent, delivery, expires_in }.
+          resend(opts) {
+            opts = opts || {};
+            if (!opts.mfa_token) {
+              const err = new Error('sw.auth.mfa.resend: mfa_token is required');
+              err.code = 'VALIDATION_ERROR';
+              throw err;
+            }
+            return platformJSON('/v1/auth/mfa/challenge', {
+              method: 'POST',
+              body: JSON.stringify({ project_id: projectId, mfa_token: opts.mfa_token, resend: true }),
+            });
+          },
           // Complete the password-login MFA branch as a cookie session. This
           // adds no authority: it brokers the same developer-authenticated
           // challenge(), then keeps the returned access/refresh credentials
@@ -13703,28 +14009,55 @@ var AUTH_JS = `    auth: (function () {
             __sw_setAuthCookies(session.access, session.refresh);
             return { user: session.user, expires_at: __sw_preflightJwt(session.access).expSec * 1000 };
           },
-          // Disable MFA. Requires a fresh code (TOTP or backup) so a
-          // stolen JWT alone can't turn it off.
+          // Turn codes off, in two steps: { token, password } re-checks the password and mails a code
+          // (resolves { challenge_id, delivery, expires_in }); { token, challenge_id, code } removes the factor
+          // (resolves { enrolled: false }). Refused under a 'required' policy (409 AUTH_MFA_REQUIRED_BY_APP).
           unenroll(opts) {
             opts = opts || {};
-            if (!opts.token || !opts.code) {
-              const err = new Error('sw.auth.mfa.unenroll: token and code are required');
+            const confirming = opts.challenge_id !== undefined;
+            if (!opts.token || (confirming ? !opts.code : !opts.password)) {
+              const err = new Error('sw.auth.mfa.unenroll: token and either password, or challenge_id and code, are required');
               err.code = 'VALIDATION_ERROR';
               throw err;
             }
             return userTokenJSON('/v1/auth/mfa/unenroll', opts.token, {
               method: 'POST',
-              body: JSON.stringify({ code: opts.code }),
+              body: JSON.stringify(confirming ? { challenge_id: opts.challenge_id, code: opts.code } : { password: opts.password }),
             });
           },
-          // The same enrolment steps for the request's own session (cookie or
-          // Bearer). enrollment_id, activation_token, challenge_id and the
-          // codes are the step's own one-time credentials and stay explicit.
-          // Activation ends every session of the account, this one included,
-          // so verifyWithCookie clears the cookies after returning the
-          // backup codes; the next sign-in asks for the second factor.
+          // For a user who cannot receive a code (no session needed): { email, password } starts a 72-hour wait
+          // and mails a notice with a cancel link (202 { removal_pending, removes_at }); the same call after the
+          // wait removes the factor ({ enrolled: false }). Refused (503) when the app cannot email the user.
+          recover(opts) {
+            opts = opts || {};
+            if (!opts.email || !opts.password) {
+              const err = new Error('sw.auth.mfa.recover: email and password are required');
+              err.code = 'VALIDATION_ERROR';
+              throw err;
+            }
+            return platformJSON('/v1/auth/mfa/recovery', {
+              method: 'POST',
+              body: JSON.stringify({ project_id: projectId, email: opts.email, password: opts.password }),
+            });
+          },
+          // Cancel a pending removal with the token from the notice's cancel link (no session or code).
+          // Resolves { outcome: 'cancelled' | 'already_closed' | 'completed', message }.
+          cancelRecovery(opts) {
+            opts = opts || {};
+            if (!opts.token) {
+              const err = new Error('sw.auth.mfa.cancelRecovery: token is required');
+              err.code = 'VALIDATION_ERROR';
+              throw err;
+            }
+            return platformJSON('/v1/auth/mfa/recovery/cancel', {
+              method: 'POST',
+              body: JSON.stringify({ token: opts.token }),
+            });
+          },
+          // The same steps for the request's own session (cookie or Bearer). challenge_id and the codes are the
+          // step's own one-time credentials and stay explicit. Turning codes on or off ends no session.
           async enrollWithCookie(req) {
-            return sessionChange('mfa.enrollWithCookie', req, '/v1/auth/mfa/enroll', { body: {} });
+            return sessionChange('mfa.enrollWithCookie', req, '/v1/auth/mfa/enroll', { body: { method: 'email' } });
           },
           async reauthenticateWithCookie(req, opts) {
             return sessionChange('mfa.reauthenticateWithCookie', req, '/v1/auth/mfa/activation/reauth', { body: function () {
@@ -13743,15 +14076,19 @@ var AUTH_JS = `    auth: (function () {
             } });
           },
           async verifyWithCookie(req, opts) {
-            return sessionChange('mfa.verifyWithCookie', req, '/v1/auth/mfa/verify', { ends: true, body: function () {
-              opts = requireFields('mfa.verifyWithCookie', opts, ['enrollment_id', 'activation_token', 'code']);
-              return { enrollment_id: opts.enrollment_id, activation_token: opts.activation_token, code: opts.code };
+            return sessionChange('mfa.verifyWithCookie', req, '/v1/auth/mfa/verify', { body: function () {
+              opts = requireFields('mfa.verifyWithCookie', opts, ['challenge_id', 'code']);
+              return { challenge_id: opts.challenge_id, code: opts.code };
             } });
           },
           async unenrollWithCookie(req, opts) {
             return sessionChange('mfa.unenrollWithCookie', req, '/v1/auth/mfa/unenroll', { body: function () {
-              opts = requireFields('mfa.unenrollWithCookie', opts, ['code']);
-              return { code: opts.code };
+              if (opts && opts.challenge_id !== undefined) {
+                opts = requireFields('mfa.unenrollWithCookie', opts, ['challenge_id', 'code']);
+                return { challenge_id: opts.challenge_id, code: opts.code };
+              }
+              opts = requireFields('mfa.unenrollWithCookie', opts, ['password']);
+              return { password: opts.password };
             } });
           },
         },
@@ -16031,7 +16368,7 @@ function __sw_dataIsDuplicateConflict(error) {
 }
 function __sw_dataPolicyUsesMembership(policy, table) {
   if (!policy || typeof policy !== 'object') return false;
-  if (policy.k === 'm') return policy.m && policy.m.m === table;
+  if (policy.k === 'm') return policy.m && policy.m.m === table && !policy.m.og;
   if (policy.k === 'a') return policy.p.some(item => __sw_dataPolicyUsesMembership(item, table));
   // allOf: a membership table named by either slot stays closed to browser writes.
   if (policy.k === 'n') return __sw_dataPolicyUsesMembership(policy.g, table) || __sw_dataPolicyUsesMembership(policy.w, table);
@@ -17180,20 +17517,25 @@ function reportedFailureFields(platformCtx, requestId) {
   return out;
 }
 
-/** Add the correlation handle without changing responses when tracing is absent. */
-function attachTraceId(response, platformCtx) {
+/** Add the correlation handle without changing responses when tracing is absent. handlerResponse is true only
+ *  at the handler-success site for a Response the handler itself returned. */
+function attachTraceId(response, platformCtx, handlerResponse) {
   try {
     const t = platformCtx && platformCtx.__sw_trace;
-    // X-Sw-Route-Pattern is the PLATFORM's (the edge's completion log): a function's own copy never
-    // passes through, with or without a trace; only the runtime's matched pattern is set below.
+    // X-Sw-Route-Pattern and X-Sw-Response-Source are the PLATFORM's (the edge's completion log): a function's
+    // own copy never passes through, with or without a trace; only the runtime's values are set below.
     if (!t) {
-      if (!response.headers.has('X-Sw-Route-Pattern')) return response;
+      if (!response.headers.has('X-Sw-Route-Pattern') && !response.headers.has('X-Sw-Response-Source') && handlerResponse !== true) return response;
       const stripped = new Headers(response.headers);
       stripped.delete('X-Sw-Route-Pattern');
+      stripped.delete('X-Sw-Response-Source');
+      if (handlerResponse === true) stripped.set('X-Sw-Response-Source', 'handler');
       return new Response(response.body, { status: response.status, statusText: response.statusText, headers: stripped });
     }
     const headers = new Headers(response.headers);
     headers.delete('X-Sw-Route-Pattern');
+    headers.delete('X-Sw-Response-Source');
+    if (handlerResponse === true) headers.set('X-Sw-Response-Source', 'handler');
     headers.set('X-Trace-Id', t.traceId);
     headers.set('traceparent', '00-' + t.traceId + '-' + t.spanId + '-' + (t.sampled ? '01' : '00'));
     headers.set('X-Trace-Sampling', t.sampled
@@ -17577,6 +17919,9 @@ function isCanonicalBigintText(value) {
 }
 
 // worker/src/utils/db-schema-deploy/client-permissions.ts
+function tableAllowsClientWrites(table) {
+  return Boolean(table.client && (table.client.create !== null || table.client.update !== null || table.client.delete || table.client.intake !== void 0));
+}
 function parseClientPermissions(value, columns, scope) {
   const fail = (message) => ({ ok: false, message });
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -18067,6 +18412,11 @@ var SW_INIT_JS = `
 globalThis.sw = globalThis.sw || {};
 ${DB_OUTCOME_ERROR_JS}
 
+// Responses this runtime made (sw.endpoint refusals and caught throws). index.mjs captures the reader and
+// removes its public hook before any user module loads, so customer code can neither read nor change it.
+const __sw_runtimeMadeResponses = new WeakSet();
+globalThis.sw.__isRuntimeMadeResponse = function (response) { return __sw_runtimeMadeResponses.has(response); };
+
 // Legacy USER_ENV supplies customer-only process.env after native reflection is denied.
 // index.mjs captures this initializer before lazy module load and removes its public hook.
 globalThis.sw.__wireProcessEnv = function __sw_wireProcessEnv(runtimeEnv) {
@@ -18176,23 +18526,32 @@ function __sw_corsHeaders(corsCfg, request) {
   };
 }
 
+/** Record a Response this runtime made itself (never the handler's). */
+function __sw_runtimeMade(response) {
+  __sw_runtimeMadeResponses.add(response);
+  return response;
+}
+
 function __sw_jsonError(status, code, message, extras) {
   var body = Object.assign({ ok: false, error: code, message: message }, extras || {});
-  return new Response(JSON.stringify(body), {
+  return __sw_runtimeMade(new Response(JSON.stringify(body), {
     status: status,
     headers: { 'Content-Type': 'application/json' },
-  });
+  }));
 }
 
 function __sw_mergeHeaders(response, extra) {
   if (!extra || Object.keys(extra).length === 0) return response;
   var headers = new Headers(response.headers);
   for (var k of Object.keys(extra)) headers.set(k, extra[k]);
-  return new Response(response.body, {
+  var merged = new Response(response.body, {
     status: response.status,
     statusText: response.statusText,
     headers: headers,
   });
+  // The copy keeps the original's provenance.
+  if (__sw_runtimeMadeResponses.has(response)) __sw_runtimeMadeResponses.add(merged);
+  return merged;
 }
 
 /**
@@ -18237,7 +18596,7 @@ globalThis.sw.endpoint = function (config) {
     const console = sw.__sw_nativeConsole || globalThis.console;
     var corsHeaders = __sw_corsHeaders(cors, request);
     if (request.method === 'OPTIONS') {
-      return new Response(null, { status: 204, headers: corsHeaders });
+      return __sw_runtimeMade(new Response(null, { status: 204, headers: corsHeaders }));
     }
 
     // Auth.
@@ -18293,10 +18652,10 @@ globalThis.sw.endpoint = function (config) {
           var code = (r && r.error) || 'RATE_LIMITED';
           var message = (r && r.message) || 'Too many requests.';
           return __sw_mergeHeaders(
-            new Response(
+            __sw_runtimeMade(new Response(
               JSON.stringify({ ok: false, error: code, message: message, retry_after: retry }),
               { status: 429, headers: { 'Content-Type': 'application/json', 'Retry-After': String(retry) } }
-            ),
+            )),
             corsHeaders
           );
         }
@@ -18315,10 +18674,10 @@ globalThis.sw.endpoint = function (config) {
           rlErr && rlErr.code, rlErr && rlErr.status, rlErr && rlErr.message
         );
         return __sw_mergeHeaders(
-          new Response(
+          __sw_runtimeMade(new Response(
             JSON.stringify({ ok: false, error: 'RATE_LIMIT_UNAVAILABLE', message: 'Rate limiting is temporarily unavailable; this request was blocked. A later identical request can succeed.' }),
             { status: 503, headers: { 'Content-Type': 'application/json', 'Retry-After': String(rateLimit.windowSeconds) } }
-          ),
+          )),
           corsHeaders
         );
       }
@@ -18403,7 +18762,7 @@ function isApiIndexHandlerPath(file) {
   return /^api\/.+\/index\.(?:ts|tsx|mts|js|mjs|jsx)$/.test(file) || /^api\/index\.(?:ts|tsx|mts|js|mjs|jsx)$/.test(file);
 }
 
-// ../../../../../../pmwork/wt/files-migration-c0-rig/worker/node_modules/acorn/dist/acorn.mjs
+// ../../../tech/worker/node_modules/acorn/dist/acorn.mjs
 var astralIdentifierCodes = [509, 0, 227, 0, 150, 4, 294, 9, 1368, 2, 2, 1, 6, 3, 41, 2, 5, 0, 166, 1, 574, 3, 9, 9, 7, 9, 32, 4, 318, 1, 80, 3, 71, 10, 50, 3, 123, 2, 54, 14, 32, 10, 3, 1, 11, 3, 46, 10, 8, 0, 46, 9, 7, 2, 37, 13, 2, 9, 6, 1, 45, 0, 13, 2, 49, 13, 9, 3, 2, 11, 83, 11, 7, 0, 3, 0, 158, 11, 6, 9, 7, 3, 56, 1, 2, 6, 3, 1, 3, 2, 10, 0, 11, 1, 3, 6, 4, 4, 68, 8, 2, 0, 3, 0, 2, 3, 2, 4, 2, 0, 15, 1, 83, 17, 10, 9, 5, 0, 82, 19, 13, 9, 214, 6, 3, 8, 28, 1, 83, 16, 16, 9, 82, 12, 9, 9, 7, 19, 58, 14, 5, 9, 243, 14, 166, 9, 71, 5, 2, 1, 3, 3, 2, 0, 2, 1, 13, 9, 120, 6, 3, 6, 4, 0, 29, 9, 41, 6, 2, 3, 9, 0, 10, 10, 47, 15, 343, 9, 54, 7, 2, 7, 17, 9, 57, 21, 2, 13, 123, 5, 4, 0, 2, 1, 2, 6, 2, 0, 9, 9, 49, 4, 2, 1, 2, 4, 9, 9, 330, 3, 10, 1, 2, 0, 49, 6, 4, 4, 14, 10, 5350, 0, 7, 14, 11465, 27, 2343, 9, 87, 9, 39, 4, 60, 6, 26, 9, 535, 9, 470, 0, 2, 54, 8, 3, 82, 0, 12, 1, 19628, 1, 4178, 9, 519, 45, 3, 22, 543, 4, 4, 5, 9, 7, 3, 6, 31, 3, 149, 2, 1418, 49, 513, 54, 5, 49, 9, 0, 15, 0, 23, 4, 2, 14, 1361, 6, 2, 16, 3, 6, 2, 1, 2, 4, 101, 0, 161, 6, 10, 9, 357, 0, 62, 13, 499, 13, 245, 1, 2, 9, 726, 6, 110, 6, 6, 9, 4759, 9, 787719, 239];
 var astralIdentifierStartCodes = [0, 11, 2, 25, 2, 18, 2, 1, 2, 14, 3, 13, 35, 122, 70, 52, 268, 28, 4, 48, 48, 31, 14, 29, 6, 37, 11, 29, 3, 35, 5, 7, 2, 4, 43, 157, 19, 35, 5, 35, 5, 39, 9, 51, 13, 10, 2, 14, 2, 6, 2, 1, 2, 10, 2, 14, 2, 6, 2, 1, 4, 51, 13, 310, 10, 21, 11, 7, 25, 5, 2, 41, 2, 8, 70, 5, 3, 0, 2, 43, 2, 1, 4, 0, 3, 22, 11, 22, 10, 30, 66, 18, 2, 1, 11, 21, 11, 25, 71, 55, 7, 1, 65, 0, 16, 3, 2, 2, 2, 28, 43, 28, 4, 28, 36, 7, 2, 27, 28, 53, 11, 21, 11, 18, 14, 17, 111, 72, 56, 50, 14, 50, 14, 35, 39, 27, 10, 22, 251, 41, 7, 1, 17, 2, 60, 28, 11, 0, 9, 21, 43, 17, 47, 20, 28, 22, 13, 52, 58, 1, 3, 0, 14, 44, 33, 24, 27, 35, 30, 0, 3, 0, 9, 34, 4, 0, 13, 47, 15, 3, 22, 0, 2, 0, 36, 17, 2, 24, 20, 1, 64, 6, 2, 0, 2, 3, 2, 14, 2, 9, 8, 46, 39, 7, 3, 1, 3, 21, 2, 6, 2, 1, 2, 4, 4, 0, 19, 0, 13, 4, 31, 9, 2, 0, 3, 0, 2, 37, 2, 0, 26, 0, 2, 0, 45, 52, 19, 3, 21, 2, 31, 47, 21, 1, 2, 0, 185, 46, 42, 3, 37, 47, 21, 0, 60, 42, 14, 0, 72, 26, 38, 6, 186, 43, 117, 63, 32, 7, 3, 0, 3, 7, 2, 1, 2, 23, 16, 0, 2, 0, 95, 7, 3, 38, 17, 0, 2, 0, 29, 0, 11, 39, 8, 0, 22, 0, 12, 45, 20, 0, 19, 72, 200, 32, 32, 8, 2, 36, 18, 0, 50, 29, 113, 6, 2, 1, 2, 37, 22, 0, 26, 5, 2, 1, 2, 31, 15, 0, 328, 18, 16, 0, 2, 12, 2, 33, 125, 0, 80, 921, 103, 110, 18, 195, 2637, 96, 16, 1071, 18, 5, 26, 3994, 6, 582, 6842, 29, 1763, 568, 8, 30, 18, 78, 18, 29, 19, 47, 17, 3, 32, 20, 6, 18, 433, 44, 212, 63, 129, 74, 6, 0, 67, 12, 65, 1, 2, 0, 29, 6135, 9, 1237, 42, 9, 8936, 3, 2, 6, 2, 1, 2, 290, 16, 0, 30, 2, 3, 0, 15, 3, 9, 395, 2309, 106, 6, 12, 4, 8, 8, 9, 5991, 84, 2, 70, 2, 1, 3, 0, 3, 1, 3, 3, 2, 11, 2, 0, 2, 6, 2, 64, 2, 3, 3, 7, 2, 6, 2, 27, 2, 3, 2, 4, 2, 0, 4, 6, 2, 339, 3, 24, 2, 24, 2, 30, 2, 24, 2, 30, 2, 24, 2, 30, 2, 24, 2, 30, 2, 24, 2, 7, 1845, 30, 7, 5, 262, 61, 147, 44, 11, 6, 17, 0, 322, 29, 19, 43, 485, 27, 229, 29, 3, 0, 496, 6, 2, 3, 2, 1, 2, 14, 2, 196, 60, 67, 8, 0, 1205, 3, 2, 26, 2, 1, 2, 0, 3, 0, 2, 9, 2, 3, 2, 0, 2, 0, 7, 0, 5, 0, 2, 0, 2, 0, 2, 2, 2, 1, 2, 0, 3, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 1, 2, 0, 3, 3, 2, 6, 2, 3, 2, 3, 2, 0, 2, 9, 2, 16, 6, 2, 2, 4, 2, 16, 4421, 42719, 33, 4153, 7, 221, 3, 5761, 15, 7472, 16, 621, 2467, 541, 1507, 4938, 6, 4191];
 var nonASCIIidentifierChars = "\u200C\u200D\xB7\u0300-\u036F\u0387\u0483-\u0487\u0591-\u05BD\u05BF\u05C1\u05C2\u05C4\u05C5\u05C7\u0610-\u061A\u064B-\u0669\u0670\u06D6-\u06DC\u06DF-\u06E4\u06E7\u06E8\u06EA-\u06ED\u06F0-\u06F9\u0711\u0730-\u074A\u07A6-\u07B0\u07C0-\u07C9\u07EB-\u07F3\u07FD\u0816-\u0819\u081B-\u0823\u0825-\u0827\u0829-\u082D\u0859-\u085B\u0897-\u089F\u08CA-\u08E1\u08E3-\u0903\u093A-\u093C\u093E-\u094F\u0951-\u0957\u0962\u0963\u0966-\u096F\u0981-\u0983\u09BC\u09BE-\u09C4\u09C7\u09C8\u09CB-\u09CD\u09D7\u09E2\u09E3\u09E6-\u09EF\u09FE\u0A01-\u0A03\u0A3C\u0A3E-\u0A42\u0A47\u0A48\u0A4B-\u0A4D\u0A51\u0A66-\u0A71\u0A75\u0A81-\u0A83\u0ABC\u0ABE-\u0AC5\u0AC7-\u0AC9\u0ACB-\u0ACD\u0AE2\u0AE3\u0AE6-\u0AEF\u0AFA-\u0AFF\u0B01-\u0B03\u0B3C\u0B3E-\u0B44\u0B47\u0B48\u0B4B-\u0B4D\u0B55-\u0B57\u0B62\u0B63\u0B66-\u0B6F\u0B82\u0BBE-\u0BC2\u0BC6-\u0BC8\u0BCA-\u0BCD\u0BD7\u0BE6-\u0BEF\u0C00-\u0C04\u0C3C\u0C3E-\u0C44\u0C46-\u0C48\u0C4A-\u0C4D\u0C55\u0C56\u0C62\u0C63\u0C66-\u0C6F\u0C81-\u0C83\u0CBC\u0CBE-\u0CC4\u0CC6-\u0CC8\u0CCA-\u0CCD\u0CD5\u0CD6\u0CE2\u0CE3\u0CE6-\u0CEF\u0CF3\u0D00-\u0D03\u0D3B\u0D3C\u0D3E-\u0D44\u0D46-\u0D48\u0D4A-\u0D4D\u0D57\u0D62\u0D63\u0D66-\u0D6F\u0D81-\u0D83\u0DCA\u0DCF-\u0DD4\u0DD6\u0DD8-\u0DDF\u0DE6-\u0DEF\u0DF2\u0DF3\u0E31\u0E34-\u0E3A\u0E47-\u0E4E\u0E50-\u0E59\u0EB1\u0EB4-\u0EBC\u0EC8-\u0ECE\u0ED0-\u0ED9\u0F18\u0F19\u0F20-\u0F29\u0F35\u0F37\u0F39\u0F3E\u0F3F\u0F71-\u0F84\u0F86\u0F87\u0F8D-\u0F97\u0F99-\u0FBC\u0FC6\u102B-\u103E\u1040-\u1049\u1056-\u1059\u105E-\u1060\u1062-\u1064\u1067-\u106D\u1071-\u1074\u1082-\u108D\u108F-\u109D\u135D-\u135F\u1369-\u1371\u1712-\u1715\u1732-\u1734\u1752\u1753\u1772\u1773\u17B4-\u17D3\u17DD\u17E0-\u17E9\u180B-\u180D\u180F-\u1819\u18A9\u1920-\u192B\u1930-\u193B\u1946-\u194F\u19D0-\u19DA\u1A17-\u1A1B\u1A55-\u1A5E\u1A60-\u1A7C\u1A7F-\u1A89\u1A90-\u1A99\u1AB0-\u1ABD\u1ABF-\u1ACE\u1B00-\u1B04\u1B34-\u1B44\u1B50-\u1B59\u1B6B-\u1B73\u1B80-\u1B82\u1BA1-\u1BAD\u1BB0-\u1BB9\u1BE6-\u1BF3\u1C24-\u1C37\u1C40-\u1C49\u1C50-\u1C59\u1CD0-\u1CD2\u1CD4-\u1CE8\u1CED\u1CF4\u1CF7-\u1CF9\u1DC0-\u1DFF\u200C\u200D\u203F\u2040\u2054\u20D0-\u20DC\u20E1\u20E5-\u20F0\u2CEF-\u2CF1\u2D7F\u2DE0-\u2DFF\u302A-\u302F\u3099\u309A\u30FB\uA620-\uA629\uA66F\uA674-\uA67D\uA69E\uA69F\uA6F0\uA6F1\uA802\uA806\uA80B\uA823-\uA827\uA82C\uA880\uA881\uA8B4-\uA8C5\uA8D0-\uA8D9\uA8E0-\uA8F1\uA8FF-\uA909\uA926-\uA92D\uA947-\uA953\uA980-\uA983\uA9B3-\uA9C0\uA9D0-\uA9D9\uA9E5\uA9F0-\uA9F9\uAA29-\uAA36\uAA43\uAA4C\uAA4D\uAA50-\uAA59\uAA7B-\uAA7D\uAAB0\uAAB2-\uAAB4\uAAB7\uAAB8\uAABE\uAABF\uAAC1\uAAEB-\uAAEF\uAAF5\uAAF6\uABE3-\uABEA\uABEC\uABED\uABF0-\uABF9\uFB1E\uFE00-\uFE0F\uFE20-\uFE2F\uFE33\uFE34\uFE4D-\uFE4F\uFF10-\uFF19\uFF3F\uFF65";
@@ -24015,6 +24374,140 @@ function tokenizer2(input, options) {
   return Parser.tokenizer(input, options);
 }
 
+// worker/src/utils/db-schema-deploy/extract-schema-grants.ts
+function readGrantScope(r, table, line, fail) {
+  r.expectPunct("(", "after grant");
+  r.expectPunct("{", "in grant options");
+  let membership, grantee, row;
+  let operations;
+  const seen = /* @__PURE__ */ new Set();
+  while (!r.tryPunct("}")) {
+    const key = r.readKey("in grant options");
+    if (seen.has(key.name)) fail(key.line, `Duplicate grant option "${key.name}".`);
+    seen.add(key.name);
+    r.expectPunct(":", "after grant option");
+    if (key.name === "table" || key.name === "grantee" || key.name === "row") {
+      const value = r.readLiteral("in grant options");
+      if (typeof value !== "string" || !/^[a-zA-Z_][a-zA-Z0-9_]{0,63}$/.test(value)) fail(key.line, "grant table, grantee and row must be column/table identifiers.");
+      if (key.name === "table") membership = value.toLowerCase();
+      else if (key.name === "grantee") grantee = value.toLowerCase();
+      else row = value.toLowerCase();
+    } else if (key.name === "operations") {
+      const ops = [];
+      r.expectPunct("[", "in grant operations");
+      while (!r.tryPunct("]")) {
+        const op = r.readLiteral("in grant operations");
+        if (op !== "read" && op !== "update") fail(key.line, "grant operations allow only read and update.");
+        if (ops.includes(op)) fail(key.line, "Duplicate grant operation.");
+        ops.push(op);
+        if (!r.tryPunct(",")) {
+          r.expectPunct("]", "closing grant operations");
+          break;
+        }
+      }
+      if (!ops.includes("read")) fail(key.line, "grant operations require read; update alone is not allowed.");
+      operations = ops.includes("update") ? ["read", "update"] : ["read"];
+    } else fail(key.line, `Unknown grant option "${key.name}". Allowed: table, grantee, row, operations.`);
+    if (!r.tryPunct(",")) {
+      r.expectPunct("}", "closing grant options");
+      break;
+    }
+  }
+  r.tryPunct(",");
+  r.expectPunct(")", "closing grant");
+  if (!membership || !grantee || !operations || grantee === "user_id") fail(line, `grant() on "${table}" requires table, a grantee column distinct from managed user_id, and explicit operations.`);
+  if (row !== void 0 && (row === "user_id" || row === grantee)) fail(line, `grant() on "${table}": row names the shares column holding the shared row's id, distinct from user_id and the grantee.`);
+  return { kind: "member", group: ["user_id"], membership, memberUser: grantee, memberGroup: row === void 0 ? ["user_id"] : ["user_id", row], operations, ownerGrant: true };
+}
+function resolveGrantRowKeys(scope, key, table, line, fail) {
+  const visit = (node) => {
+    if (node.kind === "member" && node.ownerGrant && node.memberGroup.length === 2 && node.group.length === 1) {
+      if (key === void 0) fail(line, `grant() with row on "${table}" needs the table's one id() key: each share names one row by it.`);
+      node.group = ["user_id", key.toLowerCase()];
+    } else if (node.kind === "any_of") node.policies.forEach(visit);
+    else if (node.kind === "all_of") {
+      visit(node.gate);
+      visit(node.who);
+    }
+  };
+  if (scope.kind === "policy") visit(scope.policy);
+}
+function validateDeclaredMemberships(tables, tableByName, knownColumns, errors) {
+  const memberPolicies = (scope) => {
+    const out = [];
+    const visit = (node) => {
+      if (node.kind === "member") out.push(node);
+      else if (node.kind === "any_of") node.policies.forEach(visit);
+      else if (node.kind === "all_of") {
+        visit(node.gate);
+        visit(node.who);
+      }
+    };
+    if (scope.kind === "member") out.push(scope);
+    else if (scope.kind === "policy") visit(scope.policy);
+    return out;
+  };
+  for (const t of tables) {
+    for (const sc of memberPolicies(t.scope)) {
+      const own = knownColumns(t);
+      for (const g of sc.group) {
+        if (!own.has(g)) {
+          errors.push(
+            `Table "${t.name}" is member-scoped on "${g}", but "${g}" is not one of its declared columns. The group-key columns must be real columns on the table.`
+          );
+        }
+      }
+      const membershipTable = tableByName.get(sc.membership);
+      if (!membershipTable) {
+        errors.push(
+          `Table "${t.name}" is member-scoped through the membership table "${sc.membership}", which is not declared in db/schema.ts. The membership table must be a managed table in the same schema.`
+        );
+        continue;
+      }
+      const membershipCols = knownColumns(membershipTable);
+      if (sc.ownerGrant) {
+        if (membershipTable.scope.kind !== "owner" || membershipTable.scope.column !== "user_id" || membershipTable.scope.visitors) {
+          errors.push(`Grant table "${sc.membership}" must use owner() with managed user_id and authenticated owners.`);
+        }
+        if (membershipTable.client?.intake || membershipTable.client?.links) errors.push(`Grant table "${sc.membership}" cannot expose public intake or row links; only its authenticated owner manages grants.`);
+        const grantee = membershipTable.columns.find((column) => column.name === sc.memberUser);
+        if (!grantee || grantee.helper !== "text" || grantee.nullable) errors.push(`Grant grantee "${sc.membership}"."${sc.memberUser}" must be a required text column.`);
+        if (sc.memberGroup.length === 2) {
+          const row = membershipTable.columns.find((column) => column.name === sc.memberGroup[1]);
+          const key = t.columns.find((column) => column.name === sc.group[1]);
+          const keyHelper = key?.helper === "id" ? key.uuid ? "text" : "integer" : null;
+          if (!row || row.nullable || row.helper !== keyHelper) {
+            errors.push(`Grant row "${sc.membership}"."${sc.memberGroup[1]}" must be a required ${keyHelper ?? "id-typed"} column holding a "${t.name}" id.`);
+          } else if (row.hasDefault || row.references !== t.name || row.onDelete !== "cascade") {
+            errors.push(`Grant row "${sc.membership}"."${sc.memberGroup[1]}" must reference its row with no default: ${sc.memberGroup[1]}: ${keyHelper}({ references: '${t.name}', onDelete: 'cascade' }).`);
+          }
+          if (membershipTable.client?.update?.includes(sc.memberGroup[1])) {
+            errors.push(`Grant row "${sc.membership}"."${sc.memberGroup[1]}" cannot be in client.update: a share names one row for its life. Delete the share and create another.`);
+          }
+          const users = tables.filter((other) => memberPolicies(other.scope).some((m) => m.ownerGrant && m.membership === sc.membership));
+          if (users.length !== 1 || memberPolicies(t.scope).filter((m) => m.ownerGrant && m.membership === sc.membership).length !== 1) {
+            errors.push(`Grant table "${sc.membership}" names rows of "${t.name}", so it serves only that one grant() rule. Declare another shares table for other grants.`);
+          }
+        }
+      } else if (tableAllowsClientWrites(membershipTable)) {
+        errors.push(`Table "${sc.membership}" grants membership access to "${t.name}" and cannot allow client writes; membership changes go through a server function.`);
+      }
+      if (!membershipCols.has(sc.memberUser)) {
+        errors.push(
+          `The membership table "${sc.membership}" (for member-scoped "${t.name}") has no "${sc.memberUser}" column named in member({ member_user }).`
+        );
+      }
+      for (const mg of sc.ownerGrant ? [] : sc.memberGroup) {
+        if (!membershipCols.has(mg)) {
+          errors.push(
+            `The membership table "${sc.membership}" (for member-scoped "${t.name}") has no "${mg}" column named in member({ member_group }).`
+          );
+        }
+      }
+    }
+  }
+}
+
 // worker/src/utils/db-schema-deploy/schema-constants.ts
 var LITERAL_WORDS = /* @__PURE__ */ new Set(["true", "false", "null"]);
 var STATEMENT_WORDS = /* @__PURE__ */ new Set([
@@ -25084,8 +25577,9 @@ function resolveAppRoleScopes(tables, appRoles, errors) {
 }
 
 // worker/src/utils/db-schema-deploy/extract-schema-roles.ts
+var EMAIL_DOMAIN = EMAIL_DOMAIN_PATTERN;
 var GROUP_KEYS = ["roles", "adminGrantableRoles"];
-var APP_ROLE_KEYS = ["grantableBy"];
+var APP_ROLE_KEYS = ["grantableBy", "emailDomain"];
 function readStringList2(r, fail, ctx) {
   const open = r.peek();
   if (open.kind !== "punct" || open.value !== "[") fail(open.line, `${ctx} must be a list of quoted role names, such as ['viewer'].`);
@@ -25129,7 +25623,7 @@ function readAppRoles(r, fail) {
     const key = r.readKey("for an app role name");
     if (out.some((role2) => role2.name === key.name)) fail(key.line, `app role "${key.name}" is declared twice.`);
     r.expectPunct(":", `after app role "${key.name}"`);
-    r.expectPunct("{", `opening app role "${key.name}", which takes { grantableBy: [...] }`);
+    r.expectPunct("{", `opening app role "${key.name}", which takes { grantableBy: [...], emailDomain: '...' }`);
     const role = { name: key.name, grantableBy: [] };
     const seen = /* @__PURE__ */ new Set();
     while (!r.tryPunct("}")) {
@@ -25140,7 +25634,16 @@ function readAppRoles(r, fail) {
       if (seen.has(opt.name)) fail(opt.line, `app role "${key.name}" declares ${opt.name} twice.`);
       seen.add(opt.name);
       r.expectPunct(":", `after appRoles.${key.name}.${opt.name}`);
-      role.grantableBy = readStringList2(r, fail, `appRoles.${key.name}.grantableBy`);
+      if (opt.name === "emailDomain") {
+        const t = r.next();
+        if (t.kind !== "string") fail(t.line, `appRoles.${key.name}.emailDomain must be one quoted domain, such as 'example.com'.`);
+        if (!EMAIL_DOMAIN.test(t.value)) {
+          fail(t.line, `appRoles.${key.name}.emailDomain "${t.value}" must be one lowercase domain such as 'example.com': no "@", no wildcard, no scheme or path. Users whose verified email is at exactly that domain hold the role; subdomains are other domains.`);
+        }
+        role.emailDomain = t.value;
+      } else {
+        role.grantableBy = readStringList2(r, fail, `appRoles.${key.name}.grantableBy`);
+      }
       if (!r.tryPunct(",")) {
         r.expectPunct("}", `closing app role "${key.name}"`);
         break;
@@ -25157,12 +25660,25 @@ function readAppRoles(r, fail) {
 function validateDeclaredRoles(groups, appRoles) {
   const delegation = /* @__PURE__ */ Object.create(null);
   for (const role of appRoles ?? []) delegation[role.name] = role.grantableBy;
-  return roleVocabularyErrors({
+  return [...emailDomainRoleErrors(appRoles ?? []), ...roleVocabularyErrors({
     groupRoles: groups?.roles ?? [],
     adminGrantableGroupRoles: groups?.adminGrantableRoles ?? [],
     appRoles: (appRoles ?? []).map((role) => role.name),
     appRoleDelegation: delegation
-  });
+  })];
+}
+function emailDomainRoleErrors(appRoles) {
+  const errors = [];
+  const byDomain = new Set(appRoles.filter((role) => role.emailDomain !== void 0).map((role) => role.name));
+  for (const role of appRoles) {
+    if (role.emailDomain !== void 0 && !EMAIL_DOMAIN.test(role.emailDomain)) errors.push(`appRoles.${role.name}.emailDomain is not one lowercase domain.`);
+    for (const grantor of role.grantableBy) {
+      if (byDomain.has(grantor)) {
+        errors.push(`appRoles.${role.name}.grantableBy names "${grantor}", which is held by email domain. A role held by email domain cannot grant other roles; list a role that is granted explicitly.`);
+      }
+    }
+  }
+  return errors;
 }
 
 // worker/src/utils/db-schema-deploy/extract-schema-options.ts
@@ -25249,6 +25765,7 @@ var SCHEMA_CALLABLE = /* @__PURE__ */ new Set([
   ...TABLE_MARKER_HELPERS,
   "schema",
   "table",
+  "grant",
   "removed",
   "hasMany",
   "belongsTo",
@@ -25363,10 +25880,10 @@ function tokenize2(source) {
 var Reader = class {
   constructor(tokens, options = {}) {
     this.tokens = tokens;
-    this.bareIdIsText = !options.legacyIntegerIdDefault;
+    this.bareIdIsText = (table) => !options.legacyIntegerIdDefault && !options.integerKeyTables?.has(table.toLowerCase());
   }
   pos = 0;
-  /** What a bare id() declares: a random text key, or (legacy retained source) an integer. */
+  /** What a bare id() on this table declares: a random text key, or an integer (ExtractSchemaOptions). */
   bareIdIsText;
   peek() {
     return this.tokens[this.pos];
@@ -25534,7 +26051,7 @@ function readColumn(r, tableName, rawName, line) {
   const col = {
     name,
     helper,
-    uuid: helper === "id" && r.bareIdIsText,
+    uuid: helper === "id" && r.bareIdIsText(tableName),
     nullable: false,
     hasDefault: false,
     default: null,
@@ -25771,7 +26288,7 @@ function readPolicyMember(r, tableName, line) {
   if (scope.kind !== "member") throw new SchemaTsError(`line ${line}: invalid member() policy.`);
   return scope;
 }
-var ANY_OF_FORMS = "anyOf() accepts exactly one owner() and one member(), group() or appRole().";
+var ANY_OF_FORMS = "anyOf() accepts exactly one owner() and one member(), grant(), group() or appRole().";
 function readAnyOfBranch(r, tableName, which) {
   const tok = r.expectIdent(`for the ${which} policy in anyOf() on table "${tableName}"`);
   const failAt = (at2, message) => {
@@ -25779,6 +26296,7 @@ function readAnyOfBranch(r, tableName, which) {
   };
   if (tok.value === "owner") return readPolicyOwner(r, tableName, tok.line);
   if (tok.value === "member") return readPolicyMember(r, tableName, tok.line);
+  if (tok.value === "grant") return readGrantScope(r, tableName, tok.line, failAt);
   if (tok.value === "group") return readGroupScope(r, tableName, tok.line, failAt);
   if (tok.value === "appRole") return readAppRoleScope(r, tableName, tok.line, failAt);
   throw new SchemaTsError(`line ${tok.line}: ${ANY_OF_FORMS}`);
@@ -25794,6 +26312,7 @@ function readAnyOfScope(r, tableName, line) {
   if (owners.length !== 1) throw new SchemaTsError(`line ${line}: ${ANY_OF_FORMS}`);
   const owner = owners[0];
   const other = firstPolicy.kind === "owner" ? secondPolicy : firstPolicy;
+  if (other.kind === "member" && other.ownerGrant && owner.column !== DEFAULT_OWNER_COLUMN) throw new SchemaTsError(`line ${line}: grant() requires owner() with managed user_id.`);
   return { kind: "policy", policy: { kind: "any_of", policies: [owner, other] } };
 }
 var ALL_OF_FORMS = "allOf() takes a gate \u2014 member(), group() or appRole() \u2014 and then owner() or anyOf(owner(), ...).";
@@ -25821,6 +26340,7 @@ function readAllOfScope(r, tableName, line) {
   r.tryPunct(",");
   r.expectPunct(")", "closing allOf()");
   const x = who.kind === "any_of" ? who.policies[1] : null;
+  if (x?.kind === "member" && x.ownerGrant) throw new SchemaTsError(`line ${line}: grant() belongs in anyOf(owner(), grant()), not allOf().`);
   for (const node of [gate, ...x ? [x] : []]) {
     if (node.kind !== "member") continue;
     if (!explicitMemberOperations.has(node)) {
@@ -26056,6 +26576,9 @@ function readTable(r, rawName, nameLine) {
       if (key.name === "scope") {
         if (scope) throw new SchemaTsError(`line ${key.line}: table "${rawName}" declares "scope" twice.`);
         scope = readScope(r, rawName);
+        resolveGrantRowKeys(scope, idCols[0]?.name, rawName, key.line, (at2, message) => {
+          throw new SchemaTsError(`line ${at2}: ${message}`);
+        });
       } else if (key.name === "indexes") {
         if (indexEntries) throw new SchemaTsError(`line ${key.line}: table "${rawName}" declares "indexes" twice.`);
         indexEntries = readColumnLists(r, rawName, "indexes");
@@ -26287,55 +26810,7 @@ function extractSchemaTs(source, options = {}) {
     };
     resolveAppRoleScopes(tables, appRoles, errors);
     resolveGroupsAndParents(tables, tableByName, privatePolicy, groupRoles, errors);
-    const memberPolicies = (scope) => {
-      const out = [];
-      const visit = (node) => {
-        if (node.kind === "member") out.push(node);
-        else if (node.kind === "any_of") node.policies.forEach(visit);
-        else if (node.kind === "all_of") {
-          visit(node.gate);
-          visit(node.who);
-        }
-      };
-      if (scope.kind === "member") out.push(scope);
-      else if (scope.kind === "policy") visit(scope.policy);
-      return out;
-    };
-    for (const t of tables) {
-      for (const sc of memberPolicies(t.scope)) {
-        const own = knownColumns(t);
-        for (const g of sc.group) {
-          if (!own.has(g)) {
-            errors.push(
-              `Table "${t.name}" is member-scoped on "${g}", but "${g}" is not one of its declared columns. The group-key columns must be real columns on the table.`
-            );
-          }
-        }
-        const membershipTable = tableByName.get(sc.membership);
-        if (!membershipTable) {
-          errors.push(
-            `Table "${t.name}" is member-scoped through the membership table "${sc.membership}", which is not declared in db/schema.ts. The membership table must be a managed table in the same schema.`
-          );
-          continue;
-        }
-        const membershipCols = knownColumns(membershipTable);
-        if (membershipTable.client && (membershipTable.client.create !== null || membershipTable.client.update !== null || membershipTable.client.delete || membershipTable.client.intake !== void 0)) {
-          errors.push(`Table "${sc.membership}" grants membership access to "${t.name}" and cannot allow client writes; membership changes go through a server function.`);
-        }
-        if (!membershipCols.has(sc.memberUser)) {
-          errors.push(
-            `The membership table "${sc.membership}" (for member-scoped "${t.name}") has no "${sc.memberUser}" column named in member({ member_user }).`
-          );
-        }
-        for (const mg of sc.memberGroup) {
-          if (!membershipCols.has(mg)) {
-            errors.push(
-              `The membership table "${sc.membership}" (for member-scoped "${t.name}") has no "${mg}" column named in member({ member_group }).`
-            );
-          }
-        }
-      }
-    }
+    validateDeclaredMemberships(tables, tableByName, knownColumns, errors);
     validateDeclaredRelations(tables, tableByName, knownColumns, (table) => removedTables.includes(table) ? "removedTable()" : exportedTables.includes(table) ? "exported()" : null, errors);
     validateRowLinks(tables, tableByName, errors);
     validateIntake(tables, tableByName, errors);
@@ -26343,7 +26818,7 @@ function extractSchemaTs(source, options = {}) {
       errors.push(...fileErrors);
       validateFileCollections(fileCollections, (name) => {
         const t = tableByName.get(name);
-        return t ? { columns: knownColumns(t), clientWrites: Boolean(t.client && (t.client.create !== null || t.client.update !== null || t.client.delete || t.client.intake !== void 0)), parentTarget: fileParentTarget(t) } : null;
+        return t ? { columns: knownColumns(t), clientWrites: tableAllowsClientWrites(t), parentTarget: fileParentTarget(t) } : null;
       }, errors);
     }
     if (groupRoles || appRoles) errors.push(...validateDeclaredRoles(groupRoles, appRoles));

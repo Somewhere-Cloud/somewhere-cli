@@ -1,7 +1,6 @@
 {
   "esbuild": "0.27.3",
   "source_files": {
-    "../../../tech/worker/node_modules/acorn/dist/acorn.mjs": "b4c8c70200e72bae33cf1085e0ecb1e792c1b6924ed50cab817caf14f51bb249",
     "shared/customer-function-limits.ts": "639630f1efc4adc1a82191bbb5f49a6e20fde4c6a7c673bd376ce6582634776e",
     "shared/d1-region.ts": "71cda96cfead241b4f4e35b8cd6b1d8e577f072257e91a8dbe0deaa1b142b378",
     "shared/d1-session.ts": "2ae29b74bba68016c86d25fa2a58f8c2fce4aca8fe57fafc253d380c47a3c0ab",
@@ -9,6 +8,7 @@
     "shared/public-result.ts": "85ba1a6dd4136fd7362cf7f38b3042b1cacfc389af8c28343398c1ba83d26298",
     "worker/containers/compile/declared-data-contract.cjs": "6d421db4a64f7f3ea58ec7bf773a1090a0f04bc99d59219178f3b1b602ad3d68",
     "worker/containers/compile/function-route.cjs": "e7faf1104ba95e27921901b4619bd98aa6a2be47cc10af00097fd4957744606b",
+    "worker/node_modules/acorn/dist/acorn.mjs": "b4c8c70200e72bae33cf1085e0ecb1e792c1b6924ed50cab817caf14f51bb249",
     "worker/src/runtime/access-token.ts": "f6ab74f3a9e0bbfb15ac5a6a2f7391f4fb1e4e03b7358fbf8b61d962d14582ef",
     "worker/src/runtime/agent-step.generated.ts": "72dc0238e0c41142d2229cdd95a1b2b259db6baa3887181de21da1336780916b",
     "worker/src/runtime/agent.ts": "26c886d4d15710725079321d3e387266ca0681d9a45db666e55cc0e87c3f3d34",
@@ -144,6 +144,6 @@
     "worker/src/utils/sql-tokens.ts": "ac643c765def38905a0600ae155ad909335cae1a7c1912da7bc87af25acb752e",
     "worker/src/vendor/neondatabase-serverless/source.generated.ts": "96a3c18fde7d8888fdb53a4d7cd0721c238a234521d2084d1e66868a8df8e69c"
   },
-  "sha256": "2f657ed09093ca9d35de711e4f2788019572ce9da7652bf1a2d5c371fd4e6308",
+  "sha256": "63941fff948cab385cbf64c59297e5abca4a63bf1bdfe9b29523e5423227c375",
   "fixtures_sha256": "908827d1430f4af5a83cae59ed476abc51dc9648757eac0089fe6e6db95f66c5"
 }

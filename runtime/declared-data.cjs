@@ -684,7 +684,7 @@ ${generation >= 2 ? ROW_CAN_DECLARATION : ""}${receiptCapable ? localTypes ? INS
 class DataError extends Error{constructor(status,payload){super(payload&&typeof payload.message==="string"?payload.message:payload&&typeof payload.error==="string"?payload.error:"Data operation failed");this.name="DataError";this.status=status;this.code=payload&&typeof payload.error==="string"?payload.error:null}}
 const validateListLimit=input=>{if(input.limit!==undefined&&(!Number.isInteger(input.limit)||input.limit<1||input.limit>100))throw new DataError(400,{error:"DATA_INPUT_INVALID",message:"limit must be an integer from 1 to 100"})};
 let swReadSession=null,swInFlight=0,swStarts=0;const swReadSessionVoid=()=>{swReadSession=null;swStarts++};${generation >= 3 ? PUBLIC_BOOTSTRAP_CLIENT_RUNTIME : ""}const invoke=async(table,operation,input)=>{if(operation==="list"||operation==="relation_list")validateListLimit(input);${generation >= 3 ? PUBLIC_BOOTSTRAP_INVOKE : ""}const alone=swInFlight===0,start=++swStarts,isRead=operation==="list"||operation==="get"||operation==="aggregate"||operation==="relation_list";swInFlight++;let response;try{response=await fetch("/__sw/data",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json",...(swReadSession?{"X-Sw-Read-Session":swReadSession}:{})},body:JSON.stringify({...input,contract,table,operation})})}catch(error){if(!isRead)swReadSession=null;throw error}finally{swInFlight--}const next=response.headers&&typeof response.headers.get==="function"?response.headers.get("X-Sw-Read-Session"):null;if(!alone||swStarts!==start||swInFlight!==0)swReadSession=null;else if(next&&/^swrs1[.][A-Za-z0-9_-]+[.][A-Za-z0-9_-]+$/.test(next))swReadSession=next;else if(!isRead||!response.ok)swReadSession=null;const payload=await response.json().catch(()=>{throw new DataError(response.status,{error:"INVALID_DATA_RESPONSE",message:"Data operation returned an invalid response"})});if(!response.ok)throw new DataError(response.status,payload);return payload};
-${receiptCapable ? INSERT_CLIENT_RUNTIME + "const receiptTables=" + JSON.stringify(receiptTables) + ";\n" : ""}${anonymousTables.length ? ANONYMOUS_CLIENT_RUNTIME + CREATOR_CLIENT_RUNTIME : ""}${intakeTables.length ? INTAKE_CLIENT_RUNTIME : ""}${linkedSpec.length ? LINK_CLIENT_RUNTIME : ""}const data=Object.freeze(Object.fromEntries(${JSON.stringify(runtimeTables)}.map(([table,operations,relations])=>{const entries=operations.map(operation=>[operation,operation==="list"||operation==="aggregate"?(options={})=>invoke(table,operation,options):operation==="create"?${receiptCapable ? "(values,...extra)=>createWithReceipt(table,values,extra,receiptTables.includes(table))" : "values=>invoke(table,operation,{values})"}:${anonymousTables.length ? 'operation==="createAnonymous"?(values,...extra)=>createAnonymous(table,values,extra):' : ""}${intakeTables.length ? 'operation==="intake"?(reference,values,...extra)=>intake(table,reference,values,extra):' : ""}operation==="update"?(id,values)=>invoke(table,operation,{id,values}):operation==="createLink"?(id,options)=>createLink(table,id,options):operation==="links"?id=>invoke(table,"link_list",{id}):operation==="revokeLink"?(id,link_id)=>invoke(table,"link_revoke",{id,link_id}):${generation >= 2 ? 'operation==="get"?(id,options={})=>invoke(table,operation,options&&options.can===true?{id,can:true}:{id}):' : ""}id=>invoke(table,operation,{id})]);if(relations.length)entries.push(["relations",Object.freeze(Object.fromEntries(relations.map(relation=>[relation,Object.freeze({list:(parent_id,options={})=>invoke(table,"relation_list",{...options,relation,parent_id})})])))]);return[table,Object.freeze(Object.fromEntries(entries))];}).concat(${linkedSpec.length ? `[["links",links],["linked",linkedView(${JSON.stringify(linkedSpec)})]]` : "[]"})${creatorSpec.length ? `.concat([["creators",creators],["creator",creatorView(${JSON.stringify(creatorSpec)})]])` : ""}));
+${receiptCapable ? INSERT_CLIENT_RUNTIME + "const receiptTables=" + JSON.stringify(receiptTables) + ";\n" : ""}${anonymousTables.length ? ANONYMOUS_CLIENT_RUNTIME + CREATOR_CLIENT_RUNTIME : ""}${intakeTables.length ? INTAKE_CLIENT_RUNTIME : ""}${linkedSpec.length ? LINK_CLIENT_RUNTIME : ""}const data=Object.freeze(Object.fromEntries(${JSON.stringify(runtimeTables)}.map(([table,operations,relations])=>{const entries=operations.map(operation=>[operation,operation==="list"||operation==="aggregate"?(options={})=>invoke(table,operation,options):operation==="create"?${receiptCapable ? "(values,...extra)=>createWithReceipt(table,values,extra,receiptTables.includes(table))" : '(values,...extra)=>{if(extra.length!==0)throw new DataError(400,{error:"DATA_INPUT_INVALID",message:"create takes only the values to insert. Nothing was sent."});return invoke(table,operation,{values})}'}:${anonymousTables.length ? 'operation==="createAnonymous"?(values,...extra)=>createAnonymous(table,values,extra):' : ""}${intakeTables.length ? 'operation==="intake"?(reference,values,...extra)=>intake(table,reference,values,extra):' : ""}operation==="update"?(id,values)=>invoke(table,operation,{id,values}):operation==="createLink"?(id,options)=>createLink(table,id,options):operation==="links"?id=>invoke(table,"link_list",{id}):operation==="revokeLink"?(id,link_id)=>invoke(table,"link_revoke",{id,link_id}):${generation >= 2 ? 'operation==="get"?(id,options={})=>invoke(table,operation,options&&options.can===true?{id,can:true}:{id}):' : ""}id=>invoke(table,operation,{id})]);if(relations.length)entries.push(["relations",Object.freeze(Object.fromEntries(relations.map(relation=>[relation,Object.freeze({list:(parent_id,options={})=>invoke(table,"relation_list",{...options,relation,parent_id})})])))]);return[table,Object.freeze(Object.fromEntries(entries))];}).concat(${linkedSpec.length ? `[["links",links],["linked",linkedView(${JSON.stringify(linkedSpec)})]]` : "[]"})${creatorSpec.length ? `.concat([["creators",creators],["creator",creatorView(${JSON.stringify(creatorSpec)})]])` : ""}));
 export{data,DataError};
 `;
       return { contract_digest, declaration, runtime, manifest: { version: 1, contract_digest, tables, declaration, ...insertReceiptCapability === void 0 ? {} : { insert_receipt: insertReceiptCapability } } };
@@ -963,6 +963,13 @@ interface SomewhereDbPlainInsertOptions { onConflict?: 'ignore' | 'update' | nul
 // signed-in user or visitor on a table keyed by id() with no blob() column. Any other insert
 // given a key refuses before anything runs. Eligible inserts without one get a fresh key.
 interface SomewhereDbInsertOptions extends SomewhereDbPlainInsertOptions { idempotencyKey?: string }
+// A caller upsert runs under the table's declared rule: 'update' also needs update on the conflicting
+// row, so a declared table whose rule never grants update (or a per-row shares table) takes 'ignore'
+// only. A key never combines with onConflict.
+type SomewhereDbConflict<T extends string> = __SomewhereDeclared<T, 'conflict', 'ignore' | 'update'>;
+type SomewhereDbCallerInsertOptions<T extends string> =
+  | { onConflict?: SomewhereDbConflict<T> | null; idempotencyKey?: never }
+  | { onConflict?: null; idempotencyKey?: string };
 interface SomewhereDbReceipt { readonly replayed: boolean; readonly created_at: number; readonly result_until: number; readonly refuse_until: number }
 // Process-local: retry() repeats this exact request with the same key under the current
 // context's authority, until eight days after createdAt. It never runs by itself.
@@ -980,7 +987,7 @@ interface SomewhereDbRemove { where?: SomewhereDbWhere | null }
 // (insert values, update set/increment). With no declared tables every name and
 // value stays accepted, as before. Insert and Set pick caller or server identity.
 type __SomewhereDbIntentFor<T extends string, Insert extends 'insert' | 'serverInsert', Set extends 'set' | 'serverSet'> =
-  | { op: 'insert'; table: T; values: __SomewhereDeclared<T, Insert, SomewhereDbValues>; options?: SomewhereDbPlainInsertOptions | null }
+  | { op: 'insert'; table: T; values: __SomewhereDeclared<T, Insert, SomewhereDbValues>; options?: (Insert extends 'insert' ? { onConflict?: SomewhereDbConflict<T> | null } : SomewhereDbPlainInsertOptions) | null }
   | ({ op: 'update'; table: T } & SomewhereDbUpdateFor<T, Set>)
   | { op: 'remove'; table: T; where?: SomewhereDbWhere | null };
 // sw.db.server.tx: server authority may name row identity (owner column, shared authorship).
@@ -1066,7 +1073,7 @@ interface SomewhereServerDb {
 }
 interface SomewhereCallerDb extends Omit<SomewhereServerDb, 'from' | 'count' | 'insert' | 'update' | 'tx'> {
   // The platform composes row identity from the verified user.
-  insert<T extends SomewhereDbTable>(table: T, values: __SomewhereDeclared<T, 'insert', SomewhereDbValues>, options?: SomewhereDbInsertOptions | null): Promise<SomewhereDbInsertResult<SomewhereDbRow<T>>>;
+  insert<T extends SomewhereDbTable>(table: T, values: __SomewhereDeclared<T, 'insert', SomewhereDbValues>, options?: SomewhereDbCallerInsertOptions<T> | null): Promise<SomewhereDbInsertResult<SomewhereDbRow<T>>>;
   update<T extends SomewhereDbTable>(table: T, spec: SomewhereDbUpdateFor<T, 'set'>): Promise<SomewhereDbResult<SomewhereDbRow<T>>>;
   tx(intents: readonly SomewhereDbCallerWriteIntent[]): Promise<SomewhereDbResult[]>;
   from<T extends SomewhereDbTable, const C extends readonly SomewhereDbColumn<T>[] = readonly SomewhereDbColumn<T>[], const I extends readonly SomewhereDbRelationName<T>[] = []>(
@@ -3841,11 +3848,26 @@ interface SomewhereEndpointConfig<Auth extends SomewhereEndpointAuth, Schema ext
       const find = (policy) => !policy ? null : policy.k === "o" ? policy.c : policy.k === "a" ? find(policy.p[0]) || find(policy.p[1]) : policy.k === "n" ? find(policy.w) : null;
       return find(table.policy);
     }
+    function declaredRuleGrants(policy, op) {
+      if (!policy) return true;
+      if (policy.k === "o") return true;
+      if (policy.k === "m") return !policy.m.o || policy.m.o.includes(op);
+      if (policy.k === "a") return declaredRuleGrants(policy.p[0], op) || declaredRuleGrants(policy.p[1], op);
+      if (policy.k === "n") return declaredRuleGrants(policy.g, op) && declaredRuleGrants(policy.w, op) && (op !== "update" || declaredRuleGrants(policy.g, "read") && declaredRuleGrants(policy.w, "read"));
+      if (policy.k === "g" || policy.k === "r") return !!(policy.roles && policy.roles[op] && policy.roles[op].length);
+      if (policy.k === "p") return declaredRuleGrants(policy.p, op);
+      return true;
+    }
     function declaredTablesDeclaration3(authority) {
       const schema = authority && authority.schema || {};
       const scopes = authority && authority.scopes || {};
       const names = Object.keys(schema).sort();
       if (!names.length) return "";
+      const rowShares = /* @__PURE__ */ new Set();
+      for (const name of names) {
+        const policy = schema[name].policy, branch = policy && policy.k === "a" ? policy.p[1] : null;
+        if (branch && branch.k === "m" && branch.m.og && branch.m.g.length === 2) rowShares.add(String(branch.m.m).toLowerCase());
+      }
       const key = JSON.stringify;
       const shape = (fields) => fields.length ? "{ " + fields.join("; ") + " }" : "Record<string, never>";
       const union = (columns) => columns.length ? columns.map((column) => key(column.n)).join(" | ") : "never";
@@ -3863,7 +3885,7 @@ interface SomewhereEndpointConfig<Auth extends SomewhereEndpointAuth, Schema ext
         if (owner && !columns.some((column) => column.n === owner)) columns.push({ n: owner, t: "text", optional: false, identity: true, type: "string" });
         const declared = columns.filter((column) => !column.identity);
         const relations = (table.relations || []).filter((relation) => Object.prototype.hasOwnProperty.call(schema, relation.table)).map((relation) => key(relation.name) + ": SomewhereDeclaredTables[" + key(relation.table) + "]['row']" + (relation.kind === "belongsTo" ? " | null" : "[]"));
-        return "  " + key(name) + ": {\n    row: " + shape(columns.map((column) => field(column, false))) + ";\n    insert: " + shape(declared.map((column) => field(column, column.optional))) + ";\n    serverInsert: " + shape(columns.map((column) => field(column, column.optional))) + ";\n    set: " + shape(declared.map((column) => field(column, true))) + ";\n    serverSet: " + shape(columns.map((column) => field(column, true))) + ";\n    numeric: " + union(declared.filter((column) => column.t === "integer" || column.t === "number")) + ";\n    scalar: " + union(columns.filter((column) => (!column.identity || column.n === owner) && column.t !== "json" && column.t !== "blob")) + ";\n    relations: " + (relations.length ? shape(relations) : "{}") + ";\n  };\n";
+        return "  " + key(name) + ": {\n    row: " + shape(columns.map((column) => field(column, false))) + ";\n    insert: " + shape(declared.map((column) => field(column, column.optional))) + ";\n    serverInsert: " + shape(columns.map((column) => field(column, column.optional))) + ";\n    set: " + shape(declared.map((column) => field(column, true))) + ";\n    serverSet: " + shape(columns.map((column) => field(column, true))) + ";\n    numeric: " + union(declared.filter((column) => column.t === "integer" || column.t === "number")) + ";\n    scalar: " + union(columns.filter((column) => (!column.identity || column.n === owner) && column.t !== "json" && column.t !== "blob")) + ";\n    relations: " + (relations.length ? shape(relations) : "{}") + ";\n    conflict: " + (rowShares.has(name.toLowerCase()) || !declaredRuleGrants(table.policy || (table.member ? { k: "m", m: table.member } : null), "update") ? "'ignore'" : "'ignore' | 'update'") + ";\n  };\n";
       });
       return "interface SomewhereDeclaredTables {\n" + entries.join("") + "}\n";
     }

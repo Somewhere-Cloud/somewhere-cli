@@ -2,11 +2,11 @@
   "esbuild": "0.24.0",
   "source_files": {
     "worker/containers/compile/checker-contract.cjs": "3a8355b9477d89d00bca47cf74032c3b3c6458941cf5c57ddae9e2228b51915d",
-    "worker/containers/compile/declared-data-contract.cjs": "6d421db4a64f7f3ea58ec7bf773a1090a0f04bc99d59219178f3b1b602ad3d68",
+    "worker/containers/compile/declared-data-contract.cjs": "4c853d6a21def9d4443f3e8873d177dbbe4e957457e8293cd183830a81727565",
     "worker/containers/compile/generated-declarations-render.cjs": "7ffdb34645cc9eccac6eba39dc86b646a41c4de8a1a038d2b5b46f42df9f1157",
     "worker/containers/compile/generated-declarations.cjs": "6e9902e054c5c784fd9b3c3fafc1869e79954100a45014e1132247cd82833ec4",
     "worker/containers/compile/groups-types.cjs": "7c22b4bb96c9391005d434852600dc02bc8a6bbb99d78d2b8e3eb152f7b72c58",
-    "worker/containers/compile/runtime-types.cjs": "1acc241c97efe2e0a33853bc3a01fbf48e1e9b6e13d9310f42035aac1e1e625b",
+    "worker/containers/compile/runtime-types.cjs": "fa9767ee2a0727511701821d0c18c878b7ce7b9ab3e92674057b474ad25e548e",
     "worker/containers/compile/schema-types.cjs": "aa8987178dcea6bdee593e7ff06f452265b2af9d12d1bd1c47c983db15965a73",
     "worker/containers/compile/typed-data.cjs": "1c8bec853fbee4ffd34c651076a4e1f4d8b18c0c2be5e99e31df7c9283207627",
     "worker/containers/compile/typed-files.cjs": "a0b1818afbc7673f84583c76436a3b3ca1d1fdf63d8d8db138b36646103f0708",
@@ -36,5 +36,5 @@
     "worker/src/utils/managed-groups/policy.ts": "2c5b48479a2925bea9a820022c63ca5fa827e2ff5531fe1ab6c0b058b7212b39",
     "worker/src/utils/reference-check-inputs.ts": "59c7c8d3b4aaf8bffb2a54964e41f909437745d001b093edd74cc135f4edcf67"
   },
-  "sha256": "b88c7de7c2393bb422722885eb5b677541b5adde856fe0c511db7aa940453a5b"
+  "sha256": "c62061ce7285f32fa53bf1cef84b3455bd13d0af05f2bbbc1af1b8abf9de9f09"
 }

@@ -729,7 +729,7 @@ ${generation >= 2 ? ROW_CAN_DECLARATION : ""}${receiptCapable ? localTypes ? INS
 class DataError extends Error{constructor(status,payload){super(payload&&typeof payload.message==="string"?payload.message:payload&&typeof payload.error==="string"?payload.error:"Data operation failed");this.name="DataError";this.status=status;this.code=payload&&typeof payload.error==="string"?payload.error:null}}
 const validateListLimit=input=>{if(input.limit!==undefined&&(!Number.isInteger(input.limit)||input.limit<1||input.limit>100))throw new DataError(400,{error:"DATA_INPUT_INVALID",message:"limit must be an integer from 1 to 100"})};
 let swReadSession=null,swInFlight=0,swStarts=0;const swReadSessionVoid=()=>{swReadSession=null;swStarts++};${generation >= 3 ? PUBLIC_BOOTSTRAP_CLIENT_RUNTIME : ""}const invoke=async(table,operation,input)=>{if(operation==="list"||operation==="relation_list")validateListLimit(input);${generation >= 3 ? PUBLIC_BOOTSTRAP_INVOKE : ""}const alone=swInFlight===0,start=++swStarts,isRead=operation==="list"||operation==="get"||operation==="aggregate"||operation==="relation_list";swInFlight++;let response;try{response=await fetch("/__sw/data",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json",...(swReadSession?{"X-Sw-Read-Session":swReadSession}:{})},body:JSON.stringify({...input,contract,table,operation})})}catch(error){if(!isRead)swReadSession=null;throw error}finally{swInFlight--}const next=response.headers&&typeof response.headers.get==="function"?response.headers.get("X-Sw-Read-Session"):null;if(!alone||swStarts!==start||swInFlight!==0)swReadSession=null;else if(next&&/^swrs1[.][A-Za-z0-9_-]+[.][A-Za-z0-9_-]+$/.test(next))swReadSession=next;else if(!isRead||!response.ok)swReadSession=null;const payload=await response.json().catch(()=>{throw new DataError(response.status,{error:"INVALID_DATA_RESPONSE",message:"Data operation returned an invalid response"})});if(!response.ok)throw new DataError(response.status,payload);return payload};
-${receiptCapable ? INSERT_CLIENT_RUNTIME + "const receiptTables=" + JSON.stringify(receiptTables) + ";\n" : ""}${anonymousTables.length ? ANONYMOUS_CLIENT_RUNTIME + CREATOR_CLIENT_RUNTIME : ""}${intakeTables.length ? INTAKE_CLIENT_RUNTIME : ""}${linkedSpec.length ? LINK_CLIENT_RUNTIME : ""}const data=Object.freeze(Object.fromEntries(${JSON.stringify(runtimeTables)}.map(([table,operations,relations])=>{const entries=operations.map(operation=>[operation,operation==="list"||operation==="aggregate"?(options={})=>invoke(table,operation,options):operation==="create"?${receiptCapable ? "(values,...extra)=>createWithReceipt(table,values,extra,receiptTables.includes(table))" : "values=>invoke(table,operation,{values})"}:${anonymousTables.length ? 'operation==="createAnonymous"?(values,...extra)=>createAnonymous(table,values,extra):' : ""}${intakeTables.length ? 'operation==="intake"?(reference,values,...extra)=>intake(table,reference,values,extra):' : ""}operation==="update"?(id,values)=>invoke(table,operation,{id,values}):operation==="createLink"?(id,options)=>createLink(table,id,options):operation==="links"?id=>invoke(table,"link_list",{id}):operation==="revokeLink"?(id,link_id)=>invoke(table,"link_revoke",{id,link_id}):${generation >= 2 ? 'operation==="get"?(id,options={})=>invoke(table,operation,options&&options.can===true?{id,can:true}:{id}):' : ""}id=>invoke(table,operation,{id})]);if(relations.length)entries.push(["relations",Object.freeze(Object.fromEntries(relations.map(relation=>[relation,Object.freeze({list:(parent_id,options={})=>invoke(table,"relation_list",{...options,relation,parent_id})})])))]);return[table,Object.freeze(Object.fromEntries(entries))];}).concat(${linkedSpec.length ? `[["links",links],["linked",linkedView(${JSON.stringify(linkedSpec)})]]` : "[]"})${creatorSpec.length ? `.concat([["creators",creators],["creator",creatorView(${JSON.stringify(creatorSpec)})]])` : ""}));
+${receiptCapable ? INSERT_CLIENT_RUNTIME + "const receiptTables=" + JSON.stringify(receiptTables) + ";\n" : ""}${anonymousTables.length ? ANONYMOUS_CLIENT_RUNTIME + CREATOR_CLIENT_RUNTIME : ""}${intakeTables.length ? INTAKE_CLIENT_RUNTIME : ""}${linkedSpec.length ? LINK_CLIENT_RUNTIME : ""}const data=Object.freeze(Object.fromEntries(${JSON.stringify(runtimeTables)}.map(([table,operations,relations])=>{const entries=operations.map(operation=>[operation,operation==="list"||operation==="aggregate"?(options={})=>invoke(table,operation,options):operation==="create"?${receiptCapable ? "(values,...extra)=>createWithReceipt(table,values,extra,receiptTables.includes(table))" : '(values,...extra)=>{if(extra.length!==0)throw new DataError(400,{error:"DATA_INPUT_INVALID",message:"create takes only the values to insert. Nothing was sent."});return invoke(table,operation,{values})}'}:${anonymousTables.length ? 'operation==="createAnonymous"?(values,...extra)=>createAnonymous(table,values,extra):' : ""}${intakeTables.length ? 'operation==="intake"?(reference,values,...extra)=>intake(table,reference,values,extra):' : ""}operation==="update"?(id,values)=>invoke(table,operation,{id,values}):operation==="createLink"?(id,options)=>createLink(table,id,options):operation==="links"?id=>invoke(table,"link_list",{id}):operation==="revokeLink"?(id,link_id)=>invoke(table,"link_revoke",{id,link_id}):${generation >= 2 ? 'operation==="get"?(id,options={})=>invoke(table,operation,options&&options.can===true?{id,can:true}:{id}):' : ""}id=>invoke(table,operation,{id})]);if(relations.length)entries.push(["relations",Object.freeze(Object.fromEntries(relations.map(relation=>[relation,Object.freeze({list:(parent_id,options={})=>invoke(table,"relation_list",{...options,relation,parent_id})})])))]);return[table,Object.freeze(Object.fromEntries(entries))];}).concat(${linkedSpec.length ? `[["links",links],["linked",linkedView(${JSON.stringify(linkedSpec)})]]` : "[]"})${creatorSpec.length ? `.concat([["creators",creators],["creator",creatorView(${JSON.stringify(creatorSpec)})]])` : ""}));
 export{data,DataError};
 `;
       return { contract_digest, declaration, runtime, manifest: { version: 1, contract_digest, tables, declaration, ...insertReceiptCapability === void 0 ? {} : { insert_receipt: insertReceiptCapability } } };
@@ -1547,6 +1547,8 @@ var DB_TYPED_ERRORS_JS = `      // The REST bridge's refusal as the caller sees 
           // move only a grant() would allow.
           const refused = new Error(label !== 'sw.db.tx' && guard[1] === 'POLICY_AUTHORITY_REQUIRED'
             ? label + ': the access policy of this table does not permit this change by the signed-in user. Nothing was written.'
+            : label !== 'sw.db.tx'
+            ? label + ': this row targets a group the signed-in user is not a member of. Nothing was written.'
             : guard[1] === 'MEMBERSHIP_REQUIRED'
             ? 'sw.db.tx: an insert targets a group the signed-in user is not a member of. Nothing in the transaction was written.'
             : 'sw.db.tx: the access policy of a table does not permit one of these changes by the signed-in user. Nothing in the transaction was written.');
@@ -4773,7 +4775,8 @@ var DB_STRUCTURED_EXECUTION_JS = `      async function __sw_structExec(label, ir
             ? 'sw.db.server.insert on "' + ir.table.name + '": a share can name only a "' + ir.scope.grantRow.t + '" row its user_id owns.'
             : 'sw.db.insert on "' + ir.table.name + '": a share can name only a "' + ir.scope.grantRow.t + '" row the signed-in user owns.');
         }
-        if (ir.kind === 'insert' && (ir.scope.mode === 'member' || ir.scope.mode === 'policy') && rows.length === 0) {
+        // An upsert's refusals raise inside the statement (query-sql.ts); its empty result is an ignored conflict.
+        if (ir.kind === 'insert' && (ir.scope.mode === 'member' || ir.scope.mode === 'policy') && ir.onConflict === undefined && rows.length === 0) {
           __sw_structThrow403(ir.scope.mode === 'policy' ? 'POLICY_AUTHORITY_REQUIRED' : 'MEMBERSHIP_REQUIRED',
             ir.scope.mode === 'policy' ? 'sw.db.insert on "' + ir.table.name + '": the proposed row is outside your declared private policy.'
               : 'sw.db.insert on "' + ir.table.name + '": you can only add rows to a group you belong to, and the signed-in user is not a member of the group named in this row. Add the user to the group first, or write to a group they belong to.');
@@ -5807,6 +5810,44 @@ function renderQuerySql(ir, principalId, returning, context) {
     policyInsertPredicate(policy, proposedValues) {
       return helpers.policySql(context.renderPolicy({ render: "insert", principal: principalId, table: ir.table.name, physical: context.physicalMap(), policy, proposed: proposedValues }));
     },
+    // The columns that place a row under its rule and never change through an upsert: member()
+    // group keys, a group() column, an allOf gate key, the parent() link and a per-row grant's
+    // row key. The owner is stamped and never assigned, so it is not listed.
+    policyFixedKeys(policy) {
+      const keys = [];
+      if (policy.k === "m") {
+        if (!policy.m.og) for (let i = 0; i < policy.m.g.length; i++) keys.push(policy.m.g[i]);
+        else if (policy.m.g.length === 2) keys.push(policy.m.g[1]);
+      }
+      if (policy.k === "g") keys.push(policy.c);
+      if (policy.k === "p") keys.push(policy.v);
+      if (policy.k === "a" || policy.k === "n") {
+        const parts = policy.k === "a" ? policy.p : [policy.g, policy.w];
+        for (let i = 0; i < parts.length; i++) {
+          const inner = helpers.policyFixedKeys(parts[i]);
+          for (let j = 0; j < inner.length; j++) keys.push(inner[j]);
+        }
+      }
+      return keys;
+    },
+    // Upsert under a private rule (tsk_c98959e4): the conflicting existing row must pass the rule's
+    // UPDATE predicate (rendered by the caller, binds already pushed) and keep every fixed key the
+    // caller names. Otherwise the statement raises, so it is refused whole (a transaction rolls back),
+    // never skipped.
+    conflictUpdateSql(updatePredicate, fixed) {
+      const sets = context.map(ir.values, function(e) {
+        return q(e.column) + " = excluded." + q(e.column);
+      });
+      if (sets.length === 0) context.fail('sw.db.insert with { onConflict: "update" } needs at least one column value to update on conflict.');
+      const held = ["(" + updatePredicate + ")"];
+      for (let i = 0; i < fixed.length; i++) {
+        for (let j = 0; j < ir.values.length; j++) {
+          const column = ir.values[j].column;
+          if (context.lower(column) === context.lower(fixed[i])) held.push(tableSql + "." + q(column) + " IS excluded." + q(column));
+        }
+      }
+      return " ON CONFLICT DO UPDATE SET " + sets.join(", ") + " WHERE CASE WHEN " + held.join(" AND ") + " THEN 1 ELSE json_extract('{}', 'SW_POLICY_AUTHORITY_REQUIRED') END";
+    },
     // Row-link authority (tsk_f1529568): ONE correlated EXISTS proving, in the
     // statement itself, that the session token is live, belongs to this exact
     // grant, the grant is unrevoked and unexpired, names this table and THIS
@@ -5964,6 +6005,8 @@ function renderQuerySql(ir, principalId, returning, context) {
   };
   const q = context.quote;
   const tableSql = helpers.table(ir.table.name);
+  if (ir.kind === "insert" && ir.onConflict === "update" && context.lower(tableSql) === '"excluded"')
+    context.fail('sw.db.insert: a table named "excluded" cannot take onConflict: "update". Rename the table, or use onConflict: "ignore".');
   const policyOperation = ir.kind === "select" || ir.kind === "count" || ir.kind === "aggregate" ? "read" : ir.kind === "insert" ? "create" : ir.kind;
   let sql;
   if (ir.kind === "select") {
@@ -6092,8 +6135,9 @@ function renderQuerySql(ir, principalId, returning, context) {
         existsSql += " AND " + q(m.mg[i]) + " = ?";
         params.push(gv);
       }
-      const guard = ir.txGuard ? "CASE WHEN EXISTS (" + existsSql + ") THEN 1 ELSE json_extract('{}', 'SW_MEMBERSHIP_REQUIRED') END" : "EXISTS (" + existsSql + ")";
-      sql = "INSERT INTO " + tableSql + " (" + colList + ") SELECT " + placeholders + " WHERE " + guard + context.returningSql(returning);
+      const guard = ir.txGuard || ir.onConflict !== void 0 ? "CASE WHEN EXISTS (" + existsSql + ") THEN 1 ELSE json_extract('{}', 'SW_MEMBERSHIP_REQUIRED') END" : "EXISTS (" + existsSql + ")";
+      const conflict = ir.onConflict === "ignore" ? " ON CONFLICT DO NOTHING" : ir.onConflict === "update" ? helpers.conflictUpdateSql(helpers.memberScopePredicate(m, null, "update"), m.g) : "";
+      sql = "INSERT INTO " + tableSql + " (" + colList + ") SELECT " + placeholders + " WHERE " + guard + conflict + context.returningSql(returning);
       return { sql, params };
     }
     if (ir.scope.mode === "link") {
@@ -6124,8 +6168,9 @@ function renderQuerySql(ir, principalId, returning, context) {
       for (let i = 0; i < ivals.length; i++)
         params.push(ivals[i]);
       const authorized = helpers.policyInsertPredicate(ir.scope.policy, ir.values || []);
-      const guard = ir.txGuard ? "CASE WHEN " + authorized + " THEN 1 ELSE json_extract('{}', 'SW_POLICY_AUTHORITY_REQUIRED') END" : authorized;
-      sql = "INSERT INTO " + tableSql + " (" + colList + ") SELECT " + placeholders + " WHERE " + guard + context.returningSql(returning);
+      const guard = ir.txGuard || ir.onConflict !== void 0 ? "CASE WHEN " + authorized + " THEN 1 ELSE json_extract('{}', 'SW_POLICY_AUTHORITY_REQUIRED') END" : authorized;
+      const conflict = ir.onConflict === "ignore" ? " ON CONFLICT DO NOTHING" : ir.onConflict === "update" ? helpers.conflictUpdateSql(helpers.policyPredicate(ir.scope.policy, null, null, "update"), helpers.policyFixedKeys(ir.scope.policy)) : "";
+      sql = "INSERT INTO " + tableSql + " (" + colList + ") SELECT " + placeholders + " WHERE " + guard + conflict + context.returningSql(returning);
       return { sql, params };
     }
     if ((ir.scope.mode === "user" || ir.scope.mode === "server") && ir.scope.grantRow) {
@@ -6167,13 +6212,14 @@ function renderQuerySql(ir, principalId, returning, context) {
     if (ir.onConflict === "ignore") {
       sql += " ON CONFLICT DO NOTHING";
     } else if (ir.onConflict === "update") {
-      const sets = context.map(ir.values, function(e) {
-        return q(e.column) + " = excluded." + q(e.column);
-      });
-      sql += " ON CONFLICT DO UPDATE SET " + sets.join(", ");
       if (ir.scope.mode === "user") {
-        sql += " WHERE " + q(ir.scope.ownerColumn) + " = ?";
         params.push(principalId);
+        sql += helpers.conflictUpdateSql(q(ir.scope.ownerColumn) + " = ?", []);
+      } else {
+        const sets = context.map(ir.values, function(e) {
+          return q(e.column) + " = excluded." + q(e.column);
+        });
+        sql += " ON CONFLICT DO UPDATE SET " + sets.join(", ");
       }
     }
     sql += context.returningSql(returning);
@@ -9759,14 +9805,14 @@ var DB_COMPOSED_WRITES_JS = `      // Per-column conditions are ANDed. A bounded
         if (decided.scope.mode === 'user') __sw_structAssertNotOwnerColumn(cols, decided.scope.ownerColumn, 'insert');
         if (decided.scope.mode === 'policy') __sw_structAssertPolicyWrite(cols, decided.scope.policy, 'insert');
         if (decided.scope.mode === 'policy') __sw_structAssertPolicyInsert(cols, decided.scope.policy);
-        if (decided.scope.mode === 'policy' && onConflict !== undefined) {
-          __sw_structThrow('sw.db.insert on policy-scoped tables does not support onConflict yet. Insert without onConflict.');
+        if (decided.scope.mode === 'member') __sw_structAssertMemberGroupPresent(cols, decided.scope.member, 'insert');
+        // An upsert under a rule needs create (checked above) and, for "update", update on the
+        // conflicting row; a rule that never grants update refuses before anything runs.
+        if (onConflict === 'update' && decided.scope.mode === 'policy' && !__sw_structPolicyAllows(decided.scope.policy, 'update')) {
+          __sw_structThrow403('POLICY_OPERATION_NOT_ALLOWED', 'sw.db.insert on "' + table + '": onConflict: "update" updates the existing row, and the declared private policy does not grant update. Use onConflict: "ignore", or grant update.');
         }
-        if (decided.scope.mode === 'member') {
-          if (onConflict !== undefined) {
-            __sw_structThrow('sw.db.insert on "' + table + '": onConflict is not supported on membership-scoped tables yet. Insert without onConflict.');
-          }
-          __sw_structAssertMemberGroupPresent(cols, decided.scope.member, 'insert');
+        if (onConflict === 'update' && decided.scope.mode === 'member' && !__sw_structMemberAllows(decided.scope.member, 'update')) {
+          __sw_structThrow403('MEMBER_OPERATION_NOT_ALLOWED', 'sw.db.insert on "' + table + '": onConflict: "update" updates the existing row, and member() does not grant update. Use onConflict: "ignore", or grant update.');
         }
         if (cols.length === 0 && decided.scope.mode !== 'user'
           && !(decided.scope.mode === 'policy' && __sw_structPolicyHasOwner(decided.scope.policy))) __sw_structThrow('sw.db.insert requires at least one column value.');

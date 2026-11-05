@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.38.16
+
+### Added
+
+- `somewhere upgrade [--json]` moves every recorded CLI pin to the running CLI
+  and prints the `CHANGELOG.md` entries in between (`CHANGELOG.md` now ships in
+  the package). To reach the newest release: `npx -y @somewhere-cloud/cli@latest
+  upgrade`, then `npm install`.
+- New projects pin the CLI version they were created with (`init`, `project
+  create` and the temporary deploy record it, and send it to the platform as
+  `cli_version`). A different CLI run inside the project prints one line and
+  runs the installed pin. Skills are never updated on their own; `upgrade`
+  leaves them alone and says `skills update` is the explicit step.
+- The starter `AGENTS.md` names the data-and-code exits (`somewhere pull`,
+  `somewhere db dump`, CSV export, PostgreSQL in your own Neon account) and
+  points at `somewhere docs portability`.
+
+### Changed
+
+- README, LICENSE, the starter and `browser` help no longer name the old
+  package scope, the old domain or "legacy"; the copyright holder is
+  Somewhere HQ, Inc. A test refuses those words in what ships.
+
 ## 0.38.15
 
 ### Changed

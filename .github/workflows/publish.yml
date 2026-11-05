@@ -1,4 +1,21 @@
 # Sole CLI publisher. Tags are not publication triggers.
+#
+# Release process:
+#   1. Merge the version PR (package.json + npm-shrinkwrap.json + CHANGELOG) to master.
+#   2. Dispatch this workflow on master with source_sha = that master commit and
+#      expected_version = the package.json version:
+#        gh workflow run publish.yml -R Somewhere-Cloud/somewhere-cli --ref master \
+#          -f source_sha=<40-hex master commit> -f expected_version=<x.y.z>
+#   3. The run pins the exact commit, builds, publishes with provenance, then
+#      verifies the registry (gitHead, SRI, Sigstore). Customers pick the
+#      version up through somewhere update.
+#
+# npm authentication: trusted publishing only. npmjs.com trusts the GitHub
+# Actions OIDC token for owner Somewhere-Cloud, repository somewhere-cli,
+# workflow filename publish.yml, no environment (configured on the package's
+# Settings -> Publishing access page). There is no npm token secret anywhere in
+# this workflow; a run without a configured trusted publisher fails at
+# npm publish with E404/E403 instead of using a stale credential.
 name: Publish to npm
 
 on:
@@ -24,6 +41,7 @@ concurrency:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    timeout-minutes: 40
     steps:
       # Inline trusted workflow code runs before any candidate checkout.
       - name: Authenticate trigger and immutable source
@@ -49,10 +67,13 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ steps.trigger.outputs.source }}
+          persist-credentials: false
+      # No registry input to setup-node: it would write an _authToken placeholder into
+      # .npmrc. The only credential this job ever holds is the OIDC id-token.
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-          registry-url: 'https://registry.npmjs.org'
+      # Trusted publishing needs npm >= 11.5.1; pin so the runner's bundled npm never decides.
       - run: npm install -g npm@11.19.0
       - name: Pin automatic expected version
         id: candidate
@@ -61,6 +82,9 @@ jobs:
           EXPECTED_VERSION: ${{ steps.trigger.outputs.version }}
         run: |
           node --input-type=module -e 'import fs from "node:fs"; import { validateCandidate } from "./scripts/publish-release.mjs"; const version = process.env.EXPECTED_VERSION || JSON.parse(fs.readFileSync("package.json", "utf8")).version; validateCandidate(process.env.SOURCE_SHA, version); fs.appendFileSync(process.env.GITHUB_OUTPUT, `version=${version}\n`);'
+      # mode=release: version absent from npm. mode=in-sync: this exact source is
+      # already published, so the run verifies the registry and publishes nothing.
+      # mode=drift: the version exists from different release inputs; the check fails.
       - name: Check identity before gates
         id: before
         env:
@@ -75,29 +99,33 @@ jobs:
           SOURCE_SHA: ${{ steps.trigger.outputs.source }}
           EXPECTED_VERSION: ${{ steps.candidate.outputs.version }}
         run: node scripts/publish-release.mjs check "$SOURCE_SHA" "$EXPECTED_VERSION"
-      - name: Publish once with provenance
+      - name: Already published from this source
+        if: steps.final.outputs.mode == 'in-sync'
+        env:
+          EXPECTED_VERSION: ${{ steps.candidate.outputs.version }}
+        run: |
+          echo "::notice::@somewhere-cloud/cli@$EXPECTED_VERSION is already published from this exact source; verifying the registry, publishing nothing."
+          echo "Already published: @somewhere-cloud/cli@$EXPECTED_VERSION from this source. Verification only." >> "$GITHUB_STEP_SUMMARY"
+      - name: Publish once with provenance (npm trusted publishing, no token)
         id: publication
         if: steps.final.outputs.mode == 'release'
         env:
-          # First-version bootstrap only (npm cannot trust a package that does not exist).
-          # Remove this bootstrap credential requirement when trusted publishing is configured.
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_CLOUD_BOOTSTRAP_TOKEN }}
-          # Repository variable, unset by default. 1 = stage the first version for a
-          # maintainer 2FA approval instead of publishing it (stage-only token).
-          FIRST_VERSION_STAGE: ${{ vars.NPM_FIRST_VERSION_STAGE }}
+          EXPECTED_VERSION: ${{ steps.candidate.outputs.version }}
         run: |
-          if [ -z "$NODE_AUTH_TOKEN" ]; then echo "NPM_CLOUD_BOOTSTRAP_TOKEN is required for bootstrap" >&2; exit 1; fi
-          if [ "$FIRST_VERSION_STAGE" = "1" ]; then
-            npm stage publish --provenance --access public
-            echo "staged=true" >> "$GITHUB_OUTPUT"
-            echo "Staged, not published: approve with npm stage approve (2FA), then dispatch this workflow to verify." >> "$GITHUB_STEP_SUMMARY"
-          else
-            npm publish --provenance --access public
-          fi
+          if [ -n "${NODE_AUTH_TOKEN:-}" ] || [ -n "${NPM_TOKEN:-}" ]; then echo "an npm token is set; this publisher authenticates only through OIDC" >&2; exit 1; fi
+          if npm view "@somewhere-cloud/cli@$EXPECTED_VERSION" version >/dev/null 2>&1; then echo "@somewhere-cloud/cli@$EXPECTED_VERSION already exists on npm" >&2; exit 1; fi
+          npm publish --provenance --access public
       - name: Verify published registry source, SRI and Sigstore
         id: verification
-        if: always() && steps.final.outcome == 'success' && steps.publication.outputs.staged != 'true' && (steps.final.outputs.mode == 'in-sync' || steps.publication.outcome == 'success' || steps.publication.outcome == 'failure')
+        if: always() && steps.final.outcome == 'success' && (steps.final.outputs.mode == 'in-sync' || steps.publication.outcome == 'success' || steps.publication.outcome == 'failure')
         env:
           SOURCE_SHA: ${{ steps.final.outputs.published_head }}
           EXPECTED_VERSION: ${{ steps.candidate.outputs.version }}
         run: node scripts/publish-release.mjs verify "$SOURCE_SHA" "$EXPECTED_VERSION"
+      - name: Confirm npm resolves the version
+        env:
+          EXPECTED_VERSION: ${{ steps.candidate.outputs.version }}
+        run: |
+          integrity="$(npm view "@somewhere-cloud/cli@$EXPECTED_VERSION" dist.integrity)"
+          case "$integrity" in sha512-*) echo "@somewhere-cloud/cli@$EXPECTED_VERSION dist.integrity=$integrity";; *) echo "npm view returned no dist.integrity for @somewhere-cloud/cli@$EXPECTED_VERSION" >&2; exit 1;; esac
+          echo "Published and verified: @somewhere-cloud/cli@$EXPECTED_VERSION ($integrity)" >> "$GITHUB_STEP_SUMMARY"

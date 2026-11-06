@@ -16,6 +16,8 @@ import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { SCAFFOLD_TSCONFIG_FILENAME } from './scaffold.js';
 import { TYPECHECK_TYPESCRIPT_VERSION } from './typecheck-version.js';
+import { API_BASE_URL } from './client.js';
+import { contractError, platformContractVerdict, type ContractVerdict } from './platform-contract.js';
 import { prepareDeclaredData, type LocalDeclaredData } from './declared-data.js';
 
 export interface TypeError {
@@ -50,6 +52,8 @@ export interface TypecheckResult {
   raw: string;
   /** Set when tsc itself couldn't be run at all. */
   spawnError?: string;
+  /** This CLI's consumer contract against the platform's last announced one (tsk_0f3d05b9). */
+  contract?: ContractVerdict;
 }
 
 interface TscInvocation {
@@ -371,13 +375,20 @@ export function parseTscOutput(output: string): TypeError[] {
  */
 export function runTypecheck(
   projectDir: string,
-  options: { installTypePackages?: TypePackageInstaller | false } = {},
+  options: { installTypePackages?: TypePackageInstaller | false; apiBase?: string } = {},
 ): Promise<TypecheckResult> {
+  // Decided first, so a CLI known to be out of date never reports its older rules' verdict
+  // (a schema refusal included) as the platform's. Unknown is stated, not guessed.
+  const contract = platformContractVerdict(options.apiBase ?? API_BASE_URL);
+  const outdated = contractError(contract);
+  const withContract = (result: TypecheckResult): TypecheckResult => (outdated
+    ? { ...result, ok: false, errors: [outdated, ...result.errors], contract }
+    : { ...result, contract });
   let declaredData: LocalDeclaredData | undefined;
   try { declaredData = prepareDeclaredData(projectDir); }
   catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    return Promise.resolve({ ok: false, errors: [{ file: 'db/schema.ts', line: 1, column: 1, code: 'SCHEMA_DECLARATION_INVALID', message }], via: 'bundled', raw: message });
+    return Promise.resolve(withContract({ ok: false, errors: [{ file: 'db/schema.ts', line: 1, column: 1, code: 'SCHEMA_DECLARATION_INVALID', message }], via: 'bundled', raw: message }));
   }
   // Only a caller-supplied installer resolves declared type packages; the
   // default never installs into the project.
@@ -385,7 +396,7 @@ export function runTypecheck(
     ensureDeclaredTypePackages(projectDir, options.installTypePackages);
   }
   const { command, args, via } = resolveTsc(projectDir);
-  return runTypecheckWith(projectDir, command, args, via, declaredData);
+  return runTypecheckWith(projectDir, command, args, via, declaredData).then(withContract);
 }
 
 /** Announce, on stderr so JSON on stdout is untouched, that TypeScript is

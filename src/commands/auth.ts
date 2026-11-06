@@ -32,7 +32,7 @@ import {
 } from '../lib/config.js';
 import { getDeviceId, getDeviceKeyName } from '../lib/device.js';
 import { formatNextActions, nextActions } from '../lib/next-actions.js';
-import { bold, dim, error, info, printJson, success, teal, warn } from '../lib/output.js';
+import { bold, dim, error, info, printJson, printJsonError, success, teal, warn } from '../lib/output.js';
 import { isRecord, resolveProjectRef } from '../lib/platform-command.js';
 
 async function readAuthToken(): Promise<string> {
@@ -488,6 +488,122 @@ export function registerAuth(program: Command) {
     .description('Print the current smt_ token for shell scripts')
     .action(() => {
       process.stdout.write(`${getToken()}\n`);
+    });
+
+  registerAuthRoles(auth);
+}
+
+/** `<user>`: an address (contains @) or an app user id, as the platform takes it. */
+function appUserTarget(user: string): { email: string } | { user_id: string } {
+  const value = user.trim();
+  return value.includes('@') ? { email: value } : { user_id: value };
+}
+
+function failRoles(opts: { json?: boolean }, cause: unknown): void {
+  const code = cause instanceof CliApiError ? cause.code : 'APP_ROLE_FAILED';
+  const message = cause instanceof Error ? cause.message : String(cause);
+  if (opts.json) printJsonError(code, message);
+  else error(`${message} [${code}]`, cause);
+  process.exitCode = 1;
+}
+
+interface AppRoleGrantRow {
+  user_id: string; email: string | null; email_verified: boolean | null; banned?: boolean | null;
+  role: string; granted_by: string; grant_source: string; created_at: number; already_granted?: boolean;
+}
+
+/**
+ * `somewhere auth roles grant|revoke|list` — app-wide roles declared in
+ * db/schema.ts (`appRoles`), granted with the developer key so a declared
+ * `appRole()` rule applies to the person. Same authority as editing an app
+ * user: your key, a project you edit. No claim, no app-admin promotion, no
+ * endpoint of your own.
+ */
+function registerAuthRoles(auth: Command): void {
+  const roles = auth
+    .command('roles')
+    .description('App roles declared in db/schema.ts appRoles: grant, revoke and list them for your app users')
+    .addHelpText('after', [
+      '',
+      'The person signs up in the app first. Name them by the exact address they signed up with, or by',
+      'their app user id. The address does not have to be verified: you vouch for the person. The grant lands',
+      'in the same place sw.groups.appRoles uses, so every appRole() rule on your tables applies at once.',
+      '',
+      '  somewhere auth roles grant ann@example.com staff',
+      '  somewhere auth roles revoke ann@example.com staff',
+      '  somewhere auth roles list --role staff',
+    ].join('\n'));
+
+  roles
+    .command('grant <user> <role>')
+    .description('Give an app user an app role (user = sign-up address or app user id)')
+    .option('-p, --project <project>', 'Project slug or ID; defaults to the linked project')
+    .option('--json', 'Print the grant as JSON')
+    .action(async (user: string, role: string, opts: { project?: string; json?: boolean }) => {
+      try {
+        const client = new ApiClient(getToken());
+        const project_id = resolveProjectRef(opts.project);
+        const grant = await client.call<AppRoleGrantRow>('POST', '/auth/app-roles/grant', { project_id, ...appUserTarget(user), role });
+        if (opts.json) { printJson(grant); return; }
+        const who = grant.email ? `${grant.email} (${grant.user_id})` : grant.user_id;
+        if (grant.already_granted) info(`${who} already holds the ${grant.role} role.`);
+        else success(`${who} now holds the ${grant.role} role.`);
+        if (grant.email_verified === false) info(dim('Their address is not verified; the grant stands on your say-so.'));
+      } catch (cause) { failRoles(opts, cause); }
+    });
+
+  roles
+    .command('revoke <user> <role>')
+    .description('Take an app role away from an app user, whoever granted it')
+    .option('-p, --project <project>', 'Project slug or ID; defaults to the linked project')
+    .option('--json', 'Print the result as JSON')
+    .action(async (user: string, role: string, opts: { project?: string; json?: boolean }) => {
+      try {
+        const client = new ApiClient(getToken());
+        const project_id = resolveProjectRef(opts.project);
+        const result = await client.call<{ user_id: string; email: string | null; role: string; revoked: boolean }>('POST', '/auth/app-roles/revoke', { project_id, ...appUserTarget(user), role });
+        if (opts.json) { printJson(result); return; }
+        const who = result.email ? `${result.email} (${result.user_id})` : result.user_id;
+        if (result.revoked) success(`${who} no longer holds the ${result.role} role.`);
+        else info(`${who} did not hold the ${result.role} role; nothing changed.`);
+      } catch (cause) { failRoles(opts, cause); }
+    });
+
+  roles
+    .command('list')
+    .description('Who holds which app role; filter by --user or --role')
+    .option('-p, --project <project>', 'Project slug or ID; defaults to the linked project')
+    .option('--user <user>', 'Only this app user (sign-up address or app user id)')
+    .option('--role <role>', 'Only holders of this declared app role')
+    .option('--json', 'Print the page as JSON')
+    .action(async (opts: { project?: string; user?: string; role?: string; json?: boolean }) => {
+      try {
+        const client = new ApiClient(getToken());
+        const project_id = resolveProjectRef(opts.project);
+        const items: AppRoleGrantRow[] = [];
+        let cursor: string | undefined;
+        let declared: string[] = [];
+        do {
+          const page = await client.call<{ items: AppRoleGrantRow[]; next_cursor: string | null; declared_roles: string[] }>(
+            'GET', '/auth/app-roles', undefined, { project_id, ...(opts.user ? appUserTarget(opts.user) : {}), role: opts.role, cursor, limit: 100 },
+          );
+          items.push(...page.items);
+          declared = page.declared_roles;
+          cursor = page.next_cursor ?? undefined;
+        } while (cursor);
+        if (opts.json) { printJson({ items, declared_roles: declared }); return; }
+        if (!items.length) {
+          info(declared.length
+            ? `No app roles granted yet. Declared roles: ${declared.join(', ')}. Grant one: somewhere auth roles grant <user> <role>`
+            : 'This project declares no app roles. Add appRoles to db/schema.ts and deploy.');
+          return;
+        }
+        for (const g of items) {
+          const who = g.email ? `${g.email}${g.email_verified === false ? ' (unverified)' : ''}` : g.user_id;
+          console.log(`${teal(g.role.padEnd(12))} ${who}  ${dim(`${g.user_id} · by ${g.granted_by} · ${new Date(g.created_at).toISOString()}`)}`);
+        }
+        info(dim(`Declared roles: ${declared.join(', ')}`));
+      } catch (cause) { failRoles(opts, cause); }
     });
 }
 

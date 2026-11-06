@@ -42,6 +42,7 @@ For optional after-edit checking, explicitly run `somewhere hooks install --host
 |---|---|
 | `somewhere login` | Authenticate via browser (Google OAuth) |
 | `somewhere auth login` | Alias of `somewhere login` |
+| `somewhere auth roles grant <user> <role>` | Give an app user an app role declared in `db/schema.ts` `appRoles` (user = sign-up address or app user id); `revoke` and `list` alongside |
 | `somewhere logout` | Clear stored credentials |
 | `somewhere whoami` | Show current user, plan, project count |
 | `somewhere init` | Create project + write `.somewhere.json` |

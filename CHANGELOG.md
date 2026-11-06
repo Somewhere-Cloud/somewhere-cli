@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.38.20
+
+### Added
+
+- `somewhere auth roles grant|revoke|list`: grant, revoke and list the app roles
+  declared in `db/schema.ts` (`appRoles`) for your app users, with your
+  developer key.
+
 ## 0.38.19
 
 ### Changed

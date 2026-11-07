@@ -2,7 +2,7 @@
   "esbuild": "0.24.0",
   "source_files": {
     "worker/containers/compile/checker-contract.cjs": "3a8355b9477d89d00bca47cf74032c3b3c6458941cf5c57ddae9e2228b51915d",
-    "worker/containers/compile/consumer-contract.cjs": "13b6d1e1530cb698514998b5dbd9c989d88426496f156d88ebebd5953f9269bf",
+    "worker/containers/compile/consumer-contract.cjs": "03a2c0a6571d818538ce81782b4eb3c46286e81830e29f8d8b6f6df4fb3c30ff",
     "worker/containers/compile/declared-data-contract.cjs": "47ab54cbf6fb20b77e00b2f06e0d283733ee1f3774459f2a6f82c77042c1c93a",
     "worker/containers/compile/generated-declarations-render.cjs": "7ffdb34645cc9eccac6eba39dc86b646a41c4de8a1a038d2b5b46f42df9f1157",
     "worker/containers/compile/generated-declarations.cjs": "6e9902e054c5c784fd9b3c3fafc1869e79954100a45014e1132247cd82833ec4",
@@ -37,5 +37,5 @@
     "worker/src/utils/managed-groups/policy.ts": "2c5b48479a2925bea9a820022c63ca5fa827e2ff5531fe1ab6c0b058b7212b39",
     "worker/src/utils/reference-check-inputs.ts": "59c7c8d3b4aaf8bffb2a54964e41f909437745d001b093edd74cc135f4edcf67"
   },
-  "sha256": "05ab796047d1a840f54096a21d5cc8f3753a9c46328366023d18f280cfd0212e"
+  "sha256": "396c8f0398bc6f4b57fabc134aea5fb6b9f602efedec151ea66d186bbf94725e"
 }

@@ -4428,9 +4428,9 @@ export default schema({
         return { status: "unknown", compatible: null, message: `The platform's consumer contract is not known on this machine yet (no platform response recorded). This CLI checks against contract ${cli.version}.` };
       }
       const age = Number.isFinite(seen.seen_at) ? ` (last seen ${Math.max(0, Math.round((now - seen.seen_at) / 36e5))} h ago${seen.origin ? ` from ${seen.origin}` : ""})` : "";
-      if (seen.digest === cli.digest) return { status: "current", compatible: true, message: `This CLI implements the platform's current consumer contract ${cli.version}.` };
+      if (seen.digest === cli.digest) return { status: "current", compatible: true, message: Number.isFinite(seen.seen_at) ? `This CLI implements consumer contract ${cli.version}, the one the platform last announced${age}. A platform release since then is not known until the CLI next talks to the platform.` : `This CLI implements consumer contract ${cli.version}.` };
       if (seen.version > cli.version) {
-        return { status: "outdated", compatible: false, message: `This CLI implements consumer contract ${cli.version}; the platform is at ${seen.version}${age}. Its typecheck and lint judge your code by older platform rules, so a form the platform accepts may be reported as an error and newer forms are unknown to it. Update the CLI (somewhere upgrade), then run this again.` };
+        return { status: "outdated", compatible: false, message: `This CLI implements consumer contract ${cli.version}; the platform is at ${seen.version}${age}. Its typecheck and lint judge your code by older platform rules, so a form the platform accepts may be reported as an error and newer forms are unknown to it. Update the CLI (somewhere update), then run this again.` };
       }
       if (seen.version < cli.version) {
         return { status: "ahead", compatible: false, message: `This CLI implements consumer contract ${cli.version}; the platform is still at ${seen.version}${age}. It may accept forms the platform does not yet deploy. Use the CLI version that matches the platform, or wait for the platform release.` };

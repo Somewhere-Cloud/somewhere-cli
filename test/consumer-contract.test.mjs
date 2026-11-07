@@ -84,7 +84,7 @@ test('a newer platform contract: typecheck and lint never claim a clean result',
   const result = await runTypecheck(project());
   assert.equal(result.ok, false);
   assert.equal(result.errors[0].code, 'CLI_CONTRACT_OUTDATED');
-  assert.match(result.errors[0].message, /somewhere upgrade/);
+  assert.match(result.errors[0].message, /somewhere update/);
   const lint = await lintProject(project());
   assert.equal(lint.ok, false);
   assert.equal(lint.contract.status, 'outdated');

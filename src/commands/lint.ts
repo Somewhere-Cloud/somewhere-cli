@@ -12,6 +12,8 @@ export function registerLint(program: Command): void {
       const result = await lintProject(resolve(process.cwd(), dir ?? '.'), opts);
       if (opts.json) printJson(result);
       else {
+        // The rules are the vendored platform's: say when they are known to be out of date, or unknown.
+        if (result.contract.status !== 'current') console.log(`${result.contract.compatible === false ? 'Out of date' : 'Note'}: ${result.contract.message}`);
         for (const finding of [...result.findings, ...result.generic.findings]) {
           console.log(`${finding.file}:${finding.line} warning ${finding.rule}: ${finding.message}\n  Fix: ${finding.fix}\n  ${finding.docs}`);
         }

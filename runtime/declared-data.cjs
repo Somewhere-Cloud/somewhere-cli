@@ -67,11 +67,12 @@ var require_declared_data_contract = __commonJS({
         const normalizedOperations = o?.length === 4 ? void 0 : o;
         return { k: "m", m: { g: [...g], m, u, mg: [...mg], ...normalizedOperations !== void 0 ? { o: [...normalizedOperations] } : {}, ...og ? { og: true } : {} } };
       }
-      if (value.k === "a" && keys === "k,p" && Array.isArray(value.p) && value.p.length === 2) {
+      if (value.k === "a" && (keys === "k,p" || keys === "k,p,reads" && edges === 0) && Array.isArray(value.p) && value.p.length === 2) {
         const left = policy(value.p[0], label), right = policy(value.p[1], label);
         if (left.k !== "o" || !["m", "g", "r"].includes(right.k)) fail(label);
         if (right.k === "m" && right.m.og && left.c !== "user_id") fail(label);
-        return { k: "a", p: [left, right] };
+        const reads = value.reads === void 0 ? void 0 : branchReads(value.reads, label);
+        return { k: "a", p: [left, right], ...reads ? { reads } : {} };
       }
       if (value.k === "n" && keys === "g,k,w") {
         const gate = policy(value.g, label), who = policy(value.w, label);
@@ -98,6 +99,23 @@ var require_declared_data_contract = __commonJS({
         return { k: "p", v: value.v, t: value.t, pk: value.pk, p: inherited };
       }
       fail(label);
+    }
+    function branchReads(value, label) {
+      if (!Array.isArray(value) || value.length !== 2 || value[0] === null && value[1] === null) fail(label + ".reads");
+      return value.map((list) => {
+        if (list === null) return null;
+        if (!Array.isArray(list) || !list.length || list.some((name) => typeof name !== "string" || !identifier.test(name)) || new Set(list).size !== list.length) fail(label + ".reads");
+        return [...list].sort();
+      });
+    }
+    function hiddenByBranch(table) {
+      const reads = table.policy && table.policy.k === "a" ? table.policy.reads : void 0;
+      if (!reads) return /* @__PURE__ */ new Set();
+      const hidden = /* @__PURE__ */ new Set();
+      for (const list of reads) if (list) {
+        for (const column of table.columns) if (!list.includes(column.n)) hidden.add(column.n);
+      }
+      return hidden;
     }
     function policyRoles(value, label) {
       record2(value, label + ".roles");
@@ -336,10 +354,10 @@ var require_declared_data_contract = __commonJS({
       const type = { integer: "number", bigint: "string", number: "number", text: "string", timestamp: "string", boolean: "boolean", json: "Json", blob: "number[]" }[column.t];
       return column.nul ? `${type} | null` : type;
     }
-    function shape(columns, names, mode, required = /* @__PURE__ */ new Set()) {
+    function shape(columns, names, mode, required = /* @__PURE__ */ new Set(), hidden = /* @__PURE__ */ new Set()) {
       const values = names.map((name) => {
         const column = columns.find((candidate) => candidate.n === name);
-        const optional = mode === "update" || mode === "create" && !required.has(name) && (column.d || column.nul);
+        const optional = mode === "update" || mode === "create" && !required.has(name) && (column.d || column.nul) || mode === "read" && hidden.has(name);
         return `${JSON.stringify(name)}${optional ? "?" : ""}: ${columnType(column)}`;
       });
       return values.length ? `{ ${values.join("; ")} }` : "Record<string, never>";
@@ -503,13 +521,14 @@ async function intake(table, reference, values, extra) {
   export interface IntakeResult { readonly accepted: true; readonly idempotency: InsertReceipt; readonly request: InsertRequest<IntakeResult> }
 `;
     var ROW_CAN_DECLARATION = "  /** Row capability hint (list/get with can: true): whether the signed-in caller may update or delete this row now, by the same rule the write enforces. A hint for UI; the write is still the final answer. */\n  export interface RowCan { readonly update: boolean; readonly delete: boolean; }\n";
+    var ROW_HINTS_DECLARATION = ROW_CAN_DECLARATION + '  /** Row hints (list/get with can: true): can says what the signed-in caller may change; mine is true when this caller created the row (the owner or author the platform recorded). Show edit and delete controls, a "you" label or a "mine" filter from these; the identity column itself is never sent. */\n  export interface RowHints { readonly can: RowCan; readonly mine: boolean; }\n';
     var INSERT_CLIENT_DECLARATIONS = `
   export interface InsertReceipt { readonly replayed: boolean; readonly created_at: number; readonly result_until: number; readonly refuse_until: number; }
   export interface InsertRequest<T> { readonly key: string; readonly createdAt: number; retry(): Promise<T>; }
   export type InsertResult<T> = T & { readonly idempotency: InsertReceipt; readonly request: InsertRequest<InsertResult<T>> };
 `;
-    var CLIENT_GENERATION2 = 3;
-    var ACCEPTED_CLIENT_GENERATIONS2 = Object.freeze([3, 2, 1]);
+    var CLIENT_GENERATION2 = 5;
+    var ACCEPTED_CLIENT_GENERATIONS2 = Object.freeze([5, 4, 3, 2, 1]);
     var PUBLIC_BOOTSTRAP_CLIENT_RUNTIME = 'const swCanon=(v,d)=>{if(v===null||typeof v==="string"||typeof v==="boolean"||(typeof v==="number"&&Number.isFinite(v)))return JSON.stringify(v);if(d===0||typeof v!=="object"||Array.isArray(v))return null;const parts=[];for(const k of Object.keys(v).sort()){if(v[k]===undefined)continue;const e=swCanon(v[k],d-1);if(e===null)return null;parts.push(JSON.stringify(k)+":"+e)}return"{"+parts.join(",")+"}"};let swBoot;const swBootTake=body=>{try{if(swBoot===undefined){swBoot=null;const el=typeof document!=="undefined"&&document.getElementById?document.getElementById("__sw_public_data"):null;if(el&&el.type==="application/json"&&(el.parentNode===document.head||el.parentNode===document.body)){const p=JSON.parse(el.textContent||"null");if(p&&p.v===1&&p.contract===contract&&Number.isSafeInteger(p.validated_at)&&p.validated_at<=Date.now()&&Number.isInteger(p.max_age)&&p.max_age>0&&p.max_age<=120&&p.entries&&typeof p.entries==="object"&&!Array.isArray(p.entries)&&typeof p.path==="string"&&typeof location!=="undefined")swBoot={until:p.validated_at+p.max_age*1000,path:p.path,entries:new Map(Object.entries(p.entries))}}if(el&&el.parentNode)el.parentNode.removeChild(el)}if(!swBoot)return undefined;if(Date.now()>=swBoot.until||location.pathname!==swBoot.path){swBoot=null;return undefined}const key=swCanon(body,2);if(key===null||!swBoot.entries.has(key))return undefined;const value=swBoot.entries.get(key);swBoot.entries.delete(key);return value}catch(error){swBoot=null;return undefined}};';
     var PUBLIC_BOOTSTRAP_INVOKE = 'if(operation==="list"||operation==="get"||operation==="aggregate"||operation==="relation_list"){const booted=swBootTake({...input,contract,table,operation});if(booted!==undefined)return booted}else swBoot=null;';
     function describeDataClient2(authority, contract_digest, insertReceiptCapability, localTypes = false, generation = CLIENT_GENERATION2) {
@@ -529,17 +548,19 @@ async function intake(table, reference, values, extra) {
       for (const table of tables) {
         const { name, columns, client, primaryKey } = table;
         const readable = client.read === true ? columns.filter((column) => column.n !== table.author).map((column) => column.n) : client.read || [];
-        const row = shape(columns, readable, "read");
+        const hidden = generation >= 5 ? hiddenByBranch(table) : /* @__PURE__ */ new Set();
+        const row = shape(columns, readable, "read", /* @__PURE__ */ new Set(), hidden);
         const id = columnType(columns.find((column) => column.n === primaryKey));
         const operations = [];
         const methods = [];
         if (client.read !== false) {
-          const equality = readable.filter((field) => !["json", "blob"].includes(columns.find((column) => column.n === field).t));
+          const equality = readable.filter((field) => !["json", "blob"].includes(columns.find((column) => column.n === field).t) && !hidden.has(field));
           if (generation >= 2) {
             const listOptions = `limit?: L & (number extends L ? unknown : [L] extends [PageSize] ? unknown : never); after?: ${id}; where?: ${shape(columns, equality, "update")}`;
-            operations.push(`list<const L extends number = number>(options: { ${listOptions}; can: true }): Promise<{ data: (${row} & { can: RowCan })[]; next: ${id} | null; has_more: boolean }>`);
+            const hinted = generation >= 4 ? "RowHints" : "{ can: RowCan }";
+            operations.push(`list<const L extends number = number>(options: { ${listOptions}; can: true }): Promise<{ data: (${row} & ${hinted})[]; next: ${id} | null; has_more: boolean }>`);
             operations.push(`list<const L extends number = number>(options?: { ${listOptions}; can?: false }): Promise<{ data: ${row}[]; next: ${id} | null; has_more: boolean }>`);
-            operations.push(`get(id: ${id}, options: { can: true }): Promise<{ data: (${row} & { can: RowCan }) | null }>`);
+            operations.push(`get(id: ${id}, options: { can: true }): Promise<{ data: (${row} & ${hinted}) | null }>`);
             operations.push(`get(id: ${id}, options?: { can?: false }): Promise<{ data: ${row} | null }>`);
           } else {
             operations.push(`list<const L extends number = number>(options?: { limit?: L & (number extends L ? unknown : [L] extends [PageSize] ? unknown : never); after?: ${id}; where?: ${shape(columns, equality, "update")} }): Promise<{ data: ${row}[]; next: ${id} | null; has_more: boolean }>`);
@@ -676,7 +697,7 @@ async function intake(table, reference, values, extra) {
       const declaration = `declare module ${JSON.stringify("somewhere:data")} {
   type PageSize = ${Array.from({ length: 100 }, (_, i) => i + 1).join(" | ")};
   export type Json = string | number | boolean | null | Json[] | { [key: string]: Json };
-${generation >= 2 ? ROW_CAN_DECLARATION : ""}${receiptCapable ? localTypes ? INSERT_CLIENT_DECLARATIONS.replace("readonly idempotency:", "readonly idempotency?:").replace("readonly request:", "readonly request?:") : INSERT_CLIENT_DECLARATIONS : ""}${anonymousTables.length ? ANONYMOUS_CLIENT_DECLARATIONS : ""}${intakeTables.length ? INTAKE_CLIENT_DECLARATIONS : ""}  export class DataError extends Error { readonly status: number; readonly code: string | null;${receiptCapable ? " readonly request?: InsertRequest<unknown>; readonly outcome?: string; readonly write_committed?: boolean; readonly retry?: false; readonly retryable?: false; readonly idempotency?: InsertReceipt;" : ""} constructor(status: number, payload: unknown); }
+${generation >= 4 ? ROW_HINTS_DECLARATION : generation >= 2 ? ROW_CAN_DECLARATION : ""}${receiptCapable ? localTypes ? INSERT_CLIENT_DECLARATIONS.replace("readonly idempotency:", "readonly idempotency?:").replace("readonly request:", "readonly request?:") : INSERT_CLIENT_DECLARATIONS : ""}${anonymousTables.length ? ANONYMOUS_CLIENT_DECLARATIONS : ""}${intakeTables.length ? INTAKE_CLIENT_DECLARATIONS : ""}  export class DataError extends Error { readonly status: number; readonly code: string | null;${receiptCapable ? " readonly request?: InsertRequest<unknown>; readonly outcome?: string; readonly write_committed?: boolean; readonly retry?: false; readonly retryable?: false; readonly idempotency?: InsertReceipt;" : ""} constructor(status: number, payload: unknown); }
   export const data: { ${declarations.join(";\n    ")} };
 }
 `;
@@ -957,6 +978,12 @@ interface SomewhereDbReadOptions {
   include?: readonly string[] | null;
   has?: Readonly<Record<string, SomewhereDbWhere>> | null;
 }
+// Row hints on a caller read asked for { can: true }: what this signed-in caller may change now (the
+// write still enforces) and whether this caller created the row. The owner column itself is never sent.
+interface SomewhereDbRowHints {
+  readonly can: { readonly update: boolean; readonly delete: boolean };
+  readonly mine: boolean;
+}
 interface SomewhereDbCountOptions { where?: SomewhereDbWhere | null }
 interface SomewhereDbPlainInsertOptions { onConflict?: 'ignore' | 'update' | null }
 // idempotencyKey: an explicit key (16-128 of A-Z a-z 0-9 - _) for a single plain insert by a
@@ -1076,8 +1103,11 @@ interface SomewhereCallerDb extends Omit<SomewhereServerDb, 'from' | 'count' | '
   insert<T extends SomewhereDbTable>(table: T, values: __SomewhereDeclared<T, 'insert', SomewhereDbValues>, options?: SomewhereDbCallerInsertOptions<T> | null): Promise<SomewhereDbInsertResult<SomewhereDbRow<T>>>;
   update<T extends SomewhereDbTable>(table: T, spec: SomewhereDbUpdateFor<T, 'set'>): Promise<SomewhereDbResult<SomewhereDbRow<T>>>;
   tx(intents: readonly SomewhereDbCallerWriteIntent[]): Promise<SomewhereDbResult[]>;
+  // can: true (signed-in callers only; never with asServer): each row also carries the row hints.
   from<T extends SomewhereDbTable, const C extends readonly SomewhereDbColumn<T>[] = readonly SomewhereDbColumn<T>[], const I extends readonly SomewhereDbRelationName<T>[] = []>(
-    table: T, options?: (SomewhereDbReadOptionsFor<T, C, I> & { asServer?: true }) | null): Promise<SomewhereDbResult<SomewhereDbReadRow<T, C, I>>>;
+    table: T, options: SomewhereDbReadOptionsFor<T, C, I> & { can: true; asServer?: never }): Promise<SomewhereDbResult<SomewhereDbReadRow<T, C, I> & SomewhereDbRowHints>>;
+  from<T extends SomewhereDbTable, const C extends readonly SomewhereDbColumn<T>[] = readonly SomewhereDbColumn<T>[], const I extends readonly SomewhereDbRelationName<T>[] = []>(
+    table: T, options?: (SomewhereDbReadOptionsFor<T, C, I> & { asServer?: true; can?: false }) | null): Promise<SomewhereDbResult<SomewhereDbReadRow<T, C, I>>>;
   count(table: SomewhereDbTable, options?: (SomewhereDbCountOptions & { asServer?: true }) | null): Promise<{ data: number; error: null }>;
   delete<T extends SomewhereDbTable>(table: T, spec?: SomewhereDbRemove | null): Promise<SomewhereDbResult<SomewhereDbRow<T>>>;
   readonly server: SomewhereServerDb;
@@ -4124,10 +4154,10 @@ function boolean(options?: SomewhereSchemaDeclaration.ColumnOptions<boolean>): S
 function timestamp(options?: SomewhereSchemaDeclaration.ColumnOptions<string>): SomewhereSchemaDeclaration.Column;
 function json(options?: SomewhereSchemaDeclaration.ColumnOptions<string>): SomewhereSchemaDeclaration.Column;
 function blob(options?: SomewhereSchemaDeclaration.ColumnOptions<never>): SomewhereSchemaDeclaration.Column;
-function owner(options?: { column?: string; visitors?: boolean }): SomewhereSchemaDeclaration.OwnerScope;
+function owner(options?: { column?: string; visitors?: boolean; read?: string[] }): SomewhereSchemaDeclaration.OwnerScope;
 function shared(): SomewhereSchemaDeclaration.Scope;
 function serverOnly(): SomewhereSchemaDeclaration.Scope;
-function member(options: { group: string | string[]; membership: string; member_user: string; member_group: string | string[]; operations?: Array<'read' | 'create' | 'update' | 'delete' | 'upload' | 'replace'> }): SomewhereSchemaDeclaration.MemberScope;
+function member(options: { group: string | string[]; membership: string; member_user: string; member_group: string | string[]; operations?: Array<'read' | 'create' | 'update' | 'delete' | 'upload' | 'replace'>; read?: string[] }): SomewhereSchemaDeclaration.MemberScope;
 function files(options: SomewhereSchemaDeclaration.FileCollectionOptions): SomewhereSchemaDeclaration.FileCollection;
 function hasMany(table: string, foreignKey: string): SomewhereSchemaDeclaration.Relation;
 function belongsTo(table: string, foreignKey: string): SomewhereSchemaDeclaration.Relation;
@@ -4135,13 +4165,13 @@ function removed(): SomewhereSchemaDeclaration.ColumnMarker;
 function removedTable(): SomewhereSchemaDeclaration.TableMarker;
 function exported(): SomewhereSchemaDeclaration.TableMarker;
 `;
-    var policySignatures = `function grant(options: { table: string; grantee: string; row?: string; operations: readonly ['read'] | readonly ['read', 'update'] }): SomewhereSchemaDeclaration.GrantScope;
+    var policySignatures = `function grant(options: { table: string; grantee: string; row?: string; operations: readonly ['read'] | readonly ['read', 'update']; read?: string[] }): SomewhereSchemaDeclaration.GrantScope;
 function anyOf(owner: SomewhereSchemaDeclaration.OwnerScope, other: SomewhereSchemaDeclaration.GrantScope | SomewhereSchemaDeclaration.MemberScope | SomewhereSchemaDeclaration.GroupScope | SomewhereSchemaDeclaration.AppRoleScope): SomewhereSchemaDeclaration.AnyOfScope;
 function anyOf(other: SomewhereSchemaDeclaration.GrantScope | SomewhereSchemaDeclaration.MemberScope | SomewhereSchemaDeclaration.GroupScope | SomewhereSchemaDeclaration.AppRoleScope, owner: SomewhereSchemaDeclaration.OwnerScope): SomewhereSchemaDeclaration.AnyOfScope;
 function allOf(gate: SomewhereSchemaDeclaration.MemberScope | SomewhereSchemaDeclaration.GroupScope | SomewhereSchemaDeclaration.AppRoleScope, who: SomewhereSchemaDeclaration.OwnerScope | SomewhereSchemaDeclaration.AnyOfScope): SomewhereSchemaDeclaration.Scope;
 function parent(options: { via: string; table?: string }): SomewhereSchemaDeclaration.Scope;
-function group(options?: { column?: string; roles?: Partial<Record<'read' | 'create' | 'update' | 'delete', string[]>> }): SomewhereSchemaDeclaration.GroupScope;
-function appRole(options: { roles: Partial<Record<'read' | 'create' | 'update' | 'delete', string[]>> }): SomewhereSchemaDeclaration.AppRoleScope;
+function group(options?: { column?: string; roles?: Partial<Record<'read' | 'create' | 'update' | 'delete', string[]>>; read?: string[] }): SomewhereSchemaDeclaration.GroupScope;
+function appRole(options: { roles: Partial<Record<'read' | 'create' | 'update' | 'delete', string[]>>; read?: string[] }): SomewhereSchemaDeclaration.AppRoleScope;
 `;
     var SCHEMA_DECLARATION2 = types + signatures.replace(/^function /gm, "declare function ") + `declare module 'somewhere/db' {
 ${(signatures + policySignatures).replace(/^function /gm, "  export function ")}}
@@ -4312,19 +4342,131 @@ var require_generated_declarations_render = __commonJS({
   }
 });
 
+// worker/containers/compile/consumer-contract.cjs
+var require_consumer_contract = __commonJS({
+  "worker/containers/compile/consumer-contract.cjs"(exports2, module2) {
+    "use strict";
+    var CONSUMER_CONTRACT2 = Object.freeze({
+      version: 1,
+      digest: "caa6986fab558d2d8ccb9157f3e7ffb5e94b179b4d22254dfeefe991468005e4"
+    });
+    var MEMBERSHIPS = "memberships: table({ id: id(), team_id: text(), member_id: text() }, { scope: owner(), client: { read: true } }),";
+    var SHARES = "shares: table({ id: id(), grantee_id: text() }, { scope: owner(), client: { read: true, create: ['grantee_id'], delete: true }, unique: [['user_id', 'grantee_id']] }),";
+    var MEMBER = "member({ group: ['team_id'], membership: 'memberships', member_user: 'member_id', member_group: ['team_id'], operations: ['read', 'create', 'update', 'delete'] })";
+    var one = (imports, tables, options = "") => `import { schema, table, id, text, integer, ${imports} } from 'somewhere/db';
+export default schema({
+  ${tables}
+}${options});
+`;
+    var contacts = (scope, extra = "") => `contacts: table({ id: id(), team_id: text({ default: '' }), name: text()${extra} }, { scope: ${scope}, client: { read: true, create: ['name'], update: ['name'], delete: true } }),`;
+    var CONSUMER_CONTRACT_FORMS = Object.freeze([
+      ["owner()", one("owner", "notes: table({ id: id(), title: text() }, { scope: owner(), client: { read: true, create: ['title'], update: ['title'], delete: true } }),")],
+      ["shared()", one("shared", "posts: table({ id: id(), body: text() }, { scope: shared(), client: { read: true, create: ['body'] } }),")],
+      ["publicRead", one("owner", "cards: table({ id: id(), title: text() }, { scope: owner(), client: { read: ['id', 'title'], publicRead: true } }),")],
+      ["member()", one("owner, member", `${MEMBERSHIPS}
+  ${contacts(MEMBER)}`)],
+      ["anyOf(owner(), member())", one("owner, member, anyOf", `${MEMBERSHIPS}
+  ${contacts(`anyOf(owner(), ${MEMBER})`)}`)],
+      ["anyOf(owner(), appRole())", one("owner, anyOf, appRole", "tickets: table({ id: id(), subject: text() }, { scope: anyOf(owner(), appRole({ roles: { read: ['staff'] } })), client: { read: true } }),", ", { appRoles: { staff: { grantableBy: [] } } }")],
+      ["anyOf(owner(), grant())", one("owner, anyOf, grant", `${SHARES}
+  ${contacts("anyOf(owner(), grant({ table: 'shares', grantee: 'grantee_id', operations: ['read'] }))")}`)],
+      ["anyOf(owner(), grant({ row }))", one("owner, anyOf, grant", "doc_shares: table({ id: id(), doc_id: text({ references: 'docs', onDelete: 'cascade' }), grantee_id: text() }, { scope: owner(), unique: [['doc_id', 'grantee_id']] }),\n  docs: table({ id: id(), title: text() }, { scope: anyOf(owner(), grant({ table: 'doc_shares', grantee: 'grantee_id', row: 'doc_id', operations: ['read', 'update'] })), client: { read: true, update: ['title'] } }),")],
+      ["anyOf(owner({ read }), appRole())", one("owner, anyOf, appRole", "tickets: table({ id: id(), subject: text(), customer_email: text() }, { scope: anyOf(owner({ read: ['id', 'subject'] }), appRole({ roles: { read: ['staff'] } })), client: { read: ['id', 'subject', 'customer_email'] } }),", ", { appRoles: { staff: { grantableBy: [] } } }")],
+      ["allOf(member(), owner())", one("owner, member, allOf", `${MEMBERSHIPS}
+  ${contacts(`allOf(${MEMBER}, owner())`)}`)],
+      ["parent()", one("owner, parent, hasMany", "tickets: table({ id: id(), subject: text() }, { scope: owner(), client: { read: true }, relations: { comments: hasMany('comments', 'ticket_id') } }),\n  comments: table({ id: id(), ticket_id: text({ references: 'tickets' }), body: text() }, { scope: parent({ via: 'ticket_id' }), client: { read: true } }),")],
+      // Refused by deploy (scripts/check-cli-vendor-parity.mjs asserts the same reasons).
+      ["refused: grant() inside allOf", one("owner, member, anyOf, allOf, grant", `${SHARES}
+  ${MEMBERSHIPS}
+  ${contacts(`allOf(${MEMBER}, anyOf(owner(), grant({ table: 'shares', grantee: 'grantee_id', operations: ['read'] })))`)}`)],
+      ["refused: grant() update without read", one("owner, anyOf, grant", `${SHARES}
+  ${contacts("anyOf(owner(), grant({ table: 'shares', grantee: 'grantee_id', operations: ['update'] }))")}`)],
+      ["refused: grant() delete", one("owner, anyOf, grant", `${SHARES}
+  ${contacts("anyOf(owner(), grant({ table: 'shares', grantee: 'grantee_id', operations: ['read', 'update', 'delete'] }))")}`)],
+      ["refused: grant() alone", one("owner, grant", `${SHARES}
+  ${contacts("grant({ table: 'shares', grantee: 'grantee_id', operations: ['read'] })")}`)],
+      ["refused: a column named mine", one("owner", "notes: table({ id: id(), mine: text() }, { scope: owner(), client: { read: true } }),")]
+    ]);
+    var DERIVED = ["generateFromFiles", "localDeclarationFromFiles", "declaredTablesFromFiles", "runtimeDeclarationFromFiles", "filesDeclarationFromFiles"];
+    function consumerContractComponents2(data, sourceLintVersion, hash) {
+      const forms = {};
+      for (const [name, source] of CONSUMER_CONTRACT_FORMS) {
+        const files = { "db/schema.ts": source };
+        let verdict;
+        try {
+          verdict = { accepted: true, outputs: DERIVED.map((key) => typeof data[key] === "function" ? data[key](files) ?? null : `missing ${key}`) };
+        } catch (error) {
+          verdict = { accepted: false, refusal: String(error && error.message || error) };
+        }
+        forms[name] = hash(JSON.stringify(verdict));
+      }
+      return {
+        schema_declaration: hash(String(data.SCHEMA_DECLARATION)),
+        runtime_context_declaration: hash(String(data.RUNTIME_CONTEXT_DECLARATION)),
+        endpoint_declaration: hash(String(data.ENDPOINT_DECLARATION)),
+        files_declaration: hash(String(data.FILES_DECLARATION_FILE)),
+        source_lint_version: String(sourceLintVersion),
+        forms
+      };
+    }
+    function consumerContractFingerprint2(components) {
+      const sorted3 = (value) => value && typeof value === "object" && !Array.isArray(value) ? Object.fromEntries(Object.keys(value).sort().map((k) => [k, sorted3(value[k])])) : value;
+      return JSON.stringify(sorted3(components));
+    }
+    function consumerContractHeader(contract = CONSUMER_CONTRACT2) {
+      return `${contract.version}; digest=${contract.digest}`;
+    }
+    function parseConsumerContractHeader2(value) {
+      const m = /^\s*(\d{1,9}); digest=([0-9a-f]{64})\s*$/.exec(String(value || ""));
+      return m ? { version: Number(m[1]), digest: m[2] } : null;
+    }
+    function consumerContractVerdict2(cli, seen, now = Date.now()) {
+      if (!cli || !Number.isInteger(cli.version) || !/^[0-9a-f]{64}$/.test(cli.digest || "")) {
+        return { status: "unknown", compatible: null, message: "This CLI does not record which platform consumer contract it implements." };
+      }
+      if (!seen) {
+        return { status: "unknown", compatible: null, message: `The platform's consumer contract is not known on this machine yet (no platform response recorded). This CLI checks against contract ${cli.version}.` };
+      }
+      const age = Number.isFinite(seen.seen_at) ? ` (last seen ${Math.max(0, Math.round((now - seen.seen_at) / 36e5))} h ago${seen.origin ? ` from ${seen.origin}` : ""})` : "";
+      if (seen.digest === cli.digest) return { status: "current", compatible: true, message: Number.isFinite(seen.seen_at) ? `This CLI implements consumer contract ${cli.version}, the one the platform last announced${age}. A platform release since then is not known until the CLI next talks to the platform.` : `This CLI implements consumer contract ${cli.version}.` };
+      if (seen.version > cli.version) {
+        return { status: "outdated", compatible: false, message: `This CLI implements consumer contract ${cli.version}; the platform is at ${seen.version}${age}. Its typecheck and lint judge your code by older platform rules, so a form the platform accepts may be reported as an error and newer forms are unknown to it. Update the CLI (somewhere update), then run this again.` };
+      }
+      if (seen.version < cli.version) {
+        return { status: "ahead", compatible: false, message: `This CLI implements consumer contract ${cli.version}; the platform is still at ${seen.version}${age}. It may accept forms the platform does not yet deploy. Use the CLI version that matches the platform, or wait for the platform release.` };
+      }
+      return { status: "mismatch", compatible: false, message: `This CLI and the platform both say consumer contract ${cli.version} but with different digests${age}; one of them is not a released build. Reinstall the CLI from npm.` };
+    }
+    module2.exports = {
+      CONSUMER_CONTRACT: CONSUMER_CONTRACT2,
+      CONSUMER_CONTRACT_FORMS,
+      consumerContractComponents: consumerContractComponents2,
+      consumerContractFingerprint: consumerContractFingerprint2,
+      consumerContractHeader,
+      parseConsumerContractHeader: parseConsumerContractHeader2,
+      consumerContractVerdict: consumerContractVerdict2
+    };
+  }
+});
+
 // declared-data-vendor-entry.js
 var declared_data_vendor_entry_exports = {};
 __export(declared_data_vendor_entry_exports, {
+  CONSUMER_CONTRACT: () => import_consumer_contract.CONSUMER_CONTRACT,
   ENDPOINT_DECLARATION: () => import_runtime_types3.ENDPOINT_DECLARATION,
   FILES_DECLARATION_FILE: () => import_typed_files2.CLIENT_FILE,
   RUNTIME_CONTEXT_DECLARATION: () => import_runtime_types3.RUNTIME_CONTEXT_DECLARATION,
   SCHEMA_DECLARATION: () => import_schema_types.SCHEMA_DECLARATION,
   checkerContract: () => checkerContract,
+  consumerContractComponents: () => import_consumer_contract.consumerContractComponents,
+  consumerContractFingerprint: () => import_consumer_contract.consumerContractFingerprint,
+  consumerContractVerdict: () => import_consumer_contract.consumerContractVerdict,
   declaredTablesFromFiles: () => declaredTablesFromFiles,
   filesDeclarationFromFiles: () => filesDeclarationFromFiles,
   generateFromFiles: () => generateFromFiles,
   isRuntimeEndpointGlobal: () => isRuntimeEndpointGlobal,
   localDeclarationFromFiles: () => localDeclarationFromFiles,
+  parseConsumerContractHeader: () => import_consumer_contract.parseConsumerContractHeader,
   referenceCheckDeclarations: () => referenceCheckDeclarations,
   runtimeDeclarationFromFiles: () => runtimeDeclarationFromFiles
 });
@@ -4338,6 +4480,9 @@ function isCanonicalBigintText(value) {
   const limit = negative ? "9223372036854775808" : "9223372036854775807";
   return digits.length < limit.length || digits.length === limit.length && digits <= limit;
 }
+
+// worker/src/utils/db-schema-deploy/schema-ownership.ts
+var SHARED_AUTHOR_COLUMN = "_sw_author_id";
 
 // worker/src/utils/db-schema-deploy/client-permissions.ts
 function tableAllowsClientWrites(table) {
@@ -4391,6 +4536,9 @@ function parseClientPermissions(value, columns, scope) {
   if (Array.isArray(read)) {
     const names = [];
     for (const entry of read) {
+      if (typeof entry === "string" && ((scope.kind === "owner" || scope.kind === "policy") && entry.toLowerCase() === scope.column || entry.toLowerCase() === SHARED_AUTHOR_COLUMN)) {
+        return fail(`client.read cannot list "${entry}": the platform assigns who created each row and never sends that identity to the browser. To show the signed-in user which rows are theirs, read with { can: true }: each row then carries mine (true for rows this user created) and can.update / can.delete.`);
+      }
       if (typeof entry !== "string" || !fields.has(entry.toLowerCase())) return fail("client.read must contain only declared column names.");
       const name = entry.toLowerCase();
       if (names.includes(name)) return fail(`client.read declares field "${entry}" twice.`);
@@ -4651,9 +4799,6 @@ function bakeIntakePermissions(schema, declarations, intents, scopes) {
   }
 }
 
-// worker/src/utils/db-schema-deploy/schema-ownership.ts
-var SHARED_AUTHOR_COLUMN = "_sw_author_id";
-
 // worker/src/services/jobs/limits.ts
 var STALE_JOB_WINDOW_MS = 45 * 60 * 1e3;
 
@@ -4901,6 +5046,11 @@ function validGroupRoles(value) {
   const roles = value;
   return exactKeys(roles, ["read", "create", "update", "delete"]) && ["read", "create", "update", "delete"].every((op) => Array.isArray(roles[op]) && roles[op].every((role) => typeof role === "string" && GROUP_ROLE_NAME.test(role)) && new Set(roles[op]).size === roles[op].length);
 }
+function validBranchReads(value) {
+  if (!Array.isArray(value) || value.length !== 2) return false;
+  const list = (entry) => entry === null || Array.isArray(entry) && entry.length > 0 && entry.every((name, i) => typeof name === "string" && SAFE_SCOPE_IDENTIFIER.test(name) && name === name.toLowerCase() && (i === 0 || entry[i - 1] < name));
+  return list(value[0]) && list(value[1]) && !(value[0] === null && value[1] === null);
+}
 function exactKeys(value, keys) {
   const actual = Object.keys(value).sort();
   return actual.length === keys.length && actual.every((key, index) => key === [...keys].sort()[index]);
@@ -4942,7 +5092,7 @@ function validBakedPolicy(value, root = true, edges = 0) {
   }
   if (node.k === "a") {
     const second = node.p?.[1]?.k;
-    return exactKeys(node, ["k", "p"]) && Array.isArray(node.p) && node.p.length === 2 && node.p[0]?.k === "o" && validBakedPolicy(node.p[0], false) && (!(node.p[1]?.k === "m" && node.p[1].m?.og) || node.p[0].c === "user_id") && (second === "m" ? validBakedPolicy(node.p[1], false) : (second === "g" || second === "r") && validBakedPolicy(node.p[1], true));
+    return (exactKeys(node, ["k", "p"]) || edges === 0 && exactKeys(node, ["k", "p", "reads"]) && validBranchReads(node.reads)) && Array.isArray(node.p) && node.p.length === 2 && node.p[0]?.k === "o" && validBakedPolicy(node.p[0], false) && (!(node.p[1]?.k === "m" && node.p[1].m?.og) || node.p[0].c === "user_id") && (second === "m" ? validBakedPolicy(node.p[1], false) : (second === "g" || second === "r") && validBakedPolicy(node.p[1], true));
   }
   if (root && node.k === "n") {
     if (!ALLOF_POLICY_ADMITTED || !exactKeys(node, ["k", "g", "w"])) return false;
@@ -5091,7 +5241,9 @@ function bakedPolicyFromDeclared(value, depth = 0, edges = 0, underParent = fals
     if (depth !== 0 && !underParent || node.policies[0]?.kind !== "owner" || second !== "member" && second !== "group" && second !== "app_role") return null;
     const left = bakedPolicyFromDeclared(node.policies[0], depth + 1);
     const right = bakedPolicyFromDeclared(node.policies[1], depth + 1, edges, second !== "member");
-    const baked = left && right ? { k: "a", p: [left, right] } : null;
+    const reads = node.reads === void 0 || edges > 0 || underParent ? void 0 : Array.isArray(node.reads) && node.reads.length === 2 ? node.reads.map((list) => Array.isArray(list) ? [...new Set(list.map((name) => String(name).toLowerCase()))].sort() : null) : null;
+    if (reads === null || reads !== void 0 && !validBranchReads(reads)) return null;
+    const baked = left && right ? { k: "a", p: [left, right], ...reads ? { reads } : {} } : null;
     return baked && validBakedPolicy(pinShape(baked), true, edges) ? baked : null;
   }
   if (node.kind === "all_of") {
@@ -5195,6 +5347,7 @@ function readGrantScope(r, table, line, fail) {
   r.expectPunct("{", "in grant options");
   let membership, grantee, row;
   let operations;
+  let read;
   const seen = /* @__PURE__ */ new Set();
   while (!r.tryPunct("}")) {
     const key = r.readKey("in grant options");
@@ -5222,7 +5375,9 @@ function readGrantScope(r, table, line, fail) {
       }
       if (!ops.includes("read")) fail(key.line, "grant operations require read; update alone is not allowed.");
       operations = ops.includes("update") ? ["read", "update"] : ["read"];
-    } else fail(key.line, `Unknown grant option "${key.name}". Allowed: table, grantee, row, operations.`);
+    } else if (key.name === "read") {
+      read = readBranchReadColumns(r, `grant({ read }) on table "${table}"`);
+    } else fail(key.line, `Unknown grant option "${key.name}". Allowed: table, grantee, row, operations, read.`);
     if (!r.tryPunct(",")) {
       r.expectPunct("}", "closing grant options");
       break;
@@ -5232,7 +5387,7 @@ function readGrantScope(r, table, line, fail) {
   r.expectPunct(")", "closing grant");
   if (!membership || !grantee || !operations || grantee === "user_id") fail(line, `grant() on "${table}" requires table, a grantee column distinct from managed user_id, and explicit operations.`);
   if (row !== void 0 && (row === "user_id" || row === grantee)) fail(line, `grant() on "${table}": row names the shares column holding the shared row's id, distinct from user_id and the grantee.`);
-  return { kind: "member", group: ["user_id"], membership, memberUser: grantee, memberGroup: row === void 0 ? ["user_id"] : ["user_id", row], operations, ownerGrant: true };
+  return { kind: "member", group: ["user_id"], membership, memberUser: grantee, memberGroup: row === void 0 ? ["user_id"] : ["user_id", row], operations, ownerGrant: true, ...read ? { read } : {} };
 }
 function resolveGrantRowKeys(scope, key, table, line, fail) {
   const visit = (node) => {
@@ -6182,6 +6337,7 @@ function readRoleList(r, fail, ctx) {
 function readGroupScope(r, tableName, line, fail) {
   r.expectPunct("(", 'after "group"');
   let column = DEFAULT_GROUP_COLUMN;
+  let read;
   const explicit = {};
   if (!r.tryPunct(")")) {
     r.expectPunct("{", `in group() options for table "${tableName}"`);
@@ -6210,8 +6366,10 @@ function readGroupScope(r, tableName, line, fail) {
             break;
           }
         }
+      } else if (key.name === "read") {
+        read = readBranchReadColumns(r, `group({ read }) on table "${tableName}"`);
       } else {
-        fail(key.line, `group() on table "${tableName}" has an unknown option "${key.name}". Allowed: column, roles.`);
+        fail(key.line, `group() on table "${tableName}" has an unknown option "${key.name}". Allowed: column, roles, read.`);
       }
       if (!r.tryPunct(",")) {
         r.expectPunct("}", `closing group() options for table "${tableName}"`);
@@ -6221,7 +6379,7 @@ function readGroupScope(r, tableName, line, fail) {
     r.tryPunct(",");
     r.expectPunct(")", "closing group()");
   }
-  const node = { kind: "group", column, roles: { read: [], create: [], update: [], delete: [] } };
+  const node = { kind: "group", column, roles: { read: [], create: [], update: [], delete: [] }, ...read ? { read } : {} };
   declaredGroupRoles.set(node, { line, explicit });
   return node;
 }
@@ -6330,7 +6488,17 @@ function readAppRoleScope(r, tableName, line, fail) {
   let sawRoles = false;
   while (!r.tryPunct("}")) {
     const key = r.readKey(`for an option of ${where}`);
-    if (key.name !== "roles") fail(key.line, `${where} has an unknown option "${key.name}". Allowed: roles.`);
+    if (key.name === "read") {
+      if (node.read) fail(key.line, `${where} declares read twice.`);
+      r.expectPunct(":", `after "read" in ${where}`);
+      node.read = readBranchReadColumns(r, `appRole({ read }) on table "${tableName}"`);
+      if (!r.tryPunct(",")) {
+        r.expectPunct("}", `closing ${where}`);
+        break;
+      }
+      continue;
+    }
+    if (key.name !== "roles") fail(key.line, `${where} has an unknown option "${key.name}". Allowed: roles, read.`);
     if (sawRoles) fail(key.line, `${where} declares roles twice.`);
     sawRoles = true;
     r.expectPunct(":", `after "roles" in ${where}`);
@@ -6622,6 +6790,7 @@ var SCHEMA_CALLABLE = /* @__PURE__ */ new Set([
 ]);
 var SAFE_IDENT = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
 var RESERVED_PREFIXES = ["app_", "sqlite_", "d1_", "__sw_"];
+var ROW_HINT_FIELDS = ["can", "mine"];
 var MAX_TABLES = 100;
 var MAX_COLUMNS = 100;
 var MAX_INDEXES = 40;
@@ -6869,6 +7038,9 @@ function checkDeclaredName(kind, raw, line) {
   if (name.startsWith("_") || RESERVED_PREFIXES.some((p) => name.startsWith(p))) {
     throw new SchemaTsError(`line ${line}: ${kind} name "${raw}" uses a reserved platform prefix and cannot be declared: names starting with "app_" or "_" belong to the platform.`);
   }
+  if (kind === "Column" && ROW_HINT_FIELDS.includes(name)) {
+    throw new SchemaTsError(`line ${line}: column name "${raw}" is reserved for row hints: a read with { can: true } returns can and mine on every row, so a column cannot take either name.`);
+  }
   return name;
 }
 function readColumn(r, tableName, rawName, line) {
@@ -7058,6 +7230,7 @@ function readMemberScope(r, tableName, scopeLine) {
   let memberUser = null;
   let memberGroup = null;
   let operations, operationsSeen = false;
+  let read;
   while (!r.tryPunct("}")) {
     const key = r.readKey(`for a member() option of table "${tableName}"`);
     r.expectPunct(":", `after "${key.name}" in member() for table "${tableName}"`);
@@ -7073,9 +7246,12 @@ function readMemberScope(r, tableName, scopeLine) {
       if (operationsSeen) throw new SchemaTsError(`line ${key.line}: member() on table "${tableName}" declares operations more than once.`);
       operationsSeen = true;
       operations = readMemberOperations(r, tableName);
+    } else if (key.name === "read") {
+      if (read) throw new SchemaTsError(`line ${key.line}: member() on table "${tableName}" declares read more than once.`);
+      read = readBranchReadColumns(r, `member({ read }) on table "${tableName}"`);
     } else {
       throw new SchemaTsError(
-        `line ${key.line}: member() on table "${tableName}" has an unknown option "${key.name}". Allowed: group, membership, member_user, member_group, operations.`
+        `line ${key.line}: member() on table "${tableName}" has an unknown option "${key.name}". Allowed: group, membership, member_user, member_group, operations, read.`
       );
     }
     if (!r.tryPunct(",")) {
@@ -7105,7 +7281,7 @@ function readMemberScope(r, tableName, scopeLine) {
       `line ${scopeLine}: member() on table "${tableName}" has a ${group.length}-column group but a ${memberGroup.length}-column member_group. The group key must have the same number of columns on both sides.`
     );
   }
-  const node = { kind: "member", group, membership, memberUser, memberGroup, ...operations !== void 0 ? { operations } : {} };
+  const node = { kind: "member", group, membership, memberUser, memberGroup, ...operations !== void 0 ? { operations } : {}, ...read ? { read } : {} };
   if (operationsSeen) explicitMemberOperations.add(node);
   return node;
 }
@@ -7113,21 +7289,56 @@ var explicitMemberOperations = /* @__PURE__ */ new WeakSet();
 function readPolicyOwner(r, tableName, line) {
   r.expectPunct("(", 'after "owner"');
   let column = DEFAULT_OWNER_COLUMN;
+  let read;
   if (!r.tryPunct(")")) {
-    const opts = r.readLiteralObject(`in owner() inside anyOf() for table "${tableName}"`);
-    for (const [key, { value, line: optionLine }] of opts) {
-      if (key !== "column") {
-        throw new SchemaTsError(`line ${optionLine}: owner() inside anyOf() only allows column. Visitor ownership is not part of policy scope.`);
+    r.expectPunct("{", `in owner() inside anyOf() for table "${tableName}"`);
+    const seen = /* @__PURE__ */ new Set();
+    while (!r.tryPunct("}")) {
+      const key = r.readKey(`for an owner() option inside anyOf() for table "${tableName}"`);
+      if (seen.has(key.name)) throw new SchemaTsError(`line ${key.line}: option "${key.name}" appears twice in owner() inside anyOf() for table "${tableName}".`);
+      seen.add(key.name);
+      r.expectPunct(":", `after "${key.name}" in owner() inside anyOf() for table "${tableName}"`);
+      if (key.name === "column") {
+        const value = r.readLiteral(`for "column" in owner() inside anyOf() for table "${tableName}"`);
+        if (typeof value !== "string" || !SAFE_IDENT.test(value) || value.length > MAX_NAME_LENGTH) {
+          throw new SchemaTsError(`line ${key.line}: owner({ column }) on table "${tableName}" must be a valid column name.`);
+        }
+        column = value.toLowerCase();
+      } else if (key.name === "read") {
+        read = readBranchReadColumns(r, `owner({ read }) on table "${tableName}"`);
+      } else {
+        throw new SchemaTsError(`line ${key.line}: owner() inside anyOf() only allows column and read. Visitor ownership is not part of policy scope.`);
       }
-      if (typeof value !== "string" || !SAFE_IDENT.test(value) || value.length > MAX_NAME_LENGTH) {
-        throw new SchemaTsError(`line ${optionLine}: owner({ column }) on table "${tableName}" must be a valid column name.`);
+      if (!r.tryPunct(",")) {
+        r.expectPunct("}", `closing owner() options inside anyOf() for table "${tableName}"`);
+        break;
       }
-      column = value.toLowerCase();
     }
     r.tryPunct(",");
     r.expectPunct(")", "closing owner()");
   }
-  return { kind: "owner", column };
+  return { kind: "owner", column, ...read ? { read } : {} };
+}
+function readBranchReadColumns(r, ctx) {
+  const open = r.next();
+  if (open.kind !== "punct" || open.value !== "[") throw new SchemaTsError(`line ${open.line}: ${ctx} must be a list of quoted column names, such as ['id', 'subject'].`);
+  const out = [];
+  while (!r.tryPunct("]")) {
+    const t = r.next();
+    if (t.kind !== "string" || !SAFE_IDENT.test(t.value) || t.value.length > MAX_NAME_LENGTH) throw new SchemaTsError(`line ${t.line}: ${ctx} must be a list of quoted column names; values must be literal strings.`);
+    const name = t.value.toLowerCase();
+    if (out.includes(name)) throw new SchemaTsError(`line ${t.line}: ${ctx} lists "${t.value}" twice.`);
+    out.push(name);
+    if (!r.tryPunct(",")) {
+      r.expectPunct("]", `closing ${ctx}`);
+      break;
+    }
+  }
+  if (out.length === 0) throw new SchemaTsError(`line ${open.line}: ${ctx} must name at least one column; leave read out for every column.`);
+  return out;
+}
+function refuseBranchRead(node, line, tableName, where) {
+  if (node.read) throw new SchemaTsError(`line ${line}: read on ${where} of table "${tableName}" is accepted only on the branches of the table's own anyOf(); it names the columns that branch may read.`);
 }
 function readPolicyMember(r, tableName, line) {
   r.expectPunct("(", 'after "member"');
@@ -7162,7 +7373,11 @@ function readAnyOfScope(r, tableName, line) {
   const owner = owners[0];
   const other = firstPolicy.kind === "owner" ? secondPolicy : firstPolicy;
   if (other.kind === "member" && other.ownerGrant && owner.column !== DEFAULT_OWNER_COLUMN) throw new SchemaTsError(`line ${line}: grant() requires owner() with managed user_id.`);
-  return { kind: "policy", policy: { kind: "any_of", policies: [owner, other] } };
+  const otherRead = other;
+  const reads = [owner.read ?? null, otherRead.read ?? null];
+  delete owner.read;
+  delete otherRead.read;
+  return { kind: "policy", policy: { kind: "any_of", policies: [owner, other], ...reads[0] || reads[1] ? { reads } : {} } };
 }
 var ALL_OF_FORMS = "allOf() takes a gate \u2014 member(), group() or appRole() \u2014 and then owner() or anyOf(owner(), ...).";
 var ALL_OF_EXPLICIT = "allOf needs explicit operations";
@@ -7188,6 +7403,9 @@ function readAllOfScope(r, tableName, line) {
   } else throw new SchemaTsError(`line ${whoTok.line}: ${ALL_OF_FORMS}`);
   r.tryPunct(",");
   r.expectPunct(")", "closing allOf()");
+  refuseBranchRead(gate, line, tableName, "the gate of allOf()");
+  refuseBranchRead(who, line, tableName, "who in allOf()");
+  if (who.kind === "any_of" && who.reads) throw new SchemaTsError(`line ${line}: read on a branch of anyOf() inside allOf() on table "${tableName}" is not accepted; per-branch columns belong on the table's own anyOf().`);
   const x = who.kind === "any_of" ? who.policies[1] : null;
   if (x?.kind === "member" && x.ownerGrant) throw new SchemaTsError(`line ${line}: grant() belongs in anyOf(owner(), grant()), not allOf().`);
   for (const node of [gate, ...x ? [x] : []]) {
@@ -7279,13 +7497,17 @@ function readScope(r, tableName) {
   const failAt = (line, message) => {
     throw new SchemaTsError(`line ${line}: ${message}`);
   };
-  if (tok.value === "group") return { kind: "policy", policy: readGroupScope(r, tableName, tok.line, failAt) };
-  if (tok.value === "appRole") return { kind: "policy", policy: readAppRoleScope(r, tableName, tok.line, failAt) };
+  if (tok.value === "group" || tok.value === "appRole") {
+    const policy = tok.value === "group" ? readGroupScope(r, tableName, tok.line, failAt) : readAppRoleScope(r, tableName, tok.line, failAt);
+    refuseBranchRead(policy, tok.line, tableName, `the ${tok.value}() scope`);
+    return { kind: "policy", policy };
+  }
   if (tok.value === "member") {
     r.expectPunct("(", 'after "member"');
     const scope = readMemberScope(r, tableName, tok.line);
     r.tryPunct(",");
     r.expectPunct(")", "closing member()");
+    if (scope.kind === "member") refuseBranchRead(scope, tok.line, tableName, "the member() scope");
     return scope;
   }
   r.expectPunct("(", `after "${tok.value}"`);
@@ -7534,6 +7756,22 @@ function readTable(r, rawName, nameLine) {
       );
     }
     uniques.push(entry.columns);
+  }
+  if (scope.kind === "policy" && scope.policy.kind === "any_of" && scope.policy.reads) {
+    const key = columns.filter((column) => column.helper === "id").length === 1 ? columns.find((column) => column.helper === "id").name : null;
+    const declared = new Set(columns.map((column) => column.name));
+    scope.policy.reads.forEach((list, i) => {
+      if (!list) return;
+      const branch = scope.policy.kind === "any_of" ? scope.policy.policies[i] : null;
+      const label = branch?.kind === "owner" ? "owner()" : branch?.kind === "member" ? branch.ownerGrant ? "grant()" : "member()" : branch?.kind === "group" ? "group()" : "appRole()";
+      for (const column of list) {
+        if (!declared.has(column)) throw new SchemaTsError(`line ${nameLine}: table "${rawName}": ${label} read lists "${column}", which is not one of its declared columns.`);
+      }
+      if (key && !list.includes(key)) throw new SchemaTsError(`line ${nameLine}: table "${rawName}": ${label} read must include the id column "${key}", which every reader needs to page and address rows.`);
+      for (const relation of relations) {
+        if (relation.kind === "belongsTo" && !list.includes(relation.fk)) throw new SchemaTsError(`line ${nameLine}: table "${rawName}": ${label} read must include "${relation.fk}", the key relation "${relation.name}" joins by; a reader without it would get an empty relation.`);
+      }
+    });
   }
   let client;
   if (clientInput) {
@@ -7821,6 +8059,7 @@ function isRuntimeEndpointGlobal(diag, functions) {
 }
 
 // declared-data-vendor-entry.js
+var import_consumer_contract = __toESM(require_consumer_contract());
 function generateFromFiles(files) {
   const authority = clientAuthorityFromSource(files);
   return authority ? (0, import_typed_data.generateDataClient)(authority) : void 0;
@@ -7841,16 +8080,21 @@ function filesDeclarationFromFiles(files) {
 }
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
+  CONSUMER_CONTRACT,
   ENDPOINT_DECLARATION,
   FILES_DECLARATION_FILE,
   RUNTIME_CONTEXT_DECLARATION,
   SCHEMA_DECLARATION,
   checkerContract,
+  consumerContractComponents,
+  consumerContractFingerprint,
+  consumerContractVerdict,
   declaredTablesFromFiles,
   filesDeclarationFromFiles,
   generateFromFiles,
   isRuntimeEndpointGlobal,
   localDeclarationFromFiles,
+  parseConsumerContractHeader,
   referenceCheckDeclarations,
   runtimeDeclarationFromFiles
 });

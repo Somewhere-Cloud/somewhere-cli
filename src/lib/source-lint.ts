@@ -2,6 +2,8 @@ import { createRequire } from 'node:module';
 import { performance } from 'node:perf_hooks';
 import { genericLint, type GenericLintResult } from './generic-lint.js';
 import { collectFiles } from './files.js';
+import { API_BASE_URL } from './client.js';
+import { platformContractVerdict, type ContractVerdict } from './platform-contract.js';
 
 export interface LintFinding {
   rule: string;
@@ -33,13 +35,17 @@ export interface LocalLintResult extends SourceLintSnapshot {
   checked_files: number;
   skipped: Array<{ path: string; reason: string }>;
   generic: GenericLintResult;
+  /** This CLI's consumer contract against the platform's last announced one (tsk_0f3d05b9). */
+  contract: ContractVerdict;
 }
 
 /** Same collector as deploy, same rule source as the platform. No installs,
  * network, generated-file writes or automatic fixes. Optional generic rules
  * run the project's installed linter in a child process. */
-export async function lintProject(directory: string, options: { generic?: boolean } = {}): Promise<LocalLintResult> {
+export async function lintProject(directory: string, options: { generic?: boolean; apiBase?: string } = {}): Promise<LocalLintResult> {
   const started = performance.now();
+  // Lint rules come from the vendored platform bundle: a CLI known to be out of date is not ok.
+  const contract = platformContractVerdict(options.apiBase ?? API_BASE_URL);
   // Lint reads text only; skipping binary reads keeps asset-heavy projects fast.
   const collected = collectFiles(directory, { readBinary: false });
   const require = createRequire(import.meta.url);
@@ -48,10 +54,11 @@ export async function lintProject(directory: string, options: { generic?: boolea
   const generic: GenericLintResult = options.generic ? genericLint(directory) : { status: 'not-requested', findings: [] };
   return {
     ...report,
-    ok: collected.skipped.length === 0 && !['failed', 'unavailable'].includes(generic.status),
+    ok: collected.skipped.length === 0 && !['failed', 'unavailable'].includes(generic.status) && contract.compatible !== false,
     duration_ms: Math.round((performance.now() - started) * 1000) / 1000,
     checked_files: Object.keys(collected.files).length + Object.keys(collected.functions).length,
     skipped: collected.skipped,
     generic,
+    contract,
   };
 }

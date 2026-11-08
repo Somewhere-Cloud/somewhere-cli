@@ -31,6 +31,7 @@ export { ENDPOINT_DECLARATION, RUNTIME_CONTEXT_DECLARATION } from './worker/cont
 export { CLIENT_FILE as FILES_DECLARATION_FILE } from './worker/containers/compile/typed-files.cjs';
 export * as checkerContract from './worker/containers/compile/checker-contract.cjs';
 export { referenceCheckDeclarations, isRuntimeEndpointGlobal } from './worker/src/utils/reference-check-inputs.ts';
+export { CONSUMER_CONTRACT, consumerContractComponents, consumerContractFingerprint, consumerContractVerdict, parseConsumerContractHeader } from './worker/containers/compile/consumer-contract.cjs';
 export function generateFromFiles(files) {
   const authority = clientAuthorityFromSource(files);
   return authority ? generateDataClient(authority) : undefined;

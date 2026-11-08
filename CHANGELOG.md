@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.38.21
+
+### Added
+
+- `somewhere typecheck` and `somewhere lint` say when this CLI is out of date.
+  Every platform response announces the consumer contract it implements
+  (`X-SW-Consumer-Contract`); the CLI keeps the last one per API origin. A CLI
+  whose contract differs from the platform's fails typecheck and lint, with a
+  message saying to run `somewhere update`. When nothing has been recorded yet,
+  they say the platform's contract is unknown rather than claiming a match.
+  Only the announced version and digest are stored; nothing is downloaded or
+  run.
+
+### Changed
+
+- `somewhere typecheck` and `somewhere lint` use the platform's current
+  schema parser, `somewhere/db` types and lint rules (tech 8b620e0d,
+  consumer contract 1). The documented "is this row mine" hint
+  (`{ can: true }`) now typechecks.
+
 ## 0.38.20
 
 ### Added

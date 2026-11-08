@@ -112,11 +112,12 @@ var require_declared_data_contract = __commonJS({
         const normalizedOperations = o?.length === 4 ? void 0 : o;
         return { k: "m", m: { g: [...g], m, u, mg: [...mg], ...normalizedOperations !== void 0 ? { o: [...normalizedOperations] } : {}, ...og ? { og: true } : {} } };
       }
-      if (value.k === "a" && keys === "k,p" && Array.isArray(value.p) && value.p.length === 2) {
+      if (value.k === "a" && (keys === "k,p" || keys === "k,p,reads" && edges === 0) && Array.isArray(value.p) && value.p.length === 2) {
         const left = policy(value.p[0], label), right = policy(value.p[1], label);
         if (left.k !== "o" || !["m", "g", "r"].includes(right.k)) fail(label);
         if (right.k === "m" && right.m.og && left.c !== "user_id") fail(label);
-        return { k: "a", p: [left, right] };
+        const reads = value.reads === void 0 ? void 0 : branchReads(value.reads, label);
+        return { k: "a", p: [left, right], ...reads ? { reads } : {} };
       }
       if (value.k === "n" && keys === "g,k,w") {
         const gate = policy(value.g, label), who = policy(value.w, label);
@@ -143,6 +144,23 @@ var require_declared_data_contract = __commonJS({
         return { k: "p", v: value.v, t: value.t, pk: value.pk, p: inherited };
       }
       fail(label);
+    }
+    function branchReads(value, label) {
+      if (!Array.isArray(value) || value.length !== 2 || value[0] === null && value[1] === null) fail(label + ".reads");
+      return value.map((list) => {
+        if (list === null) return null;
+        if (!Array.isArray(list) || !list.length || list.some((name) => typeof name !== "string" || !identifier.test(name)) || new Set(list).size !== list.length) fail(label + ".reads");
+        return [...list].sort();
+      });
+    }
+    function hiddenByBranch(table) {
+      const reads = table.policy && table.policy.k === "a" ? table.policy.reads : void 0;
+      if (!reads) return /* @__PURE__ */ new Set();
+      const hidden = /* @__PURE__ */ new Set();
+      for (const list of reads) if (list) {
+        for (const column of table.columns) if (!list.includes(column.n)) hidden.add(column.n);
+      }
+      return hidden;
     }
     function policyRoles(value, label) {
       record(value, label + ".roles");
@@ -381,10 +399,10 @@ var require_declared_data_contract = __commonJS({
       const type = { integer: "number", bigint: "string", number: "number", text: "string", timestamp: "string", boolean: "boolean", json: "Json", blob: "number[]" }[column.t];
       return column.nul ? `${type} | null` : type;
     }
-    function shape(columns, names, mode, required = /* @__PURE__ */ new Set()) {
+    function shape(columns, names, mode, required = /* @__PURE__ */ new Set(), hidden = /* @__PURE__ */ new Set()) {
       const values = names.map((name) => {
         const column = columns.find((candidate) => candidate.n === name);
-        const optional = mode === "update" || mode === "create" && !required.has(name) && (column.d || column.nul);
+        const optional = mode === "update" || mode === "create" && !required.has(name) && (column.d || column.nul) || mode === "read" && hidden.has(name);
         return `${JSON.stringify(name)}${optional ? "?" : ""}: ${columnType(column)}`;
       });
       return values.length ? `{ ${values.join("; ")} }` : "Record<string, never>";
@@ -548,13 +566,14 @@ async function intake(table, reference, values, extra) {
   export interface IntakeResult { readonly accepted: true; readonly idempotency: InsertReceipt; readonly request: InsertRequest<IntakeResult> }
 `;
     var ROW_CAN_DECLARATION = "  /** Row capability hint (list/get with can: true): whether the signed-in caller may update or delete this row now, by the same rule the write enforces. A hint for UI; the write is still the final answer. */\n  export interface RowCan { readonly update: boolean; readonly delete: boolean; }\n";
+    var ROW_HINTS_DECLARATION = ROW_CAN_DECLARATION + '  /** Row hints (list/get with can: true): can says what the signed-in caller may change; mine is true when this caller created the row (the owner or author the platform recorded). Show edit and delete controls, a "you" label or a "mine" filter from these; the identity column itself is never sent. */\n  export interface RowHints { readonly can: RowCan; readonly mine: boolean; }\n';
     var INSERT_CLIENT_DECLARATIONS = `
   export interface InsertReceipt { readonly replayed: boolean; readonly created_at: number; readonly result_until: number; readonly refuse_until: number; }
   export interface InsertRequest<T> { readonly key: string; readonly createdAt: number; retry(): Promise<T>; }
   export type InsertResult<T> = T & { readonly idempotency: InsertReceipt; readonly request: InsertRequest<InsertResult<T>> };
 `;
-    var CLIENT_GENERATION = 3;
-    var ACCEPTED_CLIENT_GENERATIONS = Object.freeze([3, 2, 1]);
+    var CLIENT_GENERATION = 5;
+    var ACCEPTED_CLIENT_GENERATIONS = Object.freeze([5, 4, 3, 2, 1]);
     var PUBLIC_BOOTSTRAP_CLIENT_RUNTIME = 'const swCanon=(v,d)=>{if(v===null||typeof v==="string"||typeof v==="boolean"||(typeof v==="number"&&Number.isFinite(v)))return JSON.stringify(v);if(d===0||typeof v!=="object"||Array.isArray(v))return null;const parts=[];for(const k of Object.keys(v).sort()){if(v[k]===undefined)continue;const e=swCanon(v[k],d-1);if(e===null)return null;parts.push(JSON.stringify(k)+":"+e)}return"{"+parts.join(",")+"}"};let swBoot;const swBootTake=body=>{try{if(swBoot===undefined){swBoot=null;const el=typeof document!=="undefined"&&document.getElementById?document.getElementById("__sw_public_data"):null;if(el&&el.type==="application/json"&&(el.parentNode===document.head||el.parentNode===document.body)){const p=JSON.parse(el.textContent||"null");if(p&&p.v===1&&p.contract===contract&&Number.isSafeInteger(p.validated_at)&&p.validated_at<=Date.now()&&Number.isInteger(p.max_age)&&p.max_age>0&&p.max_age<=120&&p.entries&&typeof p.entries==="object"&&!Array.isArray(p.entries)&&typeof p.path==="string"&&typeof location!=="undefined")swBoot={until:p.validated_at+p.max_age*1000,path:p.path,entries:new Map(Object.entries(p.entries))}}if(el&&el.parentNode)el.parentNode.removeChild(el)}if(!swBoot)return undefined;if(Date.now()>=swBoot.until||location.pathname!==swBoot.path){swBoot=null;return undefined}const key=swCanon(body,2);if(key===null||!swBoot.entries.has(key))return undefined;const value=swBoot.entries.get(key);swBoot.entries.delete(key);return value}catch(error){swBoot=null;return undefined}};';
     var PUBLIC_BOOTSTRAP_INVOKE = 'if(operation==="list"||operation==="get"||operation==="aggregate"||operation==="relation_list"){const booted=swBootTake({...input,contract,table,operation});if(booted!==undefined)return booted}else swBoot=null;';
     function describeDataClient(authority, contract_digest, insertReceiptCapability, localTypes = false, generation = CLIENT_GENERATION) {
@@ -574,17 +593,19 @@ async function intake(table, reference, values, extra) {
       for (const table of tables) {
         const { name, columns, client, primaryKey } = table;
         const readable = client.read === true ? columns.filter((column) => column.n !== table.author).map((column) => column.n) : client.read || [];
-        const row = shape(columns, readable, "read");
+        const hidden = generation >= 5 ? hiddenByBranch(table) : /* @__PURE__ */ new Set();
+        const row = shape(columns, readable, "read", /* @__PURE__ */ new Set(), hidden);
         const id = columnType(columns.find((column) => column.n === primaryKey));
         const operations = [];
         const methods = [];
         if (client.read !== false) {
-          const equality = readable.filter((field) => !["json", "blob"].includes(columns.find((column) => column.n === field).t));
+          const equality = readable.filter((field) => !["json", "blob"].includes(columns.find((column) => column.n === field).t) && !hidden.has(field));
           if (generation >= 2) {
             const listOptions = `limit?: L & (number extends L ? unknown : [L] extends [PageSize] ? unknown : never); after?: ${id}; where?: ${shape(columns, equality, "update")}`;
-            operations.push(`list<const L extends number = number>(options: { ${listOptions}; can: true }): Promise<{ data: (${row} & { can: RowCan })[]; next: ${id} | null; has_more: boolean }>`);
+            const hinted = generation >= 4 ? "RowHints" : "{ can: RowCan }";
+            operations.push(`list<const L extends number = number>(options: { ${listOptions}; can: true }): Promise<{ data: (${row} & ${hinted})[]; next: ${id} | null; has_more: boolean }>`);
             operations.push(`list<const L extends number = number>(options?: { ${listOptions}; can?: false }): Promise<{ data: ${row}[]; next: ${id} | null; has_more: boolean }>`);
-            operations.push(`get(id: ${id}, options: { can: true }): Promise<{ data: (${row} & { can: RowCan }) | null }>`);
+            operations.push(`get(id: ${id}, options: { can: true }): Promise<{ data: (${row} & ${hinted}) | null }>`);
             operations.push(`get(id: ${id}, options?: { can?: false }): Promise<{ data: ${row} | null }>`);
           } else {
             operations.push(`list<const L extends number = number>(options?: { limit?: L & (number extends L ? unknown : [L] extends [PageSize] ? unknown : never); after?: ${id}; where?: ${shape(columns, equality, "update")} }): Promise<{ data: ${row}[]; next: ${id} | null; has_more: boolean }>`);
@@ -721,7 +742,7 @@ async function intake(table, reference, values, extra) {
       const declaration = `declare module ${JSON.stringify("somewhere:data")} {
   type PageSize = ${Array.from({ length: 100 }, (_, i) => i + 1).join(" | ")};
   export type Json = string | number | boolean | null | Json[] | { [key: string]: Json };
-${generation >= 2 ? ROW_CAN_DECLARATION : ""}${receiptCapable ? localTypes ? INSERT_CLIENT_DECLARATIONS.replace("readonly idempotency:", "readonly idempotency?:").replace("readonly request:", "readonly request?:") : INSERT_CLIENT_DECLARATIONS : ""}${anonymousTables.length ? ANONYMOUS_CLIENT_DECLARATIONS : ""}${intakeTables.length ? INTAKE_CLIENT_DECLARATIONS : ""}  export class DataError extends Error { readonly status: number; readonly code: string | null;${receiptCapable ? " readonly request?: InsertRequest<unknown>; readonly outcome?: string; readonly write_committed?: boolean; readonly retry?: false; readonly retryable?: false; readonly idempotency?: InsertReceipt;" : ""} constructor(status: number, payload: unknown); }
+${generation >= 4 ? ROW_HINTS_DECLARATION : generation >= 2 ? ROW_CAN_DECLARATION : ""}${receiptCapable ? localTypes ? INSERT_CLIENT_DECLARATIONS.replace("readonly idempotency:", "readonly idempotency?:").replace("readonly request:", "readonly request?:") : INSERT_CLIENT_DECLARATIONS : ""}${anonymousTables.length ? ANONYMOUS_CLIENT_DECLARATIONS : ""}${intakeTables.length ? INTAKE_CLIENT_DECLARATIONS : ""}  export class DataError extends Error { readonly status: number; readonly code: string | null;${receiptCapable ? " readonly request?: InsertRequest<unknown>; readonly outcome?: string; readonly write_committed?: boolean; readonly retry?: false; readonly retryable?: false; readonly idempotency?: InsertReceipt;" : ""} constructor(status: number, payload: unknown); }
   export const data: { ${declarations.join(";\n    ")} };
 }
 `;
@@ -1278,104 +1299,6 @@ var SENSITIVE_PARAMS = [
   "password"
 ];
 var SENSITIVE_PARAM_NAMES = new Set(SENSITIVE_PARAMS);
-
-// shared/draft-execution-authority.ts
-var DRAFT_PLATFORM_SERVICE_BINDING = "PLATFORM_API";
-
-// worker/src/runtime/draft-auth-capability.ts
-var DRAFT_AUTH_CAPABILITY_JS = `
-const __sw_authOwnDescriptor = Object.getOwnPropertyDescriptor;
-const __sw_authBearerMatches = Function.prototype.call.bind(RegExp.prototype.test, /^Bearer [A-Za-z0-9_-]+[.][A-Za-z0-9_-]+[.][A-Za-z0-9_-]+$/);
-function __sw_authOwnValue(object, key) {
-  if (!object || typeof object !== 'object') return undefined;
-  const descriptor = __sw_authOwnDescriptor(object, key);
-  return descriptor && descriptor.value;
-}
-function __sw_draftAuthRead(input, init, projectId) {
-  if (input !== 'https://api.somewhere.tech/v1/auth/me') return null;
-  const method = __sw_authOwnValue(init, 'method');
-  const headers = __sw_authOwnValue(init, 'headers');
-  const bearer = __sw_authOwnValue(headers, 'Authorization');
-  if ((method !== undefined && method !== 'GET') || __sw_authOwnValue(init, 'body') != null
-      || typeof bearer !== 'string' || !__sw_authBearerMatches(bearer)) {
-    const error = new Error('Draft identity verification requires an existing app access token.');
-    error.code = 'DRAFT_PLATFORM_CAPABILITY_DENIED';
-    throw error;
-  }
-  return {
-    __proto__: null, method: 'GET', redirect: 'manual',
-    headers: { __proto__: null, Authorization: bearer, 'X-Sw-Executing-Project': projectId, 'X-No-Auto-Refresh': '1' },
-  };
-}
-`;
-
-// worker/src/runtime/draft-platform-transport.ts
-var DRAFT_PLATFORM_TRANSPORT_JS = `// Exact draft database/files/log calls use a separate service binding that
-// native disallow_importable_env keeps outside customer module authority.
-let __sw_platformService = null;
-let __sw_draftPlatformProjectId = null;
-function __sw_bindPlatformService(env) {
-  const binding = env && env.${DRAFT_PLATFORM_SERVICE_BINDING};
-  if (!binding || typeof binding.fetch !== 'function') {
-    throw new Error('Draft platform transport is unavailable.');
-  }
-  if (__sw_platformService && __sw_platformService !== binding) {
-    throw new Error('Draft platform transport changed within one function isolate.');
-  }
-  const projectId = env && env.PROJECT_ID;
-  if (typeof projectId !== 'string' || !projectId) {
-    throw new Error('Draft platform transport has no project identity.');
-  }
-  if (__sw_draftPlatformProjectId && __sw_draftPlatformProjectId !== projectId) {
-    throw new Error('Draft platform project identity changed within one function isolate.');
-  }
-  __sw_platformService = binding;
-  __sw_draftPlatformProjectId = projectId;
-}
-${DRAFT_AUTH_CAPABILITY_JS}
-function __sw_platformFetch(input, init) {
-  if (!__sw_platformService || !__sw_draftPlatformProjectId) {
-    throw new Error('Draft platform transport is unavailable.');
-  }
-  const authRead = __sw_draftAuthRead(input, init, __sw_draftPlatformProjectId);
-  if (authRead) return __sw_platformService.fetch('https://api.somewhere.tech/v1/auth/me', authRead);
-  let url;
-  let method;
-  try {
-    const request = input instanceof Request ? input : null;
-    url = new URL(request ? request.url : String(input));
-    method = String((init && init.method) || (request && request.method) || 'GET').toUpperCase();
-  } catch (_) {
-    const error = new Error('Draft platform capability denied an unreadable request.');
-    error.code = 'DRAFT_PLATFORM_CAPABILITY_DENIED';
-    throw error;
-  }
-  const fsRoot = '/v1/fs/' + encodeURIComponent(__sw_draftPlatformProjectId);
-  const allowed =
-    ((url.pathname === '/v1/db/query' || url.pathname === '/v1/db/batch' || url.pathname === '/v1/db/raw-read' || url.pathname === '/v1/fs/upload-url') && method === 'POST') ||
-    // Split storage: the structured managed endpoints. Each one requires this
-    // exact draft identity and the artifact's signed release, and resolves the
-    // ready clone of that draft and candidate itself (readManagedExecution).
-    ((url.pathname === '/v1/db/managed/user-memory' || url.pathname === '/v1/db/managed/user' || url.pathname === '/v1/db/managed/server' || url.pathname === '/v1/db/managed/public'
-      || url.pathname === '/v1/db/managed/visitor' || url.pathname === '/v1/db/managed/visitor-session') && method === 'POST') ||
-    (url.pathname === '/v1/logs' && (method === 'GET' || method === 'POST')) ||
-    (url.pathname === '/v1/traces' && method === 'POST') ||
-    // A preview job's signed delivery: verified only for a job bound to this draft.
-    (url.pathname === '/v1/jobs/verify-invocation' && method === 'POST') ||
-    ((url.pathname === fsRoot || url.pathname.startsWith(fsRoot + '/')) &&
-      (method === 'GET' || method === 'PUT' || method === 'POST' || method === 'DELETE'));
-  if (!allowed) {
-    const error = new Error('Draft platform capability denied ' + method + ' ' + url.pathname + '.');
-    error.code = 'DRAFT_PLATFORM_CAPABILITY_DENIED';
-    throw error;
-  }
-  return __sw_platformService.fetch(input, init);
-}
-function __sw_hasExactDraftIdentity(request) {
-  const draftId = request.headers.get('X-Sw-Draft-Id');
-  const candidate = request.headers.get('X-Sw-Draft-Candidate');
-  return !!(draftId && candidate);
-}`;
 
 // worker/src/utils/function-bundle-transport.ts
 var NATIVE_RUNTIME_SERVICE_BINDING = "RUNTIME_PLATFORM_API";
@@ -2059,6 +1982,10 @@ async function __sw_hotConfigPull(env) {
 }
 `;
 
+// worker/src/utils/app-access-lifetime.ts
+var APP_ACCESS_MAX_SECONDS = 60;
+var APP_ACCESS_SELECTION_MARGIN_SECONDS = 5;
+
 // worker/src/runtime/access-token.ts
 var ACCESS_TOKEN_JS = `const __sw_accessNow = Date.now.bind(Date);
 const __sw_accessInteger = Number.isSafeInteger.bind(Number);
@@ -2079,7 +2006,7 @@ async function __sw_verifyAccessToken(binding, token, audience) {
       || typeof p.email !== 'string' || typeof p.sid !== 'string' || !p.sid || p.session_binding_version !== 1
       || !__sw_accessInteger(p.tv) || (p.role !== 'user' && p.role !== 'admin')
       || !__sw_accessInteger(p.iat) || !__sw_accessInteger(p.exp) || p.iat * 1000 > now || p.exp * 1000 <= now
-      || p.exp <= p.iat || p.exp - p.iat > 60
+      || p.exp <= p.iat || p.exp - p.iat > ${APP_ACCESS_MAX_SECONDS}
       || !p.user || Array.isArray(p.user) || p.user.id !== p.sub || p.user.email !== p.email || p.user.role !== p.role
       || 'impersonating' in p || 'impersonator_id' in p || 'impersonated_by' in p || 'registration_id' in p) return null;
     return p;
@@ -2116,7 +2043,7 @@ var CONTEXT_HEAD_JS = `// \u2500\u2500 Primordial freeze (tsk_327fe8a4, opiniona
 // JSON.parse = ... or Array.prototype.push = ... is a no-op in sloppy mode and
 // throws in strict; either way the platform guard is untouched. Freezing the
 // prototypes also blocks Object.prototype pollution. Monkey-patching core
-// built-ins is a deprecated, rare practice (a handful of old polyfill packages);
+// built-ins is a rare practice (a handful of old polyfill packages);
 // modern code never needs it and it is explicitly UNSUPPORTED. We freeze only
 // what the guard depends on (Reflect/Date are deliberately NOT frozen \u2014
 // reflect-metadata / decorator libraries add to Reflect, and the guard no longer
@@ -2618,7 +2545,7 @@ function buildPlatformContext(env, request, runtimeFetch = fetch, outboundFetch 
   }
   const isDraftExecution = draftId !== null;
   const projectEnv = isDraftExecution ? 'draft' : (env.PROJECT_ENV || 'dev');
-  const platformDomain = env.PLATFORM_DOMAIN || 'somewhere.tech';
+  const platformDomain = env.PLATFORM_DOMAIN || 'somewhere.cloud';
   const tenantDomain = env.TENANT_DOMAIN || platformDomain;
   const platformBase = env.PLATFORM_API_BASE || ('https://api.' + platformDomain);
   const apiKey = env.PROJECT_API_KEY;
@@ -2658,8 +2585,7 @@ function buildPlatformContext(env, request, runtimeFetch = fetch, outboundFetch 
   // WHERE A STATEMENT ACTUALLY WENT, said once per request (tsk_5037f8f1).
   // The per-statement number is the same 30-40 ms whether one statement runs
   // or thirty, so the question is never "what did we add" but "how far away is
-  // the database and which transport reached it" \u2014 and that was previously
-  // unanswerable from a response. sw_db_via names the transport (the binding,
+  // the database and which transport reached it". sw_db_via names the transport (the binding,
   // or the platform data plane), sw_db_edge the colo the function ran in, and
   // sw_db_home where the database answered from. Same-value edge and home mean
   // the residue is ours; different values mean it is distance, and no amount
@@ -4343,7 +4269,7 @@ function createBoundedReplyReader(maxBytes) {
       } catch {
         return { ok: false, reason: "transport" };
       } finally {
-        clearTimeout(timer);
+        if (timer !== void 0) clearTimeout(timer);
       }
     }
   };
@@ -5360,6 +5286,7 @@ function renderPolicySql(request) {
   const qualifier = r.qualifier;
   const proposed = r.proposed;
   const params = [];
+  if (r.branch !== void 0 && (!policy || policy.k !== "a")) throw new Error("policy-sql: a branch admission needs an anyOf policy");
   if (policy && policy.k === "o") {
     if (proposed) return { sql: "1", params: [] };
     params.push(r.principal);
@@ -5436,7 +5363,10 @@ function renderPolicySql(request) {
       for (let i = 0; i < team.params.length; i++) gated.push(team.params[i]);
       left = { sql: "(" + left.sql + " AND " + team.sql + ")", params: gated };
     }
+    if (r.branch === 0) return left;
     const right = renderPolicySql({ render: "predicate", principal: r.principal, emailDomain: r.emailDomain, table: r.table, physical: r.physical, policy: policy.p[1], operation: r.operation, qualifier, proposed, edge: r.edge });
+    if (r.branch === 1) return right;
+    if (r.branch !== void 0) throw new Error("policy-sql: an anyOf branch is 0 or 1");
     for (let i = 0; i < left.params.length; i++) params.push(left.params[i]);
     for (let i = 0; i < right.params.length; i++) params.push(right.params[i]);
     return { sql: "(" + left.sql + " OR " + right.sql + ")", params };
@@ -5801,8 +5731,10 @@ function renderQuerySql(ir, principalId, returning, context) {
         params.push(rendered.params[i]);
       return rendered.sql;
     },
-    policyPredicate(policy, qualifier, proposedValues, operation) {
-      return helpers.policySql(context.renderPolicy({ render: "predicate", principal: principalId, table: ir.table.name, physical: context.physicalMap(), policy, operation: operation || null, qualifier: qualifier || null, proposed: proposedValues || null }));
+    policyPredicate(policy, qualifier, proposedValues, operation, branch) {
+      const request = { render: "predicate", principal: principalId, table: ir.table.name, physical: context.physicalMap(), policy, operation: operation || null, qualifier: qualifier || null, proposed: proposedValues || null };
+      if (branch !== void 0) request.branch = branch;
+      return helpers.policySql(context.renderPolicy(request));
     },
     memberScopePredicate(member, qualifier, operation) {
       return helpers.policySql(context.renderPolicy({ render: "member", principal: principalId, table: ir.table.name, physical: context.physicalMap(), member, operation: operation || null, qualifier: qualifier || null }));
@@ -5926,7 +5858,7 @@ function renderQuerySql(ir, principalId, returning, context) {
       if (scope.mode === "member")
         return helpers.memberScopePredicate(scope.member, null, op);
       if (scope.mode === "policy")
-        return helpers.policyPredicate(scope.policy, null, null, op);
+        return helpers.policyPredicate(scope.policy, null, null, op, scope.branch);
       if (scope.mode === "link")
         return helpers.linkGuard(scope.link, tableSql + "." + q(scope.link.column), null);
       return null;
@@ -6011,8 +5943,11 @@ function renderQuerySql(ir, principalId, returning, context) {
   let sql;
   if (ir.kind === "select") {
     const cols = ir.columns && ir.columns.length ? context.map(ir.columns, q).join(", ") : "*";
-    const canCols = ir.can ? ", " + helpers.canHint(ir.can.update, "update") + " AS " + q("__sw_can_update") + ", " + helpers.canHint(ir.can.delete, "delete") + " AS " + q("__sw_can_delete") : "";
-    sql = "SELECT " + cols + canCols + " FROM " + tableSql + helpers.whereSql();
+    const canCols = ir.can ? ", " + helpers.canHint(ir.can.update, "update") + " AS " + q("__sw_can_update") + ", " + helpers.canHint(ir.can.delete, "delete") + " AS " + q("__sw_can_delete") + ", " + helpers.canHint(ir.can.mine, "read") + " AS " + q("__sw_mine") : "";
+    let branchCols = "";
+    for (let i = 0; i < (ir.branchReads || []).length; i++)
+      branchCols += ", " + helpers.canHint(ir.branchReads[i], "read") + " AS " + q("__sw_branch_" + i);
+    sql = "SELECT " + cols + canCols + branchCols + " FROM " + tableSql + helpers.whereSql();
     if (ir.order && ir.order.length) {
       sql += " ORDER BY " + context.map(ir.order, function(o) {
         return q(o.column) + " " + (o.dir === "desc" ? "DESC" : "ASC");
@@ -6371,7 +6306,7 @@ var DB_GENERATED_OWNER_READ_JS = `      function __sw_registerGeneratedOwnerRead
           if (!payload || payload.type !== 'app_user' || payload.project_id !== projectId
             || typeof payload.sub !== 'string' || !payload.sub || payload.sub.length > 200
             || typeof payload.exp !== 'number' || !__sw_generatedOwnerFinite(payload.exp)
-            || payload.exp - __sw_generatedOwnerNow() / 1000 < 120) return null;
+            || payload.exp - __sw_generatedOwnerNow() / 1000 < ${APP_ACCESS_SELECTION_MARGIN_SECONDS}) return null;
           // A private header selector, never a principal/auth memo or live brand.
           const selected = { token: token, selector: payload.sub };
           return function (options) { return __sw_structFrom(table, options, undefined, selected); };
@@ -6446,7 +6381,11 @@ var DB_PUBLIC_READ_JS = DB_GENERATED_OWNER_READ_JS + `      function __sw_shared
           }
           if (canPrincipal === undefined) refuse();
           const sameCaller = function (resolved) { return resolved && resolved.principalId === canPrincipal ? resolved.scope : null; };
-          can = { update: sameCaller(forUpdate), delete: sameCaller(forDelete) };
+          // mine (tsk_311011c1): the column that records who created a row \u2014 the owner column, or a
+          // shared table's author column \u2014 when the table has one. The hint renders it as a boolean.
+          const creatorShape = __sw_structManagedShape(table);
+          const creatorColumn = __sw_structResolveOwnerColumn(table) || (creatorShape && creatorShape.author) || null;
+          can = { update: sameCaller(forUpdate), delete: sameCaller(forDelete), mine: creatorColumn ? { mode: 'user', ownerColumn: creatorColumn } : null };
         }
         // Composed joins (tsk_1186c9a): resolve declared relations. Both absent \u2192
         // ir.include / ir.relationWhere stay unset and the IR (and its shape
@@ -6478,16 +6417,18 @@ var DB_PUBLIC_READ_JS = DB_GENERATED_OWNER_READ_JS + `      function __sw_shared
         return result;
       }
 
-      // The renderer returns the hints as two internal 0/1 columns; each row instead carries
-      // can: { update, delete } and the internal columns never reach the caller.
+      // The renderer returns the hints as internal 0/1 columns; each row instead carries
+      // can: { update, delete } and mine, and the internal columns never reach the caller.
       function __sw_structAttachCan(result) {
         const rows = result && __sw_arrayIsArray(result.data) ? result.data : [];
         for (let i = 0; i < rows.length; i++) {
           const row = rows[i];
           if (!row || typeof row !== 'object') continue;
           row.can = { update: row.__sw_can_update === 1 || row.__sw_can_update === true, delete: row.__sw_can_delete === 1 || row.__sw_can_delete === true };
+          row.mine = row.__sw_mine === 1 || row.__sw_mine === true;
           delete row.__sw_can_update;
           delete row.__sw_can_delete;
+          delete row.__sw_mine;
         }
       }
 
@@ -7006,11 +6947,28 @@ var DB_POLICY_HELPERS_JS = `${ROLE_DOMAIN_MAP_JS}
         }
         return true;
       }
+      // Per-branch read lists (tsk_1ac01f6a): [owner list | null, other list | null], at the table's
+      // own anyOf only; each list is a non-empty sorted set of lowercase column identifiers.
+      function __sw_structPolicyReads(value) {
+        if (!__sw_arrayIsArray(value) || value.length !== 2 || (value[0] === null && value[1] === null)) return false;
+        for (let i = 0; i < 2; i++) {
+          const list = value[i];
+          if (list === null) continue;
+          if (!__sw_arrayIsArray(list) || list.length === 0) return false;
+          for (let j = 0; j < list.length; j++) {
+            if (typeof list[j] !== 'string' || !__sw_reMatch(/^[a-z_][a-z0-9_]*$/, list[j]) || (j > 0 && !(list[j - 1] < list[j]))) return false;
+          }
+        }
+        return true;
+      }
       // anyOf(owner, member | group | app role); a group or app-role branch is
-      // a pinned leaf, exactly as at the root.
-      function __sw_structPolicyAny(value) {
-        if (!value || typeof value !== 'object' || __sw_keys(value).slice().sort().join(',') !== 'k,p' || value.k !== 'a'
-          || !__sw_arrayIsArray(value.p) || value.p.length !== 2 || !__sw_structPolicyLeaf(value.p[0]) || value.p[0].k !== 'o') return false;
+      // a pinned leaf, exactly as at the root. root: the table's own rule may
+      // carry per-branch read lists (reads); under allOf or a parent it may not.
+      function __sw_structPolicyAny(value, root) {
+        if (!value || typeof value !== 'object' || value.k !== 'a') return false;
+        const anyKeys = __sw_keys(value).slice().sort().join(',');
+        if (anyKeys !== 'k,p' && !(root === true && anyKeys === 'k,p,reads' && __sw_structPolicyReads(value.reads))) return false;
+        if (!__sw_arrayIsArray(value.p) || value.p.length !== 2 || !__sw_structPolicyLeaf(value.p[0]) || value.p[0].k !== 'o') return false;
         const second = value.p[1];
         if (second && second.k === 'm' && second.m && second.m.og && value.p[0].c !== 'user_id') return false;
         return (__sw_structPolicyLeaf(second) && second.k === 'm') || __sw_structPolicyGroup(second) || __sw_structPolicyRole(second);
@@ -7041,7 +6999,7 @@ var DB_POLICY_HELPERS_JS = `${ROLE_DOMAIN_MAP_JS}
       }
       // A parent chain: at most four edges, each ending in a leaf, anyOf or allOf.
       function __sw_structPolicyValid(value, edges) {
-        if (!edges && (__sw_structPolicyAny(value) || __sw_structPolicyAllOf(value) || __sw_structPolicyGroup(value) || __sw_structPolicyRole(value))) return true;
+        if (!edges && (__sw_structPolicyAny(value, true) || __sw_structPolicyAllOf(value) || __sw_structPolicyGroup(value) || __sw_structPolicyRole(value))) return true;
         const above = edges || 0;
         return value && typeof value === 'object' && __sw_keys(value).slice().sort().join(',') === 'k,p,pk,t,v' && value.k === 'p'
           && above + 1 <= 4
@@ -7752,7 +7710,7 @@ var DB_JS = `    db: (function () {
       // silently running the SQL as written \u2014 is what keeps every existing
       // scoped call from becoming an unscoped full-table read.
       function __sw_throwRawSqlCannotBePlatformScoped(api) {
-        const err = new Error(api + ' no longer applies platform scoping to raw SQL. ' +
+        const err = new Error(api + ' does not apply platform scoping to raw SQL. ' +
           'Platform-proven scoping exists only on structured queries the platform composes. ' +
           'Use sw.db.from/count/insert/update/remove/tx for declared operations. ' +
           'For intentional server-authority SQL, authorize the caller first, then use sw.db.server.query/batch; your function is responsible for that authorization.');
@@ -9458,7 +9416,7 @@ ${DB_AGGREGATE_JS}
         // Structured query builder (tsk_5b91e0e4). The platform composes,
         // renders, and scopes these \u2014 see the __sw_struct* helpers above.
         // sw.db.delete is a trivial alias of sw.db.remove (both call the same
-        // composer). The retired scope argument fails loudly, never silently.
+        // composer). A scope argument fails loudly, never silently.
         from(table, opts, legacyScope) { __sw_structNoScopeArg(legacyScope, 'from'); return __sw_structFrom(table, opts); },
         live(name, read) {
           if (arguments.length !== 2) __sw_structThrow('sw.db.live takes exactly (name, read).');
@@ -9469,9 +9427,9 @@ ${DB_AGGREGATE_JS}
         // group-by over the rows the caller is allowed to read.
         aggregate(table, opts, legacyScope) { __sw_structNoScopeArg(legacyScope, 'aggregate'); return __sw_structAggregate(table, opts); },
         // insert's third argument is the OPTIONS object ({ onConflict } \u2014
-        // tsk_3e9b033c). The retired scope-argument shapes ({ user }, {
-        // unscoped }) still fail loudly as before: they used to change
-        // semantics, so they must never be read as options.
+        // tsk_3e9b033c). The scope-argument shapes ({ user }, { unscoped })
+        // fail loudly: they would change semantics, so they are never read
+        // as options.
         insert(table, values, opts) {
           if (opts !== undefined && opts !== null && typeof opts === 'object' && !__sw_arrayIsArray(opts) && (__sw_own(opts, 'user') || __sw_own(opts, 'unscoped'))) {
             __sw_structNoScopeArg(opts, 'insert');
@@ -9639,7 +9597,7 @@ var DB_RAW_JS = `      var __sw_rawReadDbInstance = null;
         __sw_assertSingleStatement(sql);
         __sw_assertNoDdl(sql);
         options = options || {};
-        // { user } is retired (tsk_fde5d117): the platform never rewrites raw
+        // { user } is refused (tsk_fde5d117): the platform never rewrites raw
         // SQL to inject an owner filter. Preserve its specific loud failure.
         if (__sw_own(options, 'user')) {
           __sw_throwRawSqlCannotBePlatformScoped('sw.db.query');
@@ -11973,7 +11931,7 @@ var AI_JS = `    ai: (function () {
       // "undefined is not a function". Build the tool explicitly with
       // sw.db + sw.ai.chatWithTools, or use the manifest-based tool when it lands.
       function catalogTool() {
-        const err = new Error('sw.ai.catalogTool has been retired. Assemble the search tool explicitly from sw.db + sw.ai.chatWithTools, or use the manifest-based AI DB tool. See the platform docs (ai) for the migration.');
+        const err = new Error('sw.ai.catalogTool is not part of the runtime. Assemble the search tool explicitly from sw.db + sw.ai.chatWithTools, or use the manifest-based AI DB tool. The platform docs (ai) show both.');
         err.code = 'CATALOG_TOOL_RETIRED';
         err.status = 400;
         throw __sw_markExpected(err);
@@ -14301,7 +14259,7 @@ ${AUTH_SERVER_JS}
           return { id: visitor.id, isAnon: true, expiresAt: visitor.expiresAt };
         },
         async migrateAnon() {
-          const err = new Error('Caller-selected anonymous row migrations are no longer supported. Use declared visitor ownership.');
+          const err = new Error('Caller-selected anonymous row migrations are not supported. Use declared visitor ownership.');
           err.code = 'MIGRATE_ANON_REMOVED'; err.status = 400; err.__sw_expose = true;
           throw err;
         },
@@ -16009,7 +15967,7 @@ var CONTEXT_TAIL_JS = `  };
   // teaches nothing (pfb_3645abbfa717). One thrower, mounted on both the
   // standard sw and the draft proxy, so the answer is identical either way.
   function __sw_realtimeRetired() {
-    const err = new Error('sw.realtime is retired and has no replacement namespace. For browser live updates, declare the read in a function with sw.db.live(name, sw.db.from(...)) and subscribe with watchLive from /__sw/live/client.js. For durable events and history, write rows with sw.db.');
+    const err = new Error('sw.realtime is not part of the runtime. For browser live updates, declare the read in a function with sw.db.live(name, sw.db.from(...)) and subscribe with watchLive from /__sw/live/client.js. For durable events and history, write rows with sw.db.');
     err.code = 'REALTIME_RETIRED';
     err.status = 410;
     throw __sw_markExpected(err);
@@ -16231,6 +16189,17 @@ var import_declared_data_contract = __toESM(require_declared_data_contract());
 var PUBLIC_RESULT_MAX_AGE_SECONDS = 120;
 
 // worker/src/runtime/declared-data-read-plan.ts
+function declaredBranchReads(shape) {
+  const policy = shape.policy;
+  if (!policy || policy.k !== "a" || !Array.isArray(policy.reads)) return null;
+  const reads = policy.reads;
+  const hidden = [];
+  for (const list of reads) {
+    if (!list) continue;
+    for (const column of shape.columns) if (list.indexOf(column.n) === -1 && hidden.indexOf(column.n) === -1) hidden.push(column.n);
+  }
+  return { reads, hidden };
+}
 function declaredReadFields(shape) {
   const policy = shape.client;
   return policy.read === true ? shape.columns.filter((column) => column.n !== shape.author).map((column) => column.n) : Array.isArray(policy.read) ? policy.read : [];
@@ -16256,6 +16225,14 @@ function declaredListGetPlan(operation, input, shape, fields, fail) {
   };
   const primaryKey = shape.clientPrimaryKey;
   const primaryColumn = shape.columns.find((column) => column.n === primaryKey);
+  const branchPolicy = shape.policy;
+  const branchHidden = [];
+  if (branchPolicy && branchPolicy.k === "a" && Array.isArray(branchPolicy.reads)) {
+    for (const list of branchPolicy.reads) {
+      if (!list) continue;
+      for (const column of shape.columns) if (list.indexOf(column.n) === -1 && branchHidden.indexOf(column.n) === -1) branchHidden.push(column.n);
+    }
+  }
   const where = /* @__PURE__ */ Object.create(null);
   if (operation === "get") helpers.and(where, primaryKey, helpers.key(input.id, primaryColumn));
   else {
@@ -16265,6 +16242,9 @@ function declaredListGetPlan(operation, input, shape, fields, fail) {
       for (const field of Object.keys(filters)) {
         const column = shape.columns.find((item) => item.n === field);
         const value = filters[field];
+        if (branchHidden.indexOf(field) !== -1) {
+          fail(400, "DATA_INPUT_INVALID", 'where cannot name "' + field + '": an access branch of this table leaves it out, so only columns every reader may read can filter.');
+        }
         if (!fields.includes(field) || !column || column.t === "json" || column.t === "blob" || !(value === null || typeof value === "string" || typeof value === "boolean" || typeof value === "number" && Number.isFinite(value))) {
           fail(400, "DATA_INPUT_INVALID", "where accepts only equality values for readable scalar fields.");
         }
@@ -16285,9 +16265,12 @@ function declaredListGetPayload(operation, rows, fields, primaryKey, limit) {
     project(row) {
       if (row === null || row === void 0) return null;
       const result = /* @__PURE__ */ Object.create(null);
-      for (const field of fields) result[field] = row[field];
+      for (const field of fields) if (Object.prototype.hasOwnProperty.call(row, field)) result[field] = row[field];
       const can = row.can;
-      if (can && typeof can === "object") result.can = { update: can.update === true, delete: can.delete === true };
+      if (can && typeof can === "object") {
+        result.can = { update: can.update === true, delete: can.delete === true };
+        result.mine = row.mine === true;
+      }
       return result;
     }
   };
@@ -16300,7 +16283,8 @@ function declaredListGetPayload(operation, rows, fields, primaryKey, limit) {
     has_more: hasMore
   };
 }
-var DECLARED_DATA_READ_PLAN_SOURCE = `const __sw_dataReadFields = (${declaredReadFields.toString()});
+var DECLARED_DATA_READ_PLAN_SOURCE = `const __sw_dataBranchReads = (${declaredBranchReads.toString()});
+const __sw_dataReadFields = (${declaredReadFields.toString()});
 const __sw_dataListGetPlan = (${declaredListGetPlan.toString()});
 const __sw_dataListGetPayload = (${declaredListGetPayload.toString()});`;
 
@@ -16487,9 +16471,10 @@ function __sw_dataAnd(where, field, predicate) {
 // decoded once at the database seam (booleans, json, blob), so this only
 // narrows a row to the fields the client may read.
 function __sw_dataProject(row, fields) {
+  // A column an access branch withheld from this row (tsk_1ac01f6a) is absent, not null.
   if (row === null || row === undefined) return null;
   const result = Object.create(null);
-  for (const field of fields) result[field] = row[field];
+  for (const field of fields) if (Object.prototype.hasOwnProperty.call(row, field)) result[field] = row[field];
   return result;
 }
 // Named spans for this handler's own awaits (tsk_c276e2d8). The context's
@@ -16536,8 +16521,9 @@ async function __sw_dataRead(sw, table, policy, options, verb) {
   }
 }
 /** Whether this release's pinned contract grants the browser any operation (hasDeclaredDataAccess, at run time). */
+// Load-time Object.values and Array#some: customer code may replace globals in an earlier request (tsk_ab656f8e).
 function __sw_dataAnyClientGrant() {
-  return Object.values(__SW_DATA_SCHEMA).some(({ client }) => client && (client.read !== false || client.create !== null
+  return __sw_generatedOwnerSome(__sw_generatedOwnerValues(__SW_DATA_SCHEMA), ({ client }) => client && (client.read !== false || client.create !== null
     || client.update !== null || client.delete || client.intake !== undefined || client.links !== undefined));
 }
 /** The exact current data contract digest (one computation per isolate). */
@@ -16644,7 +16630,7 @@ async function __sw_handleDeclaredData(request, sw, env) {
   }
   // Membership records are authority, even if a stale or forged bake exposed
   // them. Never let the generic browser writer grant membership in a group.
-  if (!reading && Object.values(__SW_DATA_SCHEMA).some(item => item.member && item.member.m === table || __sw_dataPolicyUsesMembership(item.policy, table))) {
+  if (!reading && __sw_generatedOwnerSome(__sw_generatedOwnerValues(__SW_DATA_SCHEMA), item => item.member && item.member.m === table || __sw_dataPolicyUsesMembership(item.policy, table))) {
     __sw_dataFail(403, 'DATA_ACCESS_DENIED', 'Membership changes require a server function.');
   }
   if (policy.identity === 'visitor' && shape.visitors !== true) {
@@ -16674,12 +16660,16 @@ async function __sw_handleDeclaredData(request, sw, env) {
     const childFields = childPolicy.read === true ? child.columns.filter(column => column.n !== child.author).map(column => column.n) : childPolicy.read;
     const childPrimaryKey = child.clientPrimaryKey;
     const childPrimaryColumn = child.columns.find(column => column.n === childPrimaryKey);
+    const childBranch = __sw_dataBranchReads(child);
     const where = Object.create(null);
     __sw_dataAnd(where, relation.fk, parentId);
     if (input.where !== undefined) {
       __sw_dataObject(input.where, 'where');
       for (const field of Object.keys(input.where)) {
         const column = child.columns.find(column => column.n === field), value = input.where[field];
+        if (childBranch && childBranch.hidden.includes(field)) {
+          __sw_dataFail(400, 'DATA_INPUT_INVALID', 'where cannot name "' + field + '": an access branch of this table leaves it out, so only columns every reader may read can filter.');
+        }
         if (!childFields.includes(field) || !column || column.t === 'json' || column.t === 'blob'
           || !(value === null || typeof value === 'string' || typeof value === 'boolean'
             || typeof value === 'number' && Number.isFinite(value))) {
@@ -16709,9 +16699,11 @@ async function __sw_handleDeclaredData(request, sw, env) {
     // COUNT or MAX over a non-readable column would answer questions about
     // fields this client was never granted.
     const options = Object.create(null);
+    // A column some access branch leaves out (tsk_1ac01f6a) never feeds a filter, grouping or aggregate.
+    const branchReads = __sw_dataBranchReads(shape);
     const readableScalar = fields.filter(field => {
       const column = shape.columns.find(item => item.n === field);
-      return column && column.t !== 'json' && column.t !== 'blob';
+      return column && column.t !== 'json' && column.t !== 'blob' && !(branchReads && branchReads.hidden.includes(field));
     });
     const aggregateField = (key) => {
       const field = input[key];
@@ -16836,7 +16828,7 @@ async function __sw_handleDeclaredData(request, sw, env) {
     // operation must be declared for the browser client, and membership tables are never written
     // from the browser. A hint only; the write itself still enforces.
     if (plan.options.can) {
-      const membership = Object.values(__SW_DATA_SCHEMA).some(item => item.member && item.member.m === table || __sw_dataPolicyUsesMembership(item.policy, table));
+      const membership = __sw_generatedOwnerSome(__sw_generatedOwnerValues(__SW_DATA_SCHEMA), item => item.member && item.member.m === table || __sw_dataPolicyUsesMembership(item.policy, table));
       const declared = (op) => !membership && !!policy[op] && policy[op] !== null;
       for (const row of result.data || []) {
         if (row && row.can) row.can = { update: row.can.update === true && declared('update'), delete: row.can.delete === true && declared('delete') };
@@ -17803,7 +17795,7 @@ function __sw_postTrace(env, ctx, t, spans, status, platformFetch) {
   try {
     __sw_traceClose(t);
     if (__sw_traceWouldBeDropped(t.traceId, spans, status)) return;
-    const platformDomain = env.PLATFORM_DOMAIN || 'somewhere.tech';
+    const platformDomain = env.PLATFORM_DOMAIN || 'somewhere.cloud';
     const platformBase = env.PLATFORM_API_BASE || ('https://api.' + platformDomain);
     const ingest = __sw_telemetryIngestActive(env);
     ctx.waitUntil(
@@ -17854,7 +17846,7 @@ function __sw_fitErrorData(data, ingest) {
 /** Best-effort function exception reporting correlated to the same trace. */
 async function reportFunctionError(env, request, code, err, responseStatus, requestId, routePath, platformFetch, platformCtx, responseCode) {
   try {
-    const platformDomain = env.PLATFORM_DOMAIN || 'somewhere.tech';
+    const platformDomain = env.PLATFORM_DOMAIN || 'somewhere.cloud';
     const platformBase = env.PLATFORM_API_BASE || ('https://api.' + platformDomain);
     const apiKey = env.PROJECT_API_KEY;
     if (!apiKey || !env.PROJECT_ID) return;
@@ -18016,6 +18008,9 @@ function parseClientPermissions(value, columns, scope) {
   if (Array.isArray(read)) {
     const names = [];
     for (const entry of read) {
+      if (typeof entry === "string" && ((scope.kind === "owner" || scope.kind === "policy") && entry.toLowerCase() === scope.column || entry.toLowerCase() === SHARED_AUTHOR_COLUMN)) {
+        return fail(`client.read cannot list "${entry}": the platform assigns who created each row and never sends that identity to the browser. To show the signed-in user which rows are theirs, read with { can: true }: each row then carries mine (true for rows this user created) and can.update / can.delete.`);
+      }
       if (typeof entry !== "string" || !fields.has(entry.toLowerCase())) return fail("client.read must contain only declared column names.");
       const name = entry.toLowerCase();
       if (names.includes(name)) return fail(`client.read declares field "${entry}" twice.`);
@@ -24426,6 +24421,7 @@ function readGrantScope(r, table, line, fail) {
   r.expectPunct("{", "in grant options");
   let membership, grantee, row;
   let operations;
+  let read;
   const seen = /* @__PURE__ */ new Set();
   while (!r.tryPunct("}")) {
     const key = r.readKey("in grant options");
@@ -24453,7 +24449,9 @@ function readGrantScope(r, table, line, fail) {
       }
       if (!ops.includes("read")) fail(key.line, "grant operations require read; update alone is not allowed.");
       operations = ops.includes("update") ? ["read", "update"] : ["read"];
-    } else fail(key.line, `Unknown grant option "${key.name}". Allowed: table, grantee, row, operations.`);
+    } else if (key.name === "read") {
+      read = readBranchReadColumns(r, `grant({ read }) on table "${table}"`);
+    } else fail(key.line, `Unknown grant option "${key.name}". Allowed: table, grantee, row, operations, read.`);
     if (!r.tryPunct(",")) {
       r.expectPunct("}", "closing grant options");
       break;
@@ -24463,7 +24461,7 @@ function readGrantScope(r, table, line, fail) {
   r.expectPunct(")", "closing grant");
   if (!membership || !grantee || !operations || grantee === "user_id") fail(line, `grant() on "${table}" requires table, a grantee column distinct from managed user_id, and explicit operations.`);
   if (row !== void 0 && (row === "user_id" || row === grantee)) fail(line, `grant() on "${table}": row names the shares column holding the shared row's id, distinct from user_id and the grantee.`);
-  return { kind: "member", group: ["user_id"], membership, memberUser: grantee, memberGroup: row === void 0 ? ["user_id"] : ["user_id", row], operations, ownerGrant: true };
+  return { kind: "member", group: ["user_id"], membership, memberUser: grantee, memberGroup: row === void 0 ? ["user_id"] : ["user_id", row], operations, ownerGrant: true, ...read ? { read } : {} };
 }
 function resolveGrantRowKeys(scope, key, table, line, fail) {
   const visit = (node) => {
@@ -25391,6 +25389,7 @@ function readRoleList(r, fail, ctx) {
 function readGroupScope(r, tableName, line, fail) {
   r.expectPunct("(", 'after "group"');
   let column = DEFAULT_GROUP_COLUMN;
+  let read;
   const explicit = {};
   if (!r.tryPunct(")")) {
     r.expectPunct("{", `in group() options for table "${tableName}"`);
@@ -25419,8 +25418,10 @@ function readGroupScope(r, tableName, line, fail) {
             break;
           }
         }
+      } else if (key.name === "read") {
+        read = readBranchReadColumns(r, `group({ read }) on table "${tableName}"`);
       } else {
-        fail(key.line, `group() on table "${tableName}" has an unknown option "${key.name}". Allowed: column, roles.`);
+        fail(key.line, `group() on table "${tableName}" has an unknown option "${key.name}". Allowed: column, roles, read.`);
       }
       if (!r.tryPunct(",")) {
         r.expectPunct("}", `closing group() options for table "${tableName}"`);
@@ -25430,7 +25431,7 @@ function readGroupScope(r, tableName, line, fail) {
     r.tryPunct(",");
     r.expectPunct(")", "closing group()");
   }
-  const node = { kind: "group", column, roles: { read: [], create: [], update: [], delete: [] } };
+  const node = { kind: "group", column, roles: { read: [], create: [], update: [], delete: [] }, ...read ? { read } : {} };
   declaredGroupRoles.set(node, { line, explicit });
   return node;
 }
@@ -25539,7 +25540,17 @@ function readAppRoleScope(r, tableName, line, fail) {
   let sawRoles = false;
   while (!r.tryPunct("}")) {
     const key = r.readKey(`for an option of ${where}`);
-    if (key.name !== "roles") fail(key.line, `${where} has an unknown option "${key.name}". Allowed: roles.`);
+    if (key.name === "read") {
+      if (node.read) fail(key.line, `${where} declares read twice.`);
+      r.expectPunct(":", `after "read" in ${where}`);
+      node.read = readBranchReadColumns(r, `appRole({ read }) on table "${tableName}"`);
+      if (!r.tryPunct(",")) {
+        r.expectPunct("}", `closing ${where}`);
+        break;
+      }
+      continue;
+    }
+    if (key.name !== "roles") fail(key.line, `${where} has an unknown option "${key.name}". Allowed: roles, read.`);
     if (sawRoles) fail(key.line, `${where} declares roles twice.`);
     sawRoles = true;
     r.expectPunct(":", `after "roles" in ${where}`);
@@ -25819,6 +25830,7 @@ var SCHEMA_CALLABLE = /* @__PURE__ */ new Set([
 ]);
 var SAFE_IDENT = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
 var RESERVED_PREFIXES = ["app_", "sqlite_", "d1_", "__sw_"];
+var ROW_HINT_FIELDS = ["can", "mine"];
 var MAX_TABLES = 100;
 var MAX_COLUMNS = 100;
 var MAX_INDEXES = 40;
@@ -26066,6 +26078,9 @@ function checkDeclaredName(kind, raw, line) {
   if (name.startsWith("_") || RESERVED_PREFIXES.some((p) => name.startsWith(p))) {
     throw new SchemaTsError(`line ${line}: ${kind} name "${raw}" uses a reserved platform prefix and cannot be declared: names starting with "app_" or "_" belong to the platform.`);
   }
+  if (kind === "Column" && ROW_HINT_FIELDS.includes(name)) {
+    throw new SchemaTsError(`line ${line}: column name "${raw}" is reserved for row hints: a read with { can: true } returns can and mine on every row, so a column cannot take either name.`);
+  }
   return name;
 }
 function readColumn(r, tableName, rawName, line) {
@@ -26255,6 +26270,7 @@ function readMemberScope(r, tableName, scopeLine) {
   let memberUser = null;
   let memberGroup = null;
   let operations, operationsSeen = false;
+  let read;
   while (!r.tryPunct("}")) {
     const key = r.readKey(`for a member() option of table "${tableName}"`);
     r.expectPunct(":", `after "${key.name}" in member() for table "${tableName}"`);
@@ -26270,9 +26286,12 @@ function readMemberScope(r, tableName, scopeLine) {
       if (operationsSeen) throw new SchemaTsError(`line ${key.line}: member() on table "${tableName}" declares operations more than once.`);
       operationsSeen = true;
       operations = readMemberOperations(r, tableName);
+    } else if (key.name === "read") {
+      if (read) throw new SchemaTsError(`line ${key.line}: member() on table "${tableName}" declares read more than once.`);
+      read = readBranchReadColumns(r, `member({ read }) on table "${tableName}"`);
     } else {
       throw new SchemaTsError(
-        `line ${key.line}: member() on table "${tableName}" has an unknown option "${key.name}". Allowed: group, membership, member_user, member_group, operations.`
+        `line ${key.line}: member() on table "${tableName}" has an unknown option "${key.name}". Allowed: group, membership, member_user, member_group, operations, read.`
       );
     }
     if (!r.tryPunct(",")) {
@@ -26302,7 +26321,7 @@ function readMemberScope(r, tableName, scopeLine) {
       `line ${scopeLine}: member() on table "${tableName}" has a ${group.length}-column group but a ${memberGroup.length}-column member_group. The group key must have the same number of columns on both sides.`
     );
   }
-  const node = { kind: "member", group, membership, memberUser, memberGroup, ...operations !== void 0 ? { operations } : {} };
+  const node = { kind: "member", group, membership, memberUser, memberGroup, ...operations !== void 0 ? { operations } : {}, ...read ? { read } : {} };
   if (operationsSeen) explicitMemberOperations.add(node);
   return node;
 }
@@ -26310,21 +26329,56 @@ var explicitMemberOperations = /* @__PURE__ */ new WeakSet();
 function readPolicyOwner(r, tableName, line) {
   r.expectPunct("(", 'after "owner"');
   let column = DEFAULT_OWNER_COLUMN;
+  let read;
   if (!r.tryPunct(")")) {
-    const opts = r.readLiteralObject(`in owner() inside anyOf() for table "${tableName}"`);
-    for (const [key, { value, line: optionLine }] of opts) {
-      if (key !== "column") {
-        throw new SchemaTsError(`line ${optionLine}: owner() inside anyOf() only allows column. Visitor ownership is not part of policy scope.`);
+    r.expectPunct("{", `in owner() inside anyOf() for table "${tableName}"`);
+    const seen = /* @__PURE__ */ new Set();
+    while (!r.tryPunct("}")) {
+      const key = r.readKey(`for an owner() option inside anyOf() for table "${tableName}"`);
+      if (seen.has(key.name)) throw new SchemaTsError(`line ${key.line}: option "${key.name}" appears twice in owner() inside anyOf() for table "${tableName}".`);
+      seen.add(key.name);
+      r.expectPunct(":", `after "${key.name}" in owner() inside anyOf() for table "${tableName}"`);
+      if (key.name === "column") {
+        const value = r.readLiteral(`for "column" in owner() inside anyOf() for table "${tableName}"`);
+        if (typeof value !== "string" || !SAFE_IDENT.test(value) || value.length > MAX_NAME_LENGTH) {
+          throw new SchemaTsError(`line ${key.line}: owner({ column }) on table "${tableName}" must be a valid column name.`);
+        }
+        column = value.toLowerCase();
+      } else if (key.name === "read") {
+        read = readBranchReadColumns(r, `owner({ read }) on table "${tableName}"`);
+      } else {
+        throw new SchemaTsError(`line ${key.line}: owner() inside anyOf() only allows column and read. Visitor ownership is not part of policy scope.`);
       }
-      if (typeof value !== "string" || !SAFE_IDENT.test(value) || value.length > MAX_NAME_LENGTH) {
-        throw new SchemaTsError(`line ${optionLine}: owner({ column }) on table "${tableName}" must be a valid column name.`);
+      if (!r.tryPunct(",")) {
+        r.expectPunct("}", `closing owner() options inside anyOf() for table "${tableName}"`);
+        break;
       }
-      column = value.toLowerCase();
     }
     r.tryPunct(",");
     r.expectPunct(")", "closing owner()");
   }
-  return { kind: "owner", column };
+  return { kind: "owner", column, ...read ? { read } : {} };
+}
+function readBranchReadColumns(r, ctx) {
+  const open = r.next();
+  if (open.kind !== "punct" || open.value !== "[") throw new SchemaTsError(`line ${open.line}: ${ctx} must be a list of quoted column names, such as ['id', 'subject'].`);
+  const out = [];
+  while (!r.tryPunct("]")) {
+    const t = r.next();
+    if (t.kind !== "string" || !SAFE_IDENT.test(t.value) || t.value.length > MAX_NAME_LENGTH) throw new SchemaTsError(`line ${t.line}: ${ctx} must be a list of quoted column names; values must be literal strings.`);
+    const name = t.value.toLowerCase();
+    if (out.includes(name)) throw new SchemaTsError(`line ${t.line}: ${ctx} lists "${t.value}" twice.`);
+    out.push(name);
+    if (!r.tryPunct(",")) {
+      r.expectPunct("]", `closing ${ctx}`);
+      break;
+    }
+  }
+  if (out.length === 0) throw new SchemaTsError(`line ${open.line}: ${ctx} must name at least one column; leave read out for every column.`);
+  return out;
+}
+function refuseBranchRead(node, line, tableName, where) {
+  if (node.read) throw new SchemaTsError(`line ${line}: read on ${where} of table "${tableName}" is accepted only on the branches of the table's own anyOf(); it names the columns that branch may read.`);
 }
 function readPolicyMember(r, tableName, line) {
   r.expectPunct("(", 'after "member"');
@@ -26359,7 +26413,11 @@ function readAnyOfScope(r, tableName, line) {
   const owner = owners[0];
   const other = firstPolicy.kind === "owner" ? secondPolicy : firstPolicy;
   if (other.kind === "member" && other.ownerGrant && owner.column !== DEFAULT_OWNER_COLUMN) throw new SchemaTsError(`line ${line}: grant() requires owner() with managed user_id.`);
-  return { kind: "policy", policy: { kind: "any_of", policies: [owner, other] } };
+  const otherRead = other;
+  const reads = [owner.read ?? null, otherRead.read ?? null];
+  delete owner.read;
+  delete otherRead.read;
+  return { kind: "policy", policy: { kind: "any_of", policies: [owner, other], ...reads[0] || reads[1] ? { reads } : {} } };
 }
 var ALL_OF_FORMS = "allOf() takes a gate \u2014 member(), group() or appRole() \u2014 and then owner() or anyOf(owner(), ...).";
 var ALL_OF_EXPLICIT = "allOf needs explicit operations";
@@ -26385,6 +26443,9 @@ function readAllOfScope(r, tableName, line) {
   } else throw new SchemaTsError(`line ${whoTok.line}: ${ALL_OF_FORMS}`);
   r.tryPunct(",");
   r.expectPunct(")", "closing allOf()");
+  refuseBranchRead(gate, line, tableName, "the gate of allOf()");
+  refuseBranchRead(who, line, tableName, "who in allOf()");
+  if (who.kind === "any_of" && who.reads) throw new SchemaTsError(`line ${line}: read on a branch of anyOf() inside allOf() on table "${tableName}" is not accepted; per-branch columns belong on the table's own anyOf().`);
   const x = who.kind === "any_of" ? who.policies[1] : null;
   if (x?.kind === "member" && x.ownerGrant) throw new SchemaTsError(`line ${line}: grant() belongs in anyOf(owner(), grant()), not allOf().`);
   for (const node of [gate, ...x ? [x] : []]) {
@@ -26476,13 +26537,17 @@ function readScope(r, tableName) {
   const failAt = (line, message) => {
     throw new SchemaTsError(`line ${line}: ${message}`);
   };
-  if (tok.value === "group") return { kind: "policy", policy: readGroupScope(r, tableName, tok.line, failAt) };
-  if (tok.value === "appRole") return { kind: "policy", policy: readAppRoleScope(r, tableName, tok.line, failAt) };
+  if (tok.value === "group" || tok.value === "appRole") {
+    const policy = tok.value === "group" ? readGroupScope(r, tableName, tok.line, failAt) : readAppRoleScope(r, tableName, tok.line, failAt);
+    refuseBranchRead(policy, tok.line, tableName, `the ${tok.value}() scope`);
+    return { kind: "policy", policy };
+  }
   if (tok.value === "member") {
     r.expectPunct("(", 'after "member"');
     const scope = readMemberScope(r, tableName, tok.line);
     r.tryPunct(",");
     r.expectPunct(")", "closing member()");
+    if (scope.kind === "member") refuseBranchRead(scope, tok.line, tableName, "the member() scope");
     return scope;
   }
   r.expectPunct("(", `after "${tok.value}"`);
@@ -26731,6 +26796,22 @@ function readTable(r, rawName, nameLine) {
       );
     }
     uniques.push(entry.columns);
+  }
+  if (scope.kind === "policy" && scope.policy.kind === "any_of" && scope.policy.reads) {
+    const key = columns.filter((column) => column.helper === "id").length === 1 ? columns.find((column) => column.helper === "id").name : null;
+    const declared = new Set(columns.map((column) => column.name));
+    scope.policy.reads.forEach((list, i) => {
+      if (!list) return;
+      const branch = scope.policy.kind === "any_of" ? scope.policy.policies[i] : null;
+      const label = branch?.kind === "owner" ? "owner()" : branch?.kind === "member" ? branch.ownerGrant ? "grant()" : "member()" : branch?.kind === "group" ? "group()" : "appRole()";
+      for (const column of list) {
+        if (!declared.has(column)) throw new SchemaTsError(`line ${nameLine}: table "${rawName}": ${label} read lists "${column}", which is not one of its declared columns.`);
+      }
+      if (key && !list.includes(key)) throw new SchemaTsError(`line ${nameLine}: table "${rawName}": ${label} read must include the id column "${key}", which every reader needs to page and address rows.`);
+      for (const relation of relations) {
+        if (relation.kind === "belongsTo" && !list.includes(relation.fk)) throw new SchemaTsError(`line ${nameLine}: table "${rawName}": ${label} read must include "${relation.fk}", the key relation "${relation.name}" joins by; a reader without it would get an empty relation.`);
+      }
+    });
   }
   let client;
   if (clientInput) {

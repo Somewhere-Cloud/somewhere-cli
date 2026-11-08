@@ -83,7 +83,7 @@
     "worker/src/runtime/storage.ts": "15c7953b994497c7883b774f79ae93bae96e16373a0826cc733d21005de22ad7",
     "worker/src/runtime/tasks.ts": "75efa2e3083853bfba1dc49745ede8865ddd218b84d568a00da2dbd669f9ab23",
     "worker/src/runtime/verify-signup.ts": "dcac46b4581794fe875e3f85e3d93a2253b470f60a3c7fcee68543d8be8a6fa1",
-    "worker/src/runtime/version.ts": "e52c6d2d59f1de848ee8a7b9911516902ad1525380b9dd97ba07dfaac06f5f13",
+    "worker/src/runtime/version.ts": "9ee73e5507bb475235d5f5e1df3666dc05d9ce9ac94cf918a532d39631cc52b4",
     "worker/src/runtime/visitor-session.generated.ts": "f788a0c4efe22b18c313d8433150931d48a5f872e3bd98549d94138a5b0dfe5d",
     "worker/src/runtime/web.ts": "269590d44ffa6239bb6e79999b58ba42435c230f045daea52bf73d09519afb0e",
     "worker/src/security/browser-secret-scan.ts": "31ebc9dd94eed4d0a9a6b67b3b1e2505d4f7812c557c90337e034c1e3994c039",
@@ -136,7 +136,7 @@
     "worker/src/utils/log-sanitize.ts": "21997963eb5de1fa3e5544394996270d9bd073a76d57e6cbb3f8d789cb5c3663",
     "worker/src/utils/managed-groups/errors.ts": "18d952edd7f46bb7e459d4e6678226f4bd6e040ab40073ee5a8d0802be2f3721",
     "worker/src/utils/managed-groups/policy.ts": "2c5b48479a2925bea9a820022c63ca5fa827e2ff5531fe1ab6c0b058b7212b39",
-    "worker/src/utils/platform-data/bounded-reply.ts": "0f915cd67033ac4afdf7d760ab30a329cdf5d53bd4adc37791065d9341390ea0",
+    "worker/src/utils/platform-data/bounded-reply.ts": "e115fa1031afc8cbe2e22c3d6a53828555581192e57130105afe3b652bf19bb9",
     "worker/src/utils/platform-data/door.ts": "59ba7dda8663d7f1c2529ee01943047d866ca01a39626373e4f046458d08e440",
     "worker/src/utils/platform-data/read-only.ts": "8625ff7a41c74ef18fb4656da1de2359267b2ab286812a01703ae0aec528efbf",
     "worker/src/utils/platform-data/targets.ts": "cbd3f00d1ecdda0aa7fc3f5a822a43ca2d12b9558e0b4ef9c6e4156516512875",
@@ -145,6 +145,6 @@
     "worker/src/utils/sql-tokens.ts": "ac643c765def38905a0600ae155ad909335cae1a7c1912da7bc87af25acb752e",
     "worker/src/vendor/neondatabase-serverless/source.generated.ts": "96a3c18fde7d8888fdb53a4d7cd0721c238a234521d2084d1e66868a8df8e69c"
   },
-  "sha256": "51346c98e7a46f4849b6ab0ba0d78b2e235686000c006a70d572c73a9173c493",
+  "sha256": "7592e0415c58e1495f85a93d25c03e70041a0b8381d8fc60ff8dda1f179f0fa4",
   "fixtures_sha256": "908827d1430f4af5a83cae59ed476abc51dc9648757eac0089fe6e6db95f66c5"
 }

@@ -4269,7 +4269,7 @@ function createBoundedReplyReader(maxBytes) {
       } catch {
         return { ok: false, reason: "transport" };
       } finally {
-        clearTimeout(timer);
+        if (timer !== void 0) clearTimeout(timer);
       }
     }
   };

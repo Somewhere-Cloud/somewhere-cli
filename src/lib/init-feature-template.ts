@@ -2442,26 +2442,33 @@ export interface MagicLinkRequest {
 }
 
 /**
- * The /auth/magic page the emailed link opens. verifying: the one-time token
- * is being exchanged for the session. failed: it was missing, already used,
- * expired or revoked. mfa: waiting for the 6-digit code emailed to the user.
- * On success the page leaves.
+ * The /auth/magic page the emailed link opens. Opening it uses nothing up: the
+ * one-time token is exchanged only when the person presses Continue, so a link
+ * preview or mail scanner that loads the page cannot spend it.
+ * confirm: waiting for that press. signedInAs is the account this browser is
+ * signed in to (null when none); the link signs in as the address it was
+ * emailed to, so continuing signs that account out first. error: that sign-out
+ * could not be confirmed. verifying: the token is being exchanged. failed: it
+ * was missing, already used, expired or revoked. mfa: waiting for the 6-digit
+ * code emailed to the user. On success the page leaves.
  */
 export type MagicLinkLanding =
+  | { status: 'confirm'; signedInAs: string | null; error: string | null; confirm(): void }
   | { status: 'verifying' }
   | { status: 'mfa'; continuation: MfaContinuation }
   | { status: 'failed'; error: string };
 `;
 
-const MAGIC_LINK_HOOKS = `import { useEffect, useRef, useState } from 'react';
-import { useAuth } from '@somewhere-cloud/sdk/react';
+const MAGIC_LINK_HOOKS = `import { useRef, useState } from 'react';
+import { useAuth, useAuthState } from '@somewhere-cloud/sdk/react';
 import type { MagicLinkLanding, MagicLinkRequest } from '../../types/magic-link';
 import { authErrorMessage } from '../services/auth';
 import { useMfaContinuation } from './useMfaContinuation';
 
 // Sign-in links. The packaged route api/auth/[...path].ts sends the email
 // (POST /api/auth/magic-link) and redeems it (/api/auth/magic-link/verify).
-// The email opens /auth/magic?token=…; the token works once.
+// The email opens /auth/magic?token=…; the token works once, and only the
+// Continue button on that page sends it.
 
 export function useMagicLinkRequest(): MagicLinkRequest {
   const auth = useAuth();
@@ -2516,34 +2523,76 @@ export function landingTarget(search: string, origin: string): string {
   }
 }
 
+/** The link this tab opened, kept in its history entry rather than the
+ *  address bar: a reload still finds it, and the token never reaches a
+ *  Referer header, server logs or a shared screenshot. */
+interface OpenedLink { token: string; target: string }
+const OPENED_LINK = 'somewhereMagicLink';
+
+function openedLink(): OpenedLink | null {
+  const token = new URLSearchParams(window.location.search).get('token');
+  if (token) {
+    const link = { token, target: landingTarget(window.location.search, window.location.origin) };
+    window.history.replaceState({ [OPENED_LINK]: link }, '', window.location.pathname);
+    return link;
+  }
+  const kept = (window.history.state as Record<string, Partial<OpenedLink>> | null)?.[OPENED_LINK];
+  return typeof kept?.token === 'string' && typeof kept.target === 'string' ? { token: kept.token, target: kept.target } : null;
+}
+
+/** Forget the token: it has been sent, so it is spent or refused either way. */
+function forgetLink() {
+  window.history.replaceState(null, '', window.location.pathname);
+}
+
 export function useMagicLinkLanding(): MagicLinkLanding {
   const auth = useAuth();
+  const session = useAuthState();
+  // Read once per page load (idempotent, so StrictMode's second call agrees).
+  const [link] = useState(openedLink);
+  const [phase, setPhase] = useState<'confirm' | 'verifying' | 'failed'>('confirm');
   const [error, setError] = useState<string | null>(null);
-  const started = useRef(false);
+  const sent = useRef(false);
   const target = useRef('/');
   const mfa = useMfaContinuation(() => window.location.replace(target.current));
 
-  useEffect(() => {
-    if (started.current) return; // the token works once; never verify it twice
-    started.current = true;
-    const token = new URLSearchParams(window.location.search).get('token');
-    target.current = landingTarget(window.location.search, window.location.origin);
-    if (!token) {
-      setError('This sign-in link is incomplete. Request a new one.');
-      return;
+  async function confirm() {
+    if (!link || sent.current) return; // the token works once; never send it twice
+    sent.current = true;
+    setError(null);
+    setPhase('verifying');
+    // The link signs in as the address it was emailed to. Another account
+    // signed in here is signed out first, never silently replaced.
+    const before = auth.getState();
+    if (before.user || before.status !== 'signed-out') {
+      await auth.signOut();
+      if (auth.getState().signOutUnconfirmed) {
+        sent.current = false; // nothing was sent: the link is still unused
+        setError('Could not sign out of the current account. Try again.');
+        setPhase('confirm');
+        return;
+      }
     }
-    // Keep the one-time token out of the address bar and history.
-    window.history.replaceState(null, '', window.location.pathname);
-    auth.verifyMagicLink({ token })
+    target.current = link.target;
+    try {
+      await auth.verifyMagicLink({ token: link.token });
+      forgetLink();
       // A full load: the app starts again with the new session.
-      .then(() => window.location.replace(target.current))
-      .catch((reason: unknown) => {
-        if (!mfa.capture(reason)) setError(authErrorMessage(reason));
-      });
-  }, [auth]);
+      window.location.replace(link.target);
+    } catch (reason: unknown) {
+      forgetLink();
+      if (!mfa.capture(reason)) {
+        setError(authErrorMessage(reason));
+        setPhase('failed');
+      }
+    }
+  }
 
   if (mfa.required) return { status: 'mfa', continuation: mfa };
-  return error === null ? { status: 'verifying' } : { status: 'failed', error };
+  if (!link) return { status: 'failed', error: 'This sign-in link is incomplete. Request a new one.' };
+  if (phase === 'failed') return { status: 'failed', error: error ?? 'This sign-in link could not be used. Request a new one.' };
+  if (phase === 'verifying') return { status: 'verifying' };
+  return { status: 'confirm', signedInAs: session.user?.email ?? null, error, confirm: () => void confirm() };
 }
 `;
 
@@ -2612,6 +2661,21 @@ export function MagicLinkForm({ request }: { request: MagicLinkRequest }) {
 }
 
 export function MagicLinkStatus({ landing }: { landing: Exclude<MagicLinkLanding, { status: 'mfa' }> }) {
+  if (landing.status === 'confirm') {
+    return (
+      <main className="loading">
+        <form className="panel auth__form" onSubmit={(event) => { event.preventDefault(); landing.confirm(); }} aria-label="Continue with your emailed link">
+          <p>This link signs you in with the email address it was sent to, and accepts the invitation if it carries one. It works once.</p>
+          {landing.signedInAs
+            ? <p className="hint">You are signed in here as {landing.signedInAs}. Continuing signs that account out first.</p>
+            : null}
+          {landing.error ? <p className="error" role="alert">{landing.error}</p> : null}
+          <button type="submit" className="button">{landing.signedInAs ? 'Sign out and continue' : 'Continue'}</button>
+          <a href="/">Not now</a>
+        </form>
+      </main>
+    );
+  }
   if (landing.status === 'verifying') {
     return (
       <main className="loading" aria-busy="true">
@@ -2654,6 +2718,19 @@ export function MagicLinkForm({ request }: { request: MagicLinkRequest }) {
 }
 
 export function MagicLinkStatus({ landing }: { landing: Exclude<MagicLinkLanding, { status: 'mfa' }> }) {
+  if (landing.status === 'confirm') {
+    return (
+      <main>
+        <form onSubmit={(event) => { event.preventDefault(); landing.confirm(); }} aria-label="Continue with your emailed link">
+          <p>This link signs you in with the email address it was sent to, and accepts the invitation if it carries one. It works once.</p>
+          {landing.signedInAs ? <p>You are signed in here as {landing.signedInAs}. Continuing signs that account out first.</p> : null}
+          {landing.error ? <p role="alert">{landing.error}</p> : null}
+          <button type="submit">{landing.signedInAs ? 'Sign out and continue' : 'Continue'}</button>{' '}
+          <a href="/">Not now</a>
+        </form>
+      </main>
+    );
+  }
   if (landing.status === 'verifying') return <main aria-busy="true"><p role="status">Signing you in…</p></main>;
   return (
     <main>
@@ -2919,11 +2996,15 @@ function readme(selection: InitSelection): string {
     '## Sign-in and invitation links',
     '',
     'An emailed link opens `/auth/magic?token=…`, which `src/App.tsx` routes in front',
-    'of the sign-in gate. The page exchanges the one-time token for the same cookie',
-    'session (`auth.verifyMagicLink`, once per page load; a failure is shown, never',
-    'retried) and then opens the link\'s `redirect_uri` when it is a page of this app,',
-    'otherwise `/`. Invitations from `sw.auth.invite` (including group invitations)',
-    'land here; redeeming one signs the invitee in and accepts the invitation.',
+    'of the sign-in gate. Opening it sends nothing (a link preview or mail scanner',
+    'cannot use the token up): the token moves from the address bar into the tab\'s',
+    'history entry, and only the Continue button exchanges it for the same cookie',
+    'session (`auth.verifyMagicLink`, once; a failure is shown, never retried). Someone',
+    'already signed in here as another account sees that account and presses "Sign',
+    'out and continue": the link signs in as the address it was emailed to, never the',
+    'current account. Success opens the link\'s `redirect_uri` when it is a page of',
+    'this app, otherwise `/`. Invitations from `sw.auth.invite` and `sw.groups.invite`',
+    'land here; continuing signs the invitee in and accepts the invitation.',
   );
   if (magicLink) {
     lines.push(

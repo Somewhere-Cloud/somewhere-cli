@@ -308,8 +308,13 @@ test('a sign-out the server did not confirm sends nothing and keeps the link usa
   assert.equal(tab.landing.status, 'confirm');
   assert.equal(tab.landing.error, 'Could not sign out of the current account. Try again.');
   assert.equal(tab.history.state?.somewhereMagicLink?.token, 'tok_once', 'the unsent link is still held');
+  assert.equal(tab.landing.signedInAs, 'alice@example.com', 'keep the account label after an unconfirmed sign-out');
+  await tab.press();
+  assert.equal(tab.verifies().length, 0, 'a second failed sign-out must still refuse redemption');
+  assert.equal(tab.fetches().filter(c => c.url.endsWith('/logout')).length, 2);
   logoutWorks = true;
   await tab.press();
+  assert.equal(tab.fetches().filter(c => c.url.endsWith('/logout')).length, 3);
   assert.equal(tab.verifies().length, 1);
   assert.deepEqual(tab.events.filter(([kind]) => kind === 'navigate'), [['navigate', '/teams/7?invite_id=inv_1']]);
 });
@@ -362,4 +367,15 @@ test('a link without a token fails without calling the platform', async () => {
   await tab.load();
   assert.equal(tab.verifies().length, 0);
   assert.deepEqual(tab.landing, { status: 'failed', error: 'This sign-in link is incomplete. Request a new one.' });
+});
+
+test('reload during an unanswered redemption cannot offer the sent token again', async () => {
+  const tab = await openTab(inviteSearch(TEAM), answer(() => new Promise(() => {})));
+  await tab.load();
+  await tab.press();
+  assert.equal(tab.verifies().length, 1);
+  assert.equal(tab.history.state, null, 'discard reload copy before the request answers');
+  await tab.load();
+  assert.equal(tab.landing.status, 'failed');
+  assert.equal(tab.verifies().length, 1);
 });

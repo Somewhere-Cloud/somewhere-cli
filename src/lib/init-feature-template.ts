@@ -2524,8 +2524,8 @@ export function landingTarget(search: string, origin: string): string {
 }
 
 /** The link this tab opened, kept in its history entry rather than the
- *  address bar: a reload still finds it, and the token never reaches a
- *  Referer header, server logs or a shared screenshot. */
+ *  address bar after this script runs. The initial page request can still
+ *  carry it in server logs; history state retains it until confirmation. */
 interface OpenedLink { token: string; target: string }
 const OPENED_LINK = 'somewhereMagicLink';
 
@@ -2553,6 +2553,8 @@ export function useMagicLinkLanding(): MagicLinkLanding {
   const [phase, setPhase] = useState<'confirm' | 'verifying' | 'failed'>('confirm');
   const [error, setError] = useState<string | null>(null);
   const sent = useRef(false);
+  const accountLabel = useRef<string | null>(null);
+  if (session.user?.email) accountLabel.current = session.user.email;
   const target = useRef('/');
   const mfa = useMfaContinuation(() => window.location.replace(target.current));
 
@@ -2564,7 +2566,7 @@ export function useMagicLinkLanding(): MagicLinkLanding {
     // The link signs in as the address it was emailed to. Another account
     // signed in here is signed out first, never silently replaced.
     const before = auth.getState();
-    if (before.user || before.status !== 'signed-out') {
+    if (before.user || before.status !== 'signed-out' || before.signOutUnconfirmed) {
       await auth.signOut();
       if (auth.getState().signOutUnconfirmed) {
         sent.current = false; // nothing was sent: the link is still unused
@@ -2574,13 +2576,13 @@ export function useMagicLinkLanding(): MagicLinkLanding {
       }
     }
     target.current = link.target;
+    // Remove the reload copy before dispatch: a lost response must not revive it.
+    forgetLink();
     try {
       await auth.verifyMagicLink({ token: link.token });
-      forgetLink();
       // A full load: the app starts again with the new session.
       window.location.replace(link.target);
     } catch (reason: unknown) {
-      forgetLink();
       if (!mfa.capture(reason)) {
         setError(authErrorMessage(reason));
         setPhase('failed');
@@ -2592,7 +2594,7 @@ export function useMagicLinkLanding(): MagicLinkLanding {
   if (!link) return { status: 'failed', error: 'This sign-in link is incomplete. Request a new one.' };
   if (phase === 'failed') return { status: 'failed', error: error ?? 'This sign-in link could not be used. Request a new one.' };
   if (phase === 'verifying') return { status: 'verifying' };
-  return { status: 'confirm', signedInAs: session.user?.email ?? null, error, confirm: () => void confirm() };
+  return { status: 'confirm', signedInAs: session.user?.email ?? (session.signOutUnconfirmed ? accountLabel.current : null), error, confirm: () => void confirm() };
 }
 `;
 

@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.38.22
+
+### Fixed
+
+- The `/auth/magic` page that `somewhere init` generates no longer signs
+  anyone in, or accepts a group invitation, when the page loads. The emailed
+  token is sent only when the person presses Continue, so link previews and
+  mail scanners can no longer use up a one-time link. Reloading sends nothing:
+  the token is removed before it is sent, so a reload cannot retry a
+  redemption whose outcome is unknown. If another account is already signed
+  in, the page names it and offers "Sign out and continue"; it sends the
+  token only after the sign-out is confirmed, and retries the sign-out if it
+  failed. Continue stays disabled until the session check has answered, and
+  if the signed-in account changes after the page showed it, nothing is sent
+  and the page shows the current account again. Existing apps keep their
+  current page until they regenerate it.
+
 ## 0.38.21
 
 ### Added

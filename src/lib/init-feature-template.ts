@@ -2447,13 +2447,16 @@ export interface MagicLinkRequest {
  * preview or mail scanner that loads the page cannot spend it.
  * confirm: waiting for that press. signedInAs is the account this browser is
  * signed in to (null when none); the link signs in as the address it was
- * emailed to, so continuing signs that account out first. error: that sign-out
- * could not be confirmed. verifying: the token is being exchanged. failed: it
+ * emailed to, so continuing signs that account out first. ready is false until
+ * the session check has answered, so the page never offers Continue before it
+ * can show who is signed in. error: that sign-out could not be confirmed, or
+ * the signed-in account changed after it was shown. verifying: the token is
+ * being exchanged. failed: it
  * was missing, already used, expired or revoked. mfa: waiting for the 6-digit
  * code emailed to the user. On success the page leaves.
  */
 export type MagicLinkLanding =
-  | { status: 'confirm'; signedInAs: string | null; error: string | null; confirm(): void }
+  | { status: 'confirm'; signedInAs: string | null; ready: boolean; error: string | null; confirm(): void }
   | { status: 'verifying' }
   | { status: 'mfa'; continuation: MfaContinuation }
   | { status: 'failed'; error: string };
@@ -2558,16 +2561,42 @@ export function useMagicLinkLanding(): MagicLinkLanding {
   const target = useRef('/');
   const mfa = useMfaContinuation(() => window.location.replace(target.current));
 
-  async function confirm() {
+  // Who the page says is signed in here: the confirmed or last-known user, or the
+  // account a sign-out is still owed for. The key tells two accounts apart.
+  type Seen = { user: { id: string; email: string | null } | null; signOutUnconfirmed: boolean };
+  function shownAccount(state: Seen): string | null {
+    if (state.user) return state.user.email ?? 'another account';
+    return state.signOutUnconfirmed ? accountLabel.current ?? 'another account' : null;
+  }
+  const accountKey = (state: Seen) => (state.user ? 'user:' + state.user.id : state.signOutUnconfirmed ? 'owed' : 'none');
+
+  async function confirm(shown: string) {
     if (!link || sent.current) return; // the token works once; never send it twice
+    // The link signs in as the address it was emailed to. Another account
+    // signed in here is signed out first, never silently replaced: only the
+    // account the person was shown, and only once the session check answered.
+    const before = auth.getState();
+    if (before.status === 'checking' || before.signingOut) return;
+    if (accountKey(before) !== shown) {
+      setError(shownAccount(before)
+        ? 'The account signed in here changed. Check it below, then continue.'
+        : 'The account that was signed in here has signed out. Continue when ready.');
+      return;
+    }
     sent.current = true;
     setError(null);
     setPhase('verifying');
-    // The link signs in as the address it was emailed to. Another account
-    // signed in here is signed out first, never silently replaced.
-    const before = auth.getState();
     if (before.user || before.status !== 'signed-out' || before.signOutUnconfirmed) {
-      await auth.signOut();
+      try {
+        await auth.signOut();
+      } catch {
+        // Nothing was sent: the link is still unused. signOut() normally reports
+        // a failure as signOutUnconfirmed; this covers it throwing outright.
+        sent.current = false;
+        setError('Could not sign out of the current account. Try again.');
+        setPhase('confirm');
+        return;
+      }
       if (auth.getState().signOutUnconfirmed) {
         sent.current = false; // nothing was sent: the link is still unused
         setError('Could not sign out of the current account. Try again.');
@@ -2594,7 +2623,10 @@ export function useMagicLinkLanding(): MagicLinkLanding {
   if (!link) return { status: 'failed', error: 'This sign-in link is incomplete. Request a new one.' };
   if (phase === 'failed') return { status: 'failed', error: error ?? 'This sign-in link could not be used. Request a new one.' };
   if (phase === 'verifying') return { status: 'verifying' };
-  return { status: 'confirm', signedInAs: session.user?.email ?? (session.signOutUnconfirmed ? accountLabel.current : null), error, confirm: () => void confirm() };
+  const signedInAs = shownAccount(session);
+  const ready = session.status !== 'checking' && !session.signingOut;
+  const shownKey = accountKey(session);
+  return { status: 'confirm', signedInAs, ready, error, confirm: () => void confirm(shownKey) };
 }
 `;
 
@@ -2672,7 +2704,8 @@ export function MagicLinkStatus({ landing }: { landing: Exclude<MagicLinkLanding
             ? <p className="hint">You are signed in here as {landing.signedInAs}. Continuing signs that account out first.</p>
             : null}
           {landing.error ? <p className="error" role="alert">{landing.error}</p> : null}
-          <button type="submit" className="button">{landing.signedInAs ? 'Sign out and continue' : 'Continue'}</button>
+          {landing.ready ? null : <p className="hint" role="status">Checking who is signed in here…</p>}
+          <button type="submit" className="button" disabled={!landing.ready}>{landing.signedInAs ? 'Sign out and continue' : 'Continue'}</button>
           <a href="/">Not now</a>
         </form>
       </main>
@@ -2727,7 +2760,8 @@ export function MagicLinkStatus({ landing }: { landing: Exclude<MagicLinkLanding
           <p>This link signs you in with the email address it was sent to, and accepts the invitation if it carries one. It works once.</p>
           {landing.signedInAs ? <p>You are signed in here as {landing.signedInAs}. Continuing signs that account out first.</p> : null}
           {landing.error ? <p role="alert">{landing.error}</p> : null}
-          <button type="submit">{landing.signedInAs ? 'Sign out and continue' : 'Continue'}</button>{' '}
+          {landing.ready ? null : <p role="status">Checking who is signed in here…</p>}
+          <button type="submit" disabled={!landing.ready}>{landing.signedInAs ? 'Sign out and continue' : 'Continue'}</button>{' '}
           <a href="/">Not now</a>
         </form>
       </main>

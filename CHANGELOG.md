@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.38.23
+
+### Added
+
+- The default `somewhere init` starter ships password reset: a "Forgot
+  password?" link on the sign-in page, a `/forgot-password` page that requests
+  the email, a `/reset-password` page that the emailed link opens, and the two
+  functions behind them (`api/forgot-password.ts` calls `sw.auth.forgot`,
+  `api/reset-password.ts` calls `sw.auth.reset`). A used or expired link says
+  so in plain words and offers a new one (tsk_b15c7c79).
+
 ## 0.38.22
 
 ### Added

@@ -125,7 +125,7 @@ test('catalog is machine-readable and lists module files from the generator', ()
   ]);
   assert.ok(!catalog.ui[0].files.some((path) => path.startsWith('src/pages/')), 'pages are shared by both modes');
   assert.equal(catalog.defaults.ui, 'styled');
-  for (const id of ['private-files', 'payments', 'teams', 'public-sharing', 'password-reset', 'oauth', 'mfa', 'agent-durable']) {
+  for (const id of ['private-files', 'payments', 'teams', 'public-sharing', 'oauth', 'mfa', 'agent-durable']) {
     assert.ok(catalog.not_offered.some((entry) => entry.id === id), id);
   }
   assert.deepEqual(JSON.parse(JSON.stringify(catalog)), catalog);
@@ -280,6 +280,22 @@ test('index.html escapes the app name for text and for the description attribute
   }
 });
 
+test('every auth starter ships password reset: the sign-in link, both pages and both functions (tsk_b15c7c79)', () => {
+  for (const ui of ['styled', 'headless']) {
+    const starter = generate('auth', ui);
+    assert.match(starter.read('src/ui/AuthCard.tsx'), /href="\/forgot-password">Forgot password\?</);
+    assert.match(starter.read('api/forgot-password.ts'), /sw\.auth\.forgot\(\{ email: body\.email \}\)/);
+    assert.match(starter.read('api/reset-password.ts'), /sw\.auth\.reset\(\{ token: body\.token, new_password: body\.new_password \}\)/);
+    const app = starter.read('src/App.tsx');
+    assert.match(app, /pathname === '\/forgot-password'\) return <ForgotPasswordPage \/>/);
+    assert.match(app, /pathname === '\/reset-password'\) return <ResetPasswordPage \/>/);
+    assert.ok(app.indexOf("'/reset-password'") < app.indexOf("session.status === 'signed-out'"), 'reset opens before the sign-in gate');
+    const page = starter.read('src/pages/PasswordResetPage.tsx');
+    assert.match(page, /fetch\(path/);
+    assert.match(page, /'\/api\/reset-password', \{ token, new_password: password \}/);
+  }
+});
+
 test('every auth starter verifies email through the packaged route, with no token in page code', () => {
   for (const ui of ['styled', 'headless']) {
     const starter = generate('auth', ui);
@@ -289,7 +305,8 @@ test('every auth starter verifies email through the packaged route, with no toke
     assert.match(hook, /auth\.verifyEmail\(\{ code: code\.trim\(\) \}\)/);
     assert.match(starter.read('src/pages/SignedInLayout.tsx'), /<VerifyEmailPanel verification=\{verification\} \/>/);
     assert.match(starter.read('types/auth.ts'), /export interface EmailVerification/);
-    assert.ok(!starter.result.created.some((path) => path.startsWith('api/') && path !== 'api/auth/[...path].ts'),
+    const functions = new Set(['api/auth/[...path].ts', 'api/forgot-password.ts', 'api/reset-password.ts']);
+    assert.ok(!starter.result.created.some((path) => path.startsWith('api/') && !functions.has(path)),
       'the packaged route serves verification; no extra function');
     assert.doesNotMatch(hook + starter.read('src/ui/VerifyEmail.tsx'), /fetch\(|Authorization|Bearer|access_token|refresh_token|__Host-|localStorage/);
   }

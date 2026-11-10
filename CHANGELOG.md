@@ -9,6 +9,13 @@
   `project_patch` `edits`. Inline JSON and `--file` are exclusive; an unreadable
   file or one that is not a JSON object is refused before anything is sent.
 
+### Fixed
+
+- `somewhere call` keeps an ordered-edit refusal's handles. `--json` prints
+  `data.edit_index`, `path`, `expected`, `actual` and `conflicts_with`, and text
+  output shows them on one line under the error. Only these validated fields
+  are kept; other `data` fields are still not printed.
+
 ## 0.38.21
 
 ### Added

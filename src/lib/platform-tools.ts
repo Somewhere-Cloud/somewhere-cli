@@ -19,6 +19,35 @@ export interface PlatformToolCallOptions {
   signal?: AbortSignal;
 }
 
+/** The typed fields of an ordered-edit refusal (project_patch / fs_replace `edits`,
+ *  tsk_81dd50f0): which edit failed and why, the same handles the MCP response carries. */
+export interface EditRefusalDetail {
+  edit_index?: number;
+  path?: string;
+  expected?: number;
+  actual?: number;
+  conflicts_with?: string;
+}
+export type PlatformToolErrorData = { invalid?: InvalidDetail } & EditRefusalDetail;
+
+const EDIT_CONFLICT_FIELDS = new Set(['update_files', 'update_functions', 'update_binary_files', 'delete_files']);
+const EDIT_PATH = /^[A-Za-z0-9_.\-\/\[\]@+]{1,256}$/;
+
+/** Keep only well-formed ordered-edit refusal fields; everything else in `data` is dropped. */
+export function safeEditDetail(value: unknown): EditRefusalDetail | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const v = value as Record<string, unknown>;
+  const count = (n: unknown) => typeof n === 'number' && Number.isSafeInteger(n) && n >= 0;
+  const out: EditRefusalDetail = {};
+  if (count(v.edit_index)) out.edit_index = v.edit_index as number;
+  if (typeof v.path === 'string' && EDIT_PATH.test(v.path)) out.path = v.path;
+  if (count(v.expected)) out.expected = v.expected as number;
+  if (count(v.actual)) out.actual = v.actual as number;
+  if (typeof v.conflicts_with === 'string' && EDIT_CONFLICT_FIELDS.has(v.conflicts_with)) out.conflicts_with = v.conflicts_with;
+  // A bare path is not an edit refusal; the detail needs the edit it belongs to.
+  return out.edit_index !== undefined ? out : undefined;
+}
+
 export class PlatformToolError extends Error {
   constructor(
     public readonly tool: string,
@@ -32,8 +61,9 @@ export class PlatformToolError extends Error {
     /** The HTTP status the platform reported for this tool failure (its envelope's
      *  `http_status`), so a definite refusal is not recorded as an unknown outcome. */
     public readonly statusCode?: number,
-    /** Only the canonical validated input location; never copy arbitrary tool data. */
-    public readonly data?: { invalid: InvalidDetail },
+    /** Only validated typed fields: the canonical input location and the ordered-edit
+     *  refusal detail. Arbitrary tool data is never copied. */
+    public readonly data?: PlatformToolErrorData,
   ) {
     super(message);
     this.name = 'PlatformToolError';
@@ -266,13 +296,15 @@ export function platformToolErrorFromText(name: string, text: string): PlatformT
     const status = [parsed.http_status, record(parsed.canonical_error).http_status, collected.http_status]
       .find((value) => typeof value === 'number' && Number.isInteger(value) && value >= 100 && value <= 599) as number | undefined;
     const invalid = safeInvalid(record(parsed.data).invalid);
+    const edit = safeEditDetail(parsed.data);
+    const data: PlatformToolErrorData | undefined = invalid || edit ? { ...(invalid ? { invalid } : {}), ...(edit ?? {}) } : undefined;
     return new PlatformToolError(name, message, code, field('message') ?? text, field('next_step') ?? field('hint'), {
       requestId: field('request_id') ?? str(collected.request_id),
       traceId: field('trace_id') ?? str(collected.trace_id),
       ...(typeof parsed.retry === 'boolean' ? { retry: parsed.retry } : {}),
       ...(typeof parsed.retry_after_ms === 'number' && Number.isSafeInteger(parsed.retry_after_ms) && parsed.retry_after_ms >= 0
         ? { retryAfterMs: parsed.retry_after_ms } : {}),
-    }, status, invalid ? { invalid } : undefined);
+    }, status, data);
   } catch {
     return new PlatformToolError(name, message);
   }

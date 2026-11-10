@@ -87,6 +87,24 @@ export function error(msg: string, cause?: unknown, captureCause: unknown = caus
   console.error(`${red('✗')} ${msg}`);
   const ids = platformErrorIds(cause);
   if (ids) console.error(`  ${ids}`);
+  const detail = platformErrorDetail(cause);
+  if (detail) console.error(`  ${detail}`);
+}
+
+/**
+ * The short scalar fields of a typed failure's validated `data` (for example an
+ * ordered edit's edit_index, path, expected, actual, conflicts_with) as one line
+ * for text output. Only fields the error's own validator kept are present; a
+ * line longer than 200 characters is left to --json.
+ */
+export function platformErrorDetail(cause: unknown): string | null {
+  const data = platformErrorEnvelope(cause)?.extra.data;
+  if (!data || typeof data !== 'object') return null;
+  const parts = Object.entries(data as Record<string, unknown>)
+    .filter(([, v]) => typeof v === 'number' || typeof v === 'string')
+    .map(([k, v]) => `${k} ${v}`);
+  const line = parts.join(' · ');
+  return line && line.length <= 200 ? line : null;
 }
 
 /**

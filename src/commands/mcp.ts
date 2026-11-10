@@ -18,12 +18,15 @@ import {
   cliConfigPathForDisplay,
   somewhereStdioEntry,
 } from '../lib/config.js';
-import { ApiClient } from '../lib/client.js';
+import { ApiClient, CliApiError, typedServerError } from '../lib/client.js';
+import { CLI_VERSION } from '../lib/version.js';
 import { dim, error, info, success, teal } from '../lib/output.js';
 import {
   createPlatformMcpTransport,
   isMcpAuthRejection,
   mcpAccessExpiresSoon,
+  describeMcpFailure,
+  mcpHttpFailure,
   refreshMcpAccessToken,
 } from '../lib/platform-tools.js';
 
@@ -76,61 +79,166 @@ export function registerMcp(program: Command) {
 
 /* ─── stdio bridge (bare `somewhere mcp`) ─────────────────────────── */
 
-async function runStdioBridge(): Promise<void> {
-  const config = loadConfig();
-  if (!config?.token) {
-    emitFatalError('Not logged in. Run: somewhere login');
-    process.exit(1);
-  }
+/** The one tool the bridge serves itself while it cannot reach Somewhere. */
+export const BRIDGE_STATUS_TOOL = 'somewhere_status';
 
+/** Why the bridge is serving locally, and the login it last tried (never printed). */
+interface Recovery {
+  kind: 'login' | 'update';
+  code: string;
+  message: string;
+  token: string | null;
+  lastAttempt?: string;
+}
+
+type RpcId = string | number;
+type RpcMessage = { jsonrpc: '2.0'; id?: RpcId | null; method?: string; params?: Record<string, unknown>; result?: unknown; error?: unknown };
+
+const NOT_SENT = 'Nothing was sent to Somewhere for this call, and the bridge will not send it later.';
+
+/** A refusal the user fixes outside the bridge (log in, update the CLI); null for anything else. */
+function recoverableReason(err: unknown): Omit<Recovery, 'token'> | null {
+  const typed = typedServerError(err);
+  if (typed?.code === 'CLIENT_UPDATE_REQUIRED' || (typed && (typed.status === 410 || typed.status === 426))) {
+    return { kind: 'update', code: typed.code, message: typed.message };
+  }
+  if (typed?.status === 401) return { kind: 'login', code: typed.code, message: typed.message };
+  const http = mcpHttpFailure(err);
+  if (http && (http.code === 'CLIENT_UPDATE_REQUIRED' || http.status === 410 || http.status === 426)) {
+    return { kind: 'update', code: http.code ?? 'CLIENT_UPDATE_REQUIRED', message: http.message };
+  }
+  if (http?.status === 401 || isMcpAuthRejection(err)) {
+    return { kind: 'login', code: http?.code ?? 'LOGIN_REJECTED', message: `Somewhere refused this login (HTTP 401)${http && http.message ? `: ${http.message}` : '.'}` };
+  }
+  return null;
+}
+
+function recoveryText(recovery: Recovery): string {
+  const next = recovery.kind === 'update'
+    ? 'After updating, restart this MCP session so it runs the new CLI.'
+    : `Run \`somewhere login\` in a terminal, then call ${BRIDGE_STATUS_TOOL} again: the bridge picks up the new login without a restart.`;
+  return `Somewhere is not connected. ${recovery.code}: ${recovery.message} ${next}`
+    + (recovery.lastAttempt ? ` Last connection attempt: ${recovery.lastAttempt}` : '');
+}
+
+async function runStdioBridge(): Promise<void> {
   // Lazy-load the SDK only when the bridge actually runs (see import note above).
-  const { StdioServerTransport } =
-    await import('@modelcontextprotocol/sdk/server/stdio.js');
+  const [{ StdioServerTransport }, { LATEST_PROTOCOL_VERSION, SUPPORTED_PROTOCOL_VERSIONS }] = await Promise.all([
+    import('@modelcontextprotocol/sdk/server/stdio.js'),
+    import('@modelcontextprotocol/sdk/types.js'),
+  ]);
 
   const stdioTransport = new StdioServerTransport();
+  const log = (line: string) => process.stderr.write(`[somewhere mcp] ${line}\n`);
+  const toHost = (message: RpcMessage): void => {
+    stdioTransport.send(message as JSONRPCMessage).catch((err: unknown) => log(`stdio send failed: ${String(err)}`));
+  };
 
   let shuttingDown = false;
-  let fatalInFlight = false;
   let refreshInFlight: Promise<void> | null = null;
-  let httpTransport: StreamableHTTPClientTransport;
+  let leaveInFlight: Promise<boolean> | null = null;
+  let httpTransport: StreamableHTTPClientTransport | null = null;
+  let hostInitialized = false;
+  let probeSeq = 0;
+  /** Forwarded `initialize` requests: their answers declare tools.listChanged, which this bridge delivers. */
+  const initializeIds = new Set<RpcId>();
+  /** The bridge's own read-only probes; their answers never reach the host. */
+  const probes = new Map<RpcId, (message: RpcMessage) => void>();
+
+  const initialToken = loadConfig()?.token ?? null;
+  let recovery: Recovery | null = initialToken
+    ? null
+    : { kind: 'login', code: 'NOT_LOGGED_IN', message: 'This machine has no Somewhere login.', token: null };
 
   const shutdown = async () => {
     if (shuttingDown) return;
     shuttingDown = true;
     try { await stdioTransport.close(); } catch {}
-    try { await httpTransport.close(); } catch {}
+    try { await httpTransport?.close(); } catch {}
   };
 
-  const bindHttpTransport = (
-    transport: StreamableHTTPClientTransport,
-  ): void => {
+  const bindHttpTransport = (transport: StreamableHTTPClientTransport): void => {
     transport.onmessage = (msg: JSONRPCMessage) => {
-      stdioTransport.send(msg).catch((err: unknown) => {
-        process.stderr.write(`[somewhere mcp] stdio send failed: ${String(err)}\n`);
-      });
+      const message = msg as RpcMessage;
+      if (message.id !== undefined && message.id !== null && probes.has(message.id)) {
+        probes.get(message.id)!(message);
+        return;
+      }
+      if (message.id !== undefined && message.id !== null && initializeIds.delete(message.id) && message.result && typeof message.result === 'object') {
+        const result = message.result as { capabilities?: { tools?: Record<string, unknown> } };
+        result.capabilities = { ...result.capabilities, tools: { ...result.capabilities?.tools, listChanged: true } };
+      }
+      toHost(message);
     };
     transport.onclose = () => {
-      // Closing the superseded transport is part of a successful refresh.
-      // Only the currently-active transport is allowed to shut the bridge.
+      // Closing a superseded transport is part of a refresh or of entering recovery.
       if (transport === httpTransport) void shutdown();
     };
     transport.onerror = (err) => {
-      // send() reports this same error to its caller; that path owns the
-      // single-flight refresh + retry so it is not logged or handled twice.
+      // send() reports this same error to its caller, which owns the handling.
       if (isMcpAuthRejection(err)) return;
-      process.stderr.write(`[somewhere mcp] upstream error: ${String(err)}\n`);
+      log(`upstream error: ${describeMcpFailure(err)}`);
     };
   };
 
-  const createHttpTransport = async (
-    token: string,
-  ): Promise<StreamableHTTPClientTransport> => {
+  const createHttpTransport = async (token: string): Promise<StreamableHTTPClientTransport> => {
     const transport = await createPlatformMcpTransport(token);
     bindHttpTransport(transport);
+    await transport.start();
     return transport;
   };
 
-  httpTransport = await createHttpTransport(config.token);
+  const notifyToolsChanged = (): void => {
+    if (hostInitialized) toHost({ jsonrpc: '2.0', method: 'notifications/tools/list_changed' });
+  };
+
+  const enterRecovery = (reason: Omit<Recovery, 'token'>, token: string | null): void => {
+    const wasUpstream = recovery === null;
+    recovery = { ...reason, token };
+    const previous = httpTransport;
+    httpTransport = null;
+    void previous?.close().catch(() => {});
+    log(`not connected (${reason.code}); serving ${BRIDGE_STATUS_TOOL} until it is fixed`);
+    if (wasUpstream) notifyToolsChanged();
+  };
+
+  const reply = (id: RpcId, result: unknown): void => toHost({ jsonrpc: '2.0', id, result });
+  const replyError = (id: RpcId, code: number, message: string): void =>
+    toHost({ jsonrpc: '2.0', id, error: { code, message } });
+
+  /** Reconnect with a login made outside the bridge, proved by a read-only tools/list. Never replays anything. */
+  const tryLeaveRecovery = (): Promise<boolean> => {
+    if (leaveInFlight) return leaveInFlight;
+    leaveInFlight = (async () => {
+      const current = recovery;
+      if (!current) return true;
+      const token = loadConfig()?.token ?? null;
+      if (!token || token === current.token) return false;
+      let transport: StreamableHTTPClientTransport | null = null;
+      try {
+        transport = await createHttpTransport(token);
+        const id = `somewhere-bridge-probe-${++probeSeq}`;
+        const answered = new Promise<RpcMessage>((resolve, reject) => {
+          const timer = setTimeout(() => { probes.delete(id); reject(new Error('no answer to tools/list within 15s')); }, 15_000);
+          probes.set(id, (message) => { clearTimeout(timer); probes.delete(id); resolve(message); });
+        });
+        await transport.send({ jsonrpc: '2.0', id, method: 'tools/list', params: {} } as JSONRPCMessage);
+        const answer = await answered;
+        if (answer.error) throw new Error(`tools/list was refused: ${JSON.stringify(answer.error).slice(0, 300)}`);
+      } catch (err) {
+        void transport?.close().catch(() => {});
+        const reason = recoverableReason(err);
+        recovery = reason ? { ...reason, token } : { ...current, lastAttempt: describeMcpFailure(err) };
+        return false;
+      }
+      httpTransport = transport;
+      recovery = null;
+      log('connected with the current login');
+      notifyToolsChanged();
+      return true;
+    })();
+    return leaveInFlight.finally(() => { leaveInFlight = null; });
+  };
 
   const renewHttpTransport = async (preemptive = false): Promise<void> => {
     if (refreshInFlight) return refreshInFlight;
@@ -138,13 +246,10 @@ async function runStdioBridge(): Promise<void> {
       // Reuse the CLI's canonical renewal path: refresh after the
       // API confirms API_KEY_EXPIRED, or just before the server-provided access
       // expiry. Both paths rotate and persist the replacement smtr_ pair.
-      // INVALID_API_KEY or a revoked refresh credential stays terminal.
       const renewedToken = await refreshMcpAccessToken(preemptive);
       const previous = httpTransport;
-      const next = await createHttpTransport(renewedToken);
-      await next.start();
-      httpTransport = next;
-      await previous.close();
+      httpTransport = await createHttpTransport(renewedToken);
+      await previous?.close();
     })();
     try {
       await refreshInFlight;
@@ -153,53 +258,110 @@ async function runStdioBridge(): Promise<void> {
     }
   };
 
-  const forwardUpstream = async (msg: JSONRPCMessage): Promise<void> => {
-    // New login configs carry the exact access expiry. Renew before forwarding
-    // so a mutating MCP request is never replayed merely because it crossed
-    // the 24-hour auth boundary. Older configs retain the 401 fallback below.
-    if (mcpAccessExpiresSoon()) {
-      await renewHttpTransport(true);
+  /** Answer a host request while disconnected: initialize, the one status tool, and actionable errors. */
+  const answerLocally = (message: RpcMessage, state: Recovery, unsentNote = false): void => {
+    if (message.id === undefined || message.id === null || !message.method) return;
+    const id = message.id;
+    switch (message.method) {
+      case 'initialize': {
+        const requested = message.params?.protocolVersion;
+        reply(id, {
+          protocolVersion: typeof requested === 'string' && SUPPORTED_PROTOCOL_VERSIONS.includes(requested) ? requested : LATEST_PROTOCOL_VERSION,
+          capabilities: { tools: { listChanged: true } },
+          serverInfo: { name: 'somewhere', version: CLI_VERSION },
+          instructions: `${recoveryText(state)} Until then the only tool is ${BRIDGE_STATUS_TOOL}.`,
+        });
+        return;
+      }
+      case 'ping':
+        reply(id, {});
+        return;
+      case 'tools/list':
+        reply(id, {
+          tools: [{
+            name: BRIDGE_STATUS_TOOL,
+            description: 'Somewhere is not connected in this session. Call this to see why and what fixes it; after `somewhere login` it reconnects and the full tool list returns.',
+            inputSchema: { type: 'object', properties: {} },
+          }],
+        });
+        return;
+      case 'tools/call': {
+        const name = message.params?.name;
+        const other = name !== BRIDGE_STATUS_TOOL;
+        reply(id, {
+          content: [{ type: 'text', text: `${recoveryText(state)}${other || unsentNote ? ` ${NOT_SENT}` : ''}` }],
+          isError: true,
+        });
+        return;
+      }
+      default:
+        replyError(id, -32601, `${message.method} is unavailable: ${recoveryText(state)}`);
     }
-    try {
-      await httpTransport.send(msg);
-      return;
-    } catch (err) {
-      if (!isMcpAuthRejection(err)) throw err;
-    }
-    await renewHttpTransport();
-    // Exactly one replay. If the replacement is also rejected, fail cleanly;
-    // never spin a refresh loop or duplicate a mutating MCP call.
-    await httpTransport.send(msg);
   };
 
-  const failBridge = async (err: unknown): Promise<void> => {
-    if (fatalInFlight || shuttingDown) return;
-    fatalInFlight = true;
-    const detail = err instanceof Error ? err.message : String(err);
-    emitFatalError(`somewhere.cloud session could not be renewed. ${detail}`);
-    await shutdown();
-    process.exit(1);
+  const forwardUpstream = async (message: RpcMessage): Promise<void> => {
+    const isRequest = message.id !== undefined && message.id !== null && typeof message.method === 'string';
+    const usedToken = loadConfig()?.token ?? null;
+    if (!usedToken) {
+      // Logged out while the session runs: the renewal path would otherwise exit the process.
+      enterRecovery({ kind: 'login', code: 'NOT_LOGGED_IN', message: 'This machine has no Somewhere login.' }, null);
+      if (isRequest) answerLocally(message, recovery!, true);
+      return;
+    }
+    try {
+      // New login configs carry the exact access expiry. Renew before forwarding
+      // so a mutating MCP request is never replayed merely because it crossed
+      // the 24-hour auth boundary. Older configs retain the 401 fallback below.
+      if (mcpAccessExpiresSoon()) await renewHttpTransport(true);
+      if (!httpTransport) httpTransport = await createHttpTransport(usedToken);
+      if (isRequest && message.method === 'initialize') initializeIds.add(message.id!);
+      try {
+        await httpTransport.send(message as JSONRPCMessage);
+        return;
+      } catch (err) {
+        if (!isMcpAuthRejection(err)) throw err;
+      }
+      // A 401 means the platform did not run the request. Renew the expired key and
+      // send it exactly once more; a second refusal is a login problem, never a loop.
+      await renewHttpTransport();
+      await httpTransport!.send(message as JSONRPCMessage);
+    } catch (err) {
+      if (isRequest && message.method === 'initialize') initializeIds.delete(message.id!);
+      const reason = recoverableReason(err);
+      if (reason) enterRecovery(reason, usedToken);
+      if (recovery) {
+        if (isRequest) answerLocally(message, recovery, true);
+        return;
+      }
+      // Not a login or version problem: report the real reason and keep serving.
+      const detail = describeMcpFailure(err);
+      if (isRequest) replyError(message.id!, -32603, `${detail} The bridge is still running; retry when Somewhere is reachable.`);
+      else log(`could not forward ${message.method ?? 'a response'}: ${detail}`);
+    }
+  };
+
+  const handleHostMessage = async (message: RpcMessage): Promise<void> => {
+    if (message.method === 'notifications/initialized') hostInitialized = true;
+    if (!recovery) return forwardUpstream(message);
+    const isRequest = message.id !== undefined && message.id !== null && typeof message.method === 'string';
+    if (!isRequest) return; // notifications and responses have nowhere to go while disconnected
+    if (await tryLeaveRecovery()) {
+      if (message.method === 'tools/call' && message.params?.name === BRIDGE_STATUS_TOOL) {
+        reply(message.id!, { content: [{ type: 'text', text: 'Somewhere is connected with the current login. The full tool list is available again (your MCP client was told it changed; list tools to see it).' }] });
+        return;
+      }
+      return forwardUpstream(message);
+    }
+    answerLocally(message, recovery!);
   };
 
   stdioTransport.onmessage = (msg: JSONRPCMessage) => {
-    forwardUpstream(msg).catch((err: unknown) => {
-      void failBridge(err);
-    });
+    handleHostMessage(msg as RpcMessage).catch((err: unknown) => log(`unexpected bridge error: ${describeMcpFailure(err)}`));
   };
-
   stdioTransport.onclose = () => { void shutdown(); };
+  stdioTransport.onerror = (err) => { log(`stdio error: ${String(err)}`); };
 
-  stdioTransport.onerror = (err) => {
-    process.stderr.write(`[somewhere mcp] stdio error: ${String(err)}\n`);
-  };
-
-  try {
-    await httpTransport.start();
-  } catch (err) {
-    emitFatalError(`Failed to connect to mcp.somewhere.cloud: ${String(err)}`);
-    process.exit(1);
-  }
-
+  if (recovery) log(`not connected (${recovery.code}); serving ${BRIDGE_STATUS_TOOL} until it is fixed`);
   try {
     await stdioTransport.start();
   } catch (err) {
@@ -329,10 +491,11 @@ async function runDoctor(version: string): Promise<void> {
       const me = await new ApiClient(config.token).call<{ user?: { email?: string } }>('GET', '/auth/whoami');
       success(`Token valid (${me.user?.email ?? config.user.email ?? 'unknown account'})`);
     } catch (err) {
-      fail(
-        `Token rejected by api.somewhere.cloud: ${err instanceof Error ? err.message : String(err)}`,
-        'somewhere login',
-      );
+      // The platform's typed refusal says what is wrong; only an untyped 401 is a guess at the login.
+      const typed = typedServerError(err);
+      if (typed) fail(`Token check refused: ${typed.code}: ${typed.message}`);
+      else if (err instanceof CliApiError && err.statusCode === 401) fail('Token rejected by the platform (HTTP 401).', 'somewhere login');
+      else fail(`Could not check the token: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 
@@ -365,10 +528,12 @@ async function runDoctor(version: string): Promise<void> {
     } else if (res.status === 401) {
       fail('MCP server reachable but it rejected the token.', 'somewhere login');
     } else {
-      fail(`MCP server responded ${res.status} to initialize.`);
+      // Same parsing as the bridge, so the platform's code and message are printed.
+      const text = await res.text().catch(() => '');
+      fail(describeMcpFailure(Object.assign(new Error(`Streamable HTTP error: Error POSTing to endpoint: ${text}`), { code: res.status }), UPSTREAM_URL));
     }
   } catch (err) {
-    fail(`Cannot reach ${UPSTREAM_URL}: ${err instanceof Error ? err.message : String(err)}`);
+    fail(describeMcpFailure(err, UPSTREAM_URL));
   }
 
   // 4. Host configs — informational, not failures: not everyone uses every host.

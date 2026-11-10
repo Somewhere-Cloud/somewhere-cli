@@ -5,7 +5,7 @@ import type { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/cl
 import type { CallToolResult, Tool } from '@modelcontextprotocol/sdk/types.js';
 import type { FetchLike } from '@modelcontextprotocol/sdk/shared/transport.js';
 import { fetchWithProxy } from './http.js';
-import { ApiClient } from './client.js';
+import { ApiClient, CliApiError, typedServerError } from './client.js';
 import { getToken, loadConfig } from './config.js';
 import { safeInvalid, type InvalidDetail } from './vendor/repro-guidance.js';
 
@@ -66,6 +66,44 @@ export async function refreshMcpAccessToken(preemptive: boolean): Promise<string
     await client.call('GET', '/auth/whoami', undefined, undefined, { timeoutMs: 10_000 });
   }
   return getToken();
+}
+
+/** The status code and server message of an upstream MCP HTTP refusal (the SDK flattens them into text). */
+export function mcpHttpFailure(err: unknown): { status: number; code?: string; message: string } | null {
+  if (!(err instanceof Error) || !/^Streamable HTTP error: /.test(err.message)) return null;
+  const status = (err as Error & { code?: unknown }).code;
+  if (typeof status !== 'number' || status < 100) return null;
+  const text = err.message.replace(/^Streamable HTTP error: (Error POSTing to endpoint: )?/, '');
+  try {
+    const body = JSON.parse(text) as { error?: unknown; message?: unknown };
+    const rpc = body.error && typeof body.error === 'object'
+      ? body.error as { message?: unknown; data?: { error?: unknown } }
+      : null;
+    const code = typeof body.error === 'string' ? body.error : typeof rpc?.data?.error === 'string' ? rpc.data.error : undefined;
+    const message = typeof body.message === 'string' ? body.message : typeof rpc?.message === 'string' ? rpc.message : text;
+    return { status, code, message };
+  } catch {
+    return { status, message: text.slice(0, 300) };
+  }
+}
+
+/** The real reason a request failed: the platform's code and message, the HTTP status, or the network cause. */
+export function describeMcpFailure(err: unknown, url: string = MCP_BASE_URL): string {
+  const typed = typedServerError(err);
+  if (typed) return `${typed.code}: ${typed.message}`;
+  if (err instanceof CliApiError) return err.message;
+  const http = mcpHttpFailure(err);
+  if (http) return `${url} answered HTTP ${http.status}${http.code ? ` ${http.code}` : ''}: ${http.message}`;
+  const parts: string[] = [];
+  let current: unknown = err;
+  for (let depth = 0; current && depth < 4; depth++) {
+    const e = current as { message?: unknown; code?: unknown; cause?: unknown };
+    const text = typeof e.message === 'string' && e.message ? e.message : typeof current === 'string' ? current : '';
+    if (text && !parts.some((p) => p.includes(text))) parts.push(text);
+    if (typeof e.code === 'string' && !parts.some((p) => p.includes(e.code as string))) parts.push(e.code);
+    current = typeof current === 'object' ? e.cause : undefined;
+  }
+  return `Could not reach ${url}: ${parts.join(': ') || String(err)}`;
 }
 
 export function isMcpAuthRejection(err: unknown): boolean {
@@ -154,15 +192,30 @@ async function withPlatformClient<T>(
   };
 
   try {
+    try {
+      return await attempt(token);
+    } catch (err) {
+      if (!isMcpAuthRejection(err)) throw err;
+    }
+
+    options.signal?.throwIfAborted();
+    token = await refreshMcpAccessToken(false);
+    options.signal?.throwIfAborted();
     return await attempt(token);
   } catch (err) {
-    if (!isMcpAuthRejection(err)) throw err;
+    // An HTTP refusal of the MCP request itself carries the platform's code and
+    // message inside the SDK's flattened text: keep them typed, so every formatter
+    // prints them (tsk_224b77a0).
+    const http = mcpHttpFailure(err);
+    if (http?.code) {
+      throw new PlatformToolError('mcp', `${http.code}: ${http.message}`, http.code, http.message, undefined, {}, http.status);
+    }
+    // undici reports a network failure as a bare "fetch failed"; name the host and the cause.
+    if (err instanceof TypeError && (err as { cause?: unknown }).cause !== undefined) {
+      throw new Error(describeMcpFailure(err), { cause: err });
+    }
+    throw err;
   }
-
-  options.signal?.throwIfAborted();
-  token = await refreshMcpAccessToken(false);
-  options.signal?.throwIfAborted();
-  return attempt(token);
 }
 
 export async function listPlatformTools(

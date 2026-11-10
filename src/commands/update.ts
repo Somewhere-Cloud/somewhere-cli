@@ -31,7 +31,7 @@ import {
   verifyTarballIntegrity,
   type OfficialRelease,
 } from '../lib/update-security.js';
-import { NPM_UPDATE_COMMAND } from '../lib/notify/providers/update.js';
+import { NPM_UPDATE_COMMAND, PROJECT_PIN_NOTE } from '../lib/notify/providers/update.js';
 
 const PACKUMENT_URL = `${OFFICIAL_NPM_REGISTRY}/@somewhere-cloud%2Fcli`;
 
@@ -355,6 +355,7 @@ export async function runUpdate(
   }
 
   success(`Updated to ${release.version}. Run ${teal('somewhere --version')} to confirm.`);
+  info(PROJECT_PIN_NOTE);
   return 0;
 }
 

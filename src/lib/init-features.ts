@@ -17,7 +17,7 @@ interface InitModuleDefinition {
 const MODULES: readonly InitModuleDefinition[] = [
   {
     id: 'auth',
-    summary: 'Email/password sign-up, sign-in and sign-out through the SDK cookie session: the packaged /api/auth route, auth hooks over the SDK provider, a sign-in page, a "Verify your email" code panel for password accounts (the session decides the account; no token in page code), the /auth/magic page that sign-in and sw.auth.invite (group) invitation links open, routed in front of the sign-in gate (it redeems the one-time token once and opens the link\'s redirect_uri only when it is a page of this app), and a per-user private boundary behind a loading state. This is what plain `somewhere init` writes.',
+    summary: 'Email/password sign-up, sign-in and sign-out through the SDK cookie session: the packaged /api/auth route, auth hooks over the SDK provider, a sign-in page, a "Forgot password?" link with /forgot-password and /reset-password pages over api/forgot-password.ts and api/reset-password.ts (sw.auth.forgot, sw.auth.reset), a "Verify your email" code panel for password accounts (the session decides the account; no token in page code), the /auth/magic page that sign-in and sw.auth.invite (group) invitation links open, routed in front of the sign-in gate (it redeems the one-time token once and opens the link\'s redirect_uri only when it is a page of this app), and a per-user private boundary behind a loading state. This is what plain `somewhere init` writes.',
     requires: [],
   },
   {
@@ -45,7 +45,6 @@ const UI_MODES: readonly { id: InitUiMode; summary: string }[] = [
 // Listed so an agent reading the catalog does not invent them from scratch.
 const NOT_OFFERED: readonly { id: string; reason: string }[] = [
   { id: 'private-files', reason: 'Not offered by init yet; see `somewhere docs declared-files`.' },
-  { id: 'password-reset', reason: 'Not generated. Build it on the documented auth contract (`somewhere docs sw.auth`).' },
   { id: 'oauth', reason: 'Not a module: every auth starter has it. List `google`, `github` or `discord` in `SIGN_IN_PROVIDERS` (src/config.ts); the buttons and `/auth/callback` page are already wired. See `somewhere docs auth-client`.' },
   { id: 'mfa', reason: 'Not generated.' },
   { id: 'payments', reason: 'Not generated. See `somewhere docs payments`.' },

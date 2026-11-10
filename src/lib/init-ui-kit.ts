@@ -349,6 +349,7 @@ code, kbd { font-family: var(--font-mono); font-size: 0.9em; }
 .auth__form .button { width: 100%; }
 .auth__providers { display: grid; gap: var(--space-2); }
 .auth__switch { margin: 0; text-align: center; color: var(--color-muted); font-size: var(--text-sm); }
+.auth__forgot { margin: 0; text-align: right; font-size: var(--text-sm); }
 .divider { display: flex; align-items: center; gap: var(--space-3); color: var(--color-muted); font-size: var(--text-sm); }
 .divider::before, .divider::after { content: ""; flex: 1; height: 1px; background: var(--color-border); }
 .provider-icon { width: 18px; height: 18px; flex: none; }
@@ -452,6 +453,7 @@ export function AuthCard({ appName, tagline, form, providers, children }: AuthCa
             minLength={signUp ? form.passwordMinLength : undefined}
             hint={signUp ? \`At least \${form.passwordMinLength} characters.\` : undefined}
             value={form.password} onChange={(event) => form.setPassword(event.target.value)} />
+          {signUp ? null : <p className="auth__forgot"><a href="/forgot-password">Forgot password?</a></p>}
           {form.error ? <p className="error" role="alert">{form.error}</p> : null}
           <Button type="submit" block disabled={!form.canSubmit} pending={form.pending}>
             {signUp ? 'Create account' : 'Sign in'}
@@ -508,6 +510,7 @@ export function AuthCard({ appName, tagline, form, providers, children }: AuthCa
           minLength={signUp ? form.passwordMinLength : undefined}
           hint={signUp ? \`At least \${form.passwordMinLength} characters.\` : undefined}
           value={form.password} onChange={(event) => form.setPassword(event.target.value)} />
+        {signUp ? null : <p><a href="/forgot-password">Forgot password?</a></p>}
         {form.error ? <p role="alert">{form.error}</p> : null}
         <Button type="submit" disabled={!form.canSubmit} pending={form.pending}>
           {signUp ? 'Create account' : 'Sign in'}

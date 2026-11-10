@@ -2664,6 +2664,167 @@ export function MagicLinkStatus({ landing }: { landing: Exclude<MagicLinkLanding
 }
 `;
 
+// ------------------------------------------------------------ password reset
+
+const FORGOT_PASSWORD_API = `// api/forgot-password.ts — POST { email }. Emails a link to /reset-password?token=…
+// The answer is the same whether or not the address has an account.
+export default sw.endpoint({
+  auth: 'none',
+  body: { email: 'email' },
+  rateLimit: '10/hour',
+  handler: async ({ body }, sw) => sw.auth.forgot({ email: body.email }),
+});
+`;
+
+const RESET_PASSWORD_API = `// api/reset-password.ts — POST { token, new_password }. The token from the
+// emailed link works once and for an hour; a used or expired one is a 401.
+// A successful reset signs the account out everywhere.
+export default sw.endpoint({
+  auth: 'none',
+  body: { token: 'string', new_password: 'string' },
+  handler: async ({ body }, sw) => sw.auth.reset({ token: body.token, new_password: body.new_password }),
+});
+`;
+
+const PASSWORD_RESET_PAGE = `import { useState, type FormEvent, type ReactNode } from 'react';
+import { APP_NAME } from '../config';
+import { authErrorMessage, PASSWORD_MIN_LENGTH } from '../services/auth';
+import { Button } from '../ui/Button';
+import { TextField } from '../ui/Field';
+
+// Password reset, open to signed-out visitors (App.tsx routes both pages in
+// front of the sign-in gate). /forgot-password asks for the email; the emailed
+// link opens /reset-password?token=…. api/forgot-password.ts and
+// api/reset-password.ts call sw.auth.forgot and sw.auth.reset.
+
+class RequestError extends Error {
+  status: number;
+  constructor(status: number, message: string) {
+    super(message);
+    this.status = status;
+  }
+}
+
+async function post(path: string, body: Record<string, string>): Promise<string> {
+  const response = await fetch(path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const result: { message?: string } | null = await response.json().catch(() => null);
+  if (!response.ok) throw new RequestError(response.status, result?.message || 'Something went wrong. Try again.');
+  return result?.message ?? '';
+}
+
+function Frame({ title, intro, children }: { title: string; intro: string; children: ReactNode }) {
+  return (
+    <main className="auth">
+      <div className="auth__intro">
+        <p className="auth__app">{APP_NAME}</p>
+        <h1 className="auth__title">{title}</h1>
+        <p className="muted">{intro}</p>
+      </div>
+      <div className="auth__column">{children}</div>
+    </main>
+  );
+}
+
+export function ForgotPasswordPage() {
+  const [email, setEmail] = useState('');
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [sent, setSent] = useState<string | null>(null);
+
+  async function onSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (pending || !email.trim()) return;
+    setPending(true);
+    setError(null);
+    try {
+      await post('/api/forgot-password', { email: email.trim() });
+      setSent(email.trim());
+    } catch (reason: unknown) {
+      setError(authErrorMessage(reason));
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return (
+    <Frame title="Reset your password" intro="Enter your email and we will send you a link to choose a new password.">
+      <form className="panel auth__form" onSubmit={onSubmit} noValidate aria-label="Reset your password">
+        <TextField id="forgot-email" label="Email" type="email" name="email" autoComplete="email" inputMode="email" autoFocus
+          value={email} onChange={(event) => setEmail(event.target.value)} />
+        {error ? <p className="error" role="alert">{error}</p> : null}
+        {sent ? <p className="hint" role="status">If {sent} has an account, a reset link is on its way. It works once, for an hour.</p> : null}
+        <Button type="submit" block disabled={pending || !email.trim()} pending={pending}>Email me a reset link</Button>
+        <p className="auth__switch"><a href="/">Back to sign in</a></p>
+      </form>
+    </Frame>
+  );
+}
+
+export function ResetPasswordPage() {
+  // Read the token once, then drop it from the address bar and history.
+  const [token] = useState(() => {
+    const value = new URLSearchParams(window.location.search).get('token');
+    if (value) window.history.replaceState(null, '', window.location.pathname);
+    return value;
+  });
+  const [password, setPassword] = useState('');
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState(false);
+  const canSubmit = !pending && password.length >= PASSWORD_MIN_LENGTH;
+
+  async function onSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!token || !canSubmit) return;
+    setPending(true);
+    setError(null);
+    try {
+      await post('/api/reset-password', { token, new_password: password });
+      setDone(true);
+    } catch (reason: unknown) {
+      // 401: the link was already used, replaced by a newer one, or is over an hour old.
+      setError(reason instanceof RequestError && reason.status === 401
+        ? 'This reset link has already been used or has expired.' : authErrorMessage(reason));
+      setPassword('');
+    } finally {
+      setPending(false);
+    }
+  }
+
+  if (!token) {
+    return (
+      <Frame title="Reset your password" intro="This page opens from the link in your reset email.">
+        <p className="error" role="alert">This link has no reset token.</p>
+        <p className="auth__switch"><a href="/forgot-password">Send a new reset link</a></p>
+      </Frame>
+    );
+  }
+  if (done) {
+    return (
+      <Frame title="Password changed" intro="Sign in with your new password.">
+        <p className="auth__switch"><a href="/">Sign in</a></p>
+      </Frame>
+    );
+  }
+  return (
+    <Frame title="Choose a new password" intro="Then sign in with it.">
+      <form className="panel auth__form" onSubmit={onSubmit} noValidate aria-label="Choose a new password">
+        <TextField id="reset-password" label="New password" type="password" name="password" autoComplete="new-password" autoFocus
+          minLength={PASSWORD_MIN_LENGTH} hint={'At least ' + PASSWORD_MIN_LENGTH + ' characters.'}
+          value={password} onChange={(event) => setPassword(event.target.value)} />
+        {error ? <p className="error" role="alert">{error}</p> : null}
+        <Button type="submit" block disabled={!canSubmit} pending={pending}>Set new password</Button>
+        {error ? <p className="auth__switch"><a href="/forgot-password">Send a new reset link</a></p> : null}
+      </form>
+    </Frame>
+  );
+}
+`;
+
 function replaceOnce(text: string, find: string, replacement: string): string {
   const at = text.indexOf(find);
   if (at === -1 || text.indexOf(find, at + 1) !== -1) throw new Error(`init template: expected one ${JSON.stringify(find)}`);
@@ -2682,9 +2843,9 @@ function authCard(styled: boolean): string {
  *  link, or a social sign-in's return, opens them. */
 function appTsx(): string {
   let out = replaceOnce(APP, "import { HomePage } from './pages/HomePage';\n",
-    "import { AuthCallbackPage } from './pages/AuthCallbackPage';\nimport { HomePage } from './pages/HomePage';\nimport { MagicLinkPage } from './pages/MagicLinkPage';\n");
+    "import { AuthCallbackPage } from './pages/AuthCallbackPage';\nimport { HomePage } from './pages/HomePage';\nimport { MagicLinkPage } from './pages/MagicLinkPage';\nimport { ForgotPasswordPage, ResetPasswordPage } from './pages/PasswordResetPage';\n");
   out = replaceOnce(out, '  const session = useAuthState();\n\n',
-    "  const pathname = usePathname();\n  const session = useAuthState();\n\n  // An emailed sign-in or invitation link lands here before a session exists.\n  if (pathname === '/auth/magic') return <MagicLinkPage />;\n  // A social sign-in (src/config.ts SIGN_IN_PROVIDERS) returns here with ?code=.\n  if (pathname === '/auth/callback') return <AuthCallbackPage />;\n");
+    "  const pathname = usePathname();\n  const session = useAuthState();\n\n  // An emailed sign-in or invitation link lands here before a session exists.\n  if (pathname === '/auth/magic') return <MagicLinkPage />;\n  // Password reset works signed out; the reset email links to /reset-password.\n  if (pathname === '/forgot-password') return <ForgotPasswordPage />;\n  if (pathname === '/reset-password') return <ResetPasswordPage />;\n  // A social sign-in (src/config.ts SIGN_IN_PROVIDERS) returns here with ?code=.\n  if (pathname === '/auth/callback') return <AuthCallbackPage />;\n");
   return out;
 }
 
@@ -3020,6 +3181,7 @@ export function extensionPoints(selection: InitSelection): Record<string, string
     auth: 'src/auth/hooks.ts',
   };
   points.magic_link = 'src/auth/magic-link.ts, src/pages/MagicLinkPage.tsx';
+  points.password_reset = 'api/forgot-password.ts, api/reset-password.ts, src/pages/PasswordResetPage.tsx';
   if (selection.modules.includes('private-data')) points.data = 'db/schema.ts, src/services/notes.ts, src/data/useNotes.ts';
   if (selection.modules.includes('agent')) points.assistant = 'api/chat.ts, api/proposals.ts, src/data/useAssistant.ts, src/fixtures/assistant.ts';
   return points;
@@ -3069,6 +3231,9 @@ export function createFeatureTemplate(
     { path: 'src/auth/magic-link.ts', content: magicLinkHooks(magicLink) },
     { path: 'src/pages/MagicLinkPage.tsx', content: MAGIC_LINK_PAGE },
     { path: 'src/ui/MagicLink.tsx', content: magicLinkViews(styled, magicLink) },
+    { path: 'api/forgot-password.ts', content: FORGOT_PASSWORD_API },
+    { path: 'api/reset-password.ts', content: RESET_PASSWORD_API },
+    { path: 'src/pages/PasswordResetPage.tsx', content: PASSWORD_RESET_PAGE },
   ];
   if (styled) {
     files.push(

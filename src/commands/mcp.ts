@@ -313,6 +313,7 @@ async function runStdioBridge(): Promise<void> {
       // so a mutating MCP request is never replayed merely because it crossed
       // the 24-hour auth boundary. Older configs retain the 401 fallback below.
       if (mcpAccessExpiresSoon()) await renewHttpTransport(true);
+      // Only after the bridge closed the transport for a logout seen mid-session.
       if (!httpTransport) httpTransport = await createHttpTransport(usedToken);
       if (isRequest && message.method === 'initialize') initializeIds.add(message.id!);
       try {
@@ -362,6 +363,8 @@ async function runStdioBridge(): Promise<void> {
   stdioTransport.onerror = (err) => { log(`stdio error: ${String(err)}`); };
 
   if (recovery) log(`not connected (${recovery.code}); serving ${BRIDGE_STATUS_TOOL} until it is fixed`);
+  // One upstream transport before any host message, so concurrent first requests share it.
+  else httpTransport = await createHttpTransport(initialToken!);
   try {
     await stdioTransport.start();
   } catch (err) {

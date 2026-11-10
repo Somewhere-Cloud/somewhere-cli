@@ -278,7 +278,7 @@ function fail(reason: unknown, json?: boolean): never {
   if (json) {
     printJson({ ok: false, error: err.code, message: err.message, status: err.statusCode, ...(platformErrorEnvelope(err)?.extra ?? {}) });
   } else {
-    error(err.message);
+    error(err.message, err);
   }
   process.exit(1);
 }

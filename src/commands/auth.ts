@@ -20,7 +20,7 @@ import {
   DeviceLoginDenied,
   type DeviceSessionScope,
 } from '../lib/device-login.js';
-import { ApiClient, CliApiError } from '../lib/client.js';
+import { ApiClient, CliApiError, typedServerError } from '../lib/client.js';
 import {
   clearConfig,
   getToken,
@@ -291,17 +291,20 @@ export function registerAuth(program: Command) {
         // must NOT report success. Show the cached identity, then exit non-zero.
         // A revoked session (dashboard "Revoke", `somewhere logout` elsewhere)
         // says so in the platform's own words rather than guessing "expired".
-        // Only a 401 is about the login; an outage or a dropped connection is not,
-        // and must not send a working login to `somewhere login`.
+        // A typed refusal is printed as the platform's own code and message: it
+        // knows the cause (an out-of-date CLI, a revoked session) and guessing
+        // "expired" sends the agent to the wrong fix (tsk_224b77a0). Only an
+        // untyped 401 is reported as a login problem; an outage or a dropped
+        // connection is not, and must not send a working login to `somewhere login`.
+        const typed = typedServerError(err);
         const rejected = err instanceof CliApiError && err.statusCode === 401;
-        const revoked = rejected && /revoked/i.test(err.message);
-        const message = revoked
-          ? err.message
+        const [code, message] = typed
+          ? [typed.code, `${typed.code}: ${typed.message}`]
           : rejected
-            ? 'Could not fetch account details — token may be expired. Run: somewhere login'
-            : `Could not check this login: ${err instanceof Error ? err.message : String(err)}. The stored login was not changed; run the command again once the platform answers.`;
+            ? ['WHOAMI_FAILED', 'Could not fetch account details — token may be expired. Run: somewhere login']
+            : ['WHOAMI_UNAVAILABLE', `Could not check this login: ${err instanceof Error ? err.message : String(err)}. The stored login was not changed; run the command again once the platform answers.`];
         if (opts.json) {
-          printJson({ error: revoked ? 'SESSION_REVOKED' : rejected ? 'WHOAMI_FAILED' : 'WHOAMI_UNAVAILABLE', message });
+          printJson({ error: code, message: typed ? typed.message : message });
           process.exitCode = 1;
           return;
         }

@@ -567,3 +567,19 @@ export function formatErrorReference(meta: CliApiErrorMeta | undefined): string 
   if (meta.traceId) parts.push(`trace ${meta.traceId}`);
   return parts.length ? parts.join(' · ') : null;
 }
+
+/** Codes this CLI assigns itself when the server sent no code of its own, or no HTTP answer at all. */
+const UNTYPED_CODES = new Set([
+  'UNKNOWN', 'INVALID_RESPONSE', 'RESPONSE_BODY_ERROR', 'RESPONSE_BODY_TIMEOUT', 'NETWORK_ERROR', 'TIMEOUT', 'SERVER_SLOW',
+]);
+
+/**
+ * A typed refusal: an HTTP answer that carries an error code (the platform's, or the
+ * CLI's own named login state such as SESSION_EXPIRED). Every formatter prints its code
+ * and message rather than guessing a cause (tsk_224b77a0): an out-of-date client told
+ * "token may be expired" goes to the wrong fix. Null for an untyped answer or no answer.
+ */
+export function typedServerError(err: unknown): { code: string; message: string; status: number } | null {
+  if (!(err instanceof CliApiError) || err.statusCode < 400 || UNTYPED_CODES.has(err.code)) return null;
+  return { code: err.code, message: err.message, status: err.statusCode };
+}

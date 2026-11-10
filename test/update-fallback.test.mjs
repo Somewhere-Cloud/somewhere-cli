@@ -119,6 +119,8 @@ test('outdated warning: minor gap warns once a day; patch gap and current stay q
   const first = await getOutdatedWarning('0.33.10', options(now));
   assert.match(first, /somewhere CLI 0\.33\.10 is behind the latest release 0\.37\.6/);
   assert.match(first, /npm i -g @somewhere-cloud\/cli@latest/);
+  // A project pin keeps selecting its recorded CLI after a global update (tsk_224b77a0): say how to move it.
+  assert.match(first, /records an older CLI version keeps using it: run somewhere upgrade in that project/);
   assert.doesNotMatch(first, /\n/);
   assert.equal(await getOutdatedWarning('0.33.10', options(now + 60_000)), null, 'once a day');
   assert.deepEqual(JSON.parse(readFileSync(warnedPath, 'utf8')), { warnedAt: now });

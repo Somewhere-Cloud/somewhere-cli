@@ -100,10 +100,14 @@ export function isMinorBehind(current: string, latest: string): boolean {
  *  current provenance format), so every outdated message names this path. */
 export const NPM_UPDATE_COMMAND = `npm i -g ${PACKAGE}@latest`;
 
+/** A project that records a CLI version keeps running that version (lib/project-pin.ts):
+ *  updating the global CLI alone does not move it. */
+export const PROJECT_PIN_NOTE = 'A project that records an older CLI version keeps using it: run somewhere upgrade in that project to move it.';
+
 export function outdatedMessage(currentVersion: string, latest: string): string {
   return `! somewhere CLI ${currentVersion} is behind the latest release ${latest}; `
     + 'commands and flags in the current docs may be missing. '
-    + `Update with: somewhere update (or ${NPM_UPDATE_COMMAND})`;
+    + `Update with: somewhere update (or ${NPM_UPDATE_COMMAND}). ${PROJECT_PIN_NOTE}`;
 }
 
 /** The latest published version as last cached, without any network read.

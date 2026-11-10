@@ -209,7 +209,7 @@ function watchAndRun(dir: string, check: () => Promise<unknown>): void {
     } catch (failure) {
       // One failed check (a save mid-rename, an unreadable file) is reported;
       // the watcher keeps going and the next save checks again.
-      error(`Check failed: ${failure instanceof Error ? failure.message : String(failure)}`);
+      error(`Check failed: ${failure instanceof Error ? failure.message : String(failure)}`, failure);
     } finally {
       running = false;
     }

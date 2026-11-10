@@ -332,3 +332,21 @@ test('the local browser refuses a framed action rather than running it on the to
   assert.equal(result.ok, false);
   assert.match(result.error, /require a hosted project browser/);
 });
+
+test('frames passes through the --actions intake unchanged, and malformed shapes are refused', () => {
+  const ok = normalizeBrowserActions([{ click: '#open' }, { frames: { count: 6, interval_ms: 150, selector: ' #menu ' } }]);
+  assert.equal(ok.ok, true, JSON.stringify(ok));
+  assert.deepEqual(ok.actions[1], { frames: { count: 6, interval_ms: 150, selector: '#menu' } });
+  // Bounds belong to the platform (one source of truth): an out-of-range count is forwarded and refused there by index.
+  assert.deepEqual(normalizeBrowserActions([{ frames: { count: 50, interval_ms: 100 } }]).actions, [{ frames: { count: 50, interval_ms: 100 } }]);
+  for (const bad of [{ frames: 6 }, { frames: { count: 3 } }, { frames: { count: 3, interval_ms: 100, every: 2 } }, { frames: { count: 3, interval_ms: 100, selector: '' } }, { frames: { count: 3, interval_ms: 100 }, frame: 'child' }]) {
+    assert.equal(normalizeBrowserActions([bad]).ok, false, JSON.stringify(bad));
+  }
+});
+
+test('frames on the local loopback browser is refused with the reason, not run partially', async () => {
+  const result = await executeLocalAction(fakeSession(), { frames: { count: 3, interval_ms: 100 } }, Date.now() + 1000);
+  assert.equal(result.ok, false);
+  assert.equal(result.action, 'frames');
+  assert.match(result.error, /frames .* runs in the hosted browser/);
+});

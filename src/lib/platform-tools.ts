@@ -5,7 +5,7 @@ import type { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/cl
 import type { CallToolResult, Tool } from '@modelcontextprotocol/sdk/types.js';
 import type { FetchLike } from '@modelcontextprotocol/sdk/shared/transport.js';
 import { fetchWithProxy } from './http.js';
-import { ApiClient } from './client.js';
+import { ApiClient, CliApiError, typedServerError } from './client.js';
 import { getToken, loadConfig } from './config.js';
 import { safeInvalid, type InvalidDetail } from './vendor/repro-guidance.js';
 
@@ -17,6 +17,35 @@ let isSdkAuthError: (err: unknown) => boolean = () => false;
 export interface PlatformToolCallOptions {
   allTools?: boolean;
   signal?: AbortSignal;
+}
+
+/** The typed fields of an ordered-edit refusal (project_patch / fs_replace `edits`,
+ *  tsk_81dd50f0): which edit failed and why, the same handles the MCP response carries. */
+export interface EditRefusalDetail {
+  edit_index?: number;
+  path?: string;
+  expected?: number;
+  actual?: number;
+  conflicts_with?: string;
+}
+export type PlatformToolErrorData = { invalid?: InvalidDetail } & EditRefusalDetail;
+
+const EDIT_CONFLICT_FIELDS = new Set(['update_files', 'update_functions', 'update_binary_files', 'delete_files']);
+const EDIT_PATH = /^[A-Za-z0-9_.\-\/\[\]@+]{1,256}$/;
+
+/** Keep only well-formed ordered-edit refusal fields; everything else in `data` is dropped. */
+export function safeEditDetail(value: unknown): EditRefusalDetail | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const v = value as Record<string, unknown>;
+  const count = (n: unknown) => typeof n === 'number' && Number.isSafeInteger(n) && n >= 0;
+  const out: EditRefusalDetail = {};
+  if (count(v.edit_index)) out.edit_index = v.edit_index as number;
+  if (typeof v.path === 'string' && EDIT_PATH.test(v.path)) out.path = v.path;
+  if (count(v.expected)) out.expected = v.expected as number;
+  if (count(v.actual)) out.actual = v.actual as number;
+  if (typeof v.conflicts_with === 'string' && EDIT_CONFLICT_FIELDS.has(v.conflicts_with)) out.conflicts_with = v.conflicts_with;
+  // A bare path is not an edit refusal; the detail needs the edit it belongs to.
+  return out.edit_index !== undefined ? out : undefined;
 }
 
 export class PlatformToolError extends Error {
@@ -32,8 +61,9 @@ export class PlatformToolError extends Error {
     /** The HTTP status the platform reported for this tool failure (its envelope's
      *  `http_status`), so a definite refusal is not recorded as an unknown outcome. */
     public readonly statusCode?: number,
-    /** Only the canonical validated input location; never copy arbitrary tool data. */
-    public readonly data?: { invalid: InvalidDetail },
+    /** Only validated typed fields: the canonical input location and the ordered-edit
+     *  refusal detail. Arbitrary tool data is never copied. */
+    public readonly data?: PlatformToolErrorData,
   ) {
     super(message);
     this.name = 'PlatformToolError';
@@ -66,6 +96,44 @@ export async function refreshMcpAccessToken(preemptive: boolean): Promise<string
     await client.call('GET', '/auth/whoami', undefined, undefined, { timeoutMs: 10_000 });
   }
   return getToken();
+}
+
+/** The status code and server message of an upstream MCP HTTP refusal (the SDK flattens them into text). */
+export function mcpHttpFailure(err: unknown): { status: number; code?: string; message: string } | null {
+  if (!(err instanceof Error) || !/^Streamable HTTP error: /.test(err.message)) return null;
+  const status = (err as Error & { code?: unknown }).code;
+  if (typeof status !== 'number' || status < 100) return null;
+  const text = err.message.replace(/^Streamable HTTP error: (Error POSTing to endpoint: )?/, '');
+  try {
+    const body = JSON.parse(text) as { error?: unknown; message?: unknown };
+    const rpc = body.error && typeof body.error === 'object'
+      ? body.error as { message?: unknown; data?: { error?: unknown } }
+      : null;
+    const code = typeof body.error === 'string' ? body.error : typeof rpc?.data?.error === 'string' ? rpc.data.error : undefined;
+    const message = typeof body.message === 'string' ? body.message : typeof rpc?.message === 'string' ? rpc.message : text;
+    return { status, code, message };
+  } catch {
+    return { status, message: text.slice(0, 300) };
+  }
+}
+
+/** The real reason a request failed: the platform's code and message, the HTTP status, or the network cause. */
+export function describeMcpFailure(err: unknown, url: string = MCP_BASE_URL): string {
+  const typed = typedServerError(err);
+  if (typed) return `${typed.code}: ${typed.message}`;
+  if (err instanceof CliApiError) return err.message;
+  const http = mcpHttpFailure(err);
+  if (http) return `${url} answered HTTP ${http.status}${http.code ? ` ${http.code}` : ''}: ${http.message}`;
+  const parts: string[] = [];
+  let current: unknown = err;
+  for (let depth = 0; current && depth < 4; depth++) {
+    const e = current as { message?: unknown; code?: unknown; cause?: unknown };
+    const text = typeof e.message === 'string' && e.message ? e.message : typeof current === 'string' ? current : '';
+    if (text && !parts.some((p) => p.includes(text))) parts.push(text);
+    if (typeof e.code === 'string' && !parts.some((p) => p.includes(e.code as string))) parts.push(e.code);
+    current = typeof current === 'object' ? e.cause : undefined;
+  }
+  return `Could not reach ${url}: ${parts.join(': ') || String(err)}`;
 }
 
 export function isMcpAuthRejection(err: unknown): boolean {
@@ -154,15 +222,30 @@ async function withPlatformClient<T>(
   };
 
   try {
+    try {
+      return await attempt(token);
+    } catch (err) {
+      if (!isMcpAuthRejection(err)) throw err;
+    }
+
+    options.signal?.throwIfAborted();
+    token = await refreshMcpAccessToken(false);
+    options.signal?.throwIfAborted();
     return await attempt(token);
   } catch (err) {
-    if (!isMcpAuthRejection(err)) throw err;
+    // An HTTP refusal of the MCP request itself carries the platform's code and
+    // message inside the SDK's flattened text: keep them typed, so every formatter
+    // prints them (tsk_224b77a0).
+    const http = mcpHttpFailure(err);
+    if (http?.code) {
+      throw new PlatformToolError('mcp', `${http.code}: ${http.message}`, http.code, http.message, undefined, {}, http.status);
+    }
+    // undici reports a network failure as a bare "fetch failed"; name the host and the cause.
+    if (err instanceof TypeError && (err as { cause?: unknown }).cause !== undefined) {
+      throw new Error(describeMcpFailure(err), { cause: err });
+    }
+    throw err;
   }
-
-  options.signal?.throwIfAborted();
-  token = await refreshMcpAccessToken(false);
-  options.signal?.throwIfAborted();
-  return attempt(token);
 }
 
 export async function listPlatformTools(
@@ -213,13 +296,15 @@ export function platformToolErrorFromText(name: string, text: string): PlatformT
     const status = [parsed.http_status, record(parsed.canonical_error).http_status, collected.http_status]
       .find((value) => typeof value === 'number' && Number.isInteger(value) && value >= 100 && value <= 599) as number | undefined;
     const invalid = safeInvalid(record(parsed.data).invalid);
+    const edit = safeEditDetail(parsed.data);
+    const data: PlatformToolErrorData | undefined = invalid || edit ? { ...(invalid ? { invalid } : {}), ...(edit ?? {}) } : undefined;
     return new PlatformToolError(name, message, code, field('message') ?? text, field('next_step') ?? field('hint'), {
       requestId: field('request_id') ?? str(collected.request_id),
       traceId: field('trace_id') ?? str(collected.trace_id),
       ...(typeof parsed.retry === 'boolean' ? { retry: parsed.retry } : {}),
       ...(typeof parsed.retry_after_ms === 'number' && Number.isSafeInteger(parsed.retry_after_ms) && parsed.retry_after_ms >= 0
         ? { retryAfterMs: parsed.retry_after_ms } : {}),
-    }, status, invalid ? { invalid } : undefined);
+    }, status, data);
   } catch {
     return new PlatformToolError(name, message);
   }

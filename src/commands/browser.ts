@@ -392,6 +392,7 @@ export function stringifyResult(v: unknown): string {
  */
 export function stepResultLines(s: BrowserStepResult): string[] {
   const value = s.value !== undefined ? s.value : s.result;
+  if (s.action === 'frames' && value && typeof value === 'object') return framesResultLines(value as FramesValue);
   if (value === undefined) {
     if (!VALUE_ACTIONS.has(s.action ?? '') || s.error) return [];
     return [`  result: ${dim('(no value returned)')}`];
@@ -399,6 +400,30 @@ export function stepResultLines(s: BrowserStepResult): string[] {
   const text = stringifyResult(value);
   if (!text.includes('\n')) return [`  result: ${text}`];
   return ['  result:', ...text.split('\n').map((l) => `    ${l}`)];
+}
+
+interface FramesValue {
+  complete?: boolean;
+  requested?: number;
+  captured?: number;
+  summary?: string;
+  motion?: Array<{ from_ms: number; to_ms: number; changed_ratio: number }>;
+  element_box?: { moved?: boolean; max_shift_px?: number };
+  incomplete?: { reason?: string; detail?: string };
+  sheet?: string;
+}
+
+/** A frames step: the verdict line, the measured change between frames, and
+ *  (with a selector) how far the element itself moved. The sheet is listed
+ *  with the screenshots under its label. */
+export function framesResultLines(v: FramesValue): string[] {
+  const lines = [`  frames: ${v.summary ?? '(no summary)'} — ${v.captured ?? 0}/${v.requested ?? 0} frames${v.sheet ? `, sheet ${v.sheet}` : ''}`];
+  if (v.motion?.length) {
+    lines.push(`  motion: ${v.motion.map((m) => `${m.from_ms}→${m.to_ms} ms ${(m.changed_ratio * 100).toFixed(1)}%`).join(', ')}`);
+  }
+  if (v.element_box) lines.push(`  element_box: ${v.element_box.moved ? `moved up to ${v.element_box.max_shift_px ?? 0}px` : 'did not move'}`);
+  if (v.incomplete) lines.push(`  incomplete: ${v.incomplete.reason ?? 'unknown'}${v.incomplete.detail ? ` — ${v.incomplete.detail}` : ''}`);
+  return lines;
 }
 
 /**

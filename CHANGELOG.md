@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.38.22
+
+### Added
+
+- `somewhere call <tool> --file <path>` reads the tool's JSON arguments object
+  from a file instead of the command line, for large inputs such as many
+  `project_patch` `edits`. Inline JSON and `--file` are exclusive; an unreadable
+  file or one that is not a JSON object is refused before anything is sent.
+- `somewhere browser --actions` accepts the `frames` action and prints its
+  measured change.
+- `somewhere mcp` has a recovery mode: with no login, or when the platform
+  refuses the login or the CLI version, it still completes the MCP handshake and
+  offers one tool, `somewhere_status`, that says what to do, instead of exiting
+  with "Connection closed". It picks up a later login without a restart.
+
+### Fixed
+
+- Typed server errors print their code and message in every output format.
+- The local MCP bridge creates its upstream connection once, so concurrent
+  first requests share it.
+- `somewhere call` keeps an ordered-edit refusal's handles. `--json` prints
+  `data.edit_index`, `path`, `expected`, `actual` and `conflicts_with`, and text
+  output shows them on one line under the error. Only these validated fields
+  are kept; other `data` fields are still not printed.
+
 ## 0.38.21
 
 ### Added

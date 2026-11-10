@@ -570,3 +570,29 @@ test('normalizeBrowserVerdict makes passed agree with an unhealthy exit', () => 
 });
 
 test.after(() => server.close());
+
+test('formatBrowserReport: a frames step prints its verdict, measured change and element movement, and the sheet as a screenshot', () => {
+  const lines = formatBrowserReport({
+    final_url: 'https://app.example/',
+    passed: true,
+    dom_outline: [],
+    steps: [{ step: 0, action: 'frames', ok: true, value: {
+      complete: true, requested: 3, captured: 3, sheet: 'frames-0',
+      summary: 'visual change detected in the sampled region',
+      motion: [{ from_ms: 0, to_ms: 152, changed_ratio: 0.043 }, { from_ms: 152, to_ms: 301, changed_ratio: 0 }],
+      element_box: { moved: true, max_shift_px: 78 },
+    } }],
+    screenshots: [{ label: 'frames-0', url: 'https://files.example/s.jpg', fs_path: '/_browser_tests/r/0-frames-0.jpg' }],
+  }).join('\n');
+  assert.match(lines, /frames: visual change detected in the sampled region — 3\/3 frames, sheet frames-0/);
+  assert.match(lines, /motion: 0→152 ms 4\.3%, 152→301 ms 0\.0%/);
+  assert.match(lines, /element_box: moved up to 78px/);
+  assert.match(lines, /screenshot: frames-0 — https:\/\/files\.example\/s\.jpg/);
+  assert.doesNotMatch(lines, /"motion"/, 'not dumped as JSON');
+  const partial = formatBrowserReport({ final_url: 'https://app.example/', passed: false, dom_outline: [], steps: [{ step: 0, action: 'frames', ok: false, error: 'frames incomplete', value: {
+    complete: false, requested: 6, captured: 2, summary: 'incomplete (2 of 6 frames captured): no conclusion about visual change', motion: [],
+    incomplete: { reason: 'selector_detached', detail: '"#soon" no longer matched a rendered element at frame 3' },
+  } }] }).join('\n');
+  assert.match(partial, /incomplete: selector_detached — "#soon" no longer matched/);
+  assert.match(partial, /2\/6 frames/);
+});

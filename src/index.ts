@@ -189,7 +189,8 @@ collectNotices(process.argv)
   .catch(() => {});
 try {
   const command = process.argv[2] || '';
-  const skipRecovery = ['lint', 'upgrade', 'login', 'signup', 'logout', 'docs', '--help', '-h', '--version', '-V'].includes(command);
+  // Help, version and update never wait on, or fail because of, an API call (tsk_224b77a0).
+  const skipRecovery = ['lint', 'upgrade', 'update', 'login', 'signup', 'logout', 'docs', 'help', '--help', '-h', '--version', '-V'].includes(command);
   const recovery = skipRecovery ? { kind: 'none' as const } : await recoverClaimHandoff();
   if (recovery.kind === 'recovered' && recovery.message && !jsonOutputRequested) info(recovery.message);
   if (recovery.kind === 'stale' && recovery.message) {

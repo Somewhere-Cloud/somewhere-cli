@@ -468,6 +468,7 @@ function actionName(action: BrowserSequenceAction | undefined, fallback: string)
   if ('screenshot' in action) return `screenshot ${action.screenshot}`;
   if ('dialog' in action) return `dialog ${action.dialog}`;
   if ('goto' in action) return `goto ${reportUrl(action.goto)}`;
+  if ('frames' in action) return `frames ${action.frames.count}×${action.frames.interval_ms}ms${action.frames.selector ? ` ${action.frames.selector}` : ''}`;
   return `eval ${action.eval}`;
 }
 

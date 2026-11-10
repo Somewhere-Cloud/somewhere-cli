@@ -287,7 +287,7 @@ test('stdio MCP renews before the recorded access expiry without replaying upstr
   }
 });
 
-test('stdio MCP with a revoked refresh credential ends cleanly without leaking secrets', async () => {
+test('stdio MCP with a revoked refresh credential stays up in recovery mode without leaking secrets', async () => {
   const home = mkdtempSync(join(tmpdir(), 'sw-mcp-revoked-home-'));
   writeConfig(
     home,
@@ -305,13 +305,16 @@ test('stdio MCP with a revoked refresh credential ends cleanly without leaking s
 
   try {
     bridge.send({ jsonrpc: '2.0', id: 6, method: 'tools/list', params: {} });
-    const fatal = await bridge.nextMessage((message) => message.id === null && message.error);
-    assert.equal(fatal.error.code, -32001);
-    assert.match(fatal.error.message, /session|renew|login/i);
-    const exitCode = await new Promise((resolve) => bridge.child.once('close', resolve));
-    assert.equal(exitCode, 1);
+    const listed = await bridge.nextMessage((message) => message.id === 6);
+    // Recovery mode (tsk_224b77a0): the one status tool, not a fatal exit.
+    assert.deepEqual(listed.result.tools.map((tool) => tool.name), ['somewhere_status']);
+    bridge.send({ jsonrpc: '2.0', id: 7, method: 'tools/call', params: { name: 'somewhere_status', arguments: {} } });
+    const status = await bridge.nextMessage((message) => message.id === 7);
+    assert.equal(status.result.isError, true);
+    assert.match(status.result.content[0].text, /SESSION_EXPIRED: .*somewhere login/);
+    assert.equal(bridge.child.exitCode, null, 'the bridge stays alive');
 
-    const output = `${JSON.stringify(fatal)}\n${bridge.stderr()}`;
+    const output = `${JSON.stringify(listed)}\n${JSON.stringify(status)}\n${bridge.stderr()}`;
     assert.doesNotMatch(output, /smt_expired|smtr_revoked_secret/);
     assert.equal(
       servers.apiCalls.filter((call) => call.url === '/keys/cli-pair/refresh').length,

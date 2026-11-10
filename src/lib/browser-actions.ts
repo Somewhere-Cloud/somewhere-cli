@@ -14,7 +14,8 @@ type BrowserSequenceActionBody =
   | { screenshot: string }
   | { dialog: 'accept' | 'dismiss'; text?: string }
   | { eval: string }
-  | { goto: string };
+  | { goto: string }
+  | { frames: { count: number; interval_ms: number; selector?: string } };
 
 export interface ExpectedBrowserRequest {
   path: string;
@@ -26,7 +27,7 @@ export interface BrowserRequestExpectationResult extends ExpectedBrowserRequest 
   error?: string;
 }
 
-const ACTION_KEYS = ['click', 'fill', 'upload', 'select', 'wait', 'expect', 'screenshot', 'dialog', 'eval', 'goto'] as const;
+const ACTION_KEYS = ['click', 'fill', 'upload', 'select', 'wait', 'expect', 'screenshot', 'dialog', 'eval', 'goto', 'frames'] as const;
 export const MAX_BROWSER_UPLOAD_BYTES = 10 * 1024 * 1024;
 
 const MIME_TYPES: Record<string, string> = {
@@ -131,7 +132,7 @@ export function normalizeBrowserActions(raw: unknown, baseDir = process.cwd()):
       const frame = typeof record.frame === 'string' && record.frame.trim() ? record.frame.trim()
         : typeof record.frame === 'number' && Number.isInteger(record.frame) && record.frame >= 0 ? String(record.frame) : null;
       if (frame === null) return { ok: false, error: `${at}: frame must be a frame name, URL substring, child index, or iframe CSS selector.` };
-      if (key === 'goto' || key === 'dialog' || (key === 'wait' && typeof actionValue === 'number')) {
+      if (key === 'goto' || key === 'dialog' || key === 'frames' || (key === 'wait' && typeof actionValue === 'number')) {
         return { ok: false, error: `${at}: ${key === 'wait' ? 'a fixed wait' : key} applies to the whole page, so it cannot take "frame".` };
       }
       frames[index] = frame;
@@ -193,6 +194,24 @@ export function normalizeBrowserActions(raw: unknown, baseDir = process.cwd()):
     if (key === 'screenshot') {
       if (typeof actionValue !== 'string' || !actionValue.trim()) return { ok: false, error: `${at}: screenshot must be a non-empty label.` };
       actions.push({ screenshot: actionValue.trim() });
+      continue;
+    }
+    if (key === 'frames') {
+      // The shape is checked here; the bounds (2-12 frames, at most 10 s) are
+      // the platform's, which refuses out-of-range values by action index.
+      if (!actionValue || typeof actionValue !== 'object' || Array.isArray(actionValue)) {
+        return { ok: false, error: `${at}: frames must be an object such as {"count":6,"interval_ms":400}.` };
+      }
+      const sample = actionValue as Record<string, unknown>;
+      const extra = Object.keys(sample).filter((k) => k !== 'count' && k !== 'interval_ms' && k !== 'selector');
+      if (extra.length) return { ok: false, error: `${at}: frames takes only count, interval_ms and selector (got ${extra.join(', ')}).` };
+      if (typeof sample.count !== 'number' || typeof sample.interval_ms !== 'number') {
+        return { ok: false, error: `${at}: frames needs a number "count" and a number "interval_ms".` };
+      }
+      if (sample.selector !== undefined && (typeof sample.selector !== 'string' || !sample.selector.trim())) {
+        return { ok: false, error: `${at}: frames.selector must be a non-empty CSS selector when given.` };
+      }
+      actions.push({ frames: { count: sample.count, interval_ms: sample.interval_ms, ...(typeof sample.selector === 'string' ? { selector: sample.selector.trim() } : {}) } });
       continue;
     }
     if (key === 'dialog') {
@@ -336,6 +355,7 @@ export function actionLabel(action: BrowserSequenceAction): string {
   if ('screenshot' in action) return 'screenshot';
   if ('dialog' in action) return 'dialog';
   if ('goto' in action) return 'goto';
+  if ('frames' in action) return 'frames';
   return 'eval';
 }
 

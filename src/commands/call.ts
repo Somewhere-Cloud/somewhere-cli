@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { Command } from 'commander';
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import { callPlatformTool, listPlatformTools } from '../lib/platform-tools.js';
@@ -6,19 +7,38 @@ import { dim, error, printJson } from '../lib/output.js';
 import { isRecord } from '../lib/platform-command.js';
 import type { ProjectConfig } from '../types.js';
 
-function parseArguments(value: string | undefined): Record<string, unknown> {
+function parseArguments(value: string | undefined, file?: string): Record<string, unknown> {
   if (value === undefined) return {};
+  const where = file === undefined ? 'Arguments' : `The arguments in ${file}`;
   let parsed: unknown;
   try {
     parsed = JSON.parse(value) as unknown;
   } catch (err) {
-    throw new Error(`Arguments must be valid JSON. ${err instanceof Error ? err.message : String(err)}. `
-      + 'The requested tool was not called. Pass one JSON object as a single argument, with double-quoted property names and string values; run `somewhere call --help` for usage.');
+    throw new Error(`${where} must be valid JSON. ${err instanceof Error ? err.message : String(err)}. `
+      + (file === undefined
+        ? 'The requested tool was not called. Pass one JSON object as a single argument, with double-quoted property names and string values; run `somewhere call --help` for usage.'
+        : 'The requested tool was not called. The file holds one JSON object with double-quoted property names and string values.'));
   }
   if (!isRecord(parsed)) {
-    throw new Error('Arguments must be a JSON object, for example: \'{"project_id":"default"}\'. The requested tool was not called.');
+    throw new Error(`${where} must be a JSON object, for example: '{"project_id":"default"}'. The requested tool was not called.`);
   }
   return parsed;
+}
+
+/** Arguments from the inline JSON or from `--file <path>` (tsk_81dd50f0), never both. */
+export function readCallArguments(jsonArgs: string | undefined, file: string | undefined): Record<string, unknown> {
+  if (file === undefined) return parseArguments(jsonArgs);
+  if (jsonArgs !== undefined) {
+    throw new Error('Pass the JSON arguments inline or with --file, not both. The requested tool was not called.');
+  }
+  let text: string;
+  try {
+    text = readFileSync(file, 'utf8');
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException)?.code;
+    throw new Error(`Could not read --file ${file}${code ? ` (${code})` : ''}. The requested tool was not called.`);
+  }
+  return parseArguments(text, file);
 }
 
 function acceptsProjectId(tool: Tool | undefined): boolean {
@@ -63,18 +83,21 @@ export function registerCall(program: Command): void {
     .command('call [tool] [json]')
     .description('Invoke any platform tool by name with JSON arguments')
     .option('--list', 'List every available platform tool and its input schema')
+    .option('--file <path>', 'Read the JSON arguments object from a file instead of the command line')
     .option('--all-projects', 'In a linked directory, do not default project_id to the linked project')
     .option('--json', 'Print stable JSON output')
     .addHelpText('after', '\nIn a directory linked with .somewhere.json, a tool that takes project_id runs against the\n'
-      + 'linked project unless the JSON names one. Use --all-projects to omit the default; the tool decides its scope.\n')
+      + 'linked project unless the JSON names one. Use --all-projects to omit the default; the tool decides its scope.\n'
+      + '\nLarge arguments, such as many project_patch edits, go in a file:\n'
+      + '  somewhere call project_patch --file edits.json\n')
     .action(async (
       tool: string | undefined,
       jsonArgs: string | undefined,
-      opts: { list?: boolean; json?: boolean; allProjects?: boolean },
+      opts: { list?: boolean; json?: boolean; allProjects?: boolean; file?: string },
     ) => {
       try {
         if (opts.list) {
-          if (tool || jsonArgs) throw new Error('Do not pass a tool name with --list. The requested tool was not called. Run `somewhere call --list` without a tool name or JSON arguments.');
+          if (tool || jsonArgs || opts.file !== undefined) throw new Error('Do not pass a tool name with --list. The requested tool was not called. Run `somewhere call --list` without a tool name or JSON arguments.');
           const tools = await listPlatformTools({ allTools: true });
           if (opts.json) {
             printJson({ tools, count: tools.length });
@@ -90,7 +113,7 @@ export function registerCall(program: Command): void {
         if (!tool) {
           throw new Error('Missing tool name. The requested tool was not called. Run `somewhere call --list` to discover tools.');
         }
-        let args = parseArguments(jsonArgs);
+        let args = readCallArguments(jsonArgs, opts.file);
         const linked = loadProjectConfig();
         const needsCatalog = !('project_id' in args) && !opts.allProjects && Boolean(linked?.project_id);
         const entry = needsCatalog

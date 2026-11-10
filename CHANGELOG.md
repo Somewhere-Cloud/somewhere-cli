@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- `somewhere call <tool> --file <path>` reads the tool's JSON arguments object
+  from a file instead of the command line, for large inputs such as many
+  `project_patch` `edits`. Inline JSON and `--file` are exclusive; an unreadable
+  file or one that is not a JSON object is refused before anything is sent.
+
 ## 0.38.21
 
 ### Added

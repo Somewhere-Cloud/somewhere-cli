@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.38.28
+
+### Fixed
+
+- After a rollback or restore, a refused deploy no longer says "live is newer
+  than this folder" (live is the older version then). It says live was moved to
+  a different version than the one the folder came from (tsk_0dcd7530).
+
 ## 0.38.27
 
 ### Changed

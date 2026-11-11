@@ -382,7 +382,7 @@ export function formatStaleReleaseBaseExplanation(
   const list = changed.slice(0, 10).join(', ');
   const more = changed.length > 10 ? `, and ${changed.length - 10} more` : '';
   return [
-    `Not deployed: live is newer than this folder. Nothing was changed. ${how}`,
+    `${own || d.active_release_activation === 'rollback' ? 'Not deployed: live was moved to a different version than the one this folder came from.' : 'Not deployed: live is newer than this folder.'} Nothing was changed. ${how}`,
     changed.length > 0
       ? `Files that differ between ${folder} and live: ${list}${more}.`
       : d.history_unavailable ? 'The earlier version is no longer available to compare, so the differing files cannot be listed.' : null,

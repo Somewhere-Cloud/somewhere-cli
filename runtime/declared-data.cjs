@@ -4197,6 +4197,8 @@ var require_schema_types = __commonJS({
   interface TableOptions<Field extends string> {
     scope?: Scope; client?: ClientPermissions<Field>; indexes?: string[][];
     unique?: string[][]; relations?: Record<string, Relation>;
+    /** sw.rooms: a room per row; save = a json() column only the room writes, referee = an app function path. */
+    rooms?: { save?: Field; referee?: string };
   }
 }
 `;
@@ -4404,8 +4406,8 @@ var require_consumer_contract = __commonJS({
   "worker/containers/compile/consumer-contract.cjs"(exports2, module2) {
     "use strict";
     var CONSUMER_CONTRACT2 = Object.freeze({
-      version: 2,
-      digest: "dd64af8fa3c540cfc8ef97d5e0af6e91235425cd5b2e35761f35543c78796672"
+      version: 3,
+      digest: "21c4d644e0ac9a86858201e65ef5a31fe9b8d86e0863af334f539b78904f64e9"
     });
     var MEMBERSHIPS = "memberships: table({ id: id(), team_id: text(), member_id: text() }, { scope: owner(), client: { read: true } }),";
     var SHARES = "shares: table({ id: id(), grantee_id: text() }, { scope: owner(), client: { read: true, create: ['grantee_id'], delete: true }, unique: [['user_id', 'grantee_id']] }),";

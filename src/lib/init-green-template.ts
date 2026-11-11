@@ -47,7 +47,16 @@ const APP_TYPES = `export interface GreetingResponse {
 }
 `;
 
-const SCHEMA = `import { id, schema, serverOnly, table, text } from 'somewhere/db';
+const SCHEMA = `// Starter table. To replace the greeting with your app, declare your own tables here
+// (a schema needs at least one) and delete the greeting files: api/greeting.ts,
+// src/services/greeting.ts, types/app.ts and the greeting code in src/App.tsx. Then:
+// - Never deployed: delete the greetings table below.
+// - Already deployed: replace it with \`greetings: removedTable()\` (import removedTable
+//   from 'somewhere/db'). The deploy retires it and keeps its rows for 30 days;
+//   declaring it again within 30 days restores them. Leave it declared to keep it.
+// - Unsure: delete it and run \`somewhere deploy-check .\`. A deployed table is refused
+//   with SCHEMA_DEPLOY_REFUSED naming it and nothing changes; then use removedTable().
+import { id, schema, serverOnly, table, text } from 'somewhere/db';
 
 export default schema({
   greetings: table({
@@ -59,7 +68,8 @@ export default schema({
 });
 `;
 
-const API = `export default sw.endpoint({
+const API = `// Starter endpoint. To remove the greeting, follow the steps at the top of db/schema.ts.
+export default sw.endpoint({
   auth: 'none', // deliberate: public and read-only; anyone can fetch the greeting
   handler: async (_input, sw) => {
     const result = await sw.db.from('greetings', { limit: 1 });
@@ -140,11 +150,9 @@ the greeting message; add caller authorization before serving private data.
 The SDK and \`api/auth/[...path].ts\` are included; add your sign-in UI or use
 \`somewhere init --template auth\` for the complete sign-in screens.
 
-When replacing the greeting, remove its page/service files. If this table has
-never been deployed, delete its schema declaration. If it has been deployed,
-use \`greetings: removedTable()\` (import \`removedTable\` from \`somewhere/db\`);
-the deploy retires it with 30-day retention, even if it is empty. Remove an
-unused \`types/app.ts\` too. A missing optional include directory is harmless.
+To replace the greeting, follow the steps at the top of \`db/schema.ts\`;
+they cover a table that was never deployed, one that was, and not knowing
+which. A missing optional include directory is harmless.
 
 The greeting's \`serverOnly()\` scope demonstrates a trusted public endpoint;
 it is not the default for your app's data. Choose fitting declared access

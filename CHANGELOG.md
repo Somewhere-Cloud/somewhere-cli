@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.38.30
+
+### Fixed
+
+- Typecheck accepts the `rooms: { save, referee }` table option in
+  `db/schema.ts` instead of reporting TS2353. The vendored platform types are
+  re-synced at consumer contract 3 (tsk_4e67d49d).
+
 ## 0.38.29
 
 ### Changed

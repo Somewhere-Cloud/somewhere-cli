@@ -6,6 +6,9 @@ var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __getProtoOf = Object.getPrototypeOf;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
+var __esm = (fn, res) => function __init() {
+  return fn && (res = (0, fn[__getOwnPropNames(fn)[0]])(fn = 0)), res;
+};
 var __commonJS = (cb, mod) => function __require() {
   return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
 };
@@ -72,6 +75,37 @@ var require_function_route = __commonJS({
       return parts.length ? `/api/${parts.join("/")}` : "/api";
     }
     module2.exports = { functionRouteSegments: functionRouteSegments2, displayRoute: displayRoute2, routeShape: routeShape2, typedClientRoute };
+  }
+});
+
+// worker/src/utils/log-sanitize.ts
+var SENSITIVE_PARAMS, SENSITIVE_PARAM_NAMES;
+var init_log_sanitize = __esm({
+  "worker/src/utils/log-sanitize.ts"() {
+    "use strict";
+    SENSITIVE_PARAMS = [
+      "access_token",
+      "refresh_token",
+      // OAuth callbacks carry one-use credentials even when validation refuses them.
+      "code",
+      "state",
+      // A creator or link secret belongs only in a request body; a stray query copy is never kept.
+      "creator_secret",
+      "secret",
+      "signature",
+      "api_key",
+      "apikey",
+      "token",
+      "key",
+      "sig",
+      // A DSN carries its own password, and percent-encoding hides it from the
+      // Postgres URI rule below. `password` covers the other connection-string
+      // form, `postgres://reader@host/db?password=…`, which has no userinfo
+      // password for that rule to match.
+      "dsn",
+      "password"
+    ];
+    SENSITIVE_PARAM_NAMES = new Set(SENSITIVE_PARAMS);
   }
 });
 
@@ -1275,30 +1309,11 @@ var import_function_route = __toESM(require_function_route());
 // worker/src/runtime/verify-signup.ts
 var VERIFY_SIGNUP_FETCH_PROLOGUE = "    const verifySignup = await __sw_captureVerifySignup(request); request = verifySignup.request;";
 
-// worker/src/utils/log-sanitize.ts
-var SENSITIVE_PARAMS = [
-  "access_token",
-  "refresh_token",
-  // OAuth callbacks carry one-use credentials even when validation refuses them.
-  "code",
-  "state",
-  // A creator or link secret belongs only in a request body; a stray query copy is never kept.
-  "creator_secret",
-  "secret",
-  "signature",
-  "api_key",
-  "apikey",
-  "token",
-  "key",
-  "sig",
-  // A DSN carries its own password, and percent-encoding hides it from the
-  // Postgres URI rule below. `password` covers the other connection-string
-  // form, `postgres://reader@host/db?password=…`, which has no userinfo
-  // password for that rule to match.
-  "dsn",
-  "password"
-];
-var SENSITIVE_PARAM_NAMES = new Set(SENSITIVE_PARAMS);
+// worker/src/utils/platform-compile-failure.ts
+var COMPILE_UNAVAILABLE_REALERT_MS = 60 * 60 * 1e3;
+
+// worker/src/utils/authority.ts
+init_log_sanitize();
 
 // worker/src/utils/function-bundle-transport.ts
 var NATIVE_RUNTIME_SERVICE_BINDING = "RUNTIME_PLATFORM_API";
@@ -2337,6 +2352,9 @@ function __sw_parseTraceparent(raw) {
 // the customer's own file path, so they are named from the reserved operation
 // segment or the HTTP method, never from a path segment; anything that is not
 // a platform /v1/ path is 'platform.call', never the path itself.
+// sw.rooms -> its platform-private door half (the browser ticket door). Module
+// scope: customer modules cannot name it, and nothing is stored on sw.
+const __sw_roomsDoor = new WeakMap();
 const __sw_FS_OPS = { move: 1, copy: 1, restore: 1, stat: 1, versions: 1, diff: 1, glob: 1, search: 1, replace: 1, sign: 1, 'public-url': 1, visibility: 1 };
 const __sw_FS_METHOD_OPS = { GET: 'sw.fs.get', HEAD: 'sw.fs.get', PUT: 'sw.fs.write', DELETE: 'sw.fs.delete', POST: 'sw.fs.post' };
 function __sw_traceOpName(path, method) {
@@ -15957,6 +15975,138 @@ var PUSH_JS = `    push: (function () {
       };
     })(),`;
 
+// worker/src/runtime/rooms.ts
+var ROOMS_JS = `    rooms: (function () {
+      function __sw_roomsError(code, message, status) {
+        const err = new Error(message);
+        err.code = code;
+        err.status = status;
+        err.__sw_expose = true;
+        return __sw_markExpected(err);
+      }
+      function __sw_roomsRef(label, table, id) {
+        if (typeof table !== 'string' || table.length === 0 || table.length > 128) {
+          throw __sw_roomsError('VALIDATION_ERROR', label + ': table must be the name of a table that declares rooms.', 400);
+        }
+        if (!(typeof id === 'string' && id.length > 0 && id.length <= 4096) && !(typeof id === 'number' && Number.isSafeInteger(id))) {
+          throw __sw_roomsError('VALIDATION_ERROR', label + ': id must be the row id (a string or a whole number).', 400);
+        }
+        return { table: table, id: id };
+      }
+      function __sw_roomsVisitorToken() {
+        const staged = typeof __sw_visitorSessionToken === 'function' ? __sw_visitorSessionToken() : null;
+        return staged || __sw_readCookie(__sw_authSnapshotRequest.headers.get('cookie'), '__Host-sw_visitor') || null;
+      }
+      // The verified person of this request, carried the way every user-owned
+      // surface carries it. The platform re-verifies; nothing here is trusted.
+      async function __sw_roomsCallerHeaders(label, issueVisitor) {
+        if (__sw_signedDelivery || __sw_hasRuntimeProjectAuthority()) {
+          throw __sw_roomsError('ROOM_NO_CALLER', label + ' acts as the person who made this request, and this request has none (a job, schedule or server call). Use sw.rooms.server.' + label.split('.').pop() + ' for platform authority.', 403);
+        }
+        __sw_enforceAmbientCookieCsrf();
+        if (await __sw_optionalSubject()) {
+          return await __sw_runtimeSubjectHeaders('X-Somewhere-Rooms-Authority', 'none');
+        }
+        let visitor = __sw_roomsVisitorToken();
+        if (!visitor && issueVisitor && typeof __sw_resolveVisitorIdentity === 'function') {
+          // The ticket door gives a first-time anonymous visitor a session when the
+          // app declares visitor identity, so the person is the same on reconnect.
+          try { await __sw_resolveVisitorIdentity(); visitor = __sw_roomsVisitorToken(); }
+          catch (err) { if (!err || err.code !== 'VISITOR_IDENTITY_UNAVAILABLE') throw err; }
+        }
+        if (visitor) return { 'X-Somewhere-Rooms-Authority': 'visitor', 'X-Sw-Visitor-Session': visitor };
+        return { 'X-Somewhere-Rooms-Authority': 'none' };
+      }
+      async function __sw_roomsCall(path, headers, body) {
+        const r = await platformFetch(path, {
+          method: 'POST',
+          headers: Object.assign({ 'Content-Type': 'application/json' }, headers),
+          body: JSON.stringify(Object.assign({ project_id: projectId }, body)),
+        });
+        const data = await __sw_platformJSONBody(r);
+        if (!r.ok || !data || data.ok === false) {
+          const err = __sw_platformError(r, data);
+          if (data && typeof data.reason === 'string') err.reason = data.reason;
+          if (data && data.state !== undefined) err.state = data.state;
+          if (data && data.version !== undefined) err.version = data.version;
+          if (r.status >= 400 && r.status < 500) { err.__sw_expose = true; __sw_markExpected(err); }
+          throw err;
+        }
+        return data.data;
+      }
+      function __sw_roomsOps(label, prefix, headersFor) {
+        return {
+          async act(table, id, action) {
+            const ref = __sw_roomsRef(label + '.act', table, id);
+            return __sw_roomsCall(prefix + 'act', await headersFor(label + '.act'), Object.assign(ref, { action: action }));
+          },
+          async set(table, id, patch) {
+            const ref = __sw_roomsRef(label + '.set', table, id);
+            if (!patch || typeof patch !== 'object' || Array.isArray(patch)) {
+              throw __sw_roomsError('VALIDATION_ERROR', label + '.set: patch must be an object of top-level keys (null deletes a key).', 400);
+            }
+            return __sw_roomsCall(prefix + 'set', await headersFor(label + '.set'), Object.assign(ref, { patch: patch }));
+          },
+          async send(table, id, message) {
+            const ref = __sw_roomsRef(label + '.send', table, id);
+            return __sw_roomsCall(prefix + 'send', await headersFor(label + '.send'), Object.assign(ref, { message: message }));
+          },
+          async get(table, id) {
+            const ref = __sw_roomsRef(label + '.get', table, id);
+            return __sw_roomsCall(prefix + 'get', await headersFor(label + '.get'), ref);
+          },
+        };
+      }
+      async function __sw_roomsServerHeaders() { return { 'X-Somewhere-Rooms-Authority': 'server' }; }
+      const __sw_roomsVerified = new WeakMap();
+      async function __sw_roomsEvent(req) {
+        if (!req || typeof req.clone !== 'function' || !req.headers) {
+          throw __sw_roomsError('ROOM_EVENT_INVALID', 'sw.rooms.event(req) takes the request your referee function received.', 400);
+        }
+        const known = __sw_roomsVerified.get(req);
+        if (known) return known;
+        const pending = (async function () {
+          const eventId = req.headers.get('x-somewhere-room-event');
+          const invalid = function () { return __sw_roomsError('ROOM_EVENT_INVALID', 'This request is not an event sent by a room of this app.', 403); };
+          if (!eventId) throw invalid();
+          const bytes = new Uint8Array(await req.clone().arrayBuffer());
+          let event;
+          try { event = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)); } catch (_) { throw invalid(); }
+          if (!event || typeof event !== 'object' || !event.row || typeof event.row.table !== 'string') throw invalid();
+          const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes));
+          let hex = '';
+          for (let i = 0; i < digest.length; i++) hex += digest[i].toString(16).padStart(2, '0');
+          let answer;
+          try {
+            answer = await __sw_roomsCall('/v1/rooms/verify-event', {}, { table: event.row.table, id: event.row.id, event_id: eventId, body_sha256: hex });
+          } catch (err) {
+            if (err && err.status >= 400 && err.status < 500) throw invalid();
+            throw err;
+          }
+          if (!answer || answer.valid !== true) throw invalid();
+          return event;
+        })();
+        __sw_roomsVerified.set(req, pending);
+        pending.catch(function () { __sw_roomsVerified.delete(req); });
+        return pending;
+      }
+      const __sw_rooms = Object.assign(__sw_roomsOps('sw.rooms', '/v1/rooms/', function (label) { return __sw_roomsCallerHeaders(label, false); }), {
+        server: Object.freeze(__sw_roomsOps('sw.rooms.server', '/v1/rooms/server/', __sw_roomsServerHeaders)),
+        event: __sw_roomsEvent,
+      });
+      Object.freeze(__sw_rooms);
+      // Platform-private: the browser ticket door (/__sw/rooms/ticket) asks for a
+      // ticket as this request's person. Module-scoped, never reachable from sw.
+      __sw_roomsDoor.set(__sw_rooms, {
+        async ticket(table, id) {
+          const ref = __sw_roomsRef('joinRoom', table, id);
+          return __sw_roomsCall('/v1/rooms/ticket', await __sw_roomsCallerHeaders('sw.rooms.ticket', true), ref);
+        },
+      });
+      return __sw_rooms;
+    })(),
+`;
+
 // worker/src/runtime/context-tail.ts
 var CONTEXT_TAIL_JS = `  };
   // sw.realtime is RETIRED (tsk_e0cc5403). There is no namespace: the property
@@ -16066,11 +16216,22 @@ var CONTEXT_TAIL_JS = `  };
       portal: sw.payments.portal,
       portalForUser: sw.payments.portalForUser,
     });
+    // Rooms are a live-app feature: every operation refuses with one typed code,
+    // before any transport, and the real namespace is never reachable here.
+    function draftRoomsUnavailable() {
+      const err = new Error('Rooms work on the live app only, not in a preview. Deploy, then open the live app.');
+      err.code = 'ROOMS_DRAFT_UNAVAILABLE';
+      err.status = 409;
+      err.__sw_expose = true;
+      throw err;
+    }
+    const draftRoomsOps = { act: draftRoomsUnavailable, set: draftRoomsUnavailable, send: draftRoomsUnavailable, get: draftRoomsUnavailable };
+    const draftRooms = Object.freeze(Object.assign({}, draftRoomsOps, { server: Object.freeze(Object.assign({}, draftRoomsOps)), event: draftRoomsUnavailable }));
     const draftSafe = new Set([
       'project_id', 'subdomain', 'tier', 'env', 'request_id', 'params',
       // Groups stays discoverable only to return its draft refusal before transport.
       'groups',
-      'crypto', 'db', 'fs', 'auth', 'billing', 'email', 'payments', 'logs', 'sw', 'ctx',
+      'crypto', 'db', 'fs', 'auth', 'billing', 'email', 'payments', 'logs', 'rooms', 'sw', 'ctx',
       '__sw_pendingRefresh', '__sw_pendingCookies', '__sw_pendingBackground',
       // Response state the shim's attachPendingRefresh reads on every answer (#439). A draft's
       // read session is inert by construction (context-head: envelope null when isDraftExecution),
@@ -16099,10 +16260,11 @@ var CONTEXT_TAIL_JS = `  };
       const descriptor = Object.getOwnPropertyDescriptor(sw, property);
       if (!descriptor) continue;
       if (property === 'db' || property === 'fs' || property === 'auth' || property === 'billing' || property === 'email'
-          || property === 'payments') {
+          || property === 'payments' || property === 'rooms') {
         Object.defineProperty(draftTarget, property, {
           value: property === 'db' ? draftDb : property === 'fs' ? draftFs : property === 'auth' ? draftAuth
-            : property === 'billing' ? draftBilling : property === 'email' ? draftEmail : draftPayments,
+            : property === 'billing' ? draftBilling : property === 'email' ? draftEmail
+            : property === 'rooms' ? draftRooms : draftPayments,
           enumerable: descriptor.enumerable,
         });
       } else {
@@ -16178,6 +16340,7 @@ var PARTS = [
   WEB_JS,
   NOTIFICATIONS_JS,
   PUSH_JS,
+  ROOMS_JS,
   CONTEXT_TAIL_JS
 ];
 var PLATFORM_CONTEXT_JS = PARTS.join("\n").trim();
@@ -17524,6 +17687,443 @@ async function __sw_handlePushDoor(request, sw, env) {
 }
 `;
 
+// worker/src/runtime/rooms-client.ts
+var ROOMS_CLIENT_MODULE_JS = `
+const TICKET_PATH = '/__sw/rooms/ticket';
+const CONNECT_PATH = '/__sw/rooms/connect';
+const RENEW_MS = 240000;
+const PING_MS = 30000;
+const PING_FRAME = '{"t":"ping"}';
+const PONG_FRAME = '{"t":"pong"}';
+const FINAL_BYE = { row_deleted: 'ROOM_ROW_DELETED', full: 'ROOM_FULL' };
+
+function roomError(code, message, extra) {
+  const err = new Error(message);
+  err.code = code;
+  if (extra) for (const key in extra) err[key] = extra[key];
+  return err;
+}
+
+function merge(base, patch) {
+  const next = Object.assign({}, base);
+  for (const key of Object.keys(patch || {})) {
+    if (patch[key] === null) delete next[key];
+    else next[key] = patch[key];
+  }
+  return next;
+}
+
+async function requestTicket(table, id) {
+  let res;
+  try {
+    res = await fetch(TICKET_PATH, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ table: table, id: id }),
+    });
+  } catch (cause) {
+    throw roomError('ROOM_UNREACHABLE', 'The room could not be reached. Check the connection.', { retryable: true, cause: cause });
+  }
+  let body = null;
+  try { body = await res.json(); } catch (_) {}
+  if (!res.ok || !body || body.ok === false || !body.data || typeof body.data.ticket !== 'string') {
+    const code = (body && (body.code || body.error)) || 'ROOM_UNREACHABLE';
+    throw roomError(code, (body && body.message) || ('The room could not be joined (' + res.status + ').'), {
+      status: res.status,
+      retryable: res.status >= 500 || res.status === 429 || !body,
+    });
+  }
+  return body.data.ticket;
+}
+
+function connectUrl(ticket) {
+  return (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + CONNECT_PATH + '?ticket=' + encodeURIComponent(ticket);
+}
+
+class Room {
+  constructor(table, id) {
+    this.table = table;
+    this.id = id;
+    this.state = {};
+    this.version = 0;
+    this.people = [];
+    this.canSet = false;
+    this.referee = false;
+    this.status = 'connecting';
+    const room = this;
+    this.me = {
+      info: null,
+      set(info) {
+        if (!info || typeof info !== 'object' || Array.isArray(info)) throw new TypeError('room.me.set takes an object');
+        room.me.info = info;
+        room._frame({ t: 'me', info: info });
+      },
+    };
+    this._handlers = { state: new Set(), message: new Set(), people: new Set(), status: new Set(), timer_failed: new Set() };
+    this._base = {};
+    this._you = null;
+    this._n = 0;
+    this._sets = [];
+    this._acts = new Map();
+    this._socket = null;
+    this._generation = 0;
+    this._stopped = false;
+    this._failures = 0;
+    this._retry = null;
+    this._renew = null;
+    this._ping = null;
+    this._lastPong = 0;
+    this._firstJoin = null;
+  }
+
+  on(event, fn) {
+    const set = this._handlers[event];
+    if (!set) throw new TypeError('room.on: unknown event ' + event + ' (use state, people, message, status or timer_failed)');
+    if (typeof fn !== 'function') throw new TypeError('room.on takes a function');
+    set.add(fn);
+    return () => set.delete(fn);
+  }
+
+  _emit(event, a, b) {
+    for (const fn of Array.from(this._handlers[event])) {
+      try { fn(a, b); } catch (err) { setTimeout(() => { throw err; }); }
+    }
+  }
+
+  _setStatus(status, detail) {
+    if (this.status === status) return;
+    this.status = status;
+    this._emit('status', status, detail);
+  }
+
+  _frame(frame) {
+    const socket = this._socket;
+    if (!socket || socket.readyState !== 1 || this.status !== 'open') return false;
+    socket.send(JSON.stringify(frame));
+    return true;
+  }
+
+  _recompute(change) {
+    let next = this._base;
+    for (const entry of this._sets) next = merge(next, entry.patch);
+    this.state = next;
+    this._emit('state', this.state, change || null);
+  }
+
+  _decoratePeople(list) {
+    return list.map((person) => Object.assign({}, person, { me: person.id === this._you }));
+  }
+
+  set(patch) {
+    if (!patch || typeof patch !== 'object' || Array.isArray(patch)) {
+      return Promise.reject(new TypeError('room.set takes an object of top-level keys (null deletes a key)'));
+    }
+    if (this._stopped) return Promise.reject(roomError('ROOM_LEFT', 'This room was left.'));
+    if (this.referee) return Promise.reject(roomError('ROOM_HAS_REFEREE', 'This room has a referee: use room.act(action).'));
+    const n = ++this._n;
+    return new Promise((resolve, reject) => {
+      const entry = { n: n, patch: patch, resolve: resolve, reject: reject, acked: null };
+      if (!this._frame({ t: 'set', n: n, patch: patch })) {
+        reject(roomError('ROOM_NOT_CONNECTED', 'The room is reconnecting; nothing was changed. Try again when room.status is open.'));
+        return;
+      }
+      this._sets.push(entry);
+      this._recompute({ by: 'me', pending: true });
+    });
+  }
+
+  act(action) {
+    if (this._stopped) return Promise.reject(roomError('ROOM_LEFT', 'This room was left.'));
+    if (!this.referee) return Promise.reject(roomError('ROOM_NO_REFEREE', 'This room has no referee: use room.set(patch).'));
+    const n = ++this._n;
+    return new Promise((resolve, reject) => {
+      if (!this._frame({ t: 'act', n: n, action: action })) {
+        reject(roomError('ROOM_NOT_CONNECTED', 'The room is reconnecting; the action was not sent. Try again when room.status is open.'));
+        return;
+      }
+      this._acts.set(n, { resolve: resolve, reject: reject, acked: null });
+    });
+  }
+
+  send(data) {
+    if (this._stopped) return false;
+    return this._frame({ t: 'msg', data: data });
+  }
+
+  leave() {
+    if (this._stopped) return;
+    this._stopped = true;
+    this._generation++;
+    this._clearTimers();
+    if (this._socket) { try { this._socket.close(1000, 'leave'); } catch (_) {} }
+    this._socket = null;
+    this._failUnanswered('ROOM_LEFT');
+    this._setStatus('closed', { code: 'left' });
+  }
+
+  _clearTimers() {
+    if (this._retry !== null) { clearTimeout(this._retry); this._retry = null; }
+    if (this._renew !== null) { clearInterval(this._renew); this._renew = null; }
+    if (this._ping !== null) { clearInterval(this._ping); this._ping = null; }
+  }
+
+  // Unanswered operations whose connection is gone: their outcome is unknown.
+  // Never re-sent; the caller gets the fresh state with the refusal.
+  _failUnanswered(reasonCode) {
+    const state = this.state;
+    const unknown = (kind) => roomError('ROOM_OUTCOME_UNKNOWN', 'The connection dropped before the room answered this ' + kind + '. It may or may not have been applied; err.state is the room\\'s current state.', { state: state, version: this.version, cause: reasonCode });
+    for (const entry of this._acts.values()) entry.reject(unknown('action'));
+    this._acts.clear();
+    for (const entry of this._sets) entry.reject(unknown('change'));
+    this._sets = [];
+  }
+
+  _settleAcked() {
+    for (const [n, entry] of this._acts) {
+      if (entry.acked !== null && this.version >= entry.acked) { this._acts.delete(n); entry.resolve(this.state); }
+    }
+    const before = this._sets.length;
+    this._sets = this._sets.filter((entry) => {
+      if (entry.acked !== null && this.version >= entry.acked) { entry.resolve(this._base); return false; }
+      return true;
+    });
+    return before !== this._sets.length;
+  }
+
+  _onFrame(frame) {
+    if (!frame || typeof frame.t !== 'string') return;
+    switch (frame.t) {
+      case 'hello': {
+        const first = this._firstJoin !== null;
+        this._you = frame.you;
+        this.canSet = frame.can_set === true;
+        this.referee = frame.referee === true;
+        this._base = frame.state && typeof frame.state === 'object' ? frame.state : {};
+        this.version = frame.version || 0;
+        this.people = this._decoratePeople(Array.isArray(frame.people) ? frame.people : []);
+        this._failures = 0;
+        this._setStatus('open');
+        // Anything unanswered from the previous connection gets this fresh state.
+        this.state = this._base;
+        this._failUnanswered('reconnected');
+        this._recompute({ by: null, joined: true });
+        this._emit('people', this.people);
+        if (this.me.info) this._frame({ t: 'me', info: this.me.info });
+        if (first) { const done = this._firstJoin; this._firstJoin = null; done.resolve(this); }
+        return;
+      }
+      case 'state': {
+        if (typeof frame.version === 'number' && frame.version <= this.version) return;
+        this._base = frame.state !== undefined ? (frame.state || {}) : merge(this._base, frame.patch);
+        this.version = frame.version;
+        this._settleAcked();
+        this._recompute({ by: frame.by === undefined ? null : frame.by, version: frame.version });
+        return;
+      }
+      case 'ok': {
+        const act = this._acts.get(frame.n);
+        if (act) {
+          if (this.version >= frame.version) { this._acts.delete(frame.n); act.resolve(this.state); }
+          else act.acked = frame.version;
+          return;
+        }
+        const entry = this._sets.find((item) => item.n === frame.n);
+        if (entry) {
+          entry.acked = frame.version;
+          if (this._settleAcked()) this._recompute({ by: 'me', version: this.version });
+        }
+        return;
+      }
+      case 'no': {
+        if (frame.state !== undefined && typeof frame.version === 'number' && frame.version >= this.version) {
+          this._base = frame.state || {};
+          this.version = frame.version;
+        }
+        const err = roomError(frame.code || 'ROOM_REFUSED', frame.reason || frame.code || 'The room refused this.', { reason: frame.reason, state: this._base, version: this.version });
+        const act = this._acts.get(frame.n);
+        if (act) { this._acts.delete(frame.n); err.state = this.state; act.reject(err); return; }
+        const index = this._sets.findIndex((item) => item.n === frame.n);
+        if (index !== -1) {
+          const entry = this._sets.splice(index, 1)[0];
+          this._recompute({ by: 'me', refused: frame.code });
+          err.state = this.state;
+          entry.reject(err);
+        }
+        return;
+      }
+      case 'msgs': {
+        for (const item of Array.isArray(frame.items) ? frame.items : []) this._emit('message', item.data, item.from);
+        return;
+      }
+      case 'people': {
+        const left = new Set(frame.left || []);
+        const changed = new Map((frame.changed || []).map((person) => [person.id, person]));
+        let next = this.people.filter((person) => !left.has(person.id)).map((person) => changed.has(person.id) ? Object.assign({}, person, changed.get(person.id), { me: person.id === this._you }) : person);
+        next = next.concat(this._decoratePeople((frame.joined || []).filter((person) => !next.some((p) => p.id === person.id))));
+        this.people = next;
+        this._emit('people', this.people);
+        return;
+      }
+      case 'timer_failed': {
+        this._emit('timer_failed');
+        return;
+      }
+      case 'bye': {
+        this._bye = frame.code;
+        return;
+      }
+      case 'pong': {
+        this._lastPong = Date.now();
+        return;
+      }
+      default:
+        return;
+    }
+  }
+
+  async _connect() {
+    const generation = ++this._generation;
+    let ticket;
+    try {
+      ticket = await requestTicket(this.table, this.id);
+    } catch (err) {
+      if (generation !== this._generation || this._stopped) return;
+      if (err.retryable) return this._scheduleRetry();
+      return this._finish(err);
+    }
+    if (generation !== this._generation || this._stopped) return;
+    this._bye = null;
+    const socket = new WebSocket(connectUrl(ticket));
+    this._socket = socket;
+    this._lastPong = Date.now();
+    socket.onmessage = (message) => {
+      if (generation !== this._generation) return;
+      if (message.data === PONG_FRAME) { this._lastPong = Date.now(); return; }
+      let frame = null;
+      try { frame = JSON.parse(message.data); } catch (_) { return; }
+      this._onFrame(frame);
+    };
+    let closed = false;
+    const onGone = () => {
+      if (closed || generation !== this._generation) return;
+      closed = true;
+      this._socket = null;
+      if (this._ping !== null) { clearInterval(this._ping); this._ping = null; }
+      if (this._renew !== null) { clearInterval(this._renew); this._renew = null; }
+      if (this._stopped) return;
+      const finalCode = this._bye && FINAL_BYE[this._bye];
+      if (finalCode) {
+        return this._finish(roomError(finalCode, finalCode === 'ROOM_FULL' ? 'This room is full.' : 'This room\\'s row was deleted.'));
+      }
+      this._setStatus('reconnecting', { code: this._bye || 'dropped' });
+      // expired / app_updated rejoin at once with a fresh ticket; a drop backs off.
+      if (this._bye === 'expired' || this._bye === 'app_updated') this._connect();
+      else this._scheduleRetry();
+    };
+    socket.onclose = onGone;
+    socket.onerror = onGone;
+    socket.onopen = () => {
+      if (generation !== this._generation) return;
+      this._ping = setInterval(() => {
+        if (Date.now() - this._lastPong > PING_MS * 2 + 5000) { try { socket.close(4000, 'no answer'); } catch (_) {} onGone(); return; }
+        try { socket.send(PING_FRAME); } catch (_) {}
+      }, PING_MS);
+      this._renew = setInterval(() => this._renewTicket(generation), RENEW_MS);
+    };
+  }
+
+  // Every 4 minutes: a fresh ticket over the open connection. The row's read
+  // rule is evaluated again each time; a refusal means access was removed and
+  // the room closes the connection when the current ticket expires.
+  async _renewTicket(generation) {
+    try {
+      const ticket = await requestTicket(this.table, this.id);
+      if (generation === this._generation && this._socket && this._socket.readyState === 1) {
+        this._socket.send(JSON.stringify({ t: 'ticket', ticket: ticket }));
+      }
+    } catch (err) {
+      if (!err.retryable) console.warn('[rooms] access to ' + this.table + ' ' + this.id + ' was not renewed: ' + err.code);
+    }
+  }
+
+  _scheduleRetry() {
+    if (this._stopped || this._retry !== null) return;
+    this._setStatus('reconnecting', { code: 'dropped' });
+    const delay = Math.min(500 * Math.pow(2, this._failures), 30000) * (0.75 + Math.random() * 0.5);
+    this._failures = Math.min(this._failures + 1, 6);
+    this._retry = setTimeout(() => { this._retry = null; this._connect(); }, delay);
+  }
+
+  _finish(err) {
+    this._stopped = true;
+    this._generation++;
+    this._clearTimers();
+    this._failUnanswered(err.code);
+    this._setStatus('closed', { code: err.code, error: err });
+    if (this._firstJoin) { const done = this._firstJoin; this._firstJoin = null; done.reject(err); }
+  }
+
+  _start() {
+    return new Promise((resolve, reject) => {
+      this._firstJoin = { resolve: resolve, reject: reject };
+      if (typeof window !== 'undefined') {
+        window.addEventListener('online', () => {
+          if (!this._stopped && this._retry !== null) { clearTimeout(this._retry); this._retry = null; this._connect(); }
+        });
+      }
+      this._connect();
+    });
+  }
+}
+
+export async function joinRoom(table, id) {
+  if (typeof table !== 'string' || !table) throw new TypeError('joinRoom(table, id): table is the name of a table that declares rooms');
+  if (!(typeof id === 'string' && id) && !Number.isSafeInteger(id)) throw new TypeError('joinRoom(table, id): id is the row id');
+  return new Room(table, id)._start();
+}
+`.trim();
+var ROOMS_DOOR_RUNTIME_JS = String.raw`
+const __SW_ROOMS_CLIENT_MODULE = ${JSON.stringify(ROOMS_CLIENT_MODULE_JS)};
+function __sw_roomsDoorMatch(url) {
+  if (url.pathname !== '/__sw/rooms/ticket' && url.pathname !== '/__sw/rooms/client.js') return null;
+  return { path: '/__sw/rooms', params: {}, load: async () => ({ default: (request, sw) => __sw_handleRoomsDoor(request, sw) }) };
+}
+async function __sw_handleRoomsDoor(request, sw) {
+  const url = new URL(request.url);
+  if (url.pathname === '/__sw/rooms/client.js') {
+    if (request.method !== 'GET' && request.method !== 'HEAD') __sw_dataFail(405, 'METHOD_NOT_ALLOWED', 'Use GET /__sw/rooms/client.js.');
+    return new Response(request.method === 'HEAD' ? null : __SW_ROOMS_CLIENT_MODULE, {
+      status: 200,
+      headers: { 'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'public, max-age=300' },
+    });
+  }
+  if (__sw_artifactExecution !== 'standard') {
+    __sw_dataFail(409, 'ROOMS_DRAFT_UNAVAILABLE', 'Rooms work on the live app only, not in a preview.');
+  }
+  if (request.method !== 'POST') __sw_dataFail(405, 'METHOD_NOT_ALLOWED', 'Use POST /__sw/rooms/ticket.');
+  const origin = request.headers.get('origin');
+  if (!origin) __sw_dataFail(400, 'ORIGIN_REQUIRED', 'Room requests require the app Origin header.');
+  if (origin !== url.origin) __sw_dataFail(403, 'ROOM_ORIGIN_FORBIDDEN', 'Room requests must come from this app origin.');
+  const input = await __sw_dataReadBody(request);
+  if (!input || typeof input !== 'object' || Array.isArray(input)) __sw_dataFail(400, 'VALIDATION_ERROR', 'Send { table, id }.');
+  for (const key of Object.keys(input)) {
+    if (key !== 'table' && key !== 'id') __sw_dataFail(400, 'VALIDATION_ERROR', 'A ticket request takes only table and id; ' + key + ' is not accepted.');
+  }
+  let data;
+  try {
+    data = await __sw_roomsDoor.get(sw.rooms).ticket(input.table, input.id);
+  } catch (err) {
+    if (err && typeof err.status === 'number' && err.status >= 400 && err.status < 500) err.__sw_expose = true;
+    throw err;
+  }
+  return new Response(JSON.stringify({ ok: true, data: data }), {
+    status: 200,
+    headers: { 'content-type': 'application/json', 'cache-control': 'no-store' },
+  });
+}
+`;
+
 // worker/src/utils/function-trace-source.ts
 var FUNCTION_TRACE_SOURCE = String.raw`
 /** The trace id for this invocation, or null when tracing did not initialize. */
@@ -18655,9 +19255,17 @@ globalThis.sw.endpoint = function (config) {
       try { user = await sw.auth.fromRequest(request); } catch (_) { /* swallow */ }
     }
 
-    // Body validation (skipped on GET/DELETE/HEAD \u2014 no body expected).
+    // Body validation. A declared schema means the handler always gets the
+    // validated body: GET/HEAD cannot carry one and are refused with 405;
+    // every other method must send valid JSON (tsk_9a9b1a31).
     var body = null;
-    if (bodySchema && request.method !== 'GET' && request.method !== 'DELETE' && request.method !== 'HEAD') {
+    if (bodySchema && (request.method === 'GET' || request.method === 'HEAD')) {
+      return __sw_mergeHeaders(
+        __sw_jsonError(405, 'METHOD_NOT_ALLOWED', request.method + ' is not supported: this endpoint declares a body schema, so it accepts a JSON body with POST, PUT, PATCH or DELETE. Answer GET from its own export const GET handler in the same file.'),
+        Object.assign({ Allow: 'POST, PUT, PATCH, DELETE, OPTIONS' }, corsHeaders)
+      );
+    }
+    if (bodySchema) {
       try { body = await request.json(); }
       catch (_) {
         return __sw_mergeHeaders(
@@ -25803,6 +26411,59 @@ function declaredScopeIdentityColumns(scope) {
   const collect = (policy) => policy.kind === "owner" ? [policy.column] : policy.kind === "member" ? [...policy.group] : policy.kind === "any_of" ? policy.policies.flatMap(collect) : policy.kind === "all_of" ? [...collect(policy.gate), ...collect(policy.who)] : policy.kind === "group" ? [policy.column] : policy.kind === "app_role" ? [] : [policy.via];
   return [...new Set(collect(scope.policy))];
 }
+var ROOM_REFEREE_PATH = /^\/api\/[A-Za-z0-9_\-]+(?:\/[A-Za-z0-9_\-.]+)*$/;
+function readRoomsOption(r, rawName, line) {
+  r.expectPunct("{", `opening the rooms option of table "${rawName}", which takes { save?: 'column', referee?: '/api/path' }`);
+  const out = { line };
+  while (!r.tryPunct("}")) {
+    const opt = r.readKey(`for an option of rooms on table "${rawName}"`);
+    if (opt.name !== "save" && opt.name !== "referee") {
+      throw new SchemaTsError(`line ${opt.line}: rooms on table "${rawName}" has an unknown option "${opt.name}". Allowed: save, referee.`);
+    }
+    if (out[opt.name]) throw new SchemaTsError(`line ${opt.line}: rooms on table "${rawName}" declares ${opt.name} twice.`);
+    r.expectPunct(":", `after rooms.${opt.name}`);
+    const t = r.next();
+    if (t.kind !== "string") throw new SchemaTsError(`line ${t.line}: rooms.${opt.name} on table "${rawName}" must be a quoted literal string.`);
+    out[opt.name] = { value: t.value, line: t.line };
+    if (!r.tryPunct(",")) {
+      r.expectPunct("}", `closing the rooms option of table "${rawName}"`);
+      break;
+    }
+  }
+  return out;
+}
+function validateRoomsOption(input, rawName, nameLine, columns, scope, client, relations) {
+  if (columns.filter((c) => c.helper === "id").length !== 1) {
+    throw new SchemaTsError(`line ${input.line}: table "${rawName}" declares rooms, which need exactly one id() column: a room is attached to one row by its id.`);
+  }
+  const out = {};
+  if (input.save) {
+    const name = input.save.value.toLowerCase();
+    const column = columns.find((c) => c.name === name);
+    if (!column) throw new SchemaTsError(`line ${input.save.line}: rooms.save on table "${rawName}" names "${input.save.value}", which is not one of its declared columns.`);
+    if (column.helper !== "json") throw new SchemaTsError(`line ${input.save.line}: rooms.save on table "${rawName}" names "${name}", which must be a json() column: the room saves its whole state there.`);
+    if (declaredScopeIdentityColumns(scope).includes(name) || declaredOwnerColumn(scope) === name) {
+      throw new SchemaTsError(`line ${input.save.line}: rooms.save on table "${rawName}" names "${name}", which the table's access rule reads; the room's state can never decide who may see the row.`);
+    }
+    if (relations.some((rel) => rel.kind === "belongsTo" && rel.fk === name)) {
+      throw new SchemaTsError(`line ${input.save.line}: rooms.save on table "${rawName}" names "${name}", which is a relation key.`);
+    }
+    const writable = [...client?.create ?? [], ...client?.update ?? [], ...client?.intake?.fields ?? []];
+    if (writable.includes(name)) {
+      throw new SchemaTsError(`line ${input.save.line}: rooms.save on table "${rawName}" names "${name}", which is browser-writable through client.create, client.update or client.intake. The room is the only writer of its save column; remove it from those lists.`);
+    }
+    out.save = name;
+  }
+  if (input.referee) {
+    const path = input.referee.value;
+    if (!ROOM_REFEREE_PATH.test(path) || path.length > 200 || path.split("/").some((part) => part === "." || part === "..")) {
+      throw new SchemaTsError(`line ${input.referee.line}: rooms.referee on table "${rawName}" must be the path of one of the app's own functions, such as '/api/game-room'.`);
+    }
+    out.referee = path;
+  }
+  void nameLine;
+  return out;
+}
 var COLUMN_HELPERS = /* @__PURE__ */ new Set([
   "id",
   "text",
@@ -26679,6 +27340,7 @@ function readTable(r, rawName, nameLine) {
   let relations = [];
   let relationsDeclared = false;
   let clientInput;
+  let roomsInput;
   if (r.tryPunct(",")) {
     r.expectPunct("{", `opening the options of table "${rawName}"`);
     while (!r.tryPunct("}")) {
@@ -26703,9 +27365,12 @@ function readTable(r, rawName, nameLine) {
       } else if (key.name === "client") {
         if (clientInput) throw new SchemaTsError(`line ${key.line}: table "${rawName}" declares "client" twice.`);
         clientInput = readClientPermissions(r);
+      } else if (key.name === "rooms") {
+        if (roomsInput) throw new SchemaTsError(`line ${key.line}: table "${rawName}" declares "rooms" twice.`);
+        roomsInput = readRoomsOption(r, rawName, key.line);
       } else {
         throw new SchemaTsError(
-          `line ${key.line}: table "${rawName}" has an unknown option "${key.name}". Allowed: scope, indexes, unique, relations, client.`
+          `line ${key.line}: table "${rawName}" has an unknown option "${key.name}". Allowed: scope, indexes, unique, relations, client, rooms.`
         );
       }
       if (!r.tryPunct(",")) {
@@ -26832,7 +27497,8 @@ function readTable(r, rawName, nameLine) {
     }
     client = parsed.permissions;
   }
-  return { kind: "table", table: { name, scope, relations, columns, indexes, uniques, removedColumns: [...removedColumns].sort(), ...client ? { client } : {} } };
+  const rooms = roomsInput ? validateRoomsOption(roomsInput, rawName, nameLine, columns, scope, client, relations) : void 0;
+  return { kind: "table", table: { name, scope, relations, columns, indexes, uniques, removedColumns: [...removedColumns].sort(), ...client ? { client } : {}, ...rooms ? { rooms } : {} } };
 }
 function extractSchemaTs(source, options = {}) {
   if (typeof source !== "string" || source.trim().length === 0) {

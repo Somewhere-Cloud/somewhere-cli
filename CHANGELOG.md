@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.38.29
+
+### Changed
+
+- Typecheck and lint know `sw.rooms` (`act`, `set`, `send`, `get`,
+  `sw.rooms.server.*` and `sw.rooms.event(req)`) and the `rooms` table
+  option. The vendored platform parser, types and lint are re-synced with the
+  platform at consumer contract 2 (tsk_4e67d49d).
+
 ## 0.38.28
 
 ### Fixed

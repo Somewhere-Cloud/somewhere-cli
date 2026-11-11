@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.38.31
+
+### Changed
+
+- `somewhere deploy` names the exact files it uploaded. On the terminal it
+  lists the paths after the headline (20 or fewer), or points to the full
+  list. `deploy --json` and `deploy --dry-run --json` add
+  `uploaded: { static_files, functions }`, taken from the same selection as
+  the request and the headline count (tsk_23f34679).
+- `somewhere init --template minimal` puts the greeting-removal steps at the
+  top of `db/schema.ts`, and `api/greeting.ts` points to them (tsk_a3dde3d6).
+
 ## 0.38.30
 
 ### Fixed

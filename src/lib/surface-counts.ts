@@ -110,3 +110,41 @@ export function countFromResponse(value: unknown): number | null {
   if (Array.isArray(value)) return value.length;
   return null;
 }
+
+/** The exact paths one deploy sends, as the platform will store them (tsk_23f34679). */
+export interface UploadInventory {
+  /** Every static file in the request body (text and binary), sorted. */
+  static_files: string[];
+  /** Every function route in the request body, sorted; `_` helpers are bundled into them, not listed. */
+  functions: string[];
+}
+
+/**
+ * The one source for "what did this deploy upload": the same selection the
+ * request body carries, so the headline count, the terminal list and the JSON
+ * `uploaded` field can never disagree. A partial deploy lists only the half it
+ * sends: `--scope functions` sends no static files, `--scope static` no functions.
+ */
+export function uploadInventory(
+  files: Record<string, unknown>,
+  binaryFiles: Record<string, unknown>,
+  functions: Record<string, unknown>,
+  scope?: 'functions' | 'static',
+): UploadInventory {
+  const sorted = (paths: string[]) => paths.sort((a, b) => a.localeCompare(b));
+  return {
+    static_files: scope === 'functions' ? [] : sorted([...Object.keys(files), ...Object.keys(binaryFiles)]),
+    functions: scope === 'static'
+      ? []
+      : sorted(Object.keys(functions).filter((path) => !path.split('/').some((segment) => segment.startsWith('_')))),
+  };
+}
+
+/** Terminal list of an inventory: paths inline when short, a pointer to the JSON list when long. */
+export const INLINE_UPLOAD_LIST_MAX = 20;
+export function formatUploadInventory(inventory: UploadInventory): string {
+  const paths = [...inventory.static_files, ...inventory.functions];
+  if (paths.length === 0) return 'Uploaded: nothing';
+  if (paths.length <= INLINE_UPLOAD_LIST_MAX) return `Uploaded: ${paths.join(', ')}`;
+  return `Uploaded ${paths.length} paths; the full list is "uploaded" in the output of somewhere deploy --dry-run --json`;
+}

@@ -240,6 +240,7 @@ test('deploy --json with no stored credential deploys and emits the anonymous co
     files: 1,
     has_functions: false,
     ...SERVER_DEPLOY_FIELDS,
+    uploaded: { static_files: ['index.html'], functions: [] },
     url: `https://${project.subdomain}.somewhere.cloud`,
     claim_url: 'https://somewhere.cloud/claim?token=swtc_e2e',
     expires_at: config.temp_expires_at,

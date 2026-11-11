@@ -42,6 +42,17 @@ export interface TypeError {
  */
 const UNRESOLVED_DEP_CODES = new Set(['TS2307', 'TS7016', 'TS2306', 'TS2875']);
 
+/** A bare npm specifier that resolves on deploy. A relative or absolute import
+ *  ('./x', '../x', '/x') names a project file: when it is missing, the deploy
+ *  is missing it too, so that diagnostic is a real error and is kept. */
+function isUnresolvedBareImport(e: TypeError): boolean {
+  if (!UNRESOLVED_DEP_CODES.has(e.code)) return false;
+  const specifier = /['"]([^'"]+)['"]/.exec(e.message)?.[1];
+  if (specifier === undefined) return true;
+  if (/^somewhere(?::data|:files|\/db)$/.test(specifier)) return false;
+  return !/^(?:\.{1,2}(?:[\\/]|$)|[\\/]|[A-Za-z]:[\\/])/.test(specifier);
+}
+
 export interface TypecheckResult {
   /** true = no type errors. */
   ok: boolean;
@@ -357,7 +368,11 @@ export function parseTscOutput(output: string): TypeError[] {
   const re = /^(.+?)\((\d+),(\d+)\): error (TS\d+): (.+)$/;
   for (const line of output.split(/\r?\n/)) {
     const m = re.exec(line.trim());
-    if (!m) continue;
+    if (!m) {
+      const last = errors[errors.length - 1];
+      if (last && /^\s/.test(line)) last.message = explainPageLimit(last.message, line);
+      continue;
+    }
     errors.push({
       file: m[1],
       line: Number(m[2]),
@@ -367,6 +382,16 @@ export function parseTscOutput(output: string): TypeError[] {
     });
   }
   return errors;
+}
+
+/** The typed data client allows `limit` 1 to 100. Outside that range tsc only
+ *  says the call has no matching overload (TS2769) and shows `limit?: undefined`
+ *  in the detail lines, which never names the rule, so the rule is appended. */
+export const PAGE_LIMIT_EXPLANATION =
+  'A data list call reads at most 100 rows: limit must be a number from 1 to 100. Read further pages with { after: page.next } while page.has_more is true.';
+export function explainPageLimit(message: string, detailLine: string): string {
+  if (!detailLine.includes('limit?: undefined') || message.includes(PAGE_LIMIT_EXPLANATION)) return message;
+  return `${message} ${PAGE_LIMIT_EXPLANATION}`;
 }
 
 /**
@@ -463,8 +488,7 @@ async function runTypecheckWith(
   // Drop locally-unresolvable bare-import diagnostics (they resolve on
   // deploy via esm.sh) so they don't bury the real bugs. Undefined symbols
   // (TS2304) survive the filter.
-  const errors = allErrors.filter((e) => !UNRESOLVED_DEP_CODES.has(e.code)
-    || /['"]somewhere(?::data|:files|\/db)['"]/.test(e.message));
+  const errors = allErrors.filter((e) => !isUnresolvedBareImport(e));
   // tsc exits non-zero whenever it emits diagnostics. If it failed but we
   // parsed NONE (a config/crash failure, not type errors), don't claim
   // "clean" — surface it via raw output so the user sees something's wrong.

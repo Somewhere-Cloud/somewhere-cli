@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.38.24
+
+### Fixed
+
+- `somewhere typecheck` no longer reports "clean" and exits 0 when a relative
+  or absolute import names a file that does not exist. Only bare npm imports,
+  which resolve on deploy, are left out of the verdict. Type errors exit 1,
+  and the summary line says that `somewhere deploy` does not stop on type
+  errors (tsk_8f8e4863).
+- `somewhere pull --force` no longer deletes local files a deploy would never
+  upload (AGENTS.md, CLAUDE.md, README.md, tests, dotfiles, ignored files). It
+  replaces deployed files and removes only files the publish rules would upload
+  that are no longer deployed. Without `--force`, those local-only files are no
+  longer listed as skipped, so pull records the source base again (tsk_10b73eac).
+- A data `list()` call with a `limit` outside 1 to 100 used to show only
+  `TS2769 No overload matches this call`. `somewhere typecheck` and
+  `typecheck --deploy` now add the rule to that line: at most 100 rows per
+  call, and read further pages with `after` (tsk_dd9cf0e4).
+
 ## 0.38.23
 
 ### Added

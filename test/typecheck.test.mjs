@@ -62,7 +62,7 @@ test('typecheck verdict is advisory on errors and keeps the clean summary unchan
 
   assert.equal(
     stderr[0],
-    '✗ 2 type errors (via npx tsc) — deploys are not blocked by type errors; fix at your own pace.',
+    '✗ 2 type errors (via npx tsc) — exit 1. `somewhere deploy` does not stop on type errors; it ships them.',
   );
   assert.ok(stdout.includes(
     '  src/one.ts:1:2 TS2322 Type number is not assignable to type string.',
@@ -196,6 +196,33 @@ test('runTypecheck ignores unresolved bare-import noise (TS2307/TS2875) but keep
   assert.equal(r.ok, false);
   assert.ok(r.errors.every((e) => e.code !== 'TS2307'), 'no module-resolution noise');
   assert.ok(r.errors.some((e) => e.code === 'TS2304'), 'dropped import still caught');
+});
+
+test('parseTscOutput names the 100-row rule when a list limit is out of range', async () => {
+  const { parseTscOutput, PAGE_LIMIT_EXPLANATION } = await import('../dist/lib/typecheck.js');
+  const out = [
+    'src/notes.ts(3,40): error TS2769: No overload matches this call.',
+    "  Overload 1 of 2, '(options: { limit?: undefined; after?: string | undefined; }): Promise<{ data: Row[] }>', gave the following error.",
+    "    Type 'number' is not assignable to type 'undefined'.",
+    'src/other.ts(1,1): error TS2322: Type string is not assignable to type number.',
+  ].join('\n');
+  const errors = parseTscOutput(out);
+  assert.equal(errors.length, 2);
+  assert.ok(errors[0].message.endsWith(PAGE_LIMIT_EXPLANATION), errors[0].message);
+  assert.ok(!errors[1].message.includes(PAGE_LIMIT_EXPLANATION));
+});
+
+test('runTypecheck keeps a missing relative import: the deploy is missing that file too', async () => {
+  const dir = fixture({
+    'api/tts.ts':
+      "import { helper } from './does-not-exist';\n" +
+      'export default async function (req, sw) {\n' +
+      '  return Response.json({ ok: helper() });\n' +
+      '}\n',
+  });
+  const r = await runTypecheck(dir);
+  assert.equal(r.ok, false);
+  assert.ok(r.errors.some((e) => e.code === 'TS2307' && e.message.includes('./does-not-exist')), JSON.stringify(r.errors));
 });
 
 test('runTypecheck treats a tree with only unresolved imports as ok', async () => {

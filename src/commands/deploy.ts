@@ -1286,10 +1286,9 @@ export function registerDeploy(program: Command) {
           if (resolve(baseDir) === resolve(targetDir)) saveBaseFiles(baseDir, { project_id: deployedProject, release_id: releaseId, files: publishedHashes });
           else clearBaseFiles(baseDir);
         };
-        if (opts.force) {
-          body.force = true;
-          if (!tempSession) body.source = 'cli';
-        }
+        // Every CLI deploy names its tool, so a later refusal can say "deployed by the somewhere CLI".
+        body.source = 'cli';
+        if (opts.force) body.force = true;
 
         if (opts.dryRun) {
           const plan = await callDeployWithRetry<DryRunResult>(client, body, {

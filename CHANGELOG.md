@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.38.27
+
+### Changed
+
+- Every `somewhere deploy` sends `source: "cli"`, so the platform records that
+  the CLI shipped the release. A later refused deploy says "deployed by the
+  somewhere CLI" instead of leaving the tool unnamed (tsk_0dcd7530).
+
 ## 0.38.26
 
 ### Added

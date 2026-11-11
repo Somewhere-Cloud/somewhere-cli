@@ -239,7 +239,7 @@ test('deploy writes state, leaves first payload legacy, then sends base_version 
     const first = await run(['deploy', '--json'], { cwd: fixtureDir, env });
     assert.equal(first.status, 0, `stdout:\n${first.stdout}\nstderr:\n${first.stderr}`);
     assert.equal('base_version' in bodies[0], false, 'first-ever deploy must stay on the legacy path');
-    assert.equal('source' in bodies[0], false, 'first-ever deploy should not add source without saved state');
+    assert.equal(bodies[0].source, 'cli', 'every CLI deploy names its tool');
 
     let project = readProject(fixtureDir);
     assert.deepEqual(project.last_deploy, {
@@ -617,7 +617,7 @@ test('negative saved version is treated as absent and never sent as base_version
 
     assert.equal(result.status, 0, `stdout:\n${result.stdout}\nstderr:\n${result.stderr}`);
     assert.equal('base_version' in deployBody, false);
-    assert.equal('source' in deployBody, false);
+    assert.equal(deployBody.source, 'cli');
   });
 });
 
@@ -661,7 +661,7 @@ test('project refs that are not the canonical linked project_id do not reuse sav
     assert.equal(result.status, 0, `stdout:\n${result.stdout}\nstderr:\n${result.stderr}`);
     assert.equal(deployBody.project_id, 'copied-site');
     assert.equal('base_version' in deployBody, false);
-    assert.equal('source' in deployBody, false);
+    assert.equal(deployBody.source, 'cli');
   });
 });
 
@@ -806,7 +806,7 @@ test('deploy --temporary does not send or update saved stale-base state', async 
 
     assert.equal(result.status, 0, `stdout:\n${result.stdout}\nstderr:\n${result.stderr}`);
     assert.equal('base_version' in deployBody, false);
-    assert.equal('source' in deployBody, false);
+    assert.equal(deployBody.source, 'cli');
     assert.equal(readProject(fixtureDir).last_deploy.last_deployed_version, 3);
   });
 });

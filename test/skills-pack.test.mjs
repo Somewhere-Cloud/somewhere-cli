@@ -28,7 +28,7 @@ const { writeInitScaffold } = await import('../dist/lib/init-scaffold.js');
 const { createGreenTemplate } = await import('../dist/lib/init-green-template.js');
 const CLI_VERSION = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).version;
 
-const NAMES = ['deploy-verify-loop', 'schema-changes', 'sign-in-setup', 'troubleshooting', 'realtime-and-background', 'email-and-test-inbox'];
+const NAMES = ['deploy-verify-loop', 'schema-changes', 'sign-in-setup', 'troubleshooting', 'realtime-and-background', 'email-and-test-inbox', 'design'];
 const sha = (s) => createHash('sha256').update(s).digest('hex');
 const temp = () => mkdtempSync(join(tmpdir(), 'somewhere-skills-'));
 
@@ -70,7 +70,7 @@ async function withHost(body, fn) {
   }
 }
 
-test('the bundled pack is the six generated skills, verifies, and fits the ceilings', () => {
+test('the bundled pack is the seven generated skills, verifies, and fits the ceilings', () => {
   verifyPack(BUNDLED_SKILLS_PACK);
   assert.deepEqual(BUNDLED_SKILLS_PACK.files.map((f) => f.path), NAMES.map((n) => `${n}/SKILL.md`));
   let bytes = 0;
@@ -79,7 +79,8 @@ test('the bundled pack is the six generated skills, verifies, and fits the ceili
     assert.ok(f.content.split('\n').length <= 150, `${f.path} is over 150 lines`);
     assert.match(f.content, /^---\nname: [a-z-]+\ndescription: .+\n---\n/);
   }
-  assert.ok(bytes <= 12 * 1024, `pack is ${bytes} bytes`);
+  // The platform's own ceiling (tech scripts/skills/pack.mjs MAX_SKILL_CONTENT_BYTES).
+  assert.ok(bytes <= 16 * 1024, `pack is ${bytes} bytes`);
 });
 
 test('init on an empty directory writes the pack, links it for Claude, and pins it to this CLI', () => {
@@ -99,7 +100,7 @@ test('init on an empty directory writes the pack, links it for Claude, and pins 
   assert.equal(lock.version, BUNDLED_SKILLS_PACK.version);
   assert.equal(lock.cli, CLI_VERSION);
   assert.equal(lock.source, 'bundled');
-  assert.equal(Object.keys(lock.files).length, 6);
+  assert.equal(Object.keys(lock.files).length, NAMES.length);
   // AGENTS.md: the first screen names the pack, then the canonical loop.
   const agents = readFileSync(join(dir, 'AGENTS.md'), 'utf8');
   assert.equal(agents, INIT_AGENTS_MD);

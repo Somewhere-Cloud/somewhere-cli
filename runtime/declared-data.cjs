@@ -1237,7 +1237,7 @@ interface SomewhereDbAggregateResult<Row = Record<string, unknown>> {
 interface SomewhereDbRawCallerOptions { unscoped?: true | null; asServer?: true | null; user?: never }
 type SomewhereDbLiveState =
   | { name: string; state: 'ready'; release_id?: string; fingerprint: string; subscribe_url: string; expires_at: number }
-  | { name: string; state: 'resync_required'; reason: string };
+  | { name: string; state: 'resync_required' | 'unavailable'; reason: string };
 type SomewhereDbLiveResult<Row = Record<string, unknown>> = SomewhereDbResult<Row> & { live: SomewhereDbLiveState };
 type SomewhereDbScopeDeclaration =
   | { intent?: 'scoped' | null; owner_column: string; sensitive_columns?: readonly string[] | null }
@@ -1280,8 +1280,6 @@ interface SomewhereCallerDb {
   query(sql: string, params?: readonly unknown[] | null, options?: SomewhereDbRawCallerOptions | null): Promise<SomewhereDbResult>;
   batch(statements: readonly SomewhereRawDbStatement[], options?: SomewhereDbRawCallerOptions | null): Promise<SomewhereRawBatchResult[]>;
   aggregate<T extends SomewhereDbTable>(table: T, options: SomewhereDbAggregateOptionsFor<T> & { asServer?: true }): Promise<SomewhereDbAggregateResult<SomewhereDbAggregateRow<T>>>;
-  // read must be the exact sw.db.from(...) result (or its promise) this release declares under name.
-  live<Row>(name: string, read: SomewhereDbResult<Row> | PromiseLike<SomewhereDbResult<Row>>): Promise<SomewhereDbLiveResult<Row>>;
   tables(): Promise<string[]>;
   readonly scope: SomewhereDbScopeApi;
 }
@@ -3847,6 +3845,9 @@ interface SomewhereRoomOps {
 interface SomewhereRuntimeRooms extends SomewhereRoomOps {
   readonly server: SomewhereRoomOps;
   event(req: Request): Promise<SomewhereRoomEvent>;
+  // A live list: read must be the exact sw.db.from(...) result (or its promise) this release
+  // declares under name. Return it from a function; the browser follows it with watchLive.
+  live<Row>(name: string, read: SomewhereDbResult<Row> | PromiseLike<SomewhereDbResult<Row>>): Promise<SomewhereDbLiveResult<Row>>;
 }
 
 interface SomewhereRuntimeContext {
@@ -4406,8 +4407,8 @@ var require_consumer_contract = __commonJS({
   "worker/containers/compile/consumer-contract.cjs"(exports2, module2) {
     "use strict";
     var CONSUMER_CONTRACT2 = Object.freeze({
-      version: 3,
-      digest: "21c4d644e0ac9a86858201e65ef5a31fe9b8d86e0863af334f539b78904f64e9"
+      version: 4,
+      digest: "ccf5c29211e634d5f41a4a6e2574103d3491e236188aeb53079dbf2842fcc19e"
     });
     var MEMBERSHIPS = "memberships: table({ id: id(), team_id: text(), member_id: text() }, { scope: owner(), client: { read: true } }),";
     var SHARES = "shares: table({ id: id(), grantee_id: text() }, { scope: owner(), client: { read: true, create: ['grantee_id'], delete: true }, unique: [['user_id', 'grantee_id']] }),";

@@ -1667,120 +1667,6 @@ function __sw_runtimeErrorMetadata(error) {
 // worker/src/utils/database-plane-bindings.ts
 var LEGACY_DATABASE_LAYOUT = Object.freeze({ layout: "legacy" });
 
-// worker/src/runtime/live-client.ts
-var LIVE_CLIENT_MODULE_JS = `
-export function watchLive(load, render) {
-  if (typeof load !== 'function' || typeof render !== 'function') {
-    throw new TypeError('watchLive takes exactly (load, render)');
-  }
-  let stopped = false;
-  let socket = null;
-  let socketGeneration = 0;
-  let liveKey = null;
-  let inFlight = null;
-  let dirty = false;
-  let reconnectRequested = false;
-  let debounceTimer = null;
-  let retryTimer = null;
-  let retryFailures = 0;
-
-  function connect(live) {
-    if (!live || live.state !== 'ready' || typeof live.subscribe_url !== 'string') return;
-    if (retryTimer !== null) return;
-    const nextKey = String(live.release_id) + ':' + String(live.fingerprint);
-    const generation = ++socketGeneration;
-    if (socket) { try { socket.close(1000, 'refresh'); } catch (_) {} }
-    liveKey = nextKey;
-    socket = new WebSocket(live.subscribe_url);
-    socket.onmessage = function (message) {
-      if (stopped || generation !== socketGeneration) return;
-      let frame = null;
-      try { frame = JSON.parse(message.data); } catch (_) { return; }
-      if (frame && frame.type === 'live_control') {
-        schedule(frame.event === 'release_changed', 100);
-      }
-    };
-    let failed = false;
-    socket.onopen = function () {
-      if (stopped || generation !== socketGeneration) return;
-      retryFailures = 0;
-      if (retryTimer !== null) { clearTimeout(retryTimer); retryTimer = null; }
-    };
-    function scheduleRetry() {
-      if (stopped || generation !== socketGeneration || retryTimer !== null) return;
-      const delay = Math.min(500 * Math.pow(2, retryFailures), 30000);
-      retryFailures = Math.min(retryFailures + 1, 6);
-      retryTimer = setTimeout(function () {
-        retryTimer = null;
-        if (!stopped && generation === socketGeneration) refresh(true).catch(scheduleRetry);
-      }, delay);
-    }
-    function retry() {
-      if (stopped || generation !== socketGeneration || failed) return;
-      failed = true;
-      scheduleRetry();
-    }
-    socket.onclose = retry;
-    socket.onerror = retry;
-  }
-
-  function refresh(reconnect) {
-    if (stopped) return Promise.resolve(null);
-    if (inFlight) {
-      dirty = true;
-      reconnectRequested = reconnectRequested || reconnect;
-      return inFlight;
-    }
-    inFlight = Promise.resolve().then(load).then(function (snapshot) {
-      if (stopped) return snapshot;
-      render(snapshot && snapshot.data, snapshot);
-      const live = snapshot && snapshot.live;
-      const nextKey = live && String(live.release_id) + ':' + String(live.fingerprint);
-      if (reconnect || !socket || nextKey !== liveKey) connect(live);
-      return snapshot;
-    }).finally(function () {
-      inFlight = null;
-      if (dirty && !stopped) {
-        const reconnectAfter = reconnectRequested;
-        dirty = false;
-        reconnectRequested = false;
-        schedule(reconnectAfter, 0);
-      }
-    });
-    return inFlight;
-  }
-
-  function schedule(reconnect, delay) {
-    if (stopped) return;
-    reconnectRequested = reconnectRequested || reconnect;
-    if (debounceTimer !== null) return;
-    debounceTimer = setTimeout(function () {
-      debounceTimer = null;
-      const reconnectNow = reconnectRequested;
-      reconnectRequested = false;
-      refresh(reconnectNow);
-    }, delay);
-  }
-
-  function onVisibility() {
-    if (document.visibilityState === 'visible') schedule(false, 0);
-  }
-  document.addEventListener('visibilitychange', onVisibility);
-  const periodic = setInterval(function () { schedule(false, 0); }, 30000);
-  refresh(true);
-
-  return function stop() {
-    stopped = true;
-    socketGeneration++;
-    if (debounceTimer !== null) clearTimeout(debounceTimer);
-    if (retryTimer !== null) clearTimeout(retryTimer);
-    clearInterval(periodic);
-    document.removeEventListener('visibilitychange', onVisibility);
-    if (socket) { try { socket.close(1000, 'stopped'); } catch (_) {} }
-  };
-}
-`.trim();
-
 // worker/src/runtime/runtime-console-capture.ts
 var RUNTIME_CONSOLE_MAX_ENTRIES = 200;
 var RUNTIME_CONSOLE_MAX_BYTES = 64 * 1024;
@@ -2355,6 +2241,9 @@ function __sw_parseTraceparent(raw) {
 // sw.rooms -> its platform-private door half (the browser ticket door). Module
 // scope: customer modules cannot name it, and nothing is stored on sw.
 const __sw_roomsDoor = new WeakMap();
+// sw.db namespace -> its live-list declare (sw.rooms.live delegates to it): the
+// composed-read brands live in the db closure. Module scope, never on sw.
+const __sw_liveDoor = new WeakMap();
 const __sw_FS_OPS = { move: 1, copy: 1, restore: 1, stat: 1, versions: 1, diff: 1, glob: 1, search: 1, replace: 1, sign: 1, 'public-url': 1, visibility: 1 };
 const __sw_FS_METHOD_OPS = { GET: 'sw.fs.get', HEAD: 'sw.fs.get', PUT: 'sw.fs.write', DELETE: 'sw.fs.delete', POST: 'sw.fs.post' };
 function __sw_traceOpName(path, method) {
@@ -4753,7 +4642,7 @@ var DB_STRUCTURED_EXECUTION_JS = `      async function __sw_structExec(label, ir
           // delta. A failure cannot undo the committed write; clients repair
           // through their mandatory function refresh policy.
           // Only group keys and (user, group) pairs leave the returned rows.
-          liveDelivery = await __sw_publishStructuredLiveInvalidation(ir, mutation, principalId, __sw_liveGroupEvidenceFor(ir, mutation, rows));
+          liveDelivery = await __sw_publishStructuredLiveInvalidation(ir, mutation, principalId, __sw_liveGroupEvidenceFor(ir, mutation, rows), __sw_liveOwnersFor(ir, mutation, rows, principalId));
         }
         const result = {
           data: __sw_structDecodeRows(ir, rows, !!mutation),
@@ -7351,15 +7240,82 @@ var DB_LIVE_INVALIDATION_JS = `      function __sw_liveInvalidation(table) {
         return evidence;
       }
 
-      async function __sw_publishStructuredLiveInvalidation(ir, mutation, principalId, evidence) {
+      // Owner lists: the owners (old and new) of the rows a write touched. A
+      // write in the owner's own scope can only touch the writer's rows; any
+      // other write (server, job, another scope) is attributed from its own
+      // returned rows, plus the owner its filter pinned when it moves a row.
+      // Missing evidence is reported, never guessed.
+      function __sw_liveOwnersFor(ir, mutation, rows, principalId) {
+        if (!mutation) return null;
+        const written = (ir.values || []).concat(ir.increments || []).map(function (item) { return String(item.column).toLowerCase(); });
+        const candidates = __sw_liveCandidates(__sw_liveInvalidation(mutation.table), mutation.op, written);
+        const wanted = String(mutation.table || '').toLowerCase();
+        let column = null, mixed = false;
+        for (let i = 0; i < candidates.length; i++) {
+          const view = __sw_liveViewByName(candidates[i]);
+          const deps = (view && view.dependencies) || [];
+          for (let j = 0; j < deps.length; j++) {
+            const dep = deps[j];
+            if (!dep || dep.table !== wanted || !dep.scope || dep.scope.mode !== 'user') continue;
+            const c = String(dep.scope.ownerColumn).toLowerCase();
+            if (column !== null && column !== c) mixed = true;
+            column = c;
+          }
+        }
+        if (column === null) return null;
+        const subjectOf = function (value) {
+          const id = typeof value === 'number' ? value : String(value);
+          return { kind: /^anon_[a-zA-Z0-9_-]{8,}$/.test(String(value)) ? 'visitor' : 'app_user', id: id };
+        };
+        if (ir.scope && ir.scope.mode === 'user' && principalId !== undefined && principalId !== null) {
+          return { owners: [subjectOf(principalId)], complete: !mixed };
+        }
+        const scalar = function (value) {
+          return (typeof value === 'string' && value.length > 0 && value.length <= 200) || (typeof value === 'number' && Number.isSafeInteger(value));
+        };
+        const seen = new Set();
+        const owners = [];
+        let complete = !mixed;
+        const add = function (value) {
+          if (value === null || value === undefined) return;
+          if (!scalar(value)) { complete = false; return; }
+          const key = typeof value + ':' + String(value);
+          if (seen.has(key)) return;
+          seen.add(key);
+          owners.push(subjectOf(value));
+        };
+        const list = rows || [];
+        for (let i = 0; i < list.length; i++) {
+          const row = list[i];
+          let found = false;
+          if (row && typeof row === 'object') {
+            const keys = Object.keys(row);
+            for (let k = 0; k < keys.length; k++) if (keys[k].toLowerCase() === column) { found = true; add(row[keys[k]]); }
+          }
+          if (!found) complete = false;
+        }
+        if (mutation.op === 'update' && written.indexOf(column) !== -1) {
+          let pinned = false;
+          const where = ir.where || [];
+          for (let i = 0; i < where.length; i++) {
+            const p = where[i];
+            if (p && p.op === 'eq' && String(p.column).toLowerCase() === column && scalar(p.value)) { add(p.value); pinned = true; }
+          }
+          if (!pinned) complete = false;
+        }
+        if (owners.length > 100) return { owners: owners.slice(0, 100), complete: false };
+        return { owners: owners, complete: complete };
+      }
+
+      async function __sw_publishStructuredLiveInvalidation(ir, mutation, principalId, evidence, owned) {
         if (isDraftExecution || !env.SW_RELEASE_ID) return null;
         const entry = __sw_liveInvalidation(mutation.table);
         const written = (ir.values || []).concat(ir.increments || []).map(function (item) { return String(item.column).toLowerCase(); });
         const candidates = __sw_liveCandidates(entry, mutation.op, written);
         if (!candidates.length) return null;
         // A group list's table or membership table is attributed by its group
-        // evidence, not by the writer; a server-only membership write has no subject.
-        const subject = __sw_liveSubject(ir, principalId) || (evidence ? { kind: 'shared', id: null } : null);
+        // evidence and an owner list by its owners, not by the writer.
+        const subject = __sw_liveSubject(ir, principalId) || (evidence || owned ? { kind: 'shared', id: null } : null);
         if (!subject) return { delivery: 'resync_required', reason: 'LIVE_SCOPE_NOT_SUBSCRIBABLE' };
         const body = {
           projectId: projectId,
@@ -7371,17 +7327,32 @@ var DB_LIVE_INVALIDATION_JS = `      function __sw_liveInvalidation(table) {
         };
         if (evidence && evidence.groups) body.groups = evidence.groups;
         if (evidence && evidence.memberships) body.memberships = evidence.memberships;
-        try {
-          const response = await platformFetch('/v1/live/invalidate', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
-          });
-          if (!response.ok) return { delivery: 'resync_required', reason: 'DELIVERY_UNAVAILABLE' };
-          if (evidence && !evidence.complete) return { delivery: 'resync_required', reason: 'LIVE_GROUP_EVIDENCE_INCOMPLETE' };
-          return { delivery: 'invalidated' };
-        } catch (error) {
-          console.warn('[SW_LIVE_INVALIDATION] delivery failed: ' + ((error && error.message) || String(error)));
-          return { delivery: 'resync_required', reason: 'DELIVERY_UNAVAILABLE' };
+        if (owned) body.owners = owned.owners;
+        // Bounded retry: three attempts over about a second. The write has
+        // already committed; a final failure is logged and reported, never thrown.
+        let lastReason = 'DELIVERY_UNAVAILABLE';
+        for (let attempt = 0; attempt < 3; attempt++) {
+          if (attempt > 0) await new Promise(function (resolve) { setTimeout(resolve, attempt * 300); });
+          try {
+            const response = await platformFetch('/v1/live/invalidate', {
+              method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+            });
+            if (response.ok) {
+              if (evidence && !evidence.complete) return { delivery: 'resync_required', reason: 'LIVE_GROUP_EVIDENCE_INCOMPLETE' };
+              if (owned && !owned.complete) {
+                console.warn('[SW_LIVE_INVALIDATION] ' + body.table + ': not every owner was named in the write result; those owner lists catch up on their next refresh.');
+                return { delivery: 'resync_required', reason: 'LIVE_OWNER_EVIDENCE_INCOMPLETE' };
+              }
+              return { delivery: 'invalidated' };
+            }
+            lastReason = 'DELIVERY_UNAVAILABLE';
+            if (response.status < 500) { lastReason = 'DELIVERY_REFUSED_' + response.status; break; }
+          } catch (error) {
+            lastReason = 'DELIVERY_UNAVAILABLE';
+          }
         }
+        console.error('[SW_LIVE_INVALIDATION] ' + body.table + ' ' + body.op + ': the change committed, but live lists were not notified (' + lastReason + '). Open lists catch up on reconnect, focus or within 60 s.');
+        return { delivery: 'resync_required', reason: lastReason };
       }
 
 `;
@@ -9320,19 +9291,19 @@ ${DB_RENDER_IR_JS}
       async function __sw_liveDeclare(name, read) {
         const result = await read;
         if (typeof name !== 'string' || !name || arguments.length !== 2) {
-          __sw_structThrow('sw.db.live takes exactly (name, read).');
+          __sw_structThrow('sw.rooms.live takes exactly (name, read).');
         }
         const view = __sw_liveViewByName(name);
         if (!view) {
-          __sw_structThrow403('LIVE_VIEW_NOT_DECLARED', 'sw.db.live("' + name + '") is not declared by this release. Declare the exact composed read directly in sw.db.live(name, sw.db.from(...)) and deploy.');
+          __sw_structThrow403('LIVE_VIEW_NOT_DECLARED', 'sw.rooms.live("' + name + '") is not declared by this release. Declare the exact composed read directly in sw.rooms.live(name, sw.db.from(...)) and deploy.');
         }
         const brand = result && typeof result === 'object' ? __sw_liveReadBrands.get(result) : null;
         if (!brand || brand.fingerprint !== view.fingerprint) {
-          __sw_structThrow403('LIVE_READ_NOT_COMPOSED', 'sw.db.live requires the exact successful sw.db.from result declared for this name. A raw query, cloned result, failed read, or different composed shape cannot mint a subscription.');
+          __sw_structThrow403('LIVE_READ_NOT_COMPOSED', 'sw.rooms.live requires the exact successful sw.db.from result declared for this name. A raw query, cloned result, failed read, or different composed shape cannot mint a subscription.');
         }
         const dependency = view.dependencies && view.dependencies.find(function (item) { return item.kind === 'rows'; });
         if (!dependency || (dependency.scope.mode === 'policy' && !(dependency.scope.policy && (dependency.scope.policy.k === 'g' || __sw_liveRoleChain(dependency.scope.policy) || __sw_liveGroupChain(dependency.scope.policy))))) {
-          __sw_structThrow403('LIVE_VIEW_POLICY_SCOPE_UNSUPPORTED', 'sw.db.live does not subscribe policy-scoped tables yet.');
+          __sw_structThrow403('LIVE_VIEW_POLICY_SCOPE_UNSUPPORTED', 'sw.rooms.live does not subscribe policy-scoped tables yet.');
         }
         const subject = __sw_liveSubject(brand.ir, brand.principalId);
         if (!subject) {
@@ -9436,10 +9407,6 @@ ${DB_AGGREGATE_JS}
         // sw.db.delete is a trivial alias of sw.db.remove (both call the same
         // composer). A scope argument fails loudly, never silently.
         from(table, opts, legacyScope) { __sw_structNoScopeArg(legacyScope, 'from'); return __sw_structFrom(table, opts); },
-        live(name, read) {
-          if (arguments.length !== 2) __sw_structThrow('sw.db.live takes exactly (name, read).');
-          return __sw_liveDeclare(name, read);
-        },
         count(table, opts, legacyScope) { __sw_structNoScopeArg(legacyScope, 'count'); return __sw_structCount(table, opts); },
         // Composed aggregates (tsk_d3edbf2b) \u2014 count/sum/avg/min/max with
         // group-by over the rows the caller is allowed to read.
@@ -9501,6 +9468,7 @@ ${DB_AGGREGATE_JS}
           };
         })(),
       };
+      __sw_liveDoor.set(__sw_dbNamespace, __sw_liveDeclare);
       return __sw_registerGeneratedOwnerRead(__sw_dbNamespace);`;
 
 // worker/src/runtime/db-raw.ts
@@ -9602,6 +9570,19 @@ var DB_RAW_JS = `      var __sw_rawReadDbInstance = null;
         });
         __sw_pendingBackground.push(pending);
       }
+      // A raw SQL write names no rows the platform can attribute, so it cannot
+      // notify a live list. Say so once per table per request instead of
+      // leaving the list silently stale (structured writes notify).
+      var __sw_rawLiveWarned;
+      function __sw_rawLiveWarn(sql) {
+        const mut = __sw_mutationOf(sql);
+        if (!mut || !__sw_liveInvalidation(mut.table)) return;
+        __sw_rawLiveWarned = __sw_rawLiveWarned || new Set();
+        const table = String(mut.table).toLowerCase();
+        if (__sw_rawLiveWarned.has(table)) return;
+        __sw_rawLiveWarned.add(table);
+        console.warn('[SW_LIVE] A raw SQL ' + mut.op + ' on ' + table + ' does not notify its live lists; open lists catch up on reconnect, focus or within 60 s. Write it with sw.db.insert/update/remove to update them at once.');
+      }
       function __sw_rawResultWrote(results) {
         const list = __sw_arrayIsArray(results) ? results : [results];
         return list.some(function (r) {
@@ -9635,6 +9616,7 @@ var DB_RAW_JS = `      var __sw_rawReadDbInstance = null;
         const rows = r.results || [];
         const mut = __sw_mutationOf(sql);
         if (mut || __sw_rawResultWrote(r)) __sw_publicDataInvalidate();
+        if (mut) __sw_rawLiveWarn(sql);
         if (mut) {
           __sw_deferDbSizeObservation(r);
         }
@@ -9676,6 +9658,7 @@ var DB_RAW_JS = `      var __sw_rawReadDbInstance = null;
           throw error;
         }
         if (batchMutates || __sw_rawResultWrote(results)) __sw_publicDataInvalidate();
+        if (batchMutates) for (const s of statements) __sw_rawLiveWarn(s.sql);
         if (batchMutates) {
           __sw_deferDbSizeObservation(results);
         }
@@ -16011,11 +15994,10 @@ var ROOMS_JS = `    rooms: (function () {
         if (!visitor && issueVisitor && typeof __sw_resolveVisitorIdentity === 'function') {
           // The ticket door gives a first-time anonymous visitor a session when the
           // app declares visitor identity, so the person is the same on reconnect.
-          try { await __sw_resolveVisitorIdentity(); visitor = __sw_roomsVisitorToken(); }
-          catch (err) { if (!err || err.code !== 'VISITOR_IDENTITY_UNAVAILABLE') throw err; }
+          await __sw_resolveVisitorIdentity(); visitor = __sw_roomsVisitorToken();
         }
         if (visitor) return { 'X-Somewhere-Rooms-Authority': 'visitor', 'X-Sw-Visitor-Session': visitor };
-        return { 'X-Somewhere-Rooms-Authority': 'none' };
+        throw __sw_roomsError('AUTH_REQUIRED', 'Rooms require a signed-in or visitor session.', 401);
       }
       async function __sw_roomsCall(path, headers, body) {
         const r = await platformFetch(path, {
@@ -16093,6 +16075,14 @@ var ROOMS_JS = `    rooms: (function () {
       const __sw_rooms = Object.assign(__sw_roomsOps('sw.rooms', '/v1/rooms/', function (label) { return __sw_roomsCallerHeaders(label, false); }), {
         server: Object.freeze(__sw_roomsOps('sw.rooms.server', '/v1/rooms/server/', __sw_roomsServerHeaders)),
         event: __sw_roomsEvent,
+        // A live list: the declared composed read plus a refresh subscription
+        // (worker/src/runtime/db.ts __sw_liveDeclare). Rows stay in the read.
+        live: function live(name, read) {
+          if (arguments.length !== 2) throw __sw_roomsError('VALIDATION_ERROR', 'sw.rooms.live takes exactly (name, read): a declared name and sw.db.from(...).', 400);
+          const declare = __sw_liveDoor.get(sw.db);
+          if (typeof declare !== 'function') throw __sw_roomsError('ROOMS_LIVE_UNAVAILABLE', 'Live lists are unavailable in this runtime.', 500);
+          return declare(name, read);
+        },
       });
       Object.freeze(__sw_rooms);
       // Platform-private: the browser ticket door (/__sw/rooms/ticket) asks for a
@@ -16117,7 +16107,7 @@ var CONTEXT_TAIL_JS = `  };
   // teaches nothing (pfb_3645abbfa717). One thrower, mounted on both the
   // standard sw and the draft proxy, so the answer is identical either way.
   function __sw_realtimeRetired() {
-    const err = new Error('sw.realtime is not part of the runtime. For browser live updates, declare the read in a function with sw.db.live(name, sw.db.from(...)) and subscribe with watchLive from /__sw/live/client.js. For durable events and history, write rows with sw.db.');
+    const err = new Error('sw.realtime is not part of the runtime. For browser live updates, declare the read in a function with sw.rooms.live(name, sw.db.from(...)) and subscribe with watchLive from /__sw/rooms/client.js. For durable events and history, write rows with sw.db.');
     err.code = 'REALTIME_RETIRED';
     err.status = 410;
     throw __sw_markExpected(err);
@@ -16226,7 +16216,13 @@ var CONTEXT_TAIL_JS = `  };
       throw err;
     }
     const draftRoomsOps = { act: draftRoomsUnavailable, set: draftRoomsUnavailable, send: draftRoomsUnavailable, get: draftRoomsUnavailable };
-    const draftRooms = Object.freeze(Object.assign({}, draftRoomsOps, { server: Object.freeze(Object.assign({}, draftRoomsOps)), event: draftRoomsUnavailable }));
+    // A preview still shows a live list's rows; only the subscription is unavailable.
+    async function draftRoomsLive(name, read) {
+      if (arguments.length !== 2) draftRoomsUnavailable();
+      const result = await read;
+      return Object.assign({}, result, { live: { name: name, state: 'unavailable', reason: 'ROOMS_DRAFT_UNAVAILABLE' } });
+    }
+    const draftRooms = Object.freeze(Object.assign({}, draftRoomsOps, { server: Object.freeze(Object.assign({}, draftRoomsOps)), event: draftRoomsUnavailable, live: draftRoomsLive }));
     const draftSafe = new Set([
       'project_id', 'subdomain', 'tier', 'env', 'request_id', 'params',
       // Groups stays discoverable only to return its draft refusal before transport.
@@ -17687,6 +17683,185 @@ async function __sw_handlePushDoor(request, sw, env) {
 }
 `;
 
+// worker/src/runtime/live-client.ts
+var LIVE_CLIENT_MODULE_JS = `
+const LIVE_PING_FRAME = '{"type":"sw_ping"}';
+const LIVE_PING_MS = 25000;
+const LIVE_PONG_TIMEOUT_MS = 10000;
+const LIVE_SAFETY_REFRESH_MS = 60000;
+const LIVE_RETRY_LIMIT = 6;
+
+function liveError(code, message, cause) {
+  const err = new Error(message);
+  err.code = code;
+  if (cause !== undefined) err.cause = cause;
+  return err;
+}
+
+export function watchLive(load, render, onError) {
+  if (typeof load !== 'function' || typeof render !== 'function' || (onError !== undefined && typeof onError !== 'function')) {
+    throw new TypeError('watchLive(load, render, onError?): load and render are functions; onError is an optional function');
+  }
+  let stopped = false;
+  let socket = null;
+  let socketGeneration = 0;
+  let liveKey = null;
+  let inFlight = null;
+  let dirty = false;
+  let reconnectRequested = false;
+  let retryTimer = null;
+  let failures = 0;
+  let pingTimer = null;
+  let pongTimer = null;
+  let reconnectTimer = null;
+  let drops = 0;
+
+  function report(err) {
+    const retrying = failures <= LIVE_RETRY_LIMIT;
+    const info = { attempt: failures, retrying: retrying };
+    if (onError) {
+      try { onError(err, info); } catch (handlerError) { console.error('[watchLive] onError threw', handlerError); }
+    } else {
+      console.error('[watchLive] ' + (err && err.code ? err.code + ': ' : '') + ((err && err.message) || String(err)) + (retrying ? ' (retrying)' : ' (gave up; the list refreshes again on reconnect, focus or within 60 s)'), err);
+    }
+  }
+
+  function scheduleRetry(reconnect) {
+    if (stopped || retryTimer !== null || failures > LIVE_RETRY_LIMIT) return;
+    const delay = Math.min(500 * Math.pow(2, failures - 1), 15000);
+    retryTimer = setTimeout(function () { retryTimer = null; refresh(reconnect); }, delay);
+  }
+
+  function fail(err, reconnect) {
+    failures += 1;
+    report(err);
+    scheduleRetry(reconnect);
+  }
+
+  function stopPing() {
+    if (pingTimer !== null) { clearInterval(pingTimer); pingTimer = null; }
+    if (pongTimer !== null) { clearTimeout(pongTimer); pongTimer = null; }
+  }
+
+  function connect(live) {
+    const nextKey = String(live.release_id) + ':' + String(live.fingerprint);
+    const generation = ++socketGeneration;
+    stopPing();
+    if (socket) { try { socket.close(1000, 'refresh'); } catch (_) {} }
+    liveKey = nextKey;
+    let ws;
+    try { ws = new WebSocket(live.subscribe_url); } catch (err) { socket = null; fail(liveError('LIVE_CONNECT_FAILED', 'The live connection could not be opened.', err), true); return; }
+    socket = ws;
+    let closed = false;
+    ws.onmessage = function (message) {
+      if (stopped || generation !== socketGeneration) return;
+      if (pongTimer !== null) { clearTimeout(pongTimer); pongTimer = null; }
+      drops = 0;
+      let frame = null;
+      try { frame = JSON.parse(message.data); } catch (_) { return; }
+      if (!frame || frame.type !== 'live_control') return;
+      // resync_required: rows changed, or this socket just went live.
+      // release_changed / access_revoked / reauthorize_required: the socket
+      // closes next; the close handler reconnects through a fresh load.
+      if (frame.event === 'resync_required') refresh(false);
+    };
+    ws.onopen = function () {
+      if (stopped || generation !== socketGeneration) return;
+      pingTimer = setInterval(function () {
+        if (stopped || generation !== socketGeneration) return;
+        try { ws.send(LIVE_PING_FRAME); } catch (_) { return; }
+        if (pongTimer === null) pongTimer = setTimeout(function () {
+          pongTimer = null;
+          if (generation === socketGeneration) { try { ws.close(4000, 'no_pong'); } catch (_) {} onClose(); }
+        }, LIVE_PONG_TIMEOUT_MS);
+      }, LIVE_PING_MS);
+    };
+    function onClose() {
+      if (closed || stopped || generation !== socketGeneration) return;
+      closed = true;
+      stopPing();
+      // An error may leave the socket half-open; close it explicitly so no stale
+      // connection lingers behind the replacement.
+      try { ws.close(1000, 'replaced'); } catch (_) {}
+      socket = null;
+      liveKey = null;
+      // A fresh load re-checks access and mints a new ticket; it also shows
+      // anything that changed while the socket was down. The first drop
+      // reconnects at once; repeated drops back off and are reported.
+      drops += 1;
+      if (drops > 3) report(liveError('LIVE_DISCONNECTED', 'The live connection keeps closing; reconnecting.'));
+      if (reconnectTimer !== null) return;
+      const delay = drops === 1 ? 0 : Math.min(500 * Math.pow(2, drops - 2), 15000);
+      reconnectTimer = setTimeout(function () { reconnectTimer = null; refresh(true); }, delay);
+    }
+    ws.onclose = onClose;
+    ws.onerror = onClose;
+  }
+
+  function refresh(reconnect) {
+    if (stopped) return Promise.resolve(null);
+    if (inFlight) {
+      dirty = true;
+      reconnectRequested = reconnectRequested || !!reconnect;
+      return inFlight;
+    }
+    if (retryTimer !== null) { clearTimeout(retryTimer); retryTimer = null; }
+    if (reconnect && reconnectTimer !== null) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+    let snapshot = null;
+    inFlight = Promise.resolve().then(load).then(function (value) {
+      snapshot = value;
+      if (stopped) return;
+      render(snapshot && snapshot.data, snapshot);
+      const live = snapshot && snapshot.live;
+      if (!live || live.state !== 'ready' || typeof live.subscribe_url !== 'string') {
+        // The rows rendered, but nothing will tell this page about changes.
+        throw liveError((live && live.reason) || 'LIVE_NOT_DECLARED',
+          live ? 'The list loaded, but it could not subscribe to changes (' + (live.reason || live.state) + ').'
+               : 'load() must return the JSON of a function that returns sw.rooms.live(name, read).');
+      }
+      failures = 0;
+      const nextKey = String(live.release_id) + ':' + String(live.fingerprint);
+      if (reconnect || !socket || nextKey !== liveKey) connect(live);
+    }).catch(function (err) {
+      if (!stopped) fail(err && err.code ? err : liveError('LIVE_REFRESH_FAILED', 'Refreshing the live list failed: ' + ((err && err.message) || String(err)), err), reconnect || !socket);
+    }).then(function () {
+      inFlight = null;
+      if (dirty && !stopped) {
+        const again = reconnectRequested;
+        dirty = false;
+        reconnectRequested = false;
+        refresh(again);
+      }
+      return snapshot;
+    });
+    return inFlight;
+  }
+
+  function repair() {
+    if (stopped) return;
+    failures = Math.min(failures, LIVE_RETRY_LIMIT);
+    refresh(!socket && reconnectTimer === null);
+  }
+  function onVisibility() { if (document.visibilityState === 'visible') repair(); }
+  document.addEventListener('visibilitychange', onVisibility);
+  if (typeof window !== 'undefined') window.addEventListener('online', repair);
+  const safety = setInterval(function () { if (document.visibilityState !== 'hidden') repair(); }, LIVE_SAFETY_REFRESH_MS);
+  refresh(true);
+
+  return function stop() {
+    stopped = true;
+    socketGeneration++;
+    stopPing();
+    if (retryTimer !== null) clearTimeout(retryTimer);
+    if (reconnectTimer !== null) clearTimeout(reconnectTimer);
+    clearInterval(safety);
+    document.removeEventListener('visibilitychange', onVisibility);
+    if (typeof window !== 'undefined') window.removeEventListener('online', repair);
+    if (socket) { try { socket.close(1000, 'stopped'); } catch (_) {} }
+  };
+}
+`.trim();
+
 // worker/src/runtime/rooms-client.ts
 var ROOMS_CLIENT_MODULE_JS = `
 const TICKET_PATH = '/__sw/rooms/ticket';
@@ -18082,7 +18257,7 @@ export async function joinRoom(table, id) {
   if (!(typeof id === 'string' && id) && !Number.isSafeInteger(id)) throw new TypeError('joinRoom(table, id): id is the row id');
   return new Room(table, id)._start();
 }
-`.trim();
+`.trim() + "\n\n" + LIVE_CLIENT_MODULE_JS;
 var ROOMS_DOOR_RUNTIME_JS = String.raw`
 const __SW_ROOMS_CLIENT_MODULE = ${JSON.stringify(ROOMS_CLIENT_MODULE_JS)};
 function __sw_roomsDoorMatch(url) {

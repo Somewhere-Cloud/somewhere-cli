@@ -33,6 +33,11 @@
   `.somewhere/base-files.json`. `--force` replaces local edits with live
   (tsk_a7b38bae).
 
+## 0.38.26
+
+The 0.38.25 changes below. npm accepted 0.38.25 but never served it, so the
+same source is published again under this version.
+
 ## 0.38.25
 
 ### Fixed

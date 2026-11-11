@@ -1277,6 +1277,8 @@ interface SomewhereServerDb {
   aggregate<T extends SomewhereDbTable>(table: T, options: SomewhereDbAggregateOptionsFor<T>): Promise<SomewhereDbAggregateResult<SomewhereDbAggregateRow<T>>>;
 }
 interface SomewhereCallerDb {
+  /** @deprecated Replaced by sw.rooms.live(name, sw.db.from(...)); deploy refuses sw.db.live. */
+  live(name: 'sw.db.live was replaced by sw.rooms.live(name, sw.db.from(...))', read: never): never;
   query(sql: string, params?: readonly unknown[] | null, options?: SomewhereDbRawCallerOptions | null): Promise<SomewhereDbResult>;
   batch(statements: readonly SomewhereRawDbStatement[], options?: SomewhereDbRawCallerOptions | null): Promise<SomewhereRawBatchResult[]>;
   aggregate<T extends SomewhereDbTable>(table: T, options: SomewhereDbAggregateOptionsFor<T> & { asServer?: true }): Promise<SomewhereDbAggregateResult<SomewhereDbAggregateRow<T>>>;
@@ -3476,6 +3478,42 @@ declare module 'somewhere:push' {
   export function listenToPush(handler: (message: PushMessage) => void): () => void;
 }
 
+// The rooms browser module (/__sw/rooms/client.js), typed under this
+// specifier. Plain browser scripts import the absolute path directly.
+declare module 'somewhere:rooms' {
+  export interface RoomPerson { id: string; user: string | null; me: boolean; info: Record<string, unknown> | null }
+  export type RoomStatus = 'connecting' | 'open' | 'reconnecting' | 'closed';
+  export interface Room {
+    readonly table: string;
+    readonly id: string | number;
+    readonly state: Record<string, unknown>;
+    readonly version: number;
+    readonly people: RoomPerson[];
+    readonly status: RoomStatus;
+    readonly me: { readonly info: Record<string, unknown> | null; set(info: Record<string, unknown>): void };
+    on(event: 'state', handler: (state: Record<string, unknown>, change: { by: string; pending?: boolean } | null) => void): () => void;
+    on(event: 'people', handler: (people: RoomPerson[]) => void): () => void;
+    on(event: 'message', handler: (data: unknown, from: string) => void): () => void;
+    on(event: 'status', handler: (status: RoomStatus) => void): () => void;
+    on(event: 'timer_failed', handler: () => void): () => void;
+    // Rooms without a referee: merge top-level keys (null deletes one).
+    set(patch: Record<string, unknown>): Promise<Record<string, unknown>>;
+    // Rooms with a referee: resolves with the state after the referee accepts.
+    act(action: unknown): Promise<Record<string, unknown>>;
+    // A throwaway message to everyone else; false when not connected.
+    send(data: unknown): boolean;
+    leave(): void;
+  }
+  export function joinRoom(table: string, id: string | number): Promise<Room>;
+  // A live list declared with sw.rooms.live: load re-calls your function,
+  // render gets its data array and the whole result. Returns stop().
+  export function watchLive<Row = Record<string, unknown>>(
+    load: () => Promise<{ data: Row[]; live?: unknown }> | { data: Row[]; live?: unknown },
+    render: (rows: Row[], result: { data: Row[]; live?: unknown }) => void,
+    onError?: (error: Error & { code?: string }, info: { attempt: number; retrying: boolean }) => void,
+  ): () => void;
+}
+
 // \u2500\u2500 sw.queue / sw.jobs \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
 interface SomewhereQueuePushOptions {
   // A project-relative /api path or an https:// URL.
@@ -4407,8 +4445,8 @@ var require_consumer_contract = __commonJS({
   "worker/containers/compile/consumer-contract.cjs"(exports2, module2) {
     "use strict";
     var CONSUMER_CONTRACT2 = Object.freeze({
-      version: 4,
-      digest: "ccf5c29211e634d5f41a4a6e2574103d3491e236188aeb53079dbf2842fcc19e"
+      version: 5,
+      digest: "5624c3f3f8db6bb4535b5e3e1466700b3967b33e907ad4315681cbcb2b1d1996"
     });
     var MEMBERSHIPS = "memberships: table({ id: id(), team_id: text(), member_id: text() }, { scope: owner(), client: { read: true } }),";
     var SHARES = "shares: table({ id: id(), grantee_id: text() }, { scope: owner(), client: { read: true, create: ['grantee_id'], delete: true }, unique: [['user_id', 'grantee_id']] }),";

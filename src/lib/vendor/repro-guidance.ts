@@ -188,32 +188,32 @@ function guidanceFor(record: ReproRecord): Guidance {
     const trace = record.trace_id && /^[0-9a-f]{32}$/.test(record.trace_id) ? record.trace_id : '<TRACE_ID>';
     return { surface: 'function_crash',
       investigate: [['somewhere', 'logs', ...project, '--trace', trace]],
-      recipe: ['Read the stack first: FUNCTION_ERROR usually means the handler\'s own code threw. Submit a platform bug only if the stack points into the platform.',
-        'Do NOT resend the failed request: the handler may have written data before it threw.',
-        'Reproduce on a disposable test project: send the same method and route a synthetic body of the same shape (<FIELD>: <PLACEHOLDER>), then read it with somewhere logs --project <TEST_PROJECT> --trace <TRACE_ID>'] };
+      recipe: ['FUNCTION_ERROR usually means the handler\'s own code threw; the stack in the owner\'s logs shows whether it points into the platform, which is what makes it a platform bug.',
+        'Resending the failed request can repeat writes: the handler may have written data before it threw.',
+        'Reproduction recipe, not run: a disposable test project without customer data, the same method and route with a synthetic body of the same shape (<FIELD>: <PLACEHOLDER>), read back with somewhere logs --project <TEST_PROJECT> --trace <TRACE_ID>'] };
   }
   if (op === 'tool:site_verify' || /^POST \/browser(\/|$)|^tool:browser|^POST \/verify|^tool:verify/.test(op) || /^(browser|verify)\b/.test(record.command ?? '')) {
     return { surface: 'browser_verify',
       investigate: [['somewhere', 'verify', '--schema'], ['somewhere', 'docs', 'browser']],
-      recipe: ['Create a disposable test project: somewhere init --bare --name <TEST_PROJECT>',
-        'Write a minimal flow reproducing the shape: <FLOW_FILE> with one action of the same kind (no real data)',
-        'Run: somewhere verify --project <TEST_PROJECT> --flow <FLOW_FILE> --json and compare the code'] };
+      recipe: ['somewhere init --bare --name <TEST_PROJECT> creates a disposable test project',
+        'A minimal flow, <FLOW_FILE>, holds one action of the same kind and no real data',
+        'somewhere verify --project <TEST_PROJECT> --flow <FLOW_FILE> --json reports the code to compare with this one'] };
   }
   if (/^POST \/deploy|^tool:project_deploy/.test(op) || /^(deploy|promote|rollback)\b/.test(record.command ?? '')) {
     return { surface: 'deploy',
       investigate: [['somewhere', 'status', ...project], ['somewhere', 'logs', ...project]],
-      recipe: ['Do NOT re-run the original deploy until its outcome is known.',
-        'Read its result: somewhere status --project <PROJECT>, then somewhere call project_deploy_log with {"version": <VERSION>}',
-        'Reproduce on a disposable test project with placeholder source: somewhere deploy --project <TEST_PROJECT>'] };
+      recipe: ['Re-running the original deploy before its outcome is known can publish it twice.',
+        'Its result: somewhere status --project <PROJECT> and somewhere call project_deploy_log with {"version": <VERSION>}',
+        'Reproduction recipe, not run: a disposable test project with placeholder source, somewhere deploy --project <TEST_PROJECT>'] };
   }
   if (/\/auth\/|^tool:auth_/.test(op)) {
     return { surface: 'function_auth',
       investigate: [['somewhere', 'errors', ...project], ['somewhere', 'logs', ...project]],
-      recipe: ['Prepare a preverified test user on a disposable project: somewhere test-users prepare <ACTOR>',
-        'Repeat the same sign-in step in a browser with that state, using placeholder data only'] };
+      recipe: ['somewhere test-users prepare <ACTOR> creates a preverified test user on a disposable project',
+        'Reproduction recipe, not run: the same sign-in step in a browser with that state, using placeholder data only'] };
   }
   return { surface: 'general', investigate: [['somewhere', 'logs', ...project]],
-    recipe: ['Reproduce the same command shape on a disposable test project with placeholder input <INPUT>'] };
+    recipe: ['Reproduction recipe, not run: the same command shape on a disposable test project with placeholder input <INPUT>'] };
 }
 
 export interface ReproPacket {
@@ -231,9 +231,9 @@ export function buildPacket(record: ReproRecord): ReproPacket {
   const packet: ReproPacket = {
     schema: REPRO_SCHEMA, collected: record, omitted: OMITTED, surface: guidance.surface,
     recipe: { kind: 'synthetic', rerun_original: !mutating && record.outcome === 'refused' && record.retry === true,
-      steps: record.outcome === 'unknown' ? ['The outcome is unknown: inspect before doing anything else; never retry it blindly.', ...guidance.recipe] : guidance.recipe,
+      steps: record.outcome === 'unknown' ? ['The outcome is unknown: the operation may have completed, so a blind retry can repeat it.', ...guidance.recipe] : guidance.recipe,
       investigate: guidance.investigate },
-    submit: { destination: 'support_ticket', automatic: false, how: 'Review this packet, then submit it deliberately as a platform bug.' },
+    submit: { destination: 'support_ticket', automatic: false, how: 'Not submitted automatically; POST /v1/platform-feedback (support_ticket where that tool is available) accepts this packet as a platform bug report.' },
   };
   return scrubbed(packet);
 }

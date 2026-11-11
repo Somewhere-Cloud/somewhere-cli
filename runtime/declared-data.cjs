@@ -5,6 +5,9 @@ var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __getProtoOf = Object.getPrototypeOf;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
+var __esm = (fn, res) => function __init() {
+  return fn && (res = (0, fn[__getOwnPropNames(fn)[0]])(fn = 0)), res;
+};
 var __commonJS = (cb, mod) => function __require() {
   return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
 };
@@ -29,6 +32,37 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   mod
 ));
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
+
+// worker/src/utils/log-sanitize.ts
+var SENSITIVE_PARAMS, SENSITIVE_PARAM_NAMES;
+var init_log_sanitize = __esm({
+  "worker/src/utils/log-sanitize.ts"() {
+    "use strict";
+    SENSITIVE_PARAMS = [
+      "access_token",
+      "refresh_token",
+      // OAuth callbacks carry one-use credentials even when validation refuses them.
+      "code",
+      "state",
+      // A creator or link secret belongs only in a request body; a stray query copy is never kept.
+      "creator_secret",
+      "secret",
+      "signature",
+      "api_key",
+      "apikey",
+      "token",
+      "key",
+      "sig",
+      // A DSN carries its own password, and percent-encoding hides it from the
+      // Postgres URI rule below. `password` covers the other connection-string
+      // form, `postgres://reader@host/db?password=…`, which has no userinfo
+      // password for that rule to match.
+      "dsn",
+      "password"
+    ];
+    SENSITIVE_PARAM_NAMES = new Set(SENSITIVE_PARAMS);
+  }
+});
 
 // worker/containers/compile/declared-data-contract.cjs
 var require_declared_data_contract = __commonJS({
@@ -3793,8 +3827,31 @@ interface SomewhereRuntimeTasks {
   };
 }
 
+// \u2500\u2500 sw.rooms (tsk_4e67d49d) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+type SomewhereRoomWho = { user: string } | { visitor: string } | { anonymous: true } | 'server';
+interface SomewhereRoomEvent {
+  type: 'join' | 'leave' | 'action' | 'timer';
+  state: Record<string, unknown>;
+  version: number;
+  action?: unknown;
+  who: SomewhereRoomWho;
+  row: { table: string; id: string | number };
+}
+interface SomewhereRoomPerson { id: string; user: string | null; info: Record<string, unknown> | null }
+interface SomewhereRoomOps {
+  act(table: string, id: string | number, action: unknown): Promise<{ state: Record<string, unknown>; version: number }>;
+  set(table: string, id: string | number, patch: Record<string, unknown>): Promise<{ state: Record<string, unknown>; version: number }>;
+  send(table: string, id: string | number, message: unknown): Promise<{ sent: true }>;
+  get(table: string, id: string | number): Promise<{ state: Record<string, unknown>; version: number; people: SomewhereRoomPerson[] }>;
+}
+interface SomewhereRuntimeRooms extends SomewhereRoomOps {
+  readonly server: SomewhereRoomOps;
+  event(req: Request): Promise<SomewhereRoomEvent>;
+}
+
 interface SomewhereRuntimeContext {
   readonly email: SomewhereRuntimeEmail;
+  readonly rooms: SomewhereRuntimeRooms;
   readonly contacts: SomewhereRuntimeContacts;
   readonly inbox: SomewhereRuntimeInbox;
   readonly notifications: SomewhereRuntimeNotifications;
@@ -4347,8 +4404,8 @@ var require_consumer_contract = __commonJS({
   "worker/containers/compile/consumer-contract.cjs"(exports2, module2) {
     "use strict";
     var CONSUMER_CONTRACT2 = Object.freeze({
-      version: 1,
-      digest: "caa6986fab558d2d8ccb9157f3e7ffb5e94b179b4d22254dfeefe991468005e4"
+      version: 2,
+      digest: "dd64af8fa3c540cfc8ef97d5e0af6e91235425cd5b2e35761f35543c78796672"
     });
     var MEMBERSHIPS = "memberships: table({ id: id(), team_id: text(), member_id: text() }, { scope: owner(), client: { read: true } }),";
     var SHARES = "shares: table({ id: id(), grantee_id: text() }, { scope: owner(), client: { read: true, create: ['grantee_id'], delete: true }, unique: [['user_id', 'grantee_id']] }),";
@@ -5037,6 +5094,12 @@ var ROLE_DOMAIN_MAP_JS = `
         }
         return true;
       }`;
+
+// worker/src/utils/platform-compile-failure.ts
+var COMPILE_UNAVAILABLE_REALERT_MS = 60 * 60 * 1e3;
+
+// worker/src/utils/authority.ts
+init_log_sanitize();
 
 // worker/src/utils/authority/scope-enforcement.ts
 var SAFE_SCOPE_IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*$/;
@@ -6763,6 +6826,58 @@ function declaredScopeIdentityColumns(scope) {
   const collect = (policy) => policy.kind === "owner" ? [policy.column] : policy.kind === "member" ? [...policy.group] : policy.kind === "any_of" ? policy.policies.flatMap(collect) : policy.kind === "all_of" ? [...collect(policy.gate), ...collect(policy.who)] : policy.kind === "group" ? [policy.column] : policy.kind === "app_role" ? [] : [policy.via];
   return [...new Set(collect(scope.policy))];
 }
+var ROOM_REFEREE_PATH = /^\/api\/[A-Za-z0-9_\-]+(?:\/[A-Za-z0-9_\-.]+)*$/;
+function readRoomsOption(r, rawName, line) {
+  r.expectPunct("{", `opening the rooms option of table "${rawName}", which takes { save?: 'column', referee?: '/api/path' }`);
+  const out = { line };
+  while (!r.tryPunct("}")) {
+    const opt = r.readKey(`for an option of rooms on table "${rawName}"`);
+    if (opt.name !== "save" && opt.name !== "referee") {
+      throw new SchemaTsError(`line ${opt.line}: rooms on table "${rawName}" has an unknown option "${opt.name}". Allowed: save, referee.`);
+    }
+    if (out[opt.name]) throw new SchemaTsError(`line ${opt.line}: rooms on table "${rawName}" declares ${opt.name} twice.`);
+    r.expectPunct(":", `after rooms.${opt.name}`);
+    const t = r.next();
+    if (t.kind !== "string") throw new SchemaTsError(`line ${t.line}: rooms.${opt.name} on table "${rawName}" must be a quoted literal string.`);
+    out[opt.name] = { value: t.value, line: t.line };
+    if (!r.tryPunct(",")) {
+      r.expectPunct("}", `closing the rooms option of table "${rawName}"`);
+      break;
+    }
+  }
+  return out;
+}
+function validateRoomsOption(input, rawName, nameLine, columns, scope, client, relations) {
+  if (columns.filter((c) => c.helper === "id").length !== 1) {
+    throw new SchemaTsError(`line ${input.line}: table "${rawName}" declares rooms, which need exactly one id() column: a room is attached to one row by its id.`);
+  }
+  const out = {};
+  if (input.save) {
+    const name = input.save.value.toLowerCase();
+    const column = columns.find((c) => c.name === name);
+    if (!column) throw new SchemaTsError(`line ${input.save.line}: rooms.save on table "${rawName}" names "${input.save.value}", which is not one of its declared columns.`);
+    if (column.helper !== "json") throw new SchemaTsError(`line ${input.save.line}: rooms.save on table "${rawName}" names "${name}", which must be a json() column: the room saves its whole state there.`);
+    if (declaredScopeIdentityColumns(scope).includes(name) || declaredOwnerColumn(scope) === name) {
+      throw new SchemaTsError(`line ${input.save.line}: rooms.save on table "${rawName}" names "${name}", which the table's access rule reads; the room's state can never decide who may see the row.`);
+    }
+    if (relations.some((rel) => rel.kind === "belongsTo" && rel.fk === name)) {
+      throw new SchemaTsError(`line ${input.save.line}: rooms.save on table "${rawName}" names "${name}", which is a relation key.`);
+    }
+    const writable = [...client?.create ?? [], ...client?.update ?? [], ...client?.intake?.fields ?? []];
+    if (writable.includes(name)) {
+      throw new SchemaTsError(`line ${input.save.line}: rooms.save on table "${rawName}" names "${name}", which is browser-writable through client.create, client.update or client.intake. The room is the only writer of its save column; remove it from those lists.`);
+    }
+    out.save = name;
+  }
+  if (input.referee) {
+    const path = input.referee.value;
+    if (!ROOM_REFEREE_PATH.test(path) || path.length > 200 || path.split("/").some((part) => part === "." || part === "..")) {
+      throw new SchemaTsError(`line ${input.referee.line}: rooms.referee on table "${rawName}" must be the path of one of the app's own functions, such as '/api/game-room'.`);
+    }
+    out.referee = path;
+  }
+  return out;
+}
 var COLUMN_HELPERS = /* @__PURE__ */ new Set([
   "id",
   "text",
@@ -7639,6 +7754,7 @@ function readTable(r, rawName, nameLine) {
   let relations = [];
   let relationsDeclared = false;
   let clientInput;
+  let roomsInput;
   if (r.tryPunct(",")) {
     r.expectPunct("{", `opening the options of table "${rawName}"`);
     while (!r.tryPunct("}")) {
@@ -7663,9 +7779,12 @@ function readTable(r, rawName, nameLine) {
       } else if (key.name === "client") {
         if (clientInput) throw new SchemaTsError(`line ${key.line}: table "${rawName}" declares "client" twice.`);
         clientInput = readClientPermissions(r);
+      } else if (key.name === "rooms") {
+        if (roomsInput) throw new SchemaTsError(`line ${key.line}: table "${rawName}" declares "rooms" twice.`);
+        roomsInput = readRoomsOption(r, rawName, key.line);
       } else {
         throw new SchemaTsError(
-          `line ${key.line}: table "${rawName}" has an unknown option "${key.name}". Allowed: scope, indexes, unique, relations, client.`
+          `line ${key.line}: table "${rawName}" has an unknown option "${key.name}". Allowed: scope, indexes, unique, relations, client, rooms.`
         );
       }
       if (!r.tryPunct(",")) {
@@ -7792,7 +7911,8 @@ function readTable(r, rawName, nameLine) {
     }
     client = parsed.permissions;
   }
-  return { kind: "table", table: { name, scope, relations, columns, indexes, uniques, removedColumns: [...removedColumns].sort(), ...client ? { client } : {} } };
+  const rooms = roomsInput ? validateRoomsOption(roomsInput, rawName, nameLine, columns, scope, client, relations) : void 0;
+  return { kind: "table", table: { name, scope, relations, columns, indexes, uniques, removedColumns: [...removedColumns].sort(), ...client ? { client } : {}, ...rooms ? { rooms } : {} } };
 }
 function extractSchemaTs(source, options = {}) {
   if (typeof source !== "string" || source.trim().length === 0) {
@@ -7958,6 +8078,8 @@ function canonicalTableShape(t) {
     indexes: t.indexes,
     uniques: t.uniques,
     ...t.removedColumns.length > 0 ? { removedColumns: t.removedColumns } : {},
+    // conditional: a table without rooms keeps its generation id.
+    ...t.rooms ? { rooms: t.rooms } : {},
     // conditional: only a group() table with direct group references gains
     // it, so every other table keeps its generation id.
     ...t.groupRefs && t.groupRefs.length > 0 ? { groupRefs: t.groupRefs } : {},

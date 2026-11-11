@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.38.32
+
+### Changed
+
+- Typecheck and lint follow live lists to `sw.rooms.live(name, read)`.
+  `live()` now lives on `SomewhereRuntimeRooms`, so `sw.db.live` is
+  reported as an error, as the platform refuses it. The browser follows a list
+  with `watchLive` from `/__sw/rooms/client.js`. The vendored platform
+  parser, types, lint, deploy-path policy and repro guidance are re-synced
+  with the platform at consumer contract 4 (tech 5145fd90, tsk_8b1197b2).
+- The bundled skills pack is re-synced with the platform: seven skills,
+  including `design`, and live lists taught through `sw.rooms.live`.
+
 ## 0.38.31
 
 ### Changed

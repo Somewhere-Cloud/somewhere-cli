@@ -6,12 +6,12 @@
     "shared/d1-session.ts": "2ae29b74bba68016c86d25fa2a58f8c2fce4aca8fe57fafc253d380c47a3c0ab",
     "shared/types/placeholder-identity.ts": "089a46e2474a21193d3611eddd9c94b6bbe62441b3039ed80fc8499bada447ca",
     "worker/containers/compile/checker-contract.cjs": "3a8355b9477d89d00bca47cf74032c3b3c6458941cf5c57ddae9e2228b51915d",
-    "worker/containers/compile/consumer-contract.cjs": "66ca384f1c1a0b4bf6fcd701457121d9b3f622ebe28874e46f100525ee58542a",
+    "worker/containers/compile/consumer-contract.cjs": "47475e7f0b74ec556a52f6dfd7136ebe9633d3c9290e5c2ca3ddda1c5fc657d9",
     "worker/containers/compile/declared-data-contract.cjs": "47ab54cbf6fb20b77e00b2f06e0d283733ee1f3774459f2a6f82c77042c1c93a",
     "worker/containers/compile/generated-declarations-render.cjs": "7ffdb34645cc9eccac6eba39dc86b646a41c4de8a1a038d2b5b46f42df9f1157",
     "worker/containers/compile/generated-declarations.cjs": "6e9902e054c5c784fd9b3c3fafc1869e79954100a45014e1132247cd82833ec4",
     "worker/containers/compile/groups-types.cjs": "7c22b4bb96c9391005d434852600dc02bc8a6bbb99d78d2b8e3eb152f7b72c58",
-    "worker/containers/compile/runtime-types.cjs": "381ecf0d77e930b7e8bc2ffa6c8cc0ec040139673a7b4ccc38aef17fd39de9ec",
+    "worker/containers/compile/runtime-types.cjs": "4aa3d3573913878cf5e2cfbb1053151866411c7684874bce180573efced864c4",
     "worker/containers/compile/schema-types.cjs": "c62cc074de5da631c44f7da33ad949e3db2d288b2d2d63b2b615c5bc549c7f4a",
     "worker/containers/compile/typed-data.cjs": "1c8bec853fbee4ffd34c651076a4e1f4d8b18c0c2be5e99e31df7c9283207627",
     "worker/containers/compile/typed-files.cjs": "a0b1818afbc7673f84583c76436a3b3ca1d1fdf63d8d8db138b36646103f0708",
@@ -43,7 +43,7 @@
     "worker/src/utils/db-schema-deploy/schema-ownership.ts": "e6c811a87bc657707be3518dfe547c6d97718ac073108b126eb7f791c9c08202",
     "worker/src/utils/dev-health-class.ts": "fd430f31b9c8469f3d90e118fd8c75d1836ebcf705c1f9e93915ffa53a4cb066",
     "worker/src/utils/errors.ts": "0583d1381c6275dbfb552d75c4b292247dcfab8f0efe51fd22afb8f516e8d6f4",
-    "worker/src/utils/event-log.ts": "9e5748c07d1512fd7421727dfc82ca8af7efee5081f15d79dde5d13ffafc9d0c",
+    "worker/src/utils/event-log.ts": "75dba8684274f670d1249afec472774b9a55c48c08a0b8b0fa577e9a6c80f72e",
     "worker/src/utils/feed-kinds.ts": "f5973cbe0337e54294f7d38fc93397adc2ad77110d431a101c5dc1214371e8a1",
     "worker/src/utils/journey-segment.ts": "b1d27c58bea03a791193d7120d88d232ea1c8374d6f25f72cd86b5b8c33c73a1",
     "worker/src/utils/json-exact-integers.ts": "e2eb8d3b2e17da363eb14fb46d876208579e2e92bfac173fb27527e6c4fb575e",
@@ -57,5 +57,5 @@
     "worker/src/utils/telegram-attempt-receipts.ts": "a9ba55ae71f63ada44a105f1ceae04b0491bda0d6e77e5762db2dbecdd2981dd",
     "worker/src/utils/telegram.ts": "dfbc9e756b44b445b3c3504c90a1094a94e6f9853ff9c0e0a84fba0e8c4518da"
   },
-  "sha256": "9e147be7eca99015a2ab84590f52d6fdaef3c2cf6d96d06b9aa0e919aa46cefb"
+  "sha256": "73d74d3226288de4a926def943348271bfb45d404336fa9bba476587af19aa8b"
 }

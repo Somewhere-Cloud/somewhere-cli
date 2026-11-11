@@ -56,7 +56,8 @@ test('--json names every local omission on stderr and leaves stdout as the deplo
     'public/linked.txt': null,
   });
   assert.equal(result.status, 0, result.stderr);
-  assert.deepEqual(JSON.parse(result.stdout), dryRun);
+  // tsk_23f34679: stdout is the server's answer plus the exact paths the request carried.
+  assert.deepEqual(JSON.parse(result.stdout), { ...dryRun, uploaded: { static_files: ['index.html'], functions: [] } });
   const lines = result.stderr.trim().split('\n').filter((line) => /^(not published|never uploaded|not uploaded): /.test(line));
   assert.deepEqual(lines.map((line) => line.split(' — ')[0]), [
     'not published: api/hello.test.ts',
@@ -70,6 +71,6 @@ test('--json names every local omission on stderr and leaves stdout as the deplo
 test('--json with nothing left out prints nothing extra on stderr', async () => {
   const result = await run(['deploy', '--dry-run', '--json'], { 'index.html': '<html><body>hi</body></html>\n' });
   assert.equal(result.status, 0, result.stderr);
-  assert.deepEqual(JSON.parse(result.stdout), dryRun);
+  assert.deepEqual(JSON.parse(result.stdout), { ...dryRun, uploaded: { static_files: ['index.html'], functions: [] } });
   assert.doesNotMatch(result.stderr, /not published|never uploaded|not uploaded/);
 });

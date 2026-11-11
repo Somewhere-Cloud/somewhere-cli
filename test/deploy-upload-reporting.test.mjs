@@ -110,6 +110,8 @@ for (const [label, warnings] of [['a server that names private files', [SERVER_W
       assert.match(first.all, /Every other file in this folder, subfolders included, is uploaded with your app\./);
       assert.doesNotMatch(first.all, /A deploy publishes your app/);
       assert.match(first.all, /3 static files uploaded \(/);
+      // tsk_23f34679: the headline's files are named, from the same selection the request carried.
+      assert.match(first.all, /Uploaded: e2e\/run\.mjs, index\.html, src\/main\.js/);
       assert.doesNotMatch(first.all, /static files? deployed/);
 
       if (warnings.length) {
@@ -128,12 +130,12 @@ for (const [label, warnings] of [['a server that names private files', [SERVER_W
   });
 }
 
-test('deploy --json prints only the raw response, warnings included', async () => {
+test('deploy --json prints the raw response plus the exact uploaded paths, warnings included', async () => {
   const { HOME, dir } = project();
   await withPlatform([SERVER_WARNING], async (apiUrl, requests, deployData) => {
     const result = await run(['deploy', '--json'], { cwd: dir, env: { HOME, USERPROFILE: HOME, SOMEWHERE_API_URL: apiUrl } });
     assert.equal(result.status, 0, result.all);
-    assert.deepEqual(JSON.parse(result.stdout), deployData);
+    assert.deepEqual(JSON.parse(result.stdout), { ...deployData, uploaded: { static_files: EXPECTED_UPLOAD, functions: [] } });
     assert.deepEqual(uploaded(requests.find((r) => r.url === '/v1/deploy')), EXPECTED_UPLOAD);
   });
 });
@@ -148,6 +150,10 @@ test('deploy --dry-run sends the same upload and prints the server warning as se
     assert.deepEqual(uploaded(dry), EXPECTED_UPLOAD);
     assert.equal(result.all.split(SERVER_WARNING).length - 1, 1);
     assert.doesNotMatch(result.all, /A deploy publishes your app/);
+    assert.match(result.all, /Uploaded: e2e\/run\.mjs, index\.html, src\/main\.js/);
+    const json = await run(['deploy', '--dry-run', '--json'], { cwd: dir, env: { HOME, USERPROFILE: HOME, SOMEWHERE_API_URL: apiUrl } });
+    assert.equal(json.status, 0, json.all);
+    assert.deepEqual(JSON.parse(json.stdout).uploaded, { static_files: EXPECTED_UPLOAD, functions: [] });
   });
 });
 
@@ -193,7 +199,9 @@ test('non-TTY deploy prints collection once across all preflight warnings and ke
 
     const json = await run(['deploy', '--json'], { cwd: dir, env });
     assert.equal(json.status, 0, json.all);
-    assert.deepEqual(JSON.parse(json.stdout), deployData);
+    const { uploaded: sent, ...raw } = JSON.parse(json.stdout);
+    assert.deepEqual(raw, deployData);
+    assert.deepEqual(sent.static_files, Object.keys(deploy.body.files).sort());
     // No progress or preflight prose; only the local omissions, one line each by
     // path and reason, so a --json caller still learns what stayed local (pfb_b141efbfc449).
     assert.deepEqual(json.stderr.trim().split('\n').map((line) => line.split(' — ')[0]),

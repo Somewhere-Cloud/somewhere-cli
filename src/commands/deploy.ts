@@ -41,7 +41,7 @@ import { dim, error, green, info, platformErrorEnvelope, printJson, printJsonErr
 import type { CliConfig, ProjectConfig } from '../types.js';
 import { showProjectNotices } from '../lib/project-notices.js';
 import { formatNextActions, nextActions } from '../lib/next-actions.js';
-import { countFromResponse, countFunctionRoutes, formatPublishSurface } from '../lib/surface-counts.js';
+import { countFromResponse, countFunctionRoutes, formatPublishSurface, formatUploadInventory, uploadInventory } from '../lib/surface-counts.js';
 import {
   formatVerifyOutput,
   loadVerifyFlow,
@@ -1192,6 +1192,9 @@ export function registerDeploy(program: Command) {
       const binaryBytes = Object.values(binaryFiles)
         .reduce((sum, b64) => sum + Math.floor((b64.length * 3) / 4), 0);
       const totalBytes = textBytes + binaryBytes;
+      // The exact paths this request carries: one source for the headline count,
+      // the terminal list and the JSON `uploaded` field (tsk_23f34679).
+      const inventory = uploadInventory(files, binaryFiles, functions, scope);
 
       if (opts.dryRun && !opts.json) {
         spinner?.stop();
@@ -1301,9 +1304,10 @@ export function registerDeploy(program: Command) {
           spinner?.stop();
           await settleNotices();
           if (opts.json) {
-            printJson(plan);
+            printJson({ ...plan, uploaded: inventory });
           } else {
             printDryRun(plan, scope);
+            info(dim(formatUploadInventory(inventory)));
           }
           return;
         }
@@ -1360,7 +1364,7 @@ export function registerDeploy(program: Command) {
         const formatted = formatDeploySuccess(result, {
           scope,
           functionCount: countFunctionRoutes(functions),
-          staticFileCount: Object.keys(files).length + Object.keys(binaryFiles).length,
+          staticFileCount: inventory.static_files.length,
           totalBytes,
           linkedProject: await linkedProjectWithSubdomain(client, result, targetProjectConfig),
         });
@@ -1407,6 +1411,7 @@ export function registerDeploy(program: Command) {
                 claim_connects_agent: tempSession.handoffReady === true,
               }
             : result;
+          (output as DeployResult & { uploaded?: typeof inventory }).uploaded = inventory;
           if (postLive.kind === 'timeout') output.post_live_render = { status: 'pending', note: POST_LIVE_RENDER_STILL_RUNNING };
           printJson(verification || verificationError ? {
             ...output,
@@ -1427,6 +1432,7 @@ export function registerDeploy(program: Command) {
         // (audit #3: the old output printed "Functions deployed" + a static
         // count + "the other layer was left untouched" all at once).
         success(formatted.headline);
+        info(dim(formatUploadInventory(inventory)));
         if (formatted.projectRef) info(`Project: ${teal(formatted.projectRef)}`);
 
         // Build log: entry chunk, chunks + sizes, functions + sizes (returned

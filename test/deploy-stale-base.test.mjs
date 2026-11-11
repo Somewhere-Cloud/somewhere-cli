@@ -359,7 +359,7 @@ test('pull with skipped files does not advance last_deploy', async () => {
     });
 
     assert.equal(result.status, 1, `stdout:\n${result.stdout}\nstderr:\n${result.stderr}`);
-    assert.match(result.stderr, /Pull would overwrite local file/);
+    assert.match(result.stderr, /Pull stopped: these local files differ from live/);
     assert.equal(readProject(fixtureDir).last_deploy.last_deployed_version, 7);
     assert.equal(readFileSync(join(fixtureDir, 'index.html'), 'utf8'), '<html><body>stale base</body></html>\n');
   });
@@ -856,14 +856,19 @@ test('promote writes the returned version to the linked project state', async ()
 // release-native deploy via base_release_id, returning 409 STALE_RELEASE_BASE.
 // The CLI must anchor the release it last deployed and refuse when it moved.
 
-test('stale-release-base refusal copy names the changed files and the pull/--force next steps', () => {
-  const rendered = formatStaleReleaseBaseExplanation(['index.html', 'src/App.tsx']);
-  assert.match(rendered, /This project changed since the version this folder came from/);
-  assert.match(rendered, /another update landed first/);
-  assert.match(rendered, /Your deploy was NOT applied\./);
-  assert.match(rendered, /Changed since then: index\.html, src\/App\.tsx\./);
-  assert.match(rendered, /somewhere pull/);
-  assert.match(rendered, /somewhere deploy --force/);
+test('stale-release-base refusal names live, what shipped it, the files, and pull as the one next step', () => {
+  const rendered = formatStaleReleaseBaseExplanation({ changed_files: ['index.html', 'src/App.tsx'], active_version: 2, base_version: 1, active_release_source: 'mcp', active_release_id: 'rel_2' });
+  assert.match(rendered, /Not deployed: live is newer than this folder\. Nothing was changed\./);
+  assert.match(rendered, /Live is v2, deployed by an agent through the connector \(MCP\); this folder came from v1\./);
+  assert.match(rendered, /Files that differ between v1 and live: index\.html, src\/App\.tsx\./);
+  assert.match(rendered, /Next step: run `somewhere pull`/);
+  assert.doesNotMatch(rendered, /--force|another machine/);
+  const own = formatStaleReleaseBaseExplanation({ changed_files: ['api/hello.ts'], active_version: 1, base_version: 2, active_release_activation: 'rollback', active_release_id: 'rel_1' }, false, { kind: 'rollback', release_id: 'rel_1' });
+  assert.match(own, /Live is v1, put back by this folder's own `somewhere rollback`; this folder still holds v2\./);
+  assert.match(own, /`somewhere restore 2`/);
+  assert.doesNotMatch(own, /another machine|dashboard/);
+  const other = formatStaleReleaseBaseExplanation({ active_version: 1, base_version: 2, active_release_activation: 'rollback', active_release_id: 'rel_1' }, false, { kind: 'rollback', release_id: 'rel_9' });
+  assert.match(other, /Live is v1, put back by a rollback or restore/);
   assert.match(formatStaleReleaseBaseExplanation([], true), /no longer available to compare/);
   assert.match(formatBaseRequiredExplanation(), /no record of which published version its files came from/);
 });
@@ -921,8 +926,8 @@ test('release-native mixed surface: deploy anchors base_release_id and a STALE_R
     const second = await run(['deploy'], { cwd: fixtureDir, env });
     assert.equal(second.status, 1, `stdout:\n${second.stdout}\nstderr:\n${second.stderr}`);
     assert.equal(bodies[1].base_release_id, 'rel_first', 'second deploy must anchor on the last deployed release');
-    assert.match(second.stderr, /This project changed since the version this folder came from/);
-    assert.match(second.stderr, /somewhere deploy --force/);
+    assert.match(second.stderr, /Not deployed: live is newer than this folder/);
+    assert.match(second.stderr, /Next step: run `somewhere pull`/);
     assert.doesNotMatch(second.stderr, /\[STALE_RELEASE_BASE/);
     // A refused deploy must not advance the saved state.
     assert.equal(readProject(fixtureDir).last_deploy.last_deployed_version, 1);
@@ -1195,7 +1200,7 @@ test('promote does not advance the folder source base; the next deploy still nam
     const deployed = await run(['deploy'], { cwd: fixtureDir, env });
     assert.equal(deployed.status, 1);
     assert.equal(deployBodies[0].base_release_id, 'rel_folder');
-    assert.match(deployed.stderr, /Changed since then: src\/App\.tsx\./);
+    assert.match(deployed.stderr, /Files that differ between an earlier version and live: src\/App\.tsx\./);
   });
 });
 
@@ -1272,8 +1277,8 @@ test('explicit --project: a release that lands between the bind read and the pub
       env: { HOME, USERPROFILE: HOME, SOMEWHERE_API_URL: apiUrl },
     });
     assert.equal(result.status, 1, `stdout:\n${result.stdout}\nstderr:\n${result.stderr}`);
-    assert.match(result.stderr, /another update landed first/);
-    assert.match(result.stderr, /NOT applied/);
+    assert.match(result.stderr, /live is newer than this folder/);
+    assert.match(result.stderr, /Nothing was changed/);
     assert.equal(server.bodies.length, 1, 'one deploy request; the refusal is not retried');
     assert.equal(server.bodies[0].base_release_id, 'rel_live_7');
     assert.equal(existsSync(join(fixtureDir, '.somewhere.json')), false);

@@ -12,6 +12,7 @@ import {
   type ProjectConfigEntry,
 } from '../lib/config.js';
 import { IGNORE, collectFiles, isFunctionPath } from '../lib/files.js';
+import { loadBaseFiles, saveBaseFiles, sha256, type BaseFiles } from '../lib/base-files.js';
 import { dim, error, info, printJson, success, teal, warn } from '../lib/output.js';
 import {
   SCAFFOLD_PACKAGE_FILENAME,
@@ -43,11 +44,13 @@ export function registerPull(program: Command) {
     .description(
       'Download a project\'s deployed source files to the current directory. ' +
         'Scaffolds a tsconfig.json + package.json (only if absent) so `somewhere typecheck` ' +
-        'can catch undefined symbols locally before you deploy.',
+        'can catch undefined symbols locally before you deploy. ' +
+        'In a linked folder, plain pull is the safe update when live is newer: files you have not edited move to the live version, ' +
+        'your local edits and local-only files (AGENTS.md, notes, tests) are kept, and it stops without writing anything if a file changed both here and live.',
     )
     .option('--env <env>', 'Environment to pull from (dev or prod)', 'prod')
     .option('--out <dir>', 'Output directory', '.')
-    .option('--force', 'Overwrite local copies of deployed files, and delete local files a deploy would upload that are no longer deployed. Never deletes a file a deploy would not upload (AGENTS.md, CLAUDE.md, README.md, tests, dotfiles, .somewhereignore matches)')
+    .option('--force', 'Also replace files you edited here with live, and delete published files you edited that live no longer has. Never deletes a file a deploy would not upload (AGENTS.md, CLAUDE.md, README.md, tests, dotfiles, .somewhereignore matches)')
     .option('--json', 'Print the raw source response as JSON')
     .action(async (projectArg: string | undefined, opts) => {
       const token = getToken();
@@ -107,6 +110,13 @@ export function registerPull(program: Command) {
         process.exit(1);
       }
 
+      // The published files as this folder last had them (its recorded base).
+      const base = deployStateEntry
+        ? loadBaseFiles(outDir, body.project_id, deployStateEntry.config.source_base?.release_id ?? undefined)
+        : null;
+      const overwrite = new Set<string>();
+      const keptEdits: string[] = [];
+      const conflicts: string[] = [];
       // Preflight the entire export before touching local source or its base.
       const source = new Map<string, Buffer>();
       const addSource = (path: string, content: Buffer | string) => {
@@ -135,9 +145,20 @@ export function registerPull(program: Command) {
             }
           }
           const target = join(outDir, path);
-          if (existsSync(target) && !opts.force && !readFileSync(target).equals(contents)) {
-            throw new Error(`Pull would overwrite local file ${path}. Pull into a fresh folder or use --force intentionally.`);
-          }
+          if (!existsSync(target)) continue;
+          const local = readFileSync(target);
+          if (local.equals(contents)) continue;
+          if (opts.force) { overwrite.add(path); continue; }
+          const was = base?.files[path];
+          if (was !== undefined && was === sha256(local)) overwrite.add(path); // unedited here: bring it to live
+          else if (was !== undefined && was === sha256(contents)) keptEdits.push(path); // edited here only: keep it
+          else conflicts.push(path);
+        }
+        if (conflicts.length > 0) {
+          const list = conflicts.slice(0, 10).join(', ') + (conflicts.length > 10 ? `, and ${conflicts.length - 10} more` : '');
+          throw new Error(base
+            ? `Pull stopped: changed both in this folder and on live: ${list}. Nothing was written. Move your edits aside and pull again, or run \`somewhere pull --force\` to replace them with live.`
+            : `Pull stopped: these local files differ from live and this folder has no record of the version it came from, so local edits cannot be told apart: ${list}. Nothing was written. Pull into a fresh folder, or run \`somewhere pull --force\` to replace them with live.`);
         }
       } catch (err) {
         error(err instanceof Error ? err.message : String(err));
@@ -148,7 +169,7 @@ export function registerPull(program: Command) {
 
       const writeOne = (relPath: string, contents: Buffer | string) => {
         const target = join(outDir, relPath);
-        if (existsSync(target) && !opts.force) {
+        if (existsSync(target) && !overwrite.has(relPath)) {
           return;
         }
         mkdirSync(dirname(target), { recursive: true });
@@ -158,7 +179,7 @@ export function registerPull(program: Command) {
 
       for (const [path, contents] of source) writeOne(path, contents);
 
-      const removed = reconcileRemovedFiles(outDir, new Set(source.keys()), Boolean(opts.force));
+      const removed = reconcileRemovedFiles(outDir, new Set(source.keys()), Boolean(opts.force), base);
       if (!deployStateEntry && removed.skipped.length === 0) {
         saveProjectConfig(outDir, { project_id: body.project_id, name: body.project_id, subdomain: '' });
       }
@@ -189,7 +210,20 @@ export function registerPull(program: Command) {
         saveSourceBase(linkedOutput.dir, body.project_id, null);
       }
 
+      // Record live's files as this folder's new base, for the next pull.
+      const savedBase = loadProjectConfigEntry(outDir);
+      if (savedBase?.config.project_id === body.project_id && savedBase.config.source_base && removed.skipped.length === 0) {
+        saveBaseFiles(outDir, {
+          project_id: body.project_id,
+          release_id: savedBase.config.source_base.release_id,
+          files: Object.fromEntries([...source].map(([path, contents]) => [path, sha256(contents)])),
+        });
+      }
+
       const total = body.counts.static_files + body.counts.binary_files + body.counts.functions;
+      if (keptEdits.length > 0 && !opts.json) {
+        info(dim(`Kept your local edits (unchanged on live): ${keptEdits.slice(0, 10).join(', ')}${keptEdits.length > 10 ? `, and ${keptEdits.length - 10} more` : ''}.`));
+      }
       if (total === 0 && !opts.json) {
         warn(`No files in ${envSlot} for this project.`);
       }
@@ -275,6 +309,7 @@ function reconcileRemovedFiles(
   outDir: string,
   expected: Set<string>,
   force: boolean,
+  base: BaseFiles | null = null,
 ): { removed: string[]; skipped: string[] } {
   const removed: string[] = [];
   const skipped: string[] = [];
@@ -295,7 +330,12 @@ function reconcileRemovedFiles(
 
       const relPath = normalizeRelPath(relative(outDir, fullPath));
       if (expected.has(relPath) || !publishable.has(relPath)) continue;
-      if (!force) {
+      const was = base?.files[relPath];
+      // Not in this folder's base: a file added here, never published. Kept.
+      if (base && was === undefined) continue;
+      // Unedited here and deleted on live: remove it like any other live change.
+      const unedited = was !== undefined && was === sha256(readFileSync(fullPath));
+      if (!force && !unedited) {
         skipped.push(relPath);
         continue;
       }

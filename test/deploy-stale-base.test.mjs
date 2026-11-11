@@ -865,6 +865,7 @@ test('stale-release-base refusal names live, what shipped it, the files, and pul
   assert.doesNotMatch(rendered, /--force|another machine/);
   const own = formatStaleReleaseBaseExplanation({ changed_files: ['api/hello.ts'], active_version: 1, base_version: 2, active_release_activation: 'rollback', active_release_id: 'rel_1' }, false, { kind: 'rollback', release_id: 'rel_1' });
   assert.match(own, /Live is v1, put back by this folder's own `somewhere rollback`; this folder still holds v2\./);
+  assert.match(own, /^Not deployed: live was moved to a different version than the one this folder came from\./);
   assert.match(own, /`somewhere restore 2`/);
   assert.doesNotMatch(own, /another machine|dashboard/);
   const other = formatStaleReleaseBaseExplanation({ active_version: 1, base_version: 2, active_release_activation: 'rollback', active_release_id: 'rel_1' }, false, { kind: 'rollback', release_id: 'rel_9' });

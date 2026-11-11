@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.38.25
+
+### Fixed
+
+- A signed-out first deploy that failed (a code error, "Nothing was deployed")
+  no longer strands the folder. Its `.somewhere.json` link names a project that
+  never went live; when this machine has no sign-in that can open it (another
+  terminal, an agent's sandboxed shell, an expired temporary workspace), the
+  next `somewhere deploy` starts a new temporary project and replaces the link,
+  saying so. The machine that holds the temporary credential still redeploys
+  the same project (tsk_b9900dbb).
+- Signed out with a deployed link and no credential here, the refusal now says
+  the temporary credential lives in `~/.somewhere/config.json` of the terminal
+  that deployed, so run the command there, and how to sign in without a
+  browser on this machine.
+- A sign-in file this shell cannot read (a sandbox) or parse now stops the
+  command and names the file, instead of being treated as signed out.
+- Every network failure names the host it tried, the cause, and the next step
+  (allow that host in a sandboxed shell, or run the command in your own
+  terminal). `somewhere login` printed only "fetch failed".
+
+### Added
+
+- `somewhere claim` prints this computer's temporary-workspace claim URL and
+  expiry (nothing is sent).
+- `somewhere login --help` documents sign-in without a local browser (the
+  device code a person approves anywhere; the shell needs only
+  `api.somewhere.cloud`) and `somewhere auth set` for CI.
+
 ## 0.38.24
 
 ### Fixed

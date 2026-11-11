@@ -197,6 +197,15 @@ export function registerAuth(program: Command) {
   program
     .command('login')
     .description('Authenticate with somewhere.cloud (no account yet? run `somewhere signup`)')
+    .addHelpText('after', [
+      '',
+      'Sign-in without a browser on this machine (SSH, a VM, an agent\'s sandboxed shell):',
+      '  somewhere login prints a code; a person approves it in a browser on any device. The shell only',
+      '  needs to reach https://api.somewhere.cloud (sign-in, deploy and project commands all use that host).',
+      'No person to approve (CI): save an smt_ key once with',
+      '  printf %s "$SOMEWHERE_TOKEN" | somewhere auth set',
+      '  Setting SOMEWHERE_TOKEN alone does not sign commands in; `auth set` saves it to ~/.somewhere/config.json.',
+    ].join('\n'))
     .option('--browser-callback', 'Sign in with Google in the browser and receive the key on a localhost port, instead of entering a device code')
     .option('--signup', 'Create a new account instead — opens the sign-up page')
     .action(loginAction);

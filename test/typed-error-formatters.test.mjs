@@ -76,5 +76,8 @@ test('a network failure on the MCP-tool path names the host and the cause, not a
   await new Promise((resolve) => dead.close(resolve));
   const { status, out } = await run(['call', 'project_list', '{}'], base);
   assert.equal(status, 1);
-  assert.match(out, new RegExp(`Could not reach ${base.replace(/[.]/g, '\\.')}/mcp: fetch failed: .*ECONNREFUSED`));
+  const host = base.replace('http://', '').replace(/[.]/g, '\\.');
+  assert.match(out, new RegExp(`Could not reach ${host} \\(ECONNREFUSED`));
+  assert.match(out, new RegExp(`add ${host}, or run the command in your own terminal`));
+  assert.doesNotMatch(out, /^✗ fetch failed$/m);
 });

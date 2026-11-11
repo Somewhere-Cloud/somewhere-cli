@@ -391,7 +391,10 @@ export function formatSignedOutExistingTargetExplanation(projectId: string, from
     `${fromLink ? `This folder is linked to project ${projectId} (in .somewhere.json)` : `--project names project ${projectId}`}, but this machine is not signed in, and a new temporary workspace cannot deploy to an existing project. Nothing was created or sent.`,
     '',
     'Next steps:',
-    '  If the project is in your account, sign in with `somewhere login` (or save a token: printf %s "$SOMEWHERE_TOKEN" | somewhere auth set), then deploy again. The SOMEWHERE_TOKEN variable alone does not sign commands in.',
+    ...(fromLink
+      ? ['  If you deployed this folder signed out earlier, its temporary credential is in ~/.somewhere/config.json of the terminal you used then: run `somewhere deploy` there. An agent\'s sandboxed shell or another user account does not see it.']
+      : []),
+    '  If the project is in your account, run `somewhere login` (it prints a code; approve it in any browser), then deploy again. Without a person to approve: `printf %s "$SOMEWHERE_TOKEN" | somewhere auth set` saves an smt_ key; the SOMEWHERE_TOKEN variable on its own does not sign commands in.',
     fromLink
       ? '  Start a new temporary project instead: delete this folder\'s .somewhere.json, then run `somewhere deploy` again.'
       : '  Start a new temporary project instead: run `somewhere deploy` without --project in a folder that is not linked.',
@@ -512,6 +515,21 @@ export async function readExplicitProjectLiveBase(client: ApiClient, projectId: 
   } catch {
     return undefined;
   }
+}
+
+/** The folder's link was written when a project was created for it, and no
+ *  deploy from this folder has gone live since (a first deploy that failed
+ *  writes exactly this: source_base.release_id null). Nothing of the folder's
+ *  is on that project, so a credential that cannot open it loses nothing by
+ *  starting a new temporary project and replacing the link (tsk_b9900dbb). */
+export function linkNeverDeployed(config: ProjectConfig | null | undefined): boolean {
+  const base = config?.source_base;
+  return Boolean(config?.project_id && base && base.project_id === config.project_id && base.release_id === null
+    && !config.last_deploy);
+}
+
+export function formatReplacedNeverDeployedLink(oldProjectId: string): string {
+  return `This folder was linked to project ${oldProjectId}, which never went live from here and which this machine's sign-in cannot open. Starting a new temporary project for this folder; the link in .somewhere.json is replaced (the old project is not changed).`;
 }
 
 function findProjectConfigEntry(targetDir: string): ProjectConfigEntry | null {
@@ -669,6 +687,18 @@ export function registerDeploy(program: Command) {
       }
 
       const storedConfig = loadConfig();
+      // A link left by a first deploy that never went live, with no credential
+      // here that can open its project, would refuse every signed-out deploy:
+      // set it aside and start a new temporary project (tsk_b9900dbb). A live
+      // temporary credential is checked against the project below.
+      let replacedLink: ProjectConfigEntry | null = null;
+      {
+        const entry = opts.project ? null : findProjectConfigEntry(targetDir);
+        const noUsableCredential = !storedConfig?.token
+          || Boolean(storedConfig.temporary && storedConfig.temp_expires_at && temporarySessionExpired(storedConfig));
+        if (entry && noUsableCredential && !opts.dryRun && linkNeverDeployed(entry.config)) replacedLink = entry;
+      }
+      const findLink = (dir: string): ProjectConfigEntry | null => (replacedLink ? null : findProjectConfigEntry(dir));
       // The stored temporary session expired unclaimed and this deploy targets
       // an existing project (a folder link or --project). A freshly minted
       // temporary account owns no project, so minting one only to get a
@@ -676,7 +706,7 @@ export function registerDeploy(program: Command) {
       // machine's own record, before any request (tsk_8a68dfa2 item 14).
       if (
         storedConfig?.temporary && storedConfig.temp_expires_at && temporarySessionExpired(storedConfig)
-        && (opts.project || findProjectConfigEntry(targetDir))
+        && (opts.project || findLink(targetDir))
       ) {
         const message = formatExpiredTemporaryProjectExplanation(storedConfig.temp_expires_at);
         if (opts.json) {
@@ -692,7 +722,7 @@ export function registerDeploy(program: Command) {
       // no project, so minting one would only end in PROJECT_NOT_FOUND: say so
       // before anything is created or sent (pfb_e653dbb1fa74).
       const namedTarget = opts.project ? { projectId: String(opts.project), fromLink: false }
-        : (() => { const entry = findProjectConfigEntry(targetDir); return entry ? { projectId: entry.config.project_id, fromLink: true } : null; })();
+        : (() => { const entry = findLink(targetDir); return entry ? { projectId: entry.config.project_id, fromLink: true } : null; })();
       // A dry run keeps its own pre-request refusal (formatDryRunNeedsProjectExplanation).
       if (!storedConfig?.token && namedTarget && !opts.dryRun) {
         const message = formatSignedOutExistingTargetExplanation(namedTarget.projectId, namedTarget.fromLink);
@@ -854,7 +884,25 @@ export function registerDeploy(program: Command) {
         scope = opts.scope;
       }
 
-      const foundProjectEntry = findProjectConfigEntry(targetDir);
+      let foundProjectEntry = findLink(targetDir);
+      // A reused temporary credential and a never-deployed link from somewhere
+      // else (another shell's temporary workspace): when this credential cannot
+      // open the project, the link is replaced rather than refused after upload.
+      if (foundProjectEntry && tempSession && !besideRealLogin && !opts.project && !opts.dryRun
+        && linkNeverDeployed(foundProjectEntry.config)) {
+        try {
+          await client.call('GET', `/projects/${encodeURIComponent(foundProjectEntry.config.project_id)}`);
+        } catch (err) {
+          if (!(err instanceof CliApiError) || (err.statusCode !== 404 && err.statusCode !== 403)) throw err;
+          replacedLink = foundProjectEntry;
+          foundProjectEntry = null;
+        }
+      }
+      if (replacedLink) {
+        const note = formatReplacedNeverDeployedLink(replacedLink.config.project_id);
+        if (opts.json) console.error(note);
+        else info(note);
+      }
       // A temporary workspace minted beside a real login never targets the
       // directory's linked project: that link names a project the ACCOUNT
       // owns, and this credential is not the account. An explicit --project

@@ -154,7 +154,8 @@ export async function deviceLogin(callbacks: DeviceLoginCallbacks): Promise<Devi
   }
   if (!startRes.ok) {
     const text = await startRes.text();
-    throw new Error(`Failed to start login: HTTP ${startRes.status} ${text.slice(0, 200)}`);
+    // A sandbox proxy that blocks the host answers here too (often 403): name it.
+    throw new Error(`Failed to start login: ${new URL(API_BASE).host} answered HTTP ${startRes.status} ${text.slice(0, 200)}. If this shell only allows listed sites (an agent sandbox), add ${new URL(API_BASE).host}, or run \`somewhere login\` in your own terminal.`);
   }
   const start = (await startRes.json()) as StartResponse & { data: { verifier_bound?: boolean } };
   if (start.data.verifier_bound !== true) throw new Error('This server does not support secure device redemption. Update the platform before login.');

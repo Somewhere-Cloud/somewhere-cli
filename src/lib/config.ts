@@ -47,12 +47,32 @@ function ensureDir() {
   chmodSync(CONFIG_DIR, 0o700);
 }
 
+/** Only a missing file means "not signed in". A file this process cannot
+ *  read (a sandboxed agent shell is the usual case) or cannot parse is said
+ *  out loud: read as "signed out", it refused deploys to the folder's own
+ *  temporary project and invited a new sign-in over the existing one
+ *  (tsk_b9900dbb). */
 export function loadConfig(): CliConfig | null {
-  if (!existsSync(CONFIG_PATH)) return null;
+  let body: string;
   try {
-    return JSON.parse(readFileSync(CONFIG_PATH, 'utf-8')) as CliConfig;
+    body = readFileSync(CONFIG_PATH, 'utf-8');
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === 'ENOENT' || code === 'ENOTDIR') return null;
+    error(
+      `This shell cannot read ${CONFIG_PATH} (${code ?? String(err)}). That file holds this computer's Somewhere sign-in and any temporary project's credential, so nothing was sent. ` +
+        'If an agent is running this command in a sandboxed shell, run it in your own terminal instead, or allow that shell to read ~/.somewhere.',
+    );
+    process.exit(1);
+  }
+  try {
+    return JSON.parse(body) as CliConfig;
   } catch {
-    return null;
+    error(
+      `${CONFIG_PATH} is not valid JSON, so this computer's Somewhere sign-in cannot be read. Nothing was sent. ` +
+        'Run `somewhere login` to replace it (a temporary project it held stays reachable through its claim URL).',
+    );
+    process.exit(1);
   }
 }
 
@@ -309,7 +329,7 @@ export function getToken(): string {
     process.exit(1);
   }
   if (!config?.token) {
-    error('Not logged in. Run: somewhere login');
+    error('Not logged in. Run: somewhere login (it prints a code to approve in any browser). If you deployed signed out from another terminal on this computer, run this command there: its temporary credential is in that terminal\'s ~/.somewhere.');
     process.exit(1);
   }
   return config.token;

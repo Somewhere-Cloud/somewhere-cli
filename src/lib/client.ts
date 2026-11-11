@@ -187,7 +187,7 @@ export class ApiClient {
       const detail = cause?.code ?? cause?.message ?? (err instanceof Error ? err.message : String(err));
       throw new CliApiError(
         'NETWORK_ERROR',
-        `Could not reach ${method} ${url} — ${detail}. No HTTP response was received.`,
+        `Could not reach ${method} ${url} — ${detail}. No HTTP response was received. ${sandboxHint(url)}`,
         0,
       );
     }
@@ -335,7 +335,7 @@ export class ApiClient {
         'NETWORK_ERROR',
         `Could not reach ${method} ${url.split('?')[0]} — ${detail}. ` +
           'No HTTP response was received (this is a connection problem, not a server rejection). ' +
-          'Check your network and retry; for large deploys a flaky connection can drop the upload mid-request.',
+          `Check your network and retry; for large deploys a flaky connection can drop the upload mid-request. ${sandboxHint(url)}`,
         0,
         undefined,
         undefined,
@@ -454,7 +454,7 @@ export class ApiClient {
       const detail = cause?.code ?? cause?.message ?? (err instanceof Error ? err.message : String(err));
       throw new CliApiError(
         'NETWORK_ERROR',
-        `Could not reach ${method} ${url} — ${detail}. No HTTP response was received.`,
+        `Could not reach ${method} ${url} — ${detail}. No HTTP response was received. ${sandboxHint(url)}`,
         0,
       );
     }
@@ -503,6 +503,13 @@ export interface CliApiErrorMeta {
 
 /** Transport failures that happen before a connection exists: the request
  *  body cannot have been sent. Anything else may have been. */
+/** The one plain step for a shell that may only reach listed sites. */
+function sandboxHint(url: string): string {
+  let host = url;
+  try { host = new URL(url).host; } catch { /* keep the raw url */ }
+  return `If this shell only allows listed sites (an agent sandbox), add ${host}, or run the command in your own terminal.`;
+}
+
 const NOT_SENT_CAUSES = new Set(['ECONNREFUSED', 'ENOTFOUND', 'EAI_AGAIN', 'UND_ERR_CONNECT_TIMEOUT']);
 
 export class CliApiError extends Error {

@@ -18,7 +18,7 @@ import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSyn
 import { createRequire } from 'node:module';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 import { collectFiles } from './files.js';
-import { runBounded, timedOutMessage } from './typecheck.js';
+import { explainPageLimit, runBounded, timedOutMessage } from './typecheck.js';
 
 export interface DeployCheckFinding {
   /** 'reference': an undefined name; 'type': an advisory shape mistake. */
@@ -150,8 +150,15 @@ export function parseDeployOutput(
   const root = realpathSync(projectDir);
   const findings: DeployCheckFinding[] = [];
   const problems: string[] = [];
+  // Detail lines (indented) belong to the diagnostic above them.
+  let current: DeployCheckFinding | null = null;
   for (const raw of output.split(/\r?\n/)) {
     const line = raw.trim();
+    if (current && /^\s/.test(raw) && !DIAGNOSTIC.test(line)) {
+      current.message = explainPageLimit(current.message, raw);
+      continue;
+    }
+    current = null;
     const global = GLOBAL_ERROR.exec(line);
     if (global) {
       if (!contract.isIgnoredDiagnostic(global[1])) problems.push(line);
@@ -174,6 +181,7 @@ export function parseDeployOutput(
     const finding = { kind, code, file, line: Number(lineText), column: Number(columnText), message };
     if (vendor.isRuntimeEndpointGlobal(finding, functions)) continue;
     findings.push(finding);
+    current = finding;
   }
   return { findings, problems };
 }

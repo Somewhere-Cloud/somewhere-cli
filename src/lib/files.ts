@@ -118,6 +118,10 @@ export interface CollectedFiles {
    *  opt-in reopens them. `referencedBy` lists published source files whose
    *  text contains the file's name: a filename match, not import analysis. */
   sensitive: Array<{ path: string; reason: string; referencedBy: string[] }>;
+  /** Relative paths a deploy of this folder would upload (the publish rules'
+   *  verdict, oversize files excluded). `somewhere pull` only ever removes
+   *  files in this set. */
+  published: string[];
 }
 
 export const SENSITIVE_FILE_REASON = 'blocked by the sensitive-path policy — never uploaded';
@@ -133,7 +137,7 @@ export interface CollectOptions {
 /** Walk a directory tree and bucket every file into static / binary / function,
  *  applying the same path remapping the deploy command uses. */
 export function collectFiles(baseDir: string, options: CollectOptions = {}): CollectedFiles {
-  const out: CollectedFiles = { files: {}, binaryFiles: {}, functions: {}, skipped: [], oversize: [], notes: [], excluded: [], sensitive: [] };
+  const out: CollectedFiles = { files: {}, binaryFiles: {}, functions: {}, skipped: [], oversize: [], notes: [], excluded: [], sensitive: [], published: [] };
   const ignore = loadDeployIgnore(baseDir);
   const candidates: string[] = [];
   const sizes = new Map<string, number>();
@@ -214,6 +218,7 @@ export function collectFiles(baseDir: string, options: CollectOptions = {}): Col
       continue;
     }
     classifyInto(out, baseDir, relPath, options.readBinary !== false);
+    out.published.push(relPath);
   }
   out.oversize.sort((a, b) => a.path.localeCompare(b.path));
 

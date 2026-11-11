@@ -81,6 +81,23 @@ test('fresh pull restores normal paths, exact source/assets/schema, and ordinary
   });
 });
 
+test('pull --force removes only files a deploy would upload; local-only files stay', async () => {
+  await fixture(async ({ app, env }) => {
+    const localOnly = { 'AGENTS.md': 'agent notes', 'CLAUDE.md': 'claude notes', 'README.md': 'readme', 'tests/app.test.ts': 'test', 'src/value.test.ts': 'test' };
+    for (const [path, text] of Object.entries(localOnly)) { mkdirSync(join(app, dirname(path)), { recursive: true }); writeFileSync(join(app, path), text); }
+    mkdirSync(join(app, 'src'), { recursive: true });
+    writeFileSync(join(app, 'src/obsolete.ts'), 'export const gone = 1;\n');
+    const plain = await run(['pull', 'named-project'], app, env);
+    assert.equal(plain.status, 0, plain.output);
+    assert.match(plain.output, /src\/obsolete\.ts/);
+    assert.doesNotMatch(plain.output, /AGENTS\.md|CLAUDE\.md|README\.md|app\.test|value\.test/);
+    const forced = await run(['pull', 'named-project', '--force'], app, env);
+    assert.equal(forced.status, 0, forced.output);
+    assert.equal(existsSync(join(app, 'src/obsolete.ts')), false);
+    for (const [path, text] of Object.entries(localOnly)) assert.equal(readFileSync(join(app, path), 'utf8'), text, path);
+  });
+});
+
 test('different linked project is preserved even with force', async () => {
   await fixture(async ({ app, env }) => {
     const config = '{"project_id":"other","name":"other","subdomain":"other"}';

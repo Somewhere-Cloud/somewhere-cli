@@ -11,7 +11,7 @@ import {
   saveSourceBase,
   type ProjectConfigEntry,
 } from '../lib/config.js';
-import { IGNORE, isFunctionPath } from '../lib/files.js';
+import { IGNORE, collectFiles, isFunctionPath } from '../lib/files.js';
 import { dim, error, info, printJson, success, teal, warn } from '../lib/output.js';
 import {
   SCAFFOLD_PACKAGE_FILENAME,
@@ -47,7 +47,7 @@ export function registerPull(program: Command) {
     )
     .option('--env <env>', 'Environment to pull from (dev or prod)', 'prod')
     .option('--out <dir>', 'Output directory', '.')
-    .option('--force', 'Overwrite existing files without prompting')
+    .option('--force', 'Overwrite local copies of deployed files, and delete local files a deploy would upload that are no longer deployed. Never deletes a file a deploy would not upload (AGENTS.md, CLAUDE.md, README.md, tests, dotfiles, .somewhereignore matches)')
     .option('--json', 'Print the raw source response as JSON')
     .action(async (projectArg: string | undefined, opts) => {
       const token = getToken();
@@ -278,6 +278,10 @@ function reconcileRemovedFiles(
 ): { removed: string[]; skipped: string[] } {
   const removed: string[] = [];
   const skipped: string[] = [];
+  // Only a file the publish rules would upload can have been deleted
+  // remotely. Local-only files (agent instructions, notes, tests) are never
+  // touched, with or without --force.
+  const publishable = new Set(collectFiles(outDir, { readBinary: false }).published);
 
   const walk = (dir: string) => {
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -290,7 +294,7 @@ function reconcileRemovedFiles(
       if (!entry.isFile()) continue;
 
       const relPath = normalizeRelPath(relative(outDir, fullPath));
-      if (expected.has(relPath)) continue;
+      if (expected.has(relPath) || !publishable.has(relPath)) continue;
       if (!force) {
         skipped.push(relPath);
         continue;

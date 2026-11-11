@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.38.33
+
+### Changed
+
+- Typecheck knows the typed browser specifier `somewhere:rooms` (joinRoom,
+  watchLive), so a TypeScript page can import the rooms client without TS2307
+  (tsk_5cc533ad). The absolute `/__sw/rooms/client.js` path still builds.
+- A leftover `sw.db.live` call is reported with the rename to
+  `sw.rooms.live(name, sw.db.from(...))` instead of a bare missing-property
+  error.
+- The vendored platform parser, types, lint, deploy-path policy and repro
+  guidance are re-synced with the platform at consumer contract 5 (tech
+  8a604872).
+
 ## 0.38.32
 
 ### Changed

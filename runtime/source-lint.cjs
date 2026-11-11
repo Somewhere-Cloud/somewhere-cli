@@ -17690,6 +17690,9 @@ const LIVE_PING_MS = 25000;
 const LIVE_PONG_TIMEOUT_MS = 10000;
 const LIVE_SAFETY_REFRESH_MS = 60000;
 const LIVE_RETRY_LIMIT = 6;
+// Refusals that another attempt cannot change: report once, do not retry.
+// The next reconnect, focus or safety refresh still asks again.
+const LIVE_FINAL = { LIVE_ROLE_REQUIRED: 1, LIVE_MEMBERSHIP_REQUIRED: 1, LIVE_SCOPE_NOT_SUBSCRIBABLE: 1, LIVE_VIEW_NOT_DECLARED: 1, LIVE_VIEW_POLICY_SCOPE_UNSUPPORTED: 1, LIVE_NOT_DECLARED: 1, ROOMS_DRAFT_UNAVAILABLE: 1 };
 
 function liveError(code, message, cause) {
   const err = new Error(message);
@@ -17733,7 +17736,7 @@ export function watchLive(load, render, onError) {
   }
 
   function fail(err, reconnect) {
-    failures += 1;
+    failures = err && LIVE_FINAL[err.code] ? LIVE_RETRY_LIMIT + 1 : failures + 1;
     report(err);
     scheduleRetry(reconnect);
   }
@@ -17769,7 +17772,9 @@ export function watchLive(load, render, onError) {
       if (stopped || generation !== socketGeneration) return;
       pingTimer = setInterval(function () {
         if (stopped || generation !== socketGeneration) return;
-        try { ws.send(LIVE_PING_FRAME); } catch (_) { return; }
+        // A socket that is no longer open is dead even if its close event is late.
+        if (ws.readyState !== 1) { onClose(); return; }
+        try { ws.send(LIVE_PING_FRAME); } catch (_) { onClose(); return; }
         if (pongTimer === null) pongTimer = setTimeout(function () {
           pongTimer = null;
           if (generation === socketGeneration) { try { ws.close(4000, 'no_pong'); } catch (_) {} onClose(); }

@@ -6,10 +6,26 @@ import { getToken, loadProjectConfig } from '../lib/config.js';
 import { dim, error, info, platformErrorEnvelope, printJson, printJsonError, success, teal, warn } from '../lib/output.js';
 import { chooseProjectRef, projectRefConflictMessage } from '../lib/project-ref.js';
 import { unlinkedFolderHint } from '../lib/link-hint.js';
+import { saveLastActivation } from '../lib/base-files.js';
 
-interface RollbackResult {
+/** Remember in the linked folder that it put this release live itself, so a
+ *  later refused deploy names this folder's own rollback/restore (tsk_0dcd7530). */
+export function rememberActivation(kind: 'rollback' | 'restore', projectId: string, result: Pick<RollbackResult, 'active_release_id' | 'version'>): void {
+  const config = loadProjectConfig();
+  if (!config || !result.active_release_id) return;
+  if (config.project_id !== projectId && config.subdomain !== projectId && config.name !== projectId) return;
+  saveLastActivation(process.cwd(), {
+    project_id: config.project_id, kind, release_id: result.active_release_id,
+    version: typeof result.version === 'number' ? result.version : null, at: new Date().toISOString(),
+  });
+}
+
+export interface RollbackResult {
   restored_at: string;
   version: number;
+  /** The release now live, and the one it replaced (platform 2026-11-11+). */
+  active_release_id?: string;
+  from_release_id?: string | null;
   files_restored?: number | null;
   message?: string | null;
   /** Tables and columns added since the target stay, with their data (null when none). */
@@ -43,7 +59,7 @@ export function registerRollback(program: Command) {
   program
     .command('rollback [project]')
     .description(
-      'Revert production to the previous deployed version. Use this when a ' +
+      'Revert production to the previous deployed version (for any earlier version: `somewhere restore <version>`). Use this when a ' +
         'promote shipped a bad build — it restores the version that was live ' +
         'before, including its functions. (Requires a previous production ' +
         'version to return to.)',
@@ -115,11 +131,13 @@ export function registerRollback(program: Command) {
           project_id: projectId,
         });
         spinner?.stop();
+        rememberActivation('rollback', projectId, r);
         if (opts.json) {
           printJson(r);
           return;
         }
         success(formatRollbackSuccess(r));
+        info(dim('This folder still holds the newer source. `somewhere pull` brings it to the version now live; deploying it unchanged is refused until then.'));
         for (const line of formatRollbackNotes(r)) info(dim(line));
       } catch (err) {
         spinner?.fail('Rollback failed');
@@ -142,7 +160,7 @@ export function registerRollback(program: Command) {
     });
 }
 
-function rollbackErrorMessage(err: unknown): string {
+export function rollbackErrorMessage(err: unknown): string {
   const message = err instanceof Error ? err.message : String(err);
   if (err instanceof CliApiError && /no restorable snapshot/i.test(message)) {
     return 'Rollback is unavailable because the platform could not find a restorable previous production release. No changes were made. Redeploy the source you want in production, or try another recorded release.';

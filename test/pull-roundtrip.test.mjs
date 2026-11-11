@@ -98,6 +98,39 @@ test('pull --force removes only files a deploy would upload; local-only files st
   });
 });
 
+test('plain pull is the safe update when live is newer: unedited files move to live, local edits and local-only files stay, true conflicts stop', async () => {
+  const live = JSON.parse(JSON.stringify(source));
+  await fixture(async ({ app, env }) => {
+    let r = await run(['pull', 'named-project'], app, env);
+    assert.equal(r.status, 0, r.output);
+    assert.ok(existsSync(join(app, '.somewhere/base-files.json')), 'pull records the base');
+    writeFileSync(join(app, 'AGENTS.md'), 'local agent notes');
+    writeFileSync(join(app, 'src/value.ts'), 'export const value = 70; // local edit\n');
+    // Live moves on: index.html changes, api/read.ts changes, src/value.ts unchanged.
+    live.active_release_id = 'rel_next';
+    live.version = 8;
+    live.static_files['index.html'] = '<html><body>live v8</body></html>';
+    live.functions['api/read.ts'] = "export default () => Response.json({ v: 8 });\n";
+    r = await run(['pull', 'named-project'], app, env);
+    assert.equal(r.status, 0, r.output);
+    assert.equal(readFileSync(join(app, 'index.html'), 'utf8'), live.static_files['index.html'], 'unedited file updated to live');
+    assert.equal(readFileSync(join(app, 'api/read.ts'), 'utf8'), live.functions['api/read.ts']);
+    assert.equal(readFileSync(join(app, 'src/value.ts'), 'utf8'), 'export const value = 70; // local edit\n', 'local edit kept');
+    assert.equal(readFileSync(join(app, 'AGENTS.md'), 'utf8'), 'local agent notes');
+    assert.match(r.output, /Kept your local edits.*src\/value\.ts/);
+    assert.equal(JSON.parse(readFileSync(join(app, '.somewhere.json'), 'utf8')).source_base.release_id, 'rel_next');
+    // Now both sides change the same file: plain pull stops and writes nothing.
+    live.active_release_id = 'rel_third';
+    live.version = 9;
+    live.static_files['src/value.ts'] = 'export const value = 9;\n';
+    live.static_files['index.html'] = '<html><body>live v9</body></html>';
+    r = await run(['pull', 'named-project'], app, env);
+    assert.equal(r.status, 1, r.output);
+    assert.match(r.output, /changed both in this folder and on live: src\/value\.ts/);
+    assert.equal(readFileSync(join(app, 'index.html'), 'utf8'), '<html><body>live v8</body></html>', 'nothing written');
+  }, live);
+});
+
 test('different linked project is preserved even with force', async () => {
   await fixture(async ({ app, env }) => {
     const config = '{"project_id":"other","name":"other","subdomain":"other"}';

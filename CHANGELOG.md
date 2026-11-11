@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.38.26
+
+### Added
+
+- `somewhere restore <version>` makes an earlier deployed version live again
+  through the platform's restore (the same route as MCP
+  `project_restore_version`). Nothing is re-uploaded, so going back never needs
+  `deploy --force`. `somewhere rollback` stays the previous-version shortcut
+  (tsk_7fe22c5c).
+
+### Changed
+
+- A deploy refused because live is newer than the folder now says which version
+  is live and what put it there: the CLI, an agent through the connector, the
+  dashboard, GitHub, a rollback or restore, or this folder's own
+  `somewhere rollback`/`restore` (no more blaming "another machine" after your
+  own rollback). It lists the files that differ and gives one next step,
+  `somewhere pull` (tsk_0dcd7530).
+- Plain `somewhere pull` is the safe update when live is newer. Files you have
+  not edited since the folder last pulled or deployed move to live. Your local
+  edits and local-only files stay. It stops without writing anything when a
+  file changed both here and live. The folder records its base files in
+  `.somewhere/base-files.json`. `--force` replaces local edits with live
+  (tsk_a7b38bae).
+
 ## 0.38.25
 
 ### Fixed

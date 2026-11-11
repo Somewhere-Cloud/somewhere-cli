@@ -1,3 +1,4 @@
+import { clearBaseFiles, hashFiles, loadLastActivation, saveBaseFiles } from '../lib/base-files.js';
 import { withVerifyProgress } from '../lib/verify-progress.js';
 import { Command } from 'commander';
 import { basename, resolve } from 'node:path';
@@ -314,16 +315,81 @@ export function formatStaleBaseExplanation(
 // the version this folder came from (dashboard, MCP agent, GitHub or another
 // machine). The server names the changed files when it can still read both
 // versions; otherwise it says the history is unavailable.
-export function formatStaleReleaseBaseExplanation(changedFiles: string[] = [], historyUnavailable = false): string {
-  const list = changedFiles.slice(0, 10).join(', ');
-  const more = changedFiles.length > 10 ? `, and ${changedFiles.length - 10} more` : '';
+function ownActivationFor(dir: string, projectId: unknown): { kind: 'rollback' | 'restore'; release_id: string } | null {
+  const last = loadLastActivation(dir);
+  return last && last.project_id === projectId ? { kind: last.kind, release_id: last.release_id } : null;
+}
+
+/** What the platform reports about the live release in a STALE_RELEASE_BASE answer. */
+export interface StaleReleaseDetails {
+  changed_files?: string[];
+  history_unavailable?: boolean;
+  active_release_id?: string | null;
+  active_version?: number;
+  base_version?: number;
+  active_release_source?: string;
+  active_release_activation?: 'publish' | 'rollback';
+  active_release_activated_at?: string;
+}
+
+const SOURCE_WORDS: Record<string, string> = {
+  cli: 'the somewhere CLI',
+  mcp: 'an agent through the connector (MCP)',
+  'dashboard-editor': 'the dashboard',
+  dashboard: 'the dashboard',
+  github: 'a GitHub push',
+};
+
+export function readStaleReleaseDetails(data: Record<string, unknown> | undefined): StaleReleaseDetails {
+  const d = data ?? {};
+  const num = (v: unknown) => (typeof v === 'number' && Number.isInteger(v) ? v : undefined);
+  const str = (v: unknown) => (typeof v === 'string' && v ? v : undefined);
+  return {
+    changed_files: readStringList(d.changed_files),
+    history_unavailable: d.history_unavailable === true,
+    active_release_id: str(d.active_release_id) ?? null,
+    active_version: num(d.active_version),
+    base_version: num(d.base_version),
+    active_release_source: str(d.active_release_source),
+    active_release_activation: d.active_release_activation === 'rollback' || d.active_release_activation === 'publish' ? d.active_release_activation : undefined,
+    active_release_activated_at: str(d.active_release_activated_at),
+  };
+}
+
+/**
+ * A deploy refused because live is newer than this folder: which version is
+ * live, what put it there (naming this folder's own rollback or restore when
+ * that is the cause, tsk_0dcd7530), which files changed, and the one next step.
+ */
+export function formatStaleReleaseBaseExplanation(
+  details: StaleReleaseDetails | string[] = {},
+  historyUnavailable = false,
+  ownActivation: { kind: 'rollback' | 'restore'; release_id: string } | null = null,
+): string {
+  const d: StaleReleaseDetails = Array.isArray(details) ? { changed_files: details, history_unavailable: historyUnavailable } : details;
+  const changed = d.changed_files ?? [];
+  const live = d.active_version !== undefined ? `v${d.active_version}` : 'a newer version';
+  const folder = d.base_version !== undefined ? `v${d.base_version}` : 'an earlier version';
+  const own = ownActivation && d.active_release_id && ownActivation.release_id === d.active_release_id ? ownActivation : null;
+  const when = d.active_release_activated_at ? ` at ${d.active_release_activated_at}` : '';
+  const how = own
+    ? `Live is ${live}, put back by this folder's own \`somewhere ${own.kind}\`${when}; this folder still holds ${folder}.`
+    : d.active_release_activation === 'rollback'
+      ? `Live is ${live}, put back by a rollback or restore${when}; this folder came from ${folder}.`
+      : d.active_release_source
+        ? `Live is ${live}, deployed by ${SOURCE_WORDS[d.active_release_source] ?? `"${d.active_release_source}"`}${when}; this folder came from ${folder}.`
+        : `Live is ${live}; this folder came from ${folder}.`;
+  const list = changed.slice(0, 10).join(', ');
+  const more = changed.length > 10 ? `, and ${changed.length - 10} more` : '';
   return [
-    'This project changed since the version this folder came from — another update landed first (via the dashboard, an MCP agent, GitHub, or another machine). Your deploy was NOT applied.',
-    changedFiles.length > 0 ? `Changed since then: ${list}${more}.` : historyUnavailable ? 'The earlier version is no longer available to compare, so the changed files cannot be listed.' : null,
+    `Not deployed: live is newer than this folder. Nothing was changed. ${how}`,
+    changed.length > 0
+      ? `Files that differ between ${folder} and live: ${list}${more}.`
+      : d.history_unavailable ? 'The earlier version is no longer available to compare, so the differing files cannot be listed.' : null,
     '',
-    'Next steps:',
-    '  Run `somewhere pull` to bring the current source into this directory, re-apply your changes, then deploy again.',
-    '  Run `somewhere deploy --force` to replace those changes intentionally.',
+    own
+      ? `Next step: run \`somewhere pull\` to bring this folder to live (local-only files are kept), or \`somewhere restore ${d.base_version ?? '<version>'}\` to make ${folder} live again.`
+      : 'Next step: run `somewhere pull`. It brings the published files up to live, keeps local-only files and your local edits, and stops on a file changed both here and live. Then deploy again.',
   ].filter((line): line is string => line !== null).join('\n');
 }
 
@@ -654,6 +720,8 @@ export function registerDeploy(program: Command) {
       const collected = collectFiles(targetDir, {
         include: (opts.include as string[] | undefined) ?? [],
       });
+      // The folder's published files as uploaded: recorded as its base on success.
+      const publishedHashes = hashFiles(targetDir, collected.published);
       const collectionEndedAt = performance.now();
       const collectionMs = collectionEndedAt - collectionStartedAt;
       const { files, binaryFiles, functions, skipped, excluded, sensitive } = collected;
@@ -1213,7 +1281,10 @@ export function registerDeploy(program: Command) {
             });
             return;
           }
-          saveSourceBase(deployStateEntry?.dir ?? targetDir, deployedProject, releaseId);
+          const baseDir = deployStateEntry?.dir ?? targetDir;
+          saveSourceBase(baseDir, deployedProject, releaseId);
+          if (resolve(baseDir) === resolve(targetDir)) saveBaseFiles(baseDir, { project_id: deployedProject, release_id: releaseId, files: publishedHashes });
+          else clearBaseFiles(baseDir);
         };
         if (opts.force) {
           body.force = true;
@@ -1522,7 +1593,7 @@ export function registerDeploy(program: Command) {
               : err.code === 'STALE_RELEASE_BASE'
                 ? (deployRetriedAfterTransportFailure(err)
                   ? formatAmbiguousRetryStaleExplanation(deployRetriedAfterTransportFailure(err)!)
-                  : formatStaleReleaseBaseExplanation(readStringList(err.data?.changed_files), err.data?.history_unavailable === true))
+                  : formatStaleReleaseBaseExplanation(readStaleReleaseDetails(err.data), false, ownActivationFor(deployStateEntry?.dir ?? targetDir, projectId)))
                 : formatStaleBaseExplanation(readStaleBaseDetails(err.data));
           const firstAttempt = err.code === 'STALE_RELEASE_BASE' ? deployRetriedAfterTransportFailure(err) : null;
           if (opts.json) {

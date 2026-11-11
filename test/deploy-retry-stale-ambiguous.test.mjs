@@ -91,12 +91,12 @@ test('--json marks a timed-out deploy outcome unknown', async () => {
 test('a retry after the platform\'s own retry:true keeps the NOT applied explanation', async () => {
   const r = await deploy('retryable');
   assert.equal(r.deploys, 2);
-  assert.match(r.stdout + r.stderr, /NOT applied/);
+  assert.match(r.stdout + r.stderr, /Not deployed: live is newer than this folder/);
   assert.doesNotMatch(r.stdout + r.stderr, /may already have gone live/);
 });
 
 test('stale on the first attempt keeps the NOT applied explanation', async () => {
   const r = await deploy('stale');
   assert.equal(r.deploys, 1);
-  assert.match(r.stdout + r.stderr, /NOT applied/);
+  assert.match(r.stdout + r.stderr, /Not deployed: live is newer than this folder/);
 });

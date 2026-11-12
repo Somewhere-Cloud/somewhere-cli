@@ -1377,7 +1377,7 @@ var COMPILE_UNAVAILABLE_REALERT_MS = 60 * 60 * 1e3;
 init_log_sanitize();
 var NATIVE_RUNTIME_SERVICE_BINDING = "RUNTIME_PLATFORM_API";
 var MANAGED_RUNTIME_SERVICE_BINDING = "RUNTIME_MANAGED_DATA";
-var OUTBOUND_BRIDGE_HANDLER_PREFIX = "async fetch(request, env, ctx) {\n" + VERIFY_SIGNUP_FETCH_PROLOGUE + "\n    // Establish artifact-owned data authority before any environment read.\n    __sw_assertBridgeRuntime(env);\n    env = __sw_declaredDataEnv(env);";
+var OUTBOUND_BRIDGE_HANDLER_PREFIX = "async fetch(request, env, ctx) {\n" + VERIFY_SIGNUP_FETCH_PROLOGUE + "\n\n    __sw_assertBridgeRuntime(env);\n    env = __sw_declaredDataEnv(env);";
 var NATIVE_CAPTURE_STATEMENT = `    try { __sw_captureNativeRuntime(env); } catch (__sw_prologueError) {
       if (__sw_nativePathname(new __sw_nativeURL(__sw_nativeRequestURL(request))) !== '/__sw/fn-meta') throw __sw_prologueError;
       const __sw_nb = env && env.${NATIVE_RUNTIME_SERVICE_BINDING}, __sw_mb = env && env.${MANAGED_RUNTIME_SERVICE_BINDING};
@@ -4257,9 +4257,9 @@ var DB_ROW_LINKS_JS = `
         }
         return body.data;
       }
-      // Anonymous creation (creator-insert.ts): no user, no visitor, never retried here. The relay keeps
-      // the platform's outcome (known refusal, committed, unknown) and receipt exactly as the keyed
-      // insert relay does; a lost or unreadable answer is an unknown write, never a refusal.
+
+
+
       async function __sw_creatorPost(payload, clientIp) {
         if (!__sw_usesManagedEndpoint() || !env.SW_EXECUTION_ATTESTATION || isDraftExecution) __sw_linkUnavailable();
         const headers = await __sw_runtimeSubjectHeaders('X-Somewhere-Managed-Authority', 'none', true);
@@ -4300,9 +4300,9 @@ var DB_ROW_LINKS_JS = `
         }
         return { row: data.data[0], grant: data.grant, idempotency: receipt };
       }
-      // The creator door's platform call (creator-*.ts): a creator session only in X-Sw-Creator, the
-      // signed-in user from THIS request only for claim, never retried. Platform refusals keep their
-      // code and outcome; a lost or unreadable answer is unknown, never a refusal.
+
+
+
       async function __sw_creatorDoorPost(payload, session, clientIp, asUser) {
         if (!__sw_usesManagedEndpoint() || !env.SW_EXECUTION_ATTESTATION || isDraftExecution) __sw_linkUnavailable();
         const headers = await __sw_runtimeSubjectHeaders('X-Somewhere-Managed-Authority', 'none', !asUser);
@@ -4394,7 +4394,7 @@ var DB_INTAKE_JS = `
           e.outcome = 'committed'; e.write_committed = true; e.__sw_expose = true;
           throw e;
         }
-        // Only the acknowledgement and its receipt: nothing else the platform sent is passed on.
+
         return { accepted: true, idempotency: receipt };
       }
       const __sw_clientIntakeApi = Object.freeze({
@@ -4600,13 +4600,13 @@ var DB_STRUCTURED_EXECUTION_JS = `      async function __sw_structExec(label, ir
           __sw_emitQueryEvent(ir, Date.now() - __sw_t0, 0, false, err && err.code);
           throw err;
         }
-        // Writes project their affected row through a fidelity-guarded
-        // RETURNING list. Resolved AFTER the render above so a
-        // rejected call still reaches zero transport, and re-rendered rather
-        // than patched \u2014 the renderer is a pure function, so the second pass
-        // produces the same statement with the guarded projection and the
-        // identical bound params. Reads never take this path: same call, same
-        // SQL, same params as before.
+
+
+
+
+
+
+
         if (ir.kind === 'insert' || ir.kind === 'update' || ir.kind === 'delete') {
           const returning = await __sw_structReturningColumns(label, ir.table.name);
           if (returning) rendered = __sw_renderIR(ir, principalId, returning);
@@ -4624,50 +4624,50 @@ var DB_STRUCTURED_EXECUTION_JS = `      async function __sw_structExec(label, ir
         }
         const rows = r.results || [];
         __sw_emitQueryEvent(ir, Date.now() - __sw_t0, mutation ? ((r.meta && r.meta.changes) || rows.length) : rows.length, true, null);
-        // Member-scoped insert is guarded (INSERT \u2026 WHERE EXISTS membership).
-        // Zero rows back means the EXISTS was false: the verified user does not
-        // belong to the group this row targets. Surface it as an explicit 403
-        // BEFORE any realtime publish \u2014 the row never landed.
-        // A per-row share names a row its creator does not own (query-sql.ts grantRow guard).
+
+
+
+
+
         if (ir.kind === 'insert' && (ir.scope.mode === 'user' || ir.scope.mode === 'server') && ir.scope.grantRow && ir.onConflict === undefined && rows.length === 0) {
           __sw_structThrow403('POLICY_AUTHORITY_REQUIRED', ir.scope.mode === 'server'
             ? 'sw.db.server.insert on "' + ir.table.name + '": a share can name only a "' + ir.scope.grantRow.t + '" row its user_id owns.'
             : 'sw.db.insert on "' + ir.table.name + '": a share can name only a "' + ir.scope.grantRow.t + '" row the signed-in user owns.');
         }
-        // An upsert's refusals raise inside the statement (query-sql.ts); its empty result is an ignored conflict.
+
         if (ir.kind === 'insert' && (ir.scope.mode === 'member' || ir.scope.mode === 'policy') && ir.onConflict === undefined && rows.length === 0) {
           __sw_structThrow403(ir.scope.mode === 'policy' ? 'POLICY_AUTHORITY_REQUIRED' : 'MEMBERSHIP_REQUIRED',
             ir.scope.mode === 'policy' ? 'sw.db.insert on "' + ir.table.name + '": the proposed row is outside your declared private policy.'
               : 'sw.db.insert on "' + ir.table.name + '": you can only add rows to a group you belong to, and the signed-in user is not a member of the group named in this row. Add the user to the group first, or write to a group they belong to.');
         }
         if (ir.kind === 'count') {
-          // count() returns exactly { data, error } \u2014 data holds the scalar
-          // aggregate. NO .count key: elsewhere in the builder .count means ROWS
-          // RETURNED, so re-using it for the aggregate would overload a word
-          // that already has a meaning. No last_row_id/changes noise either.
+
+
+
+
           const n = rows.length ? Number(rows[0].count) : 0;
           return { data: Number.isFinite(n) ? n : 0, error: null };
         }
         if (ir.kind === 'aggregate') {
-          // ALWAYS an array of group rows, even ungrouped (then exactly one
-          // row). One predictable shape beats a scalar that becomes a list the
-          // moment a groupBy is added. Each row holds the grouped columns plus
-          // this call's platform-composed aggregate keys. No last_row_id or
-          // changes: nothing was written. The count key here keeps its builder-wide
-          // meaning \u2014 ROWS RETURNED, i.e. groups \u2014 which is why the COUNT(*)
-          // aggregate lives inside each row under its own key.
+
+
+
+
+
+
+
           return { data: __sw_structDecodeRows(ir, rows, false), error: null, count: rows.length };
         }
         let liveDelivery = null;
         if (mutation) {
-          // The structured path KNOWS the table + op \u2014 record size directly,
-          // never round-tripping through the SQL parser.
+
+
           __sw_deferDbSizeObservation(r);
           __sw_publicResultInvalidate(mutation.table);
-          // Invalidation contains no row data and is never an authoritative
-          // delta. A failure cannot undo the committed write; clients repair
-          // through their mandatory function refresh policy.
-          // Only group keys and (user, group) pairs leave the returned rows.
+
+
+
+
           liveDelivery = await __sw_publishStructuredLiveInvalidation(ir, mutation, principalId, __sw_liveGroupEvidenceFor(ir, mutation, rows), __sw_liveOwnersFor(ir, mutation, rows, principalId));
         }
         const result = {
@@ -6353,22 +6353,22 @@ var DB_PUBLIC_READ_JS = DB_GENERATED_OWNER_READ_JS + `      function __sw_shared
         const publicRead = declaredPublic && declaredPublic.table === table ? declaredPublic : null;
         const decided = await __sw_structResolveScope(table, 'from', server ? true : opts.asServer, !!publicRead,
           !publicRead || publicRead.identity === 'visitor', !!generatedRead);
-        //  \u2014 report what this read RESOLVED to, not what it asked
-        // for. A null private scope with no principal is the one shape whose
-        // rendered predicate carries no identity at all (db-render-ir.ts ORs a
-        // private branch in whenever one exists), so it is the one shape whose
-        // answer the next anonymous reader may share. Every other resolution \u2014
-        // signed-in, visitor, member, server \u2014 records the opposite and, as
-        // one of these per request is enough, refuses the marker for all of
-        // them. The verdict is inert outside the generated data handler, which
-        // is the only caller that reads it back.
+
+
+
+
+
+
+
+
+
         if (!generatedRead && typeof __sw_declaredPublicReadNote !== 'undefined') {
           __sw_declaredPublicReadNote(__sw_dbNamespace,
             !wantsCan && !!publicRead && !decided.scope && decided.principalId === undefined, table);
         }
-        // Row capability hints ( item 7): for a signed-in caller only. Each entry is the
-        // scope sw.db.update / sw.db.remove would resolve for this same caller on this table (null
-        // when that operation is refused before any SQL), so the hint renders the write's own rule.
+
+
+
         let can, canPrincipal;
         if (wantsCan) {
           const refuse = function () {
@@ -6385,8 +6385,8 @@ var DB_PUBLIC_READ_JS = DB_GENERATED_OWNER_READ_JS + `      function __sw_shared
             }
           };
           const forUpdate = await writeScope('update'), forDelete = await writeScope('remove');
-          // The hint principal is the caller the writes would act as. A shared table's read has
-          // no principal of its own (it is unscoped), so it is taken from the write resolution.
+
+
           canPrincipal = decided.principalId !== undefined ? decided.principalId
             : forUpdate && forUpdate.principalId !== undefined ? forUpdate.principalId
             : forDelete && forDelete.principalId !== undefined ? forDelete.principalId : undefined;
@@ -6396,15 +6396,15 @@ var DB_PUBLIC_READ_JS = DB_GENERATED_OWNER_READ_JS + `      function __sw_shared
           }
           if (canPrincipal === undefined) refuse();
           const sameCaller = function (resolved) { return resolved && resolved.principalId === canPrincipal ? resolved.scope : null; };
-          // mine: the column that records who created a row \u2014 the owner column, or a
-          // shared table's author column \u2014 when the table has one. The hint renders it as a boolean.
+
+
           const creatorShape = __sw_structManagedShape(table);
           const creatorColumn = __sw_structResolveOwnerColumn(table) || (creatorShape && creatorShape.author) || null;
           can = { update: sameCaller(forUpdate), delete: sameCaller(forDelete), mine: creatorColumn ? { mode: 'user', ownerColumn: creatorColumn } : null };
         }
-        // Composed joins: resolve declared relations. Both absent \u2192
-        // ir.include / ir.relationWhere stay unset and the IR (and its shape
-        // fingerprint) is byte-identical to a pre-join single-table read (rule 9).
+
+
+
         const includeCompiled = generatedRead ? [] : await __sw_structCompileInclude(table, opts.include, columns, server ? true : opts.asServer);
         const hasCompiled = generatedRead ? [] : await __sw_structCompileHas(table, opts.has, server ? true : opts.asServer, 'from');
         const includeRefs = includeCompiled.map(function (entry) { return entry.ref; });
@@ -6425,15 +6425,15 @@ var DB_PUBLIC_READ_JS = DB_GENERATED_OWNER_READ_JS + `      function __sw_shared
         if (relationWhere.length) ir.relationWhere = relationWhere;
         if (can) ir.can = can;
         __sw_structEnforceSchema('from', ir);
-        // An unscoped root (a shared table) renders no identity of its own; the hints bind the caller.
+
         const result = await __sw_structExec('sw.db.from', ir, can && joinPrincipalId === undefined ? canPrincipal : joinPrincipalId, null, generatedRead);
         if (includeRefs.length && !__sw_usesManagedEndpoint()) await __sw_structAttachIncludes(result, includeRefs, joinPrincipalId);
         if (can) __sw_structAttachCan(result);
         return result;
       }
 
-      // The renderer returns the hints as internal 0/1 columns; each row instead carries
-      // can: { update, delete } and mine, and the internal columns never reach the caller.
+
+
       function __sw_structAttachCan(result) {
         const rows = result && __sw_arrayIsArray(result.data) ? result.data : [];
         for (let i = 0; i < rows.length; i++) {
@@ -6447,21 +6447,21 @@ var DB_PUBLIC_READ_JS = DB_GENERATED_OWNER_READ_JS + `      function __sw_shared
         }
       }
 
-      // \u2500\u2500 Public-result invalidation \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
-      // Fired after a DECLARED write COMMITS, from the one post-commit seam
-      // that already exists, so an edit or a withdrawal reaches the next
-      // anonymous reader instead of waiting out the edge's window. The window
-      // is the fallback for a purge that never lands, never the mechanism.
-      //
-      // Only a table the schema declares publicly readable has any cached
-      // result to drop, so nothing else signals. The purge is best-effort and
-      // rides the response: a committed write is successful whatever happens
-      // to a cache, and delaying the writer on a control-plane call would be
-      // paying for someone else's read.
-      //
-      // Raw SQL writes are NOT covered and cannot be: the platform never
-      // parses SQL it did not compose, so it does not know what a raw
-      // statement touched. Those fall back to the window.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
       function __sw_publicResultInvalidate(table) {
         if (isDraftExecution || !env.SW_RELEASE_ID) return;
         const shape = __sw_structManagedShape(table);
@@ -6479,16 +6479,16 @@ var DB_PUBLIC_READ_JS = DB_GENERATED_OWNER_READ_JS + `      function __sw_shared
       }
 
 `;
-var DB_AGGREGATE_JS = `      // The result key for one aggregate. Composed from the closed function name
-      // and the validated column, NEVER from caller-supplied text \u2014 so a caller
-      // cannot name a key, only ask for a function of a column.
+var DB_AGGREGATE_JS = `
+
+
       function __sw_structAggregateAlias(fn, column) {
         return fn === 'count' ? 'count' : fn + '_' + __sw_lower(column);
       }
-      // The aggregate request -> IR aggregates. Order is the declaration order of
-      // __SW_STRUCT_AGG so two calls asking for the same set produce the same IR
-      // (and therefore the same shape fingerprint) regardless of key order in the
-      // caller's object literal.
+
+
+
+
       function __sw_structCompileAggregates(opts) {
         const out = [];
         const fns = __sw_keys(__SW_STRUCT_AGG);
@@ -6512,8 +6512,8 @@ var DB_AGGREGATE_JS = `      // The result key for one aggregate. Composed from 
       function __sw_structCompileGroupBy(groupBy) {
         if (groupBy === undefined || groupBy === null) return [];
         if (!__sw_arrayIsArray(groupBy)) __sw_structThrow('sw.db.aggregate: groupBy must be an array of column names.');
-        // A bounded key: grouping is meant to summarize, and an unbounded group
-        // key is a full-table projection wearing an aggregate's clothes.
+
+
         if (groupBy.length > 4) __sw_structThrow('sw.db.aggregate: groupBy accepts at most 4 columns.');
         const out = [];
         const seen = __sw_objCreateNull();
@@ -6527,10 +6527,10 @@ var DB_AGGREGATE_JS = `      // The result key for one aggregate. Composed from 
         }
         return out;
       }
-      // HAVING filters the composed GROUPS by an aggregate OUTPUT, so its keys
-      // are aliases from this same call \u2014 not columns. Only the ordering
-      // operators apply: an aggregate is a single number, so in / like / null
-      // have no meaning here and are refused rather than silently ignored.
+
+
+
+
       function __sw_structCompileHaving(having, aggregates) {
         if (having === undefined || having === null) return [];
         if (typeof having !== 'object' || __sw_arrayIsArray(having)) __sw_structThrow('sw.db.aggregate: having must be an object of { aggregateName: condition }.');
@@ -6539,15 +6539,15 @@ var DB_AGGREGATE_JS = `      // The result key for one aggregate. Composed from 
         const names = __sw_keys(having);
         const out = [];
         for (let i = 0; i < names.length; i++) {
-          // Aliases are composed lowercase, and SQL identifiers are
-          // case-insensitive, so match the caller's key the same way order does
-          // \u2014 and carry the canonical alias forward, never the caller's casing.
+
+
+
           const alias = __sw_lower(names[i]);
           if (!known[alias]) {
             __sw_structThrow('sw.db.aggregate: having["' + names[i] + '"] does not name an aggregate in this call. Filter one of: ' + __sw_arrayMap(aggregates, function (a) { return a.alias; }).join(', ') + '.');
           }
-          // The VALUE is still read under the caller's own key; only the alias
-          // recorded on the IR is canonicalized.
+
+
           const asked = having[names[i]];
           const conditions = __sw_arrayIsArray(asked) ? asked : [asked];
           for (let j = 0; j < conditions.length; j++) {
@@ -6567,16 +6567,16 @@ var DB_AGGREGATE_JS = `      // The result key for one aggregate. Composed from 
         }
         return out;
       }
-      // An aggregate result has exactly two kinds of column: a grouped column
-      // and an aggregate output. Ordering by anything else would name a column
-      // that is not in the result \u2014 SQLite would accept some of those and
-      // silently pick an arbitrary row's value, so refuse instead.
-      //
-      // Every reachable name is therefore one the platform already lowercased (a
-      // groupBy entry or a composed alias), so the caller's casing is NORMALIZED
-      // here rather than carried into the IR. Without that, the renderer would
-      // look an aggregate alias up under the caller's spelling, miss it, and
-      // quote it as a column that does not exist.
+
+
+
+
+
+
+
+
+
+
       function __sw_structNormalizeAggregateOrder(order, groupBy, aggregates) {
         if (!order) return;
         const allowed = __sw_objCreateNull();
@@ -6590,13 +6590,13 @@ var DB_AGGREGATE_JS = `      // The result key for one aggregate. Composed from 
           order[i].column = lc;
         }
       }
-      // Schema validation for the aggregate columns, on the SAME declared shape
-      // every other verb reads. Two distinct refusals, both of them "fail loudly
-      // rather than answer wrongly":
-      //   - sum/avg over a non-numeric column: SQLite would return 0 for a text
-      //     column instead of erroring, which is a wrong answer, not a failure.
-      //   - grouping or aggregating a json/blob column: those are stored
-      //     serialized, so comparing them as group keys is meaningless.
+
+
+
+
+
+
+
       function __sw_structEnforceAggregateSchema(ir) {
         const table = ir.table.name;
         const shape = __sw_structManagedShape(table);
@@ -6636,10 +6636,10 @@ var DB_AGGREGATE_JS = `      // The result key for one aggregate. Composed from 
           'sw.db.aggregate');
         const aggregates = __sw_structCompileAggregates(opts);
         const groupBy = __sw_structCompileGroupBy(opts.groupBy);
-        // A grouped column and an aggregate output share one result row, so a
-        // collision would make one of them unreadable. The platform composed the
-        // alias, so renaming it silently would hide which value you got \u2014
-        // refuse and let the caller rename their column or drop the aggregate.
+
+
+
+
         for (let i = 0; i < aggregates.length; i++) {
           for (let j = 0; j < groupBy.length; j++) {
             if (groupBy[j] === aggregates[i].alias) {
@@ -6650,33 +6650,33 @@ var DB_AGGREGATE_JS = `      // The result key for one aggregate. Composed from 
         const having = __sw_structCompileHaving(opts.having, aggregates);
         const order = __sw_structCompileOrder(opts.order);
         __sw_structNormalizeAggregateOrder(order, groupBy, aggregates);
-        // Declared public read composes for an aggregate exactly as it does for
-        // a select: the renderer's public branch is (privateScope OR the
-        // declared publication predicate), and it lands in the same WHERE. So an
-        // aggregate over a published catalog summarizes exactly the rows a
-        // published select would have returned \u2014 no more, and no less, which is
-        // what stops the browser client offering a method that only works when
-        // signed in.
+
+
+
+
+
+
+
         const declaredPublic = !server && typeof __sw_declaredPublicReadGet !== 'undefined'
           ? __sw_declaredPublicReadGet(__sw_dbNamespace) : null;
         const publicRead = declaredPublic && declaredPublic.table === table ? declaredPublic : null;
         const decided = await __sw_structResolveScope(table, 'aggregate', server ? true : opts.asServer, !!publicRead,
           !publicRead || publicRead.identity === 'visitor');
-        //  \u2014 an aggregate is a READ, so it owes the public-result
-        // tally the same note sw.db.from makes, on the same condition (a null
-        // private scope with no principal is the one resolution whose rendered
-        // predicate carries no identity). Without it an aggregate's rows would
-        // be rows nothing reported on: a request that listed publicly and then
-        // aggregated under an owner scope would still look like a pure public
-        // answer and could be shared with the next anonymous reader.
+
+
+
+
+
+
+
         if (typeof __sw_declaredPublicReadNote !== 'undefined') {
           __sw_declaredPublicReadNote(__sw_dbNamespace,
             !!publicRead && !decided.scope && decided.principalId === undefined, table);
         }
-        // Relation filters compose exactly as they do on from(): each one is an
-        // EXISTS carrying the related table's OWN scope predicate, so joining
-        // cannot widen what either scope alone allows \u2014 and because it lands in
-        // the WHERE, the aggregate summarizes only rows that survived BOTH.
+
+
+
+
         const hasCompiled = await __sw_structCompileHas(table, opts.has, server ? true : opts.asServer, 'aggregate');
         const relationWhere = __sw_arrayMap(hasCompiled, function (entry) { return entry.ref; });
         const principalId = __sw_structJoinPrincipal(decided, [], hasCompiled);
@@ -6694,10 +6694,10 @@ var DB_AGGREGATE_JS = `      // The result key for one aggregate. Composed from 
         if (order && order.length) ir.order = order;
         if (opts.limit !== undefined) ir.limit = __sw_structIntOpt(opts.limit, 'limit');
         if (relationWhere.length) ir.relationWhere = relationWhere;
-        // The ordinary where/order/column checks, then the aggregate-specific
-        // ones. order is deliberately cleared for the shared pass: it names
-        // aliases as well as columns, and __sw_structAssertAggregateOrder above
-        // has already proven every entry is one or the other.
+
+
+
+
         const sharedIr = __sw_assign({}, ir);
         sharedIr.order = undefined;
         __sw_structEnforceSchema('aggregate', sharedIr);
@@ -6705,19 +6705,19 @@ var DB_AGGREGATE_JS = `      // The result key for one aggregate. Composed from 
         return __sw_structExec('sw.db.aggregate', ir, principalId, null);
       }
 `;
-var DB_RELATIONS_JS = `      // \u2500\u2500 Composed joins \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
-      // THE SCOPE-COMPOSITION INVARIANT: a relation key shapes the relationship;
-      // it is NEVER trusted for access. Every participating table independently
-      // carries its own owner or membership predicate for the verified caller.
-      // Resolve a relation CHILD's own scope via the standalone resolver \u2014 its
-      // access posture cannot drift from its single-table posture.
+var DB_RELATIONS_JS = `
+
+
+
+
+
       async function __sw_structResolveRelationScope(rel, asServer, verb) {
         const decided = await __sw_structResolveScope(rel.table, verb, asServer);
         if (decided.scope.mode === 'server') __sw_structRequireServerDeclaration(rel.table);
         return decided;
       }
-      // Validate a relation predicate's columns against the RELATED table's
-      // managed shape (unmanaged \u2192 no column list, same as a single-table read).
+
+
       function __sw_structAssertRelationPredicateColumns(verb, childTable, preds) {
         const shape = __sw_structManagedShape(childTable);
         if (!shape) return;
@@ -6745,10 +6745,10 @@ var DB_RELATIONS_JS = `      // \u2500\u2500 Composed joins \u2500\u2500\u2500\u
             principalId: decided.principalId,
           });
         }
-        // Stitching reads ONE key off each root row \u2014 root.parentKey for
-        // hasMany, root.fk for belongsTo \u2014 so that column must be in the
-        // projected columns. Require it explicitly rather than silently widening
-        // the projection (which would change the returned row shape).
+
+
+
+
         if (out.length && columns) {
           for (let i = 0; i < out.length; i++) {
             const rootKey = __sw_structRelationRootKey(out[i].ref);
@@ -6759,10 +6759,10 @@ var DB_RELATIONS_JS = `      // \u2500\u2500 Composed joins \u2500\u2500\u2500\u
         }
         return out;
       }
-      // The relation's key columns, named from the ROOT row's point of view and
-      // the RELATED row's point of view. One function so the include stitcher,
-      // the column requirement above, and the child IR can never disagree about
-      // which side holds which key.
+
+
+
+
       function __sw_structRelationRootKey(rel) { return rel.kind === 'belongsTo' ? rel.fk : rel.parentKey; }
       function __sw_structRelationRelatedKey(rel) { return rel.kind === 'belongsTo' ? rel.parentKey : rel.fk; }
       function __sw_structRelationNotDeclared(verb, rootTable, name) {
@@ -6777,9 +6777,9 @@ var DB_RELATIONS_JS = `      // \u2500\u2500 Composed joins \u2500\u2500\u2500\u
           const name = keys[i];
           const rel = __sw_structResolveRelation(rootTable, name);
           if (!rel) __sw_structThrow403('RELATION_NOT_DECLARED', __sw_structRelationNotDeclared(verb, rootTable, name));
-          // The value is the related-row WHERE (same grammar). Quantifier is
-          // implicitly 'some' (EXISTS \u22651 matching row); none/every are not in
-          // this slice.
+
+
+
           const childPreds = __sw_structCompileWhere(hasOpt[name], false);
           __sw_structAssertRelationPredicateColumns(verb, rel.table, childPreds);
           const decided = await __sw_structResolveRelationScope(rel, asServer, verb);
@@ -6790,12 +6790,12 @@ var DB_RELATIONS_JS = `      // \u2500\u2500 Composed joins \u2500\u2500\u2500\u
         }
         return out;
       }
-      // A join can have an unscoped root and an owner()-scoped child. In that
-      // shape the root has no principal of its own, so keep the principal the
-      // CHILD resolver verified instead of accidentally binding undefined.
-      // Multiple owner() participants must resolve to the exact same request
-      // principal; the request-local identity memo makes that true by
-      // construction, and this assertion fails closed if that ever regresses.
+
+
+
+
+
+
       function __sw_structJoinPrincipal(rootDecision, includeCompiled, hasCompiled) {
         let principalId = rootDecision.scope && (rootDecision.scope.mode === 'user' || rootDecision.scope.mode === 'member' || rootDecision.scope.mode === 'policy')
           ? rootDecision.principalId : undefined;
@@ -6811,21 +6811,21 @@ var DB_RELATIONS_JS = `      // \u2500\u2500 Composed joins \u2500\u2500\u2500\u
         }
         return principalId;
       }
-      // Root-plus-related stitch for include: the root rows are already fetched;
-      // for each relation, fetch the related rows INDEPENDENTLY SCOPED (their
-      // owner = principal is composed by the standard renderer, never by the
-      // join key) with <relatedKey> IN (root keys), then attach them by key.
-      // Small reads use one fetch; large key sets use bounded batches. Every
-      // fetch is its own composed IR \u2014 independently rendered, scoped, and
-      // instrumented.
-      //
-      // THE DIRECTION IS A PROJECTION DECISION, NOT AN ACCESS ONE. hasMany reads
-      // root.parentKey and matches related.fk, nesting an ARRAY (possibly empty).
-      // belongsTo reads root.fk and matches related.parentKey, nesting the FLAT
-      // single row or null \u2014 the parent is unique by its primary key. A root row
-      // whose parent the caller may not read gets null, exactly as it gets [] for
-      // hidden children: the related query's own scope decided that, and no root
-      // row is dropped or invented because of it.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
       async function __sw_structAttachIncludes(result, includeRefs, principalId) {
         const rows = (result && result.data) || [];
         for (let r = 0; r < includeRefs.length; r++) {
@@ -6845,11 +6845,11 @@ var DB_RELATIONS_JS = `      // \u2500\u2500 Composed joins \u2500\u2500\u2500\u
           }
           const grouped = __sw_objCreateNull();
           if (ids.length) {
-            // The database accepts at most 100 bound parameters per statement.
-            // An owner()- or member()-scoped related table needs one bind for
-            // its principal, so batch keys at 99. Small includes stay the
-            // ordinary two-query stitch; large includes remain complete instead
-            // of failing at the transport's bind ceiling.
+
+
+
+
+
             const maxKeys = 99;
             for (let start = 0; start < ids.length; start += maxKeys) {
               const childIr = {
@@ -7152,8 +7152,8 @@ var DB_POLICY_HELPERS_JS = `${ROLE_DOMAIN_MAP_JS}
 `;
 var DB_POLICY_RESOLVE_SCOPE_JS = `
         if (__sw_linkAuthority) {
-          // Row links (db-row-links.ts): the whole request runs under its one
-          // link session; the platform composes and proves the scope.
+
+
           if (asServer === true || !__sw_usesManagedEndpoint()) __sw_linkUnavailable();
           return { scope: { mode: 'link', link: { grant: __sw_linkAuthority.grant, token: __sw_linkAuthority.token, root: __sw_linkAuthority.root,
             column: '', digest: '', epoch: 0, write: verb !== 'from' } }, principalId: undefined };
@@ -7200,8 +7200,8 @@ var DB_LIVE_INVALIDATION_JS = `      function __sw_liveInvalidation(table) {
         return Array.from(names);
       }
 
-      // An app-role list's policy: the leaf at the root or ending a parent
-      // chain of at most four edges (the platform re-checks the role).
+
+
       function __sw_liveRoleChain(policy) {
         let current = policy;
         for (let edges = 0; current && current.k === 'p'; edges++) {
@@ -7211,8 +7211,8 @@ var DB_LIVE_INVALIDATION_JS = `      function __sw_liveInvalidation(table) {
         return !!current && current.k === 'r';
       }
 
-      // A list under a group parent: one to four parent edges ending in a
-      // built-in group leaf (the platform resolves the parent's group).
+
+
       function __sw_liveGroupChain(policy) {
         let current = policy;
         let edges = 0;
@@ -7232,9 +7232,9 @@ var DB_LIVE_INVALIDATION_JS = `      function __sw_liveInvalidation(table) {
           return { kind: /^anon_[a-zA-Z0-9_-]{8,}$/.test(id) ? 'visitor' : 'app_user', id: principalId };
         }
         if (ir.scope.mode === 'unscoped') return { kind: 'shared', id: null };
-        // A live group list (member() or a built-in group() leaf at the root)
-        // is followed by a signed-in app user; the group and membership are
-        // checked by the platform at register and subscribe.
+
+
+
         if (ir.scope.mode === 'member' || (ir.scope.mode === 'policy' && ir.scope.policy && (ir.scope.policy.k === 'g' || __sw_liveRoleChain(ir.scope.policy) || __sw_liveGroupChain(ir.scope.policy)))) {
           if (principalId === undefined || principalId === null) return null;
           if (/^anon_[a-zA-Z0-9_-]{8,}$/.test(String(principalId))) return null;
@@ -7243,10 +7243,10 @@ var DB_LIVE_INVALIDATION_JS = `      function __sw_liveInvalidation(table) {
         return null;
       }
 
-      // Live group lists (managed data v2): which groups a write touched, from
-      // its OWN returned rows (plus, for a move, the group its filter pinned),
-      // and which (user, group) memberships a membership-table write touched.
-      // Nothing is guessed: missing evidence is reported as incomplete.
+
+
+
+
       function __sw_liveGroupEvidenceFor(ir, mutation, rows) {
         if (isDraftExecution || !env.SW_RELEASE_ID || !mutation) return null;
         const written = (ir.values || []).concat(ir.increments || []).map(function (item) { return String(item.column).toLowerCase(); });
@@ -7254,9 +7254,9 @@ var DB_LIVE_INVALIDATION_JS = `      function __sw_liveInvalidation(table) {
         if (!candidates.length) return null;
         const op = mutation.op;
         const wanted = String(mutation.table || '').toLowerCase();
-        // rowsGroupColumn: the group column of a group list's rows (member()
-        // or a built-in group() leaf). Built-in memberships are never written
-        // through sw.db; their changes revoke from the group operations.
+
+
+
         let rowsGroupColumn = null, membershipMember = null, roleList = false, parentGroupList = false;
         for (let i = 0; i < candidates.length; i++) {
           const view = __sw_liveViewByName(candidates[i]);
@@ -7270,15 +7270,15 @@ var DB_LIVE_INVALIDATION_JS = `      function __sw_liveInvalidation(table) {
             } else if (dep.scope.mode === 'policy' && dep.scope.policy && dep.scope.policy.k === 'g' && dep.kind === 'rows') {
               rowsGroupColumn = dep.scope.policy.c;
             } else if (dep.scope.mode === 'policy' && dep.scope.policy && __sw_liveGroupChain(dep.scope.policy)) {
-              // A list under a group parent: its resolved old/new groups must
-              // come from the mutation executor's same-batch evidence
-              // (live-group-chain.ts). Until the executor supplies it, this
-              // write's evidence is incomplete: no group is guessed or
-              // broadcast, and subscribers repair on their next refresh.
+
+
+
+
+
               parentGroupList = true;
             } else if (dep.scope.mode === 'policy' && dep.scope.policy && __sw_liveRoleChain(dep.scope.policy)) {
-              // An app-role list (rows or a parent hop): one shared channel,
-              // no per-row evidence needed.
+
+
               roleList = true;
             }
           }
@@ -7306,8 +7306,8 @@ var DB_LIVE_INVALIDATION_JS = `      function __sw_liveInvalidation(table) {
             if (scalar(got.value)) groups.add(got.value); else evidence.complete = false;
           }
           if (op === 'update' && written.indexOf(String(column).toLowerCase()) !== -1) {
-            // A move: the rows show the new group; the old one is the group the
-            // update's own filter pinned, or the evidence is incomplete.
+
+
             const where = ir.where || [];
             let pinned = false;
             for (let i = 0; i < where.length; i++) {
@@ -7327,8 +7327,8 @@ var DB_LIVE_INVALIDATION_JS = `      function __sw_liveInvalidation(table) {
             if (!user.found || !group.found || !scalar(user.value) || !scalar(group.value)) { evidence.complete = false; continue; }
             pairs.push({ user: user.value, group: group.value });
           }
-          // An update may rewrite who or which group: the old pair is not in the
-          // returned rows, so the subscription lifetime bounds that removal.
+
+
           if (op === 'update') evidence.complete = false;
           evidence.memberships = pairs.slice(0, 100);
           if (pairs.length > 100) evidence.complete = false;
@@ -7336,11 +7336,11 @@ var DB_LIVE_INVALIDATION_JS = `      function __sw_liveInvalidation(table) {
         return evidence;
       }
 
-      // Owner lists: the owners (old and new) of the rows a write touched. A
-      // write in the owner's own scope can only touch the writer's rows; any
-      // other write (server, job, another scope) is attributed from its own
-      // returned rows, plus the owner its filter pinned when it moves a row.
-      // Missing evidence is reported, never guessed.
+
+
+
+
+
       function __sw_liveOwnersFor(ir, mutation, rows, principalId) {
         if (!mutation) return null;
         const written = (ir.values || []).concat(ir.increments || []).map(function (item) { return String(item.column).toLowerCase(); });
@@ -7409,8 +7409,8 @@ var DB_LIVE_INVALIDATION_JS = `      function __sw_liveInvalidation(table) {
         const written = (ir.values || []).concat(ir.increments || []).map(function (item) { return String(item.column).toLowerCase(); });
         const candidates = __sw_liveCandidates(entry, mutation.op, written);
         if (!candidates.length) return null;
-        // A group list's table or membership table is attributed by its group
-        // evidence and an owner list by its owners, not by the writer.
+
+
         const subject = __sw_liveSubject(ir, principalId) || (evidence || owned ? { kind: 'shared', id: null } : null);
         if (!subject) return { delivery: 'resync_required', reason: 'LIVE_SCOPE_NOT_SUBSCRIBABLE' };
         const body = {
@@ -7424,8 +7424,8 @@ var DB_LIVE_INVALIDATION_JS = `      function __sw_liveInvalidation(table) {
         if (evidence && evidence.groups) body.groups = evidence.groups;
         if (evidence && evidence.memberships) body.memberships = evidence.memberships;
         if (owned) body.owners = owned.owners;
-        // Bounded retry: three attempts over about a second. The write has
-        // already committed; a final failure is logged and reported, never thrown.
+
+
         let lastReason = 'DELIVERY_UNAVAILABLE';
         for (let attempt = 0; attempt < 3; attempt++) {
           if (attempt > 0) await new Promise(function (resolve) { setTimeout(resolve, attempt * 300); });
@@ -9612,7 +9612,7 @@ var DB_RAW_JS = `      var __sw_rawReadDbInstance = null;
       }
 
       function __sw_rawRequireAuthority(api, authority) {
-        // Split: raw SQL reaches only the separate raw database, never managed rows.
+
         if (__SW_DB_SPLIT || DB_WRITE_MODE !== 'managed' || authority === __sw_structServerNamespace) return;
         const err = new Error(api + ' is unavailable in managed mode because raw SQL cannot apply declared row permissions. ' +
           'Use sw.db.from/count/insert/update/remove/tx for declared operations. ' +
@@ -9623,17 +9623,17 @@ var DB_RAW_JS = `      var __sw_rawReadDbInstance = null;
         throw err;
       }
 
-      // Raw-write public-data invalidation lives HERE, beside the raw paths that call it, so this
-      // fragment carries every helper it uses (pfb from Docs: a fragment-level executor found
-      // __sw_rawResultWrote undefined when it lived in db-public-read.ts). Raw SQL through the NATIVE binding of a legacy (non-split, non-managed) project can write any
-      // table, including a declared public one, and the platform never parses it. Such a write \u2014 or
-      // one whose outcome is unknown \u2014 drops ALL of this project's cached public results (step 2
-      // decision 2). REST raw SQL lands in /v1/db/query|batch, which purge on their own; split-layout
-      // raw SQL reaches only the separate raw database, never declared rows.
-      // At most ONE project-wide signal per request (#743 review), and none when this release declares
-      // no publicly readable table: there is then no cached public result to drop.
-      // var, uninitialised: this fragment's state must be usable wherever the closure places it (the
-      // fragment's own __sw_rawReadDbInstance is a var for the same reason). undefined reads as "not yet".
+
+
+
+
+
+
+
+
+
+
+
       var __sw_publicDataInvalidated;
       var __sw_hasPublicReadTable;
       function __sw_releaseHasPublicReadTable() {
@@ -9662,9 +9662,9 @@ var DB_RAW_JS = `      var __sw_rawReadDbInstance = null;
         });
         __sw_pendingBackground.push(pending);
       }
-      // A raw SQL write names no rows the platform can attribute, so it cannot
-      // notify a live list. Say so once per table per request instead of
-      // leaving the list silently stale (structured writes notify).
+
+
+
       var __sw_rawLiveWarned;
       function __sw_rawLiveWarn(sql) {
         const mut = __sw_mutationOf(sql);
@@ -9688,20 +9688,20 @@ var DB_RAW_JS = `      var __sw_rawReadDbInstance = null;
         __sw_assertSingleStatement(sql);
         __sw_assertNoDdl(sql);
         options = options || {};
-        // { user } is refused: the platform never rewrites raw
-        // SQL to inject an owner filter. Preserve its specific loud failure.
+
+
         if (__sw_own(options, 'user')) {
           __sw_throwRawSqlCannotBePlatformScoped('sw.db.query');
         }
-        // Neither the legacy { unscoped: true } annotation nor { asServer:
-        // true } can mint server authority. Only the closure-private namespace
-        // capability reaches the managed read transport.
+
+
+
         __sw_rawRequireAuthority(api, authority);
         let r;
         try {
           r = await __sw_execOne(api, rawSqlDb(), sql, params);
         } catch (error) {
-          // A write that failed after it may have reached the database is treated as landed.
+
           if (__sw_mutationOf(sql)) __sw_publicDataInvalidate();
           throw error;
         }
@@ -9712,8 +9712,8 @@ var DB_RAW_JS = `      var __sw_rawReadDbInstance = null;
         if (mut) {
           __sw_deferDbSizeObservation(r);
         }
-        // Provider last_row_id is connection-global and can describe another
-        // request. Keep it internal; INSERT ... RETURNING exposes this call's id.
+
+
         return {
           data: rows,
           error: null,
@@ -9745,7 +9745,7 @@ var DB_RAW_JS = `      var __sw_rawReadDbInstance = null;
         try {
           results = await __sw_execBatch(api, rawSqlDb(), statements);
         } catch (error) {
-          // DB_BATCH_OUTCOME_UNKNOWN and any other post-dispatch failure: treated as landed.
+
           if (batchMutates) __sw_publicDataInvalidate();
           throw error;
         }
@@ -9761,8 +9761,8 @@ var DB_RAW_JS = `      var __sw_rawReadDbInstance = null;
         }; });
       }
 `;
-var DB_COMPOSED_WRITES_JS = `      // Per-column conditions are ANDed. A bounded $or group remains one
-      // predicate inside the independent platform ownership/member constraint.
+var DB_COMPOSED_WRITES_JS = `
+
       function __sw_structCompileWhere(where, allowOr) {
         if (where === undefined || where === null) return [];
         if (typeof where !== 'object' || __sw_arrayIsArray(where)) __sw_structThrow('where must be an object of { column: condition }.');
@@ -9791,10 +9791,10 @@ var DB_COMPOSED_WRITES_JS = `      // Per-column conditions are ANDed. A bounded
             continue;
           }
           if (__sw_arrayIsArray(cond)) {
-            // Iterate OWN indices only: a range array must be DENSE. A hole
-            // (sparse array, or a length that outruns own indices) would read
-            // through to an inherited Array.prototype[j] and smuggle a
-            // predicate the caller never wrote \u2014 reject it loudly instead.
+
+
+
+
             for (let j = 0; j < cond.length; j++) {
               if (!__sw_own(cond, j)) {
                 __sw_structThrow('where["' + col + '"] range array must be dense \u2014 element ' + j + ' is missing (sparse/holey arrays are not allowed).');
@@ -9839,7 +9839,7 @@ var DB_COMPOSED_WRITES_JS = `      // Per-column conditions are ANDed. A bounded
           }
           onConflict = opts.onConflict;
         }
-        // A present key is explicit: validated here and never dropped (managed-insert-receipt.ts).
+
         const idempotencyKey = opts.idempotencyKey;
         if (idempotencyKey !== undefined && (typeof idempotencyKey !== 'string' || !/^[A-Za-z0-9_-]{16,128}$/.test(idempotencyKey))) {
           throw __sw_keyedError('IDEMPOTENCY_KEY_INVALID', 'sw.db.insert: idempotencyKey is 16 to 128 letters, digits, "-" or "_".', 400);
@@ -9855,8 +9855,8 @@ var DB_COMPOSED_WRITES_JS = `      // Per-column conditions are ANDed. A bounded
         if (decided.scope.mode === 'policy') __sw_structAssertPolicyWrite(cols, decided.scope.policy, 'insert');
         if (decided.scope.mode === 'policy') __sw_structAssertPolicyInsert(cols, decided.scope.policy);
         if (decided.scope.mode === 'member') __sw_structAssertMemberGroupPresent(cols, decided.scope.member, 'insert');
-        // An upsert under a rule needs create (checked above) and, for "update", update on the
-        // conflicting row; a rule that never grants update refuses before anything runs.
+
+
         if (onConflict === 'update' && decided.scope.mode === 'policy' && !__sw_structPolicyAllows(decided.scope.policy, 'update')) {
           __sw_structThrow403('POLICY_OPERATION_NOT_ALLOWED', 'sw.db.insert on "' + table + '": onConflict: "update" updates the existing row, and the declared private policy does not grant update. Use onConflict: "ignore", or grant update.');
         }
@@ -9905,9 +9905,9 @@ var DB_COMPOSED_WRITES_JS = `      // Per-column conditions are ANDed. A bounded
         return { label: 'sw.db.remove', ir: ir, principalId: decided.principalId, mutation: { op: 'delete', table: table } };
       }
 
-      // Keyed managed inserts. The platform admits exactly one plain insert by a
-      // verified user or visitor on a table whose primary key is the integer id() and that has no
-      // blob() column; this mirrors that so a key is attached only where it can be honoured.
+
+
+
       function __sw_keyedError(code, message, status) {
         const e = new Error(message);
         e.code = code; e.status = status; e.retry = false; e.retryable = false; e.__sw_expose = true;
@@ -9921,20 +9921,20 @@ var DB_COMPOSED_WRITES_JS = `      // Per-column conditions are ANDed. A bounded
         if (!__sw_structVisitorFor(p.principalId) && mode === 'unscoped' && p.principalId === undefined
           && __sw_structResolveIntent(p.ir.table.name) === 'server_only') return false;
         const shape = __sw_structManagedShape(p.ir.table.name);
-        // The declared id() column, baked as a server fact; older bakes carry it only with a browser grant.
+
         const pk = shape && (shape.primaryKey !== undefined ? shape.primaryKey : shape.clientPrimaryKey);
         const pkColumn = typeof pk === 'string' ? shape.columns.find(function (c) { return c && c.n === pk; }) : null;
         return !!pkColumn && pkColumn.t === 'integer' && !shape.columns.some(function (c) { return !c || c.t === 'blob'; });
       }
-      // The request's own copy of its values: later changes to the caller's objects never reach a retry.
+
       function __sw_keyedCols(cols) {
         return cols.map(function (c) {
           return { column: c.column, value: c.value !== null && typeof c.value === 'object' ? __sw_jsonParse(JSON.stringify(c.value)) : c.value };
         });
       }
-      // Platform-private: reached only through __sw_dbNamespace.__sw_clientInsert by the generated
-      // /__sw/data door. A generated browser client's create carries its own random nonce, which
-      // lives in the separate client key domain; nothing here lets a caller choose the domain.
+
+
+
       function __sw_clientInsertBridge(table, values, key) {
         if (typeof key !== 'string' || !/^[0-9a-f]{32}$/.test(key)) {
           throw __sw_keyedError('IDEMPOTENCY_KEY_INVALID', 'A browser insert key is 32 lowercase hexadecimal characters. Nothing ran.', 400);
@@ -9943,18 +9943,18 @@ var DB_COMPOSED_WRITES_JS = `      // Per-column conditions are ANDed. A bounded
       }
       async function __sw_structInsert(table, values, opts, authority, clientKey) {
         const prepared = await __sw_structPrepareInsert(table, values, opts, authority);
-        // Two key domains (managed-insert-receipt.ts): a function's own keys ('runtime', bound to
-        // its verified principal) and generated browser nonces ('client').
+
+
         const scope = clientKey !== undefined ? 'client' : 'runtime';
         if (clientKey !== undefined) prepared.idempotencyKey = clientKey;
         const eligible = __sw_keyedInsertEligible(prepared, authority);
-        // An explicit key on an operation that cannot honour it refuses before anything runs; it
-        // never falls back to an unkeyed write. Without a key, other inserts are unchanged.
+
+
         if (prepared.idempotencyKey !== undefined && !eligible) {
           throw __sw_keyedError('IDEMPOTENCY_UNSUPPORTED', 'sw.db.insert: idempotencyKey is available only for a single plain insert by a signed-in user or visitor on a table whose key is id() and that has no blob() column. Nothing ran.', 400);
         }
         if (!eligible) return __sw_structExec(prepared.label, prepared.ir, prepared.principalId, prepared.mutation);
-        // One key per call, allocated once, before dispatch.
+
         const key = prepared.idempotencyKey !== undefined ? prepared.idempotencyKey
           : Array.from(crypto.getRandomValues(new Uint8Array(16)), function (b) { return b.toString(16).padStart(2, '0'); }).join('');
         const createdAt = Date.now();
@@ -9969,11 +9969,11 @@ var DB_COMPOSED_WRITES_JS = `      // Per-column conditions are ANDed. A bounded
         const send = async function (p) {
           p.ir.values = __sw_keyedCols(snapshot);
           try { return attach(await __sw_managedCall([p], false, key, scope)); }
-          // Committed without a confirmed receipt: no handle, since its protection is unproven.
+
           catch (e) { throw e && e.code === 'IDEMPOTENCY_RECEIPT_INVALID' ? e : attach(e); }
         };
-        // Process-local: it repeats this exact request under this runtime context's current
-        // authority, with the same key. It never runs on its own and never makes a new key.
+
+
         handle = Object.freeze({
           key: key,
           createdAt: createdAt,
@@ -9992,12 +9992,12 @@ var DB_COMPOSED_WRITES_JS = `      // Per-column conditions are ANDed. A bounded
         });
         return send(prepared);
       }
-      // Standalone exact-key caller UPDATES share the browser's non-disclosing
-      // missing-row result. A caller REMOVE that matches nothing returns the
-      // zero-change result instead, like bulk/conditional writes (founder
-      // decision, ): a missing row and a row outside the caller's
-      // access give the same { data: [], count: 0, changes: 0 }, so neither
-      // reveals existence. No existence probe bypasses authorization.
+
+
+
+
+
+
       async function __sw_structExecCallerWrite(prepared, authority, missThrows) {
         const ir = prepared.ir;
         const shape = __sw_structManagedShape(ir.table.name);
@@ -10036,21 +10036,21 @@ var DB_COMPOSED_WRITES_JS = `      // Per-column conditions are ANDed. A bounded
           const item = intent.op === 'insert' ? await __sw_structPrepareInsert(intent.table, intent.values, intent.options, authority)
             : intent.op === 'update' ? await __sw_structPrepareUpdate(intent.table, { set: intent.set, increment: intent.increment, where: intent.where }, authority)
               : await __sw_structPrepareRemove(intent.table, { where: intent.where }, authority);
-          // A membership- or policy-guarded insert raises inside the batch when
-          // the caller may not place the row, so the whole transaction rolls
-          // back (checked in the same transaction, after earlier intents).
-          // Updates and removes are already limited to rows the caller may
-          // reach by their WHERE predicate.
+
+
+
+
+
           if (item.ir.kind === 'insert' && (item.ir.scope.mode === 'member' || item.ir.scope.mode === 'policy'
             || (item.ir.scope.mode === 'user' || item.ir.scope.mode === 'server') && item.ir.scope.grantRow)) item.ir.txGuard = true;
-          // A transaction is never keyed: an explicit key on one of its inserts refuses before anything runs.
+
           if (item.idempotencyKey !== undefined) {
             throw __sw_keyedError('IDEMPOTENCY_UNSUPPORTED', 'sw.db.tx: an insert inside a transaction cannot take idempotencyKey. Nothing ran.', 400);
           }
           prepared.push(item);
         }
         if (__sw_usesManagedEndpoint()) return __sw_managedCall(prepared, true);
-        // Finish every validation and fidelity projection before mutation.
+
         const statements = [];
         for (let i = 0; i < prepared.length; i++) {
           const item = prepared[i];
@@ -10066,15 +10066,15 @@ var DB_COMPOSED_WRITES_JS = `      // Per-column conditions are ANDed. A bounded
           results = await __sw_execBatch('sw.db.tx', target, statements);
         } catch (error) {
           for (const item of prepared) __sw_emitQueryEvent(item.ir, Date.now() - started, 0, false, error && error.code || 'DB_BATCH_OUTCOME_UNKNOWN');
-          // A preflight refusal carries its existing remedy. A lost transport
-          // acknowledgement never proves rollback and must not invite replay.
+
+
           if (error && ['DRAFT_DB_NOT_ISOLATED', 'DEV_DB_NOT_ISOLATED', 'DB_CONNECTION_NOT_READY', 'CONSTRAINT_VIOLATION', 'DATA_CONFLICT', 'DATABASE_VALUE_TOO_LARGE',
             'MEMBERSHIP_REQUIRED', 'POLICY_AUTHORITY_REQUIRED'].indexOf(error.code) !== -1) throw error;
           throw __sw_batchOutcomeUnknown();
         }
-        // The whole transaction committed, so every publicly readable table it
-        // touched has a cached public result to drop \u2014 once per table, not once
-        // per intent (; the single-write seam does the same).
+
+
+
         const purged = new Set();
         for (const item of prepared) {
           const table = __sw_lower(String(item.mutation.table));
@@ -10093,14 +10093,14 @@ var DB_COMPOSED_WRITES_JS = `      // Per-column conditions are ANDed. A bounded
           if (delivery) row.live_delivery = delivery;
           output.push(row);
         }
-        // Declared types are read back only after every post-commit signal went out.
+
         for (let i = 0; i < output.length; i++) __sw_structDecodeRows(prepared[i].ir, output[i].data, true);
         return output;
       }
 
       function __sw_structEnforceSchema(verb, ir) { return __sw_schemaChecks.enforceSchema(verb, ir); }
 
-      // The closure function itself is the private capability; JSON cannot name it.
+
       function __sw_structServerNamespace() {
         function arity(actual, maximum) { if (actual > maximum) __sw_structThrow('sw.db.server accepts only the operation arguments; no caller or authority override.'); }
         return Object.freeze({
@@ -10144,7 +10144,7 @@ var DB_COMPOSED_WRITES_JS = `      // Per-column conditions are ANDed. A bounded
         return false;
       }
       function __sw_structOperationDb(ir, principalId) {
-        // Never use a baked production binding when a dev/draft slot resolves by REST.
+
         if ((ir.scope.mode === 'server' || __sw_structNeedsPrimary(ir)) && __sw_dbExecutionPath === 'native') {
           __sw_dbSessionState().noSessionPin = 'first-primary';
         }
@@ -10152,14 +10152,14 @@ var DB_COMPOSED_WRITES_JS = `      // Per-column conditions are ANDed. A bounded
         return (__sw_visitorClaimPrimary || __sw_structVisitorFor(principalId)) ? env.PROJECT_DB : DB;
       }
 `;
-var DB_SESSION_RECOVERY_JS = `      // \u2500\u2500 Read replicas, at the one native-binding chokepoint \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
-      // A bookmark is valid only for the database that issued it. Its string
-      // carries no provenance, so shape validation is necessary but not
-      // sufficient: the provider can reject a foreign bookmark when opening
-      // the session or when its first statement executes. That refusal means
-      // "position unavailable", not "customer query failed". Retry exactly
-      // once through a fresh unconstrained session; every other error keeps
-      // its existing path and shape.
+var DB_SESSION_RECOVERY_JS = `
+
+
+
+
+
+
+
       function __sw_dbSessionState() {
         if (!__sw_dbSessionState.s) {
           __sw_dbSessionState.s = {
@@ -10272,22 +10272,22 @@ var DB_SESSION_RECOVERY_JS = `      // \u2500\u2500 Read replicas, at the one na
         __sw_dbSessionState().preparedSources.set(wrapped, source);
         return wrapped;
       }
-      // ONE REQUEST SKIPS THE SESSION, and it is not the one you would guess
-      //. Until 2026-09-19 every caller the edge called "near"
-      // got the bare binding, on the belief that a session costs ~15 ms per
-      // statement and buys nothing beside the primary. Measured against the
-      // provider's own served_by_primary field, the toll is ~0-4 ms and the
-      // belief was load-bearing in the wrong direction: when the recorded
-      // region was wrong \u2014 6 of 70 sampled live databases \u2014 the "near" caller
-      // was the one paying a full cross-continent trip on every statement,
-      // 183 ms where a session would have cost 17 ms.
-      //
-      // So the verdict now decides exactly one thing: a caller beside the
-      // primary who arrived holding the primary PIN needs no session, because
-      // a bare prepare() IS the primary and already satisfies the constraint.
-      // Even then, the pin is re-published only for a method that can write \u2014
-      // publishing it from a GET would pin that caller's next request to the
-      // primary for nothing, which is the very cost this change removes.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
       function __sw_sessionedNativeDb(binding) {
         if (!binding || typeof binding.withSession !== 'function') return binding;
         var state = __sw_dbSessionState();
@@ -10327,9 +10327,9 @@ var DB_SESSION_RECOVERY_JS = `      // \u2500\u2500 Read replicas, at the one na
           withSession: function (constraint) { return binding.withSession(constraint); },
         };
       }
-      // The edge's geography verdict, trusted as issued and used for nothing
-      // but the primary-pin shortcut above. Absent means "not beside it",
-      // which is the safe reading and the one every older edge produces.
+
+
+
       function __sw_dbNearPrimary() {
         try {
           return !!request && !!request.headers
@@ -10344,30 +10344,30 @@ var DB_SESSION_RECOVERY_JS = `      // \u2500\u2500 Read replicas, at the one na
         try { return __sw_dbBookmarkOf(state.session.getBookmark()); } catch (_) { return null; }
       }
 `;
-var DB_COALESCE_JS = `      // STATE LIVES ON A HOISTED FUNCTION, deliberately. This fragment is
-      // concatenated into the sw.db namespace AFTER that namespace's own
-      // \`return\`, so only hoisted function declarations here ever execute \u2014 a
-      // \`let\` or \`const\` at this level would sit in its temporal dead zone
-      // forever and throw on first touch. (db-result-fidelity.ts is all
-      // function declarations for the same reason.) A function declaration
-      // inside a function body is a fresh object per invocation, and the sw.db
-      // namespace is an IIFE built once per request, so this memo is
-      // request-local exactly like every other piece of sw.db state.
+var DB_COALESCE_JS = `
+
+
+
+
+
+
+
+
       function __sw_coalesceState() {
         if (!__sw_coalesceState.s) __sw_coalesceState.s = { queue: [], scheduled: false };
         return __sw_coalesceState.s;
       }
-      // Burn a floor of microtask hops so sibling calls that travel a slightly
-      // longer async path still land in the same batch \u2014 sw.db.from resolves
-      // relations and sw.db.count does not, so two calls made on the same line
-      // reach the transport a few hops apart. Then keep extending while the
-      // queue is still growing. No timer, so the floor costs nanoseconds.
+
+
+
+
+
       function __sw_coalesceMinHops() { return 6; }
       function __sw_coalesceMaxHops() { return 24; }
       function __sw_coalesceMaxStatements() { return 24; }
 
-      // Merge only what can be merged without changing a single observable
-      // behaviour. Every clause here is load-bearing \u2014 see the header comment.
+
+
       function __sw_coalesceEligible(database, sql) {
         if (__sw_dbExecutionPath !== 'native') return false;
         if (!database || database !== DB) return false;
@@ -10375,9 +10375,9 @@ var DB_COALESCE_JS = `      // STATE LIVES ON A HOISTED FUNCTION, deliberately. 
         return __sw_dbStatementKind(sql) === 'SELECT';
       }
 
-      // Run one queued statement by itself, on the same prepare/decode path a
-      // non-coalesced read takes. Errors are handed to the queued caller, whose
-      // own __sw_timedExec wrapper decorates and retries them exactly as before.
+
+
+
       function __sw_coalesceRunAlone(entry) {
         let pending;
         try {
@@ -10396,8 +10396,8 @@ var DB_COALESCE_JS = `      // STATE LIVES ON A HOISTED FUNCTION, deliberately. 
         const size = __sw_coalesceMaxStatements();
         for (let start = 0; start < entries.length; start += size) {
           const chunk = entries.slice(start, start + size);
-          // A lone statement has nothing to travel with: send it as itself
-          // rather than wrapping one statement in a batch envelope.
+
+
           if (chunk.length === 1) { __sw_coalesceRunAlone(chunk[0]); continue; }
           const database = chunk[0].database;
           const crossingStart = Date.now();
@@ -10412,8 +10412,8 @@ var DB_COALESCE_JS = `      // STATE LIVES ON A HOISTED FUNCTION, deliberately. 
           } catch (_) {
             merged = false;
           }
-          // A transport that answers a batch with anything but one result per
-          // statement cannot be index-aligned, so it is not trusted to be.
+
+
           if (!merged || !__sw_batchReceiptComplete(results, chunk.length)) {
             for (let i = 0; i < chunk.length; i++) __sw_coalesceRunAlone(chunk[i]);
             continue;
@@ -10449,22 +10449,22 @@ var DB_COALESCE_JS = `      // STATE LIVES ON A HOISTED FUNCTION, deliberately. 
           try {
             await __sw_coalesceFlush(entries);
           } catch (err) {
-            // The flush already answers every queued caller on both the merged
-            // and the fall-back path, so reaching here means the coalescer
-            // itself broke. Fail LOUD on every waiting call rather than leaving
-            // a handler hanging on a promise nothing will ever settle.
+
+
+
+
             for (let i = 0; i < entries.length; i++) entries[i].reject(err);
           }
         })();
       }
 
-      // THE seam every single-statement sw.db execution passes through. A
-      // statement that cannot be merged goes straight down the pre-existing
-      // path; a mergeable read is queued and answered from the shared batch.
-      // Either way it is wrapped in the same __sw_timedExec as before, so
-      // timing, slow-query warnings, error decoration and backpressure retry
-      // are identical \u2014 and the measured duration still includes everything
-      // the caller actually waited for.
+
+
+
+
+
+
+
       function __sw_execOne(label, database, sql, params) {
         if (!__sw_coalesceEligible(database, sql)) {
           return __sw_execOneDirect(label, database, sql, params);
@@ -10836,8 +10836,8 @@ var POSTGRES_JS = `    get postgres() {
             'Neon-Batch-Deferrable',
             'Authorization',
           ];
-          // Own DATA properties only: a getter, or an entry inherited from a
-          // polluted prototype, decides nothing here.
+
+
           const own = function (obj, key) {
             if (!obj || typeof obj !== 'object') return undefined;
             const d = Object.getOwnPropertyDescriptor(obj, key);
@@ -10858,8 +10858,8 @@ var POSTGRES_JS = `    get postgres() {
               ? input
               : (input && typeof input === 'object' ? own(input, 'url') : undefined);
             if (typeof asked !== 'string') return refuse('no destination');
-            // String equality against a compile-time constant. No parser is
-            // consulted, so a replaced global URL cannot move the target.
+
+
             let target = null;
             for (let i = 0; i < endpoints.length; i++) {
               if (endpoints[i] === asked) { target = endpoints[i]; break; }
@@ -10869,9 +10869,9 @@ var POSTGRES_JS = `    get postgres() {
             if (typeof method !== 'string' || method.toUpperCase() !== 'POST') return refuse('method');
             const askedHeaders = own(opts, 'headers');
             if (own(askedHeaders, 'Neon-Connection-String') !== dsn) return refuse('connection string');
-            // Null-prototype literals: RequestInit and HeadersInit are read by
-            // property lookup, so an inherited cf/dispatcher would otherwise
-            // reach the native fetch without this code copying anything.
+
+
+
             const headers = { __proto__: null, 'Neon-Connection-String': dsn };
             for (let i = 0; i < FORWARD.length; i++) {
               const value = own(askedHeaders, FORWARD[i]);
@@ -10891,10 +10891,10 @@ var POSTGRES_JS = `    get postgres() {
             });
           };
         };
-        // Re-installed on every read, so a customer wrapper never outlives the
-        // next use of sw.postgres. Without the driver config or the frozen
-        // endpoints in the bundle this does nothing and the platform transport
-        // stays in place.
+
+
+
+
         if (typeof __sw_neonConfig !== 'undefined' && __sw_neonConfig
             && typeof __SW_POSTGRES_SQL_ENDPOINTS !== 'undefined') {
           const direct = __sw_pgTransport(connectionString, __SW_POSTGRES_SQL_ENDPOINTS, __sw_runtimeFetch);
@@ -10926,12 +10926,12 @@ var FS_JS = `    fs: (function () {
         err.status = 400;
         return __sw_markExpected(err);
       }
-      // A file path inside a request URL: every segment percent-encoded, so a
-      // name containing # ? % or a space stays part of the path. Unencoded, a
-      // # cut off the as_user query (project authority) and a ? injected a
-      // different as_user. The route decodes each segment
-      // once; . and .. would be collapsed by URL parsing before it could
-      // refuse them, so they are refused here with the route's own rule.
+
+
+
+
+
+
       function __sw_fsUrlPath(path) {
         return __sw_fsPath(path).split('/').map(function (segment) {
           if (segment === '.' || segment === '..') {
@@ -10944,19 +10944,19 @@ var FS_JS = `    fs: (function () {
         }).join('/');
       }
       const __sw_fsOuterFetch = platformFetch;
-      // Per invocation and shared by the file views, never an isolate authority cache.
+
       const __sw_filesRead = { envelope: null, subject: null, generation: 0, pending: 0 };
       if (typeof __sw_filesMutationState !== 'undefined') __sw_filesMutationState = __sw_filesRead;
       function __sw_makeFs(__sw_fsActor, __sw_fsIsDev, __sw_fsServerAuthority) {
-        // Every transport call below goes through these: with an acting user they add that user's
-        // verified credential headers; the explicit server/dev views declare project authority.
-        // Missing user credentials never widen access.
+
+
+
         async function __sw_fsWithSubject(opts) {
           const actor = await __sw_fsActor();
           if (!actor) {
             if (__sw_fsServerAuthority) {
-              // The explicit project view declares itself; the platform never
-              // infers project authority from a missing user.
+
+
               const base = opts || {};
               return Object.assign({}, base, { headers: Object.assign({}, base.headers || {}, { 'X-Somewhere-Fs-Authority': 'server' }) });
             }
@@ -11008,19 +11008,19 @@ var FS_JS = `    fs: (function () {
       async read(path, opts) {
         path = __sw_fsUrlPath(path);
         opts = opts || {};
-        // Runtime v2: the acting end-user is DERIVED from the
-        // request's verified principal, never a caller { user }/as_user claim
-        // (a claim would let function code read any user's private file). With
-        // a verified app-user the read is ACL-scoped to them; in a server/
-        // developer context (no app-user on the request) there is no as_user
-        // and the project/developer read capability is preserved \u2014 a
-        // project-owned asset reads as before. Omission is the absence of a
-        // credential, never a widening the caller can request.
+
+
+
+
+
+
+
+
         const asUser = await __sw_fsActor();
         const userQ = asUser ? 'as_user=' + encodeURIComponent(asUser) : '';
-        // Line-range mode: return the parsed JSON envelope so user code
-        // gets { content, lines, total_lines } directly. No lines option
-        // preserves the legacy behavior (raw Response).
+
+
+
         if (opts.lines) {
           const range = Array.isArray(opts.lines)
             ? opts.lines[0] + '-' + opts.lines[1]
@@ -11043,25 +11043,25 @@ var FS_JS = `    fs: (function () {
       async write(path, body, opts) {
         path = __sw_fsUrlPath(path);
         opts = opts || {};
-        // Accept both camelCase and snake_case so docs that say
-        // content_type and SDKs that pass contentType both work. Without
-        // this, snake_case was silently dropped \u2014 the file would land
-        // with application/octet-stream and browsers refused to play it.
+
+
+
+
         const ct = opts.contentType || opts.content_type || 'application/octet-stream';
-        // Honor visibility:'public' (or public:true). The PUT route decides
-        // visibility solely from the X-Visibility header; without it every
-        // function write landed PRIVATE regardless of the option (the MCP
-        // fs_write path worked, the in-function shim silently dropped it).
+
+
+
+
         const headers = { 'Content-Type': ct };
         if (opts.visibility === 'public' || opts.public === true) headers['X-Visibility'] = 'public';
-        // Opt-in conditional write: { if_match: <version> } pins the version
-        // this writer last read (write/stat/versions all return it). If the
-        // file changed since, the platform refuses with FS_VERSION_CONFLICT
-        // instead of silently last-write-wins. Omit for today's behavior.
+
+
+
+
         const ifMatch = opts.ifMatch ?? opts.if_match;
         if (ifMatch !== undefined && ifMatch !== null) headers['If-Match'] = String(ifMatch);
-        // Runtime v2 #2: forward the DERIVED acting end-user so a write made in
-        // a user's request is owned by them (sw.fs.dev omits it \u2192 project-owned).
+
+
         const asUser = await __sw_fsActor();
         const userQ = asUser ? '?as_user=' + encodeURIComponent(asUser) : '';
         const r = await platformFetch('/v1/fs/' + projectId + path + userQ, {
@@ -11079,8 +11079,8 @@ var FS_JS = `    fs: (function () {
           if (conflict && conflict.data) err.current_version = conflict.data.current_version;
           throw __sw_markExpected(err);
         }
-        // Any other refusal is the platform's own typed error, as for read: an
-        // authorization 403 stays a 403 for the app, not a bare Error/500.
+
+
         if (!r.ok) {
           let data;
           try { data = await r.json(); } catch { data = null; }
@@ -11092,8 +11092,8 @@ var FS_JS = `    fs: (function () {
         const asUser = await __sw_fsActor();
         const userQ = asUser ? '?as_user=' + encodeURIComponent(asUser) : '';
         const r = await platformFetch('/v1/fs/' + projectId + __sw_fsUrlPath(path) + userQ, { method: 'DELETE' });
-        // A refused or failed delete is the platform's own typed error, as for read and write: resolving with the error
-        // envelope let callers report a delete that never happened as a success (founder file benchmark, 2026-10-22).
+
+
         if (!r.ok) {
           let data;
           try { data = await r.json(); } catch { data = null; }
@@ -11129,12 +11129,12 @@ var FS_JS = `    fs: (function () {
           body: JSON.stringify(body),
         });
       },
-      // Runtime v2 #2 (, sol P0-1): every ownership-bearing fs op \u2014
-      // including the read-scanners \u2014 DERIVES the acting end-user and forwards
-      // as_user so the route ACL-scopes it. Without this these ops ran
-      // project-wide from any user context (search leaked cross-file snippets,
-      // publicUrl flipped visibility on files the caller did not own). The dev
-      // view (sw.fs.dev.*) forwards no as_user \u2192 project-wide, by design.
+
+
+
+
+
+
       async stat(path) {
         const asUser = await __sw_fsActor();
         const userQ = asUser ? '?as_user=' + encodeURIComponent(asUser) : '';
@@ -11157,10 +11157,10 @@ var FS_JS = `    fs: (function () {
         const dirPath = path && path !== '/' && !path.endsWith('/') ? path + '/' : (path || '/');
         return platformJSON('/v1/fs/' + projectId + dirPath + qs);
       },
-      // diff / glob / search \u2014 CUT from the default user-facing sw.fs (sol
-      // P0-1). Per-user file diff/glob/search is a niche capability we won't
-      // bolt ownership-derivation + route ACL onto; it lives ONLY under
-      // sw.fs.dev.* with project authority. Model per-user data in sw.db.
+
+
+
+
       diff(path, opts) {
         if (!__sw_fsIsDev) throw __sw_fsDevOnly('diff');
         opts = opts || {};
@@ -11205,17 +11205,17 @@ var FS_JS = `    fs: (function () {
           body: JSON.stringify(bodyObj),
         });
       },
-      // sw.fs.uploadUrl({ path, maxSize?, contentType?, expiresIn? })
-      // \u2192 { url, path, expires_at, max_size, content_type,
-      //     owner_subject_type, owner_subject_id }
-      // Mints a short-lived signed URL the browser can PUT bytes to
-      // directly. The browser does NOT need a platform key.
+
+
+
+
+
       async uploadUrl(opts) {
         opts = opts || {};
-        // Runtime v2: upload URLs are ownership-bearing writes too. Derive the
-        // actor from the verified request exactly like write(); caller identity
-        // fields are not copied from opts. The explicit sw.fs.dev view and
-        // server/background contexts derive no actor and remain project-owned.
+
+
+
+
         const asUser = await __sw_fsActor();
         const body = {
           project_id: projectId,
@@ -11230,19 +11230,19 @@ var FS_JS = `    fs: (function () {
           body: JSON.stringify(body),
         });
       },
-      // sw.fs.signedUrl(path, { expiresIn? })
-      //   \u2192 { url, token, path, expires_at, expires_in }
-      // Mints a short-lived signed URL anyone can GET to download the
-      // file. No platform key required for the recipient. Default 1h,
-      // max 7d. Common for email attachments, image previews, share
-      // links.
+
+
+
+
+
+
       async signedUrl(path, opts) {
         opts = opts || {};
-        // Runtime v2: the owner is DERIVED from the request's
-        // verified principal, never a caller { user }/as_user claim. With a
-        // verified app-user the link is minted only if that end-user owns the
-        // file; in a server/developer context (no app-user) as_user is omitted
-        // and full backend access is preserved.
+
+
+
+
+
         const asUser = await __sw_fsActor();
         const body = {
           path: __sw_fsPath(path),
@@ -11254,22 +11254,22 @@ var FS_JS = `    fs: (function () {
           body: JSON.stringify(body),
         });
       },
-      // sw.fs.public_url(path, opts?) \u2192 { path, public_url, content_type, size_bytes, visibility }
-      // Returns a file's permanent, unauthenticated public URL.
-      // SECURITY: asking for the URL no longer silently makes a
-      // PRIVATE file world-readable. For an already-public file it just returns
-      // the URL. For a private file you must opt in to publishing:
-      //   sw.fs.public_url(path, { makePublic: true })
-      // Without the opt-in a private file throws FILE_PRIVATE and stays private.
-      // For a time-limited link to a private file WITHOUT exposing it, use
-      // sw.fs.signedUrl(path) instead.
-      // public_url / publicUrl \u2014 user-scoped in the default sw.fs (sol round 5
-      // carve-out). makePublic FLIPS visibility (a mutation); the DERIVED owner
-      // is forwarded and the route enforces authorizeFileMutation (owner-only)
-      // on the flip, so an end-user can only publish a file THEY own. This is
-      // the correct fix for the original round-1 finding (not hiding it behind
-      // dev). In sw.fs.dev.* the actor is null \u2192 project-wide, as with the other
-      // dev ops.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
       async public_url(path, opts) {
         opts = opts || {};
         const makePublic = opts.makePublic === true || opts.make_public === true || opts.public === true;
@@ -11281,14 +11281,14 @@ var FS_JS = `    fs: (function () {
       publicUrl(path, opts) {
         return this.public_url(path, opts);
       },
-      // sw.fs.setOwner(path, user)
-      //   \u2192 { path, owner_subject_type, owner_subject_id }
-      // Assigns (or transfers) a PRIVATE file to a single end-user so only that
-      // app_user can read it \u2014 via sw.fs.read(path, { user }) /
-      // sw.fs.signedUrl(path, { user }). Pass null to reset ownership back to
-      // the project. The ACL applies to private files only.
-      // sw.fs.server.setOwner(path, user, { collection, group? }) adopts an
-      // existing file under a declared collection's folder into it.
+
+
+
+
+
+
+
+
       async setOwner(path, user, opts) {
         let owner = user ?? null;
         if (owner && typeof owner === 'object' && typeof owner.id === 'string') {
@@ -11300,11 +11300,11 @@ var FS_JS = `    fs: (function () {
           err.status = 400;
           throw __sw_markExpected(err);
         }
-        // Ownership transfer is project authority, not an end-user file
-        // mutation. Forward the derived actor so user requests fail closed;
-        // the route permits only a harmless same-owner no-op used by the
-        // generated upload scaffold. Server/background contexts derive no
-        // actor and keep the trusted project-level operation.
+
+
+
+
+
         const asUser = await __sw_fsActor();
         const body = { path: __sw_fsPath(path), owner };
         if (asUser) body.as_user = asUser;
@@ -11317,21 +11317,21 @@ var FS_JS = `    fs: (function () {
           body: JSON.stringify(body),
         });
       },
-      // sw.fs.uploadFromRequest(req, { path, maxBytes?, allowedTypes?, fieldName?, public? })
-      //   \u2192 { url, path, size, contentType, visibility }
-      //
-      // One-call multipart upload handler. Parses multipart/form-data
-      // from the request, validates against the optional limits, writes
-      // to the given path, returns a URL the browser can fetch.
-      // The file is PRIVATE by default \u2014 in that case url is a
-      // short-lived signed URL (anyone with the link can GET it until it
-      // expires, the file itself stays private). Pass { public: true } to
-      // store the file world-readable; only then is url a permanent
-      // public /storage URL. Earlier this always returned a /storage URL
-      // even for the private default, so the link 404'd / 403'd \u2014 the
-      // bytes were never world-readable.
-      // Throws on every failure mode with a stable error code in the
-      // message so the caller can map \u2192 HTTP status.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
       async uploadFromRequest(req, opts) {
         opts = opts || {};
         const path = opts.path;
@@ -11373,7 +11373,7 @@ var FS_JS = `    fs: (function () {
         await this.write(path, bytes, { contentType: fileType, public: makePublic });
         const normalizedPath = path.startsWith('/') ? path : '/' + path;
         if (makePublic) {
-          // World-readable: the permanent public URL actually serves the bytes.
+
           return {
             url: '/storage' + normalizedPath,
             path: normalizedPath,
@@ -11382,9 +11382,9 @@ var FS_JS = `    fs: (function () {
             visibility: 'public',
           };
         }
-        // Private (default): a bare /storage URL would NOT serve this file, so
-        // hand back a short-lived signed URL the caller can use / share until
-        // it expires. The file itself stays private.
+
+
+
         const signed = await this.signedUrl(normalizedPath);
         return {
           url: signed && signed.url ? signed.url : null,
@@ -11395,8 +11395,8 @@ var FS_JS = `    fs: (function () {
         };
       },
         };
-        // The declared file collections door (/__sw/files) forwards through the same verified path:
-        // it acts only as this request's own signed-in user and returns the raw platform response.
+
+
         Object.defineProperty(view, '__sw_collections', {
           enumerable: false,
           value: async function (input, extraHeaders) {
@@ -11416,9 +11416,9 @@ var FS_JS = `    fs: (function () {
         return view;
       }
       const __sw_fs = __sw_makeFs(function () { return __sw_optionalSubject(); }, false);
-      // sw.fs.server is the named bypass: like sw.db.server, every operation
-      // records authority 'server' in the function's logs (operation name only \u2014
-      // never a path or file contents).
+
+
+
       __sw_fs.server = (function (view) {
         Object.keys(view).forEach(function (op) {
           const fn = view[op];
@@ -11430,33 +11430,33 @@ var FS_JS = `    fs: (function () {
         });
         return view;
       })(__sw_makeFs(function () { return null; }, false, true));
-      // The explicit project/developer capability \u2014 as_user always omitted, and
-      // the project-authority scanners (search/diff/glob/public_url) live ONLY
-      // here, never on the default user-facing sw.fs (sol P0-1: cut, not guard).
-      // sol round 6: .dev is attached ONLY when the ENTRYPOINT is structurally
-      // allowed to have it \u2014 run_code, which passes devFsEnabled=true. Every
-      // HTTP-reached context (fetch handlers, and cron/queue/job delivered to
-      // them over HTTP) constructs sw WITHOUT the flag, so .dev is simply never
-      // present \u2014 no header is inspected and there is nothing to replay. A
-      // cron or other trusted background handler uses sw.fs.server for project
-      // files. The default view requires a verified user; project-wide
-      // scanners remain in run_code (FS_DEV_NOT_IN_REQUEST names it).
+
+
+
+
+
+
+
+
+
+
+
       if (devFsEnabled) __sw_fs.dev = __sw_makeFs(function () { return null; }, true, true);
       return __sw_fs;
     })(),
 `;
 var STORAGE_JS = `    storage: (function () {
-      // sw.storage.* was removed when sw.fs replaced the legacy storage
-      // API \u2014 the old storage route now returns 410 GONE (see
-      // worker/src/index.ts). The old shim forwarded to that dead route,
-      // so get()/delete() failed SILENTLY (the 410 response was handed
-      // back as if it were file data) and put() threw an opaque
-      // "storage.put failed: 410". sw.fs is a different, versioned file
-      // store under a different key space, so a silent redirect would
-      // read the WRONG location and miss data written via the old API.
-      // Each method throws one clear, actionable error instead \u2014 the
-      // same immediate-throw shape as the sw.db dev-only shim.
-      //
+
+
+
+
+
+
+
+
+
+
+
       function deny() {
         const err = new Error(
           'sw.storage is removed \u2014 use sw.fs instead. ' +
@@ -11493,14 +11493,14 @@ var EMAIL_JS = `    email: {
         const q = new URLSearchParams({ project_id: projectId, id: String(id || '') });
         return platformJSON('/v1/email/managed-status?' + q.toString());
       },
-      // Scrub before you send: has this ONE address bounced or complained?
-      // \u2192 { address, suppressed, status, last_at, occurrences }.
+
+
       checkSuppression(address) {
         const q = new URLSearchParams({ project_id: projectId, address: String(address || '') });
         return platformJSON('/v1/email/suppression?' + q.toString());
       },
-      // The dead-address list (bounced/complained) to scrub a mailing list in
-      // one call \u2192 { bounces: [{ address, last_status, last_at, occurrences }] }.
+
+
       bounces(opts) {
         opts = opts || {};
         const q = new URLSearchParams({ project_id: projectId });
@@ -11508,8 +11508,8 @@ var EMAIL_JS = `    email: {
         if (opts.limit) q.set('limit', String(opts.limit));
         return platformJSON('/v1/email/bounces?' + q.toString());
       },
-      // Read auth mail sent only to this project's controlled test domain.
-      // Real recipients can never appear here.
+
+
       inbox(address, opts) {
         opts = opts || {};
         const q = new URLSearchParams({ project_id: projectId, address: String(address || '') });
@@ -12643,11 +12643,11 @@ var AGENT_JS = `    agent: (function () {
     })(),
 `;
 var IMAGE_JS = `    image: (function () {
-      // Image transformations \u2014 URL builder. Returns a string URL that
-      // points at Cloudflare's image resizer on the project's domain.
-      // Stick the URL in <img src="..."> or fetch it server-side. No
-      // API call is made by this helper; transformation happens at the
-      // edge when the URL is fetched.
+
+
+
+
+
       const PROJECT_HOST = env.SUBDOMAIN && env.TENANT_DOMAIN
         ? env.SUBDOMAIN + '.' + env.TENANT_DOMAIN
         : null;
@@ -12673,20 +12673,20 @@ var IMAGE_JS = `    image: (function () {
           throw new Error('sw.image.resize: source must be a non-empty URL or path string');
         }
         const optStr = buildOpts(opts);
-        // Absolute URL: use as-is for the source. The cdn-cgi prefix
-        // still needs a host with Image Transformations enabled \u2014 we
-        // use the project's own subdomain.
-        // NOTE: this regex lives inside a template literal; \\/ here
-        // emits / in the bundle, which is what V8 needs to keep the
-        // regex literal valid. A bare / collapses to / and breaks
-        // every customer's bundle (incident: 2026-05-09).
+
+
+
+
+
+
+
         if (/^https?:\\/\\//i.test(source)) {
           if (!PROJECT_HOST) {
             throw new Error('sw.image.resize: project subdomain not available; cannot build transform URL');
           }
           return 'https://' + PROJECT_HOST + '/cdn-cgi/image/' + optStr + '/' + source;
         }
-        // Relative path: assume project subdomain.
+
         if (!PROJECT_HOST) {
           throw new Error('sw.image.resize: project subdomain not available; pass an absolute URL instead');
         }
@@ -12697,21 +12697,21 @@ var IMAGE_JS = `    image: (function () {
       return { resize };
     })(),
 `;
-var AUTH_MANAGED_VISITOR_JS = `      // Visitor identity is declared when the release has visitor-owned tables:
-      // legacy bundles carry the signing key; split bundles carry no key and no
-      // managed binding, so the declaration itself is the signal.
+var AUTH_MANAGED_VISITOR_JS = `
+
+
       function __sw_visitorDeclared() {
         if (env.SW_DB_LAYOUT !== 'split') return !!env.PROJECT_VISITOR_SECRET;
         return __sw_visitorSession.visitorOwnerTables(__sw_jsonParse(env.PROJECT_SCHEMA || '{}'), __sw_jsonParse(env.PROJECT_SCOPES || '{}')).length > 0;
       }
-      // Split storage: the platform runs the same visitor
-      // helpers over its managed ledger with a key it derives itself
-      // (/v1/db/managed/visitor-session). This controller holds only the
-      // browser's ORIGINAL visitor cookie from the immutable snapshot, or a
-      // token the platform issued during this request, and stages exactly the
-      // cookie the platform answers. It keeps the legacy controller's
-      // contract: serialized transitions, cached resolution, a failed claim
-      // poisoning later transitions, peek never issuing.
+
+
+
+
+
+
+
+
       function __sw_managedVisitorController() {
         let token = __sw_readCookie(__sw_authSnapshotRequest.headers.get('cookie'), '__Host-sw_visitor') || null;
         let peeked, resolved, claimFailure;
@@ -12840,8 +12840,8 @@ var AUTH_REFRESH_RESPONSE_JS = `(async function (refresh) {
   try { result = await response.json(); } catch (_) { result = null; }
   if (!response.ok || !result || result.ok === false) {
     const err = __sw_platformError(response, result);
-    // Only definite auth denials from the response are public. Thrown
-    // transport errors and unknown rotation outcomes stay opaque.
+
+
     if (result && result.ok === false &&
         ((response.status === 401 && err.code === 'AUTH_INVALID_CREDS') ||
          (response.status === 403 && err.code === 'AUTH_BANNED'))) {
@@ -14446,9 +14446,9 @@ ${AUTH_MANAGED_VISITOR_JS}      function __sw_visitorController() {
 `;
 var JOBS_JS = `    jobs: {
       async create(opts) {
-        // A row-bound job ({ row: { binding, id } }) acts for the signed-in
-        // user on one declared row, so only that user's own request creates
-        // one: never a job delivery, never a cross-origin cookie request.
+
+
+
         const bound = !!opts && opts.row !== undefined && opts.row !== null;
         if (bound) {
           if (__sw_signedDelivery) {
@@ -14468,9 +14468,9 @@ var JOBS_JS = `    jobs: {
         });
       },
       async status(jobId) {
-        // One encoded segment: a raw id like '../fs/<project>/' was resolved
-        // by URL parsing into another route under the project key. Dot-only
-        // ids survive encoding and would still navigate, so they are refused.
+
+
+
         const id = String(jobId);
         if (id === '.' || id === '..') {
           const err = new Error('sw.jobs.status: job id may not be "." or "..".');
@@ -14542,7 +14542,7 @@ var LOGS_JS = `    logs: {
         }
         return response;
         })();
-        // Protect unawaited delivery without replacing the caller's rejection.
+
         __sw_pendingBackground.push(delivery.then(function () {}, function () {}));
         return delivery;
       },
@@ -14550,33 +14550,33 @@ var LOGS_JS = `    logs: {
       info(msg, data) { return this._send('info', msg, data); },
       warn(msg, data) { return this._send('warn', msg, data); },
       error(msg, data) { return this._send('error', msg, data); },
-      // sw.logs.tail({ limit?, level?, since?, source?, search? }) \u2014 read this
-      // project's OWN recent logs back, in one call, so a script can run an
-      // action then read the logs it produced without a second round-trip
-      // through the dashboard. Reads the same owner-scoped app_logs the
-      // GET /v1/logs read path returns; the runtime key is pinned to this
-      // project, so it can only ever see this project's logs. Both writes and
-      // reads fail loudly: sw.logs.* resolves only after the platform durably
-      // accepts the row into its queue (or direct fallback), and tail() throws
-      // on read failure.
-      //
-      // Read consistency: log writes (sw.logs.* and platform internalLog) are
-      // ingested through a durable queue that batch-inserts, so a line you just
-      // wrote can lag a short window before tail() returns it (pfb
-      // F-LOG-WRITE-READ-GAP). tail() reports only committed rows \u2014 it never
-      // invents or waits on an un-ingested write. Poll briefly if you need
-      // read-your-write.
-      //
-      //   since: epoch-ms number OR ISO-8601 string \u2014 returns logs at/after it.
-      //   level: 'debug' | 'info' | 'warn' | 'error'.   source: filter by source.
-      //   limit: default 50, capped at 500 by the read path.
-      //   trace_id: return ONLY the lines written while handling ONE request.
-      //             Pass sw.trace.id to read back this request's own lines, or
-      //             the id from a report to read back someone else's. Every
-      //             returned line also carries its own trace_id, so one noisy
-      //             log leads straight to the request that produced it.
-      // Returns an array of { id, level, message, data, source, created_at,
-      // trace_id } (newest first).
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
       async tail(opts) {
         opts = opts || {};
         const qs = new URLSearchParams({ project_id: projectId });
@@ -14591,25 +14591,25 @@ var LOGS_JS = `    logs: {
         const d = await platformJSON('/v1/logs?' + qs.toString());
         return (d && d.logs) || [];
       },
-      // sw.logs.trace(traceId) \u2014 the ORDERED PARENT/CHILD OPERATION TREE for
-      // one request: what ran, in what order, how long each step took, which
-      // step called which, and which one failed. One id in, the whole
-      // waterfall out \u2014 no joining log lines by timestamp.
-      //
-      //   const t = await sw.logs.trace(sw.trace.id);
-      //   t.waterfall  // flat, pre-order: read top-to-bottom = the request
-      //                // in the order it happened. Each entry has
-      //                // { name, depth, offset_ms, duration_ms, status }.
-      //   t.tree                // the same spans, nested by parent
-      //   t.slowest_operation   // what to fix first
-      //   t.failed_operations   // what broke
-      //
-      // Omit the argument to read THIS request's own trace. Note a request's
-      // own spans are written after its response flushes, so calling this on
-      // your own in-flight id returns { found: false } \u2014 pass an id from an
-      // EARLIER request (a log line, an error row, an X-Trace-Id header).
-      // found:false always carries a reason string; an unstored trace never
-      // looks the same as a wrong id.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
       async trace(traceId) {
         const id = traceId || (sw.trace && sw.trace.id);
         if (!id) {
@@ -14624,10 +14624,10 @@ var LOGS_JS = `    logs: {
 var ANALYTICS_JS = `    analytics: {
       async track(event, opts) {
         opts = opts || {};
-        // When collection is allowed, attribution is platform-derived. A verified
-        // app-user becomes the subject; other work stays project-level.
-        // Identity-looking fields in opts are not forwarded.
-        // Choice comes from the immutable original request, never opts or app-mutated headers.
+
+
+
+
         const choices = (__sw_authSnapshotRequest.headers.get('cookie') || '').split(';').map(part => part.trim()).filter(part => part.indexOf('__Host-sw_analytics_choice=') === 0);
         const choice = choices.length === 1 ? choices[0].slice('__Host-sw_analytics_choice='.length) : null;
         const choiceHeaders = choice ? { 'X-Somewhere-Analytics-Choice': choice } : {};
@@ -14659,14 +14659,14 @@ var ANALYTICS_JS = `    analytics: {
       },
     },
 
-    // sw.render.{screenshot,pdf} \u2014 when storage opt is set, returns a
-    // JSON envelope { storage_path, size_bytes, content_type }; without
-    // storage, returns the raw fetch Response so callers can stream
-    // the binary out (e.g. to the browser).`;
+
+
+
+`;
 var RENDER_JS = `    render: (function () {
-      // A storage call from a signed-in visitor carries the visitor's original
-      // credential, as sw.fs does, so the platform can verify who the file
-      // belongs to. Without a visitor nothing changes.
+
+
+
       async function __sw_renderStorageHeaders() {
         const subject = await __sw_optionalSubject();
         return subject ? __sw_runtimeSubjectHeaders('X-Somewhere-Fs-Authority', 'none') : {};
@@ -14683,8 +14683,8 @@ var RENDER_JS = `    render: (function () {
           let msg = 'screenshot failed: ' + r.status;
           let code;
           try { const j = await r.json(); if (j && j.error) code = j.error; if (j && j.message) msg = j.message; } catch { /* noop */ }
-          // 402 INSUFFICIENT_BALANCE is end-user-triggerable \u2014 keep the
-          // real code/status for logging but neutralize the message.
+
+
           if (r.status === 402 && code === 'INSUFFICIENT_BALANCE') {
             msg = 'This feature is temporarily unavailable; a later request can succeed.';
           }
@@ -14703,8 +14703,8 @@ var RENDER_JS = `    render: (function () {
           let msg = 'pdf failed: ' + r.status;
           let code;
           try { const j = await r.json(); if (j && j.error) code = j.error; if (j && j.message) msg = j.message; } catch { /* noop */ }
-          // 402 INSUFFICIENT_BALANCE is end-user-triggerable \u2014 keep the
-          // real code/status for logging but neutralize the message.
+
+
           if (r.status === 402 && code === 'INSUFFICIENT_BALANCE') {
             msg = 'This feature is temporarily unavailable; a later request can succeed.';
           }
@@ -14737,12 +14737,12 @@ var SEARCH_JS = `    search: {
         return platformJSON('/v1/search/index/' + encodeURIComponent(name) + '?project_id=' + encodeURIComponent(projectId), { method: 'DELETE' });
       },
       upsert(opts) {
-        // Inside a job or cron delivery the write names its job, so once the
-        // job is cancelled or finished its later batches are refused instead
-        // of re-adding items the app already removed. The id is
-        // the delivery's own job header (job tiers, container and agent steps
-        // all send it), never the message-id fallback of invocationId, and only
-        // in the shapes the platform mints: job_ + 16 or 32 lowercase hex.
+
+
+
+
+
+
         const deliveredJobId = __sw_signedDelivery && (__sw_signedDelivery.source === 'job' || __sw_signedDelivery.source === 'cron')
           ? __sw_internalInvocationRequest.headers.get('X-Somewhere-Job-Id') : null;
         const fence = deliveredJobId && /^job_(?:[a-f0-9]{16}|[a-f0-9]{32})$/.test(deliveredJobId) ? deliveredJobId : null;
@@ -14766,11 +14766,11 @@ var SEARCH_JS = `    search: {
         });
       },
       async remove(opts) {
-        // POST /v1/search/remove accepts at most 1000 ids per request (its documented limit). A larger set is
-        // removed in sequential batches of that size. The batches are NOT one atomic removal:
-        // the first failed batch stops the rest, is never retried here, and the thrown error reports which ids
-        // are confirmed removed, which are unconfirmed (that batch may or may not have applied) and which were
-        // not attempted. Success is returned only when every batch is confirmed.
+
+
+
+
+
         const ids = opts && Array.isArray(opts.ids) ? opts.ids : null;
         const BATCH = 1000;
         if (!ids || ids.length <= BATCH) {
@@ -14785,8 +14785,8 @@ var SEARCH_JS = `    search: {
           try {
             last = await platformJSON('/v1/search/remove', { method: 'POST', body: JSON.stringify({ ...opts, ids: batch, project_id: projectId }) });
           } catch (err) {
-            // A 4xx is a refusal before any mutation (that batch was not removed). Anything else (an unconfirmed
-            // removal, a 5xx, a lost reply) leaves that batch's outcome unknown.
+
+
             const status = err && typeof err.status === 'number' ? err.status : null;
             const definite = status !== null && status >= 400 && status < 500 && !(err && err.code === 'SEARCH_REMOVE_UNCONFIRMED');
             const failure = new Error(removed > 0
@@ -14850,11 +14850,11 @@ var INBOX_JS = `    inbox: (function () {
           async createAddress(opts) {
             opts = __sw_inboxCleanOpts(opts);
             const authority = await requestAuthority();
-            // Preserve the API's mailbox kind. The authority header above, not
-            // credential absence, decides whether this is an app-user write,
-            // an explicit project-runtime write, or an unauthenticated request.
-            // The route rejects the last case; it never silently changes an app
-            // mailbox into an admin mailbox.
+
+
+
+
+
             const body = { ...opts, kind: projectMode ? 'admin' : 'app', project_id: projectId };
             return platformJSON('/v1/inbox/addresses', {
               method: 'POST',
@@ -14876,8 +14876,8 @@ var INBOX_JS = `    inbox: (function () {
             if (opts.unread) params.push('unread=1');
             if (opts.q) params.push('q=' + encodeURIComponent(String(opts.q)));
             if (opts.include_spam) params.push('include_spam=1');
-            // Opaque server-issued next_cursor, passed back unchanged; the API
-            // binds it to this project, address and filters (INVALID_CURSOR otherwise).
+
+
             if (opts.cursor) params.push('cursor=' + encodeURIComponent(String(opts.cursor)));
             return platformJSON('/v1/inbox?' + params.join('&'), { headers: await headers() });
           },
@@ -14886,8 +14886,8 @@ var INBOX_JS = `    inbox: (function () {
             const qs = opts.include_html ? '?include=html' : '';
             return platformJSON('/v1/inbox/' + encodeURIComponent(id) + qs, { headers: await headers() });
           },
-          // Returns a Response \u2014 caller can stream/redirect/serve. The response
-          // carries X-Somewhere-Ownership-Status because bytes have no JSON body.
+
+
           async raw(id) {
             return platformFetch('/v1/inbox/' + encodeURIComponent(id) + '/raw', { headers: await headers() });
           },
@@ -14949,13 +14949,13 @@ var INBOX_JS = `    inbox: (function () {
         };
       }
 
-      // A verified app-user request is subject-scoped. A request with no
-      // verified principal is explicitly labelled unauthenticated; omission is
-      // never interpreted as project authority. Server code that deliberately
-      // needs project scope uses sw.inbox.project below.
+
+
+
+
       const userInbox = __sw_makeInbox(false);
-      // Deliberate trusted cross-user/admin path. It never impersonates a user,
-      // and app mail creation is unavailable here (createAddress forces admin).
+
+
       const projectInbox = __sw_makeInbox(true);
       projectInbox.assignLegacyOwner = function (addressId, appUserId) {
         return platformJSON('/v1/inbox/addresses/' + encodeURIComponent(addressId) + '/ownership', {
@@ -14988,13 +14988,13 @@ var INBOX_JS = `    inbox: (function () {
       return userInbox;
     })(),
 
-    // sw.connect.* \u2014 read-side third-party connections.
-    // Opposite of sw.payments: read another account's data, don't accept money.`;
+
+`;
 var CONNECT_JS = `    connect: {
       stripe: {
-        // Returns { url } \u2014 send the creator's browser there to authorize
-        // read-only access to their existing Stripe. opts.return_url is where
-        // Stripe bounces them back (gets ?connect=success|error appended).
+
+
+
         connect(opts) {
           opts = opts || {};
           return platformJSON('/v1/connect/stripe/connect', {
@@ -15002,16 +15002,16 @@ var CONNECT_JS = `    connect: {
             body: JSON.stringify({ project_id: projectId, return_url: opts.return_url || opts.returnUrl }),
           });
         },
-        // { connected, account_id, scope, status, sync_error, connected_at, updated_at }
-        // status is \`syncing\` until the initial subscriber cache is durable,
-        // and \`error\` when the cache is stale/failed; subscribers() fails loud
-        // in either state instead of returning a misleading empty list.
+
+
+
+
         status() {
           return platformJSON('/v1/connect/stripe/status?project_id=' + encodeURIComponent(projectId));
         },
-        // { data: [{ email, tier, status, current_period_end, ... }], next_cursor,
-        //   sync_status: 'connected', updated_at }
-        // Reads the platform-cached list (kept fresh by the Connect webhook).
+
+
+
         subscribers(opts) {
           opts = opts || {};
           const params = new URLSearchParams({ project_id: projectId });
@@ -15078,9 +15078,9 @@ var PAYMENTS_JS = `    async quote(resource, range, opts) {
         const slotEnv = opts.env || projectEnv;
         const headers = {};
         if (opts.row !== undefined) {
-          // A row-bound checkout acts as the signed-in user of this live release; the platform
-          // verifies the app token and the release attestation. Never a job proof.
-          // It holds the row's one checkout slot, so a cross-site cookie request may not start it.
+
+
+
           __sw_enforceAmbientCookieCsrf();
           if (!env.SW_EXECUTION_ATTESTATION) {
             const err = new Error('sw.payments.checkout: deploy this app before using a row-bound checkout.');
@@ -15100,8 +15100,8 @@ var PAYMENTS_JS = `    async quote(resource, range, opts) {
         }
         if (opts.row === undefined && opts.metadata && typeof opts.metadata === 'object'
             && Object.prototype.hasOwnProperty.call(opts.metadata, 'app_user_id')) {
-          // A plan checkout for an app user: the platform grants it only to this
-          // request's verified signed-in user, so carry that subject's proof.
+
+
           Object.assign(headers, await __sw_runtimeSubjectHeaders('X-Somewhere-Payments-Authority', 'none'));
         }
         return __sw_afterBillingChange(platformJSON('/v1/payments/checkout', {
@@ -15110,10 +15110,10 @@ var PAYMENTS_JS = `    async quote(resource, range, opts) {
           body: JSON.stringify({ ...opts, project_id: projectId, env: slotEnv }),
         }));
       },
-      // checkoutForUser(opts) \u2014 Runtime v2: the app_user is
-      // DERIVED from the request's verified principal, never a caller-passed id
-      // (which could bind a checkout to another user's account). Fail-closed.
-      // The merchant checkout() above stays a service op on the same route.
+
+
+
+
       async checkoutForUser(opts) {
         opts = opts || {};
         if (!opts.plan) {
@@ -15173,14 +15173,14 @@ var PAYMENTS_JS = `    async quote(resource, range, opts) {
           }),
         }));
       },
-      // portalForUser(opts) \u2014 Runtime v2: the app_user is DERIVED from the
-      // request's verified principal, never caller-supplied. Fail-closed. The
-      // merchant portal() above (customer_id) stays a service op.
+
+
+
       async portalForUser(opts) {
         opts = opts || {};
         const userId = await __sw_requireSubject('sw.payments.portalForUser');
         const env = opts.env || projectEnv;
-        // The platform opens a portal for an app user only with that user's verified proof.
+
         const headers = await __sw_runtimeSubjectHeaders('X-Somewhere-Payments-Authority', 'none');
         return __sw_afterBillingChange(platformJSON('/v1/payments/portal', {
           method: 'POST',
@@ -15193,9 +15193,9 @@ var PAYMENTS_JS = `    async quote(resource, range, opts) {
           }),
         }));
       },
-      // subscriptionForUser / cancelForUser \u2014 the signed-in user's own plan subscription for this
-      // project and env. No user, customer or subscription argument: the platform selects it from
-      // the verified subject this request proves.
+
+
+
       async subscriptionForUser(opts) {
         opts = opts || {};
         await __sw_requireSubject('sw.payments.subscriptionForUser');
@@ -15206,7 +15206,7 @@ var PAYMENTS_JS = `    async quote(resource, range, opts) {
       },
       async cancelForUser(opts) {
         opts = opts || {};
-        // It changes the user's billing, so a cross-site cookie request may not start it.
+
         __sw_enforceAmbientCookieCsrf();
         await __sw_requireSubject('sw.payments.cancelForUser');
         const env = opts.env || projectEnv;
@@ -15242,10 +15242,10 @@ var BILLING_JS = `    billing: {
       plans() {
         return platformJSON('/v1/entitlements/plans?project_id=' + encodeURIComponent(projectId));
       },
-      // has(feature) \u2014 Runtime v2: the subject is DERIVED from the request's
-      // verified principal, never a caller-passed id. Checking
-      // another user's entitlements is a server concern (raw /v1/entitlements),
-      // not this end-user gate.
+
+
+
+
       async has(feature) {
         if (!feature) {
           const err = new Error('sw.billing.has: feature is required');
@@ -15382,7 +15382,7 @@ var TASKS_JS = `    tasks: (() => {
         return { data: data.data, page: data.page };
       }
       return {
-      // sw.tasks.create({ title, description?, status?, priority?, assignee?, labels?, due_at?, area?, parent_id? })
+
       create(opts) {
         opts = opts || {};
         return platformJSON('/v1/tasks', {
@@ -15390,8 +15390,8 @@ var TASKS_JS = `    tasks: (() => {
           body: JSON.stringify({ ...opts, project_id: projectId }),
         });
       },
-      // Preserve the existing array/full-list defaults. listPage opts into bounded reads.
-      // Pass parent_id: 'null' to fetch only top-level tasks.
+
+
       list(opts) {
         const q = listQuery(opts);
         if (!q.has('view')) q.set('view', 'full');
@@ -15403,34 +15403,34 @@ var TASKS_JS = `    tasks: (() => {
       overview(opts) {
         return platformJSON('/v1/tasks/overview?' + queryOptions(opts, ['area', 'section', 'cursor']));
       },
-      // Preserve full detail by default. Request current/history/field for bounded reads.
+
       get(id, opts) {
         const q = queryOptions(opts, ['view', 'kind', 'field', 'event_id', 'cursor', 'limit', 'offset']);
         if (!q.has('view')) q.set('view', 'full');
         return platformJSON('/v1/tasks/' + encodeURIComponent(id) + '?' + q);
       },
-      // sw.tasks.update(id, { title?, description?, status?, priority?, assignee?, labels?, due_at?, area?, parent_id? })
+
       update(id, opts) {
         return platformJSON('/v1/tasks/' + encodeURIComponent(id), {
           method: 'PATCH',
           body: JSON.stringify({ ...(opts || {}), project_id: projectId }),
         });
       },
-      // sw.tasks.delete(id)
+
       delete(id) {
         return platformJSON('/v1/tasks/' + encodeURIComponent(id) + '?project_id=' + encodeURIComponent(projectId), { method: 'DELETE' });
       },
-      // sw.tasks.comment(id, body, author?)
+
       comment(id, body, author) {
         return platformJSON('/v1/tasks/' + encodeURIComponent(id) + '/comments', {
           method: 'POST',
           body: JSON.stringify({ project_id: projectId, body: body, ...(author ? { author: author } : {}) }),
         });
       },
-      // sw.tasks.settings.get() / sw.tasks.settings.update({ webhook_url?, notify_email? })
-      // \u2014 webhook_secret is returned exactly once when first set; store it
-      // server-side to verify the X-Somewhere-Signature header on incoming
-      // task webhook POSTs.
+
+
+
+
       settings: {
         get() {
           return platformJSON('/v1/tasks/settings?project_id=' + encodeURIComponent(projectId));
@@ -15495,11 +15495,11 @@ var CALENDAR_JS = `    calendar: {
         });
       },
       cancel(idOrOpts, opts) {
-        // Paid cancellations expose reservation.cancellation_status as
-        // \`refund_pending\`, \`refund_succeeded\`, \`refund_failed\`, or
-        // \`refund_unknown\`, plus cancellation_refund_intent_id/error. The
-        // reservation leaves active state before money moves; retry the same
-        // cancel call to reconcile a pending/unknown durable refund intent.
+
+
+
+
+
         const body = typeof idOrOpts === 'string'
           ? { ...(opts || {}), reservation_id: idOrOpts }
           : { ...(idOrOpts || {}) };
@@ -15599,21 +15599,21 @@ var CALENDAR_JS = `    calendar: {
     },
 `;
 var RATE_LIMIT_JS = `    rateLimit: {
-      // sw.rateLimit.check(key, max, windowSeconds) \u2192 { allowed, remaining, reset, ... }
-      // Fixed-window counter, scoped per (project, key). On allowed=false the
-      // caller should return 429.
-      //
-      // The platform's counter is the only source of truth. A warm instance
-      // that already holds the counter's answer for this key in the current
-      // window decides the next request from it and records the request after
-      // the response. It waits for the counter whenever it holds no answer for
-      // the current window, when the budget is nearly spent, while 4 of its
-      // requests are still unrecorded, or after a failed record. A window
-      // therefore admits at most the limit plus 4 per instance serving the
-      // key, and a spent limit answers 429 for the rest of its window.
+
+
+
+
+
+
+
+
+
+
+
+
       async check(key, max, windowSeconds) {
-        // A handler check runs with no rate-limit store. It reports the limit
-        // as not evaluated and lets the handler run; the live route enforces it.
+
+
         if (env.DRAFT_INLINE_CHECK === '1') {
           console.log('Rate limit (' + max + ' per ' + windowSeconds + 's) not evaluated: a handler check does not count requests. Your live route enforces it.');
           return {
@@ -15654,8 +15654,8 @@ var RATE_LIMIT_JS = `    rateLimit: {
     },
 `;
 var WEB_JS = `    web: {
-      // sw.web.scrape(url, opts?) \u2014 fetch a URL, return its content as
-      // markdown by default. opts: { formats?, only_main?, wait_for? }
+
+
       scrape(url, opts) {
         opts = opts || {};
         return platformJSON('/v1/web/scrape', {
@@ -15669,9 +15669,9 @@ var WEB_JS = `    web: {
           }),
         });
       },
-      // sw.web.search(query, opts?) \u2014 search the public web by keyword.
-      // Returns { query, results: [{ url, title, description, age, source }], count }
-      // opts: { count?, country?, freshness?, safesearch? }
+
+
+
       search(query, opts) {
         opts = opts || {};
         return platformJSON('/v1/web/search', {
@@ -15688,23 +15688,23 @@ var WEB_JS = `    web: {
       },
     },
 
-    // sw.notifications \u2014 unified notify primitive.
-    // Fans out across the channels the app uses: push (sw.push), the
-    // app's own in-app bell (a _notifications table in the project DB,
-    // auto-created on first use), and optionally email when the dev
-    // passes an explicit email address. Safe to call from an LLM tool
-    // \u2014 write your own dedup if you need it; this layer is the
-    // primitive, not the policy.`;
+
+
+
+
+
+
+`;
 var NOTIFICATIONS_JS = `    notifications: (function () {
-      // Direct DB binding for the bell store. Each IIFE binds
-      // its own copy \u2014 mirrors ai.ts / auth.ts \u2014 because fragments are
-      // separate closures; without this every bell method ReferenceErrors.
+
+
+
       const DB = env.PROJECT_DB;
       const TABLE_SQL = "CREATE TABLE IF NOT EXISTS _notifications (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, title TEXT, body TEXT, url TEXT, read INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL); CREATE INDEX IF NOT EXISTS idx_notifications_user ON _notifications(user_id, created_at DESC);";
       let ensured = false;
-      // Split database layouts (every managed-data project) never bind
-      // PROJECT_DB. Their bell rows live in the platform inbox instead
-      // (routes/app-notifications.ts); legacy layouts keep _notifications.
+
+
+
       const PLATFORM_INBOX = env.SW_DB_LAYOUT === 'split';
       const INBOX_ROUTE = '/v1/app-notifications';
       async function inboxHeaders() {
@@ -15724,8 +15724,8 @@ var NOTIFICATIONS_JS = `    notifications: (function () {
         if (ensured) return;
         if (!DB || typeof DB.exec !== 'function') return;
         try { await DB.exec(TABLE_SQL); ensured = true; } catch (err) {
-          // exec doesn't support multi-statement on some D1 versions;
-          // try one at a time.
+
+
           try {
             await DB.prepare("CREATE TABLE IF NOT EXISTS _notifications (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, title TEXT, body TEXT, url TEXT, read INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL)").run();
             await DB.prepare("CREATE INDEX IF NOT EXISTS idx_notifications_user ON _notifications(user_id, created_at DESC)").run();
@@ -15737,10 +15737,10 @@ var NOTIFICATIONS_JS = `    notifications: (function () {
       }
 
       return {
-        // send(userId, { title, body?, url?, email?, channels? }) \u2192
-        // { bell?, push?, email? } with per-channel result or error.
-        // channels defaults to ['bell','push']. Pass channels:['email']
-        // (with email:'addr') to send only email, etc.
+
+
+
+
         async send(userId, opts) {
           opts = opts || {};
           if (!userId) {
@@ -15821,10 +15821,10 @@ var NOTIFICATIONS_JS = `    notifications: (function () {
           return results;
         },
 
-        // Bell-only SELF-SERVICE helpers (Runtime v2, ): the
-        // recipient is DERIVED from the request's verified principal, never a
-        // caller-passed id. No verified user fails closed (AUTH_REQUIRED) \u2014
-        // never a silent empty result that could mask a missing session.
+
+
+
+
         async list(opts) {
           opts = opts || {};
           const userId = await __sw_requireSubject('sw.notifications.list');
@@ -15856,10 +15856,10 @@ var NOTIFICATIONS_JS = `    notifications: (function () {
           ).bind(String(userId)).first();
           return r && typeof r.n === 'number' ? r.n : 0;
         },
-        // markRead(notificationId) \u2014 Runtime v2 closes the row-id-only hole:
-        // any caller with a bell-row id could previously flip ANOTHER user's
-        // notification. The UPDATE is now constrained to user_id = the verified
-        // recipient, so a foreign id simply matches nothing (0 changes).
+
+
+
+
         async markRead(notificationId) {
           if (!notificationId) return { ok: false, error: 'notificationId required' };
           const userId = await __sw_requireSubject('sw.notifications.markRead');
@@ -15896,8 +15896,8 @@ var NOTIFICATIONS_JS = `    notifications: (function () {
     })(),
 `;
 var PUSH_JS = `    push: (function () {
-      // The signed-in user of THIS request owns the device. The platform
-      // re-verifies the carried session; no argument can name a user.
+
+
       async function __sw_pushDeviceHeaders(label) {
         await __sw_requireSubject(label);
         return Object.assign(
@@ -15918,15 +15918,15 @@ var PUSH_JS = `    push: (function () {
         return q;
       }
       return {
-      // sw.push.vapidPublicKey() \u2192 { vapid_public_key }
-      // The browser passes vapid_public_key to PushManager.subscribe().
+
+
       vapidPublicKey() {
         return platformJSON('/v1/push/vapid-public-key?project_id=' + encodeURIComponent(projectId));
       },
-      // sw.push.subscribe(subscription, { label? }) \u2192 { id, platform, owner, created }
-      // Registers the browser subscription for the signed-in user of this
-      // request. sw.push.subscribe({ test: true }) registers that user's push
-      // test inbox device instead (captured, never sent to a browser).
+
+
+
+
       async subscribe(subscription, opts) {
         opts = opts || {};
         const headers = await __sw_pushDeviceHeaders('sw.push.subscribe');
@@ -15941,8 +15941,8 @@ var PUSH_JS = `    push: (function () {
           )),
         });
       },
-      // sw.push.unsubscribe(endpoint | subscription | { test: true }) \u2192 { deleted }
-      // Removes one of the signed-in user's own devices. Idempotent.
+
+
       async unsubscribe(target) {
         const headers = await __sw_pushDeviceHeaders('sw.push.unsubscribe');
         const isTest = !!(target && typeof target === 'object' && target.test === true);
@@ -15953,10 +15953,10 @@ var PUSH_JS = `    push: (function () {
           body: JSON.stringify(isTest ? { project_id: projectId, test: true } : { project_id: projectId, endpoint }),
         });
       },
-      // sw.push.send({ payload, user_id | endpoint | subscription_id | audience, ttl? })
-      // payload may be a string or any JSON-serializable value. A target key
-      // that is present is always sent, even when its value is null or
-      // undefined, so the platform refuses it instead of widening the send.
+
+
+
+
       send(opts) {
         opts = opts || {};
         const body = { project_id: projectId, payload: opts.payload, ttl: opts.ttl };
@@ -15967,12 +15967,12 @@ var PUSH_JS = `    push: (function () {
         }
         return platformJSON('/v1/push/send', { method: 'POST', body: JSON.stringify(body) });
       },
-      // sw.push.subscriptions({ user_id?, limit? }) \u2192 { subscriptions } (no keys)
+
       subscriptions(opts) {
         return platformJSON('/v1/push/subscriptions' + __sw_pushQuery(opts));
       },
-      // sw.push.deliveries({ user_id?, subscription_id?, limit? }) \u2192 { deliveries }
-      // Newest first, seven days kept. Test-inbox deliveries include payload.
+
+
       deliveries(opts) {
         return platformJSON('/v1/push/deliveries' + __sw_pushQuery(opts));
       },
@@ -15999,8 +15999,8 @@ var ROOMS_JS = `    rooms: (function () {
         const staged = typeof __sw_visitorSessionToken === 'function' ? __sw_visitorSessionToken() : null;
         return staged || __sw_readCookie(__sw_authSnapshotRequest.headers.get('cookie'), '__Host-sw_visitor') || null;
       }
-      // The verified person of this request, carried the way every user-owned
-      // surface carries it. The platform re-verifies; nothing here is trusted.
+
+
       async function __sw_roomsCallerHeaders(label, issueVisitor) {
         if (__sw_signedDelivery || __sw_hasRuntimeProjectAuthority()) {
           throw __sw_roomsError('ROOM_NO_CALLER', label + ' acts as the person who made this request, and this request has none (a job, schedule or server call). Use sw.rooms.server.' + label.split('.').pop() + ' for platform authority.', 403);
@@ -16011,8 +16011,8 @@ var ROOMS_JS = `    rooms: (function () {
         }
         let visitor = __sw_roomsVisitorToken();
         if (!visitor && issueVisitor && typeof __sw_resolveVisitorIdentity === 'function') {
-          // The ticket door gives a first-time anonymous visitor a session when the
-          // app declares visitor identity, so the person is the same on reconnect.
+
+
           await __sw_resolveVisitorIdentity(); visitor = __sw_roomsVisitorToken();
         }
         if (visitor) return { 'X-Somewhere-Rooms-Authority': 'visitor', 'X-Sw-Visitor-Session': visitor };
@@ -16094,8 +16094,8 @@ var ROOMS_JS = `    rooms: (function () {
       const __sw_rooms = Object.assign(__sw_roomsOps('sw.rooms', '/v1/rooms/', function (label) { return __sw_roomsCallerHeaders(label, false); }), {
         server: Object.freeze(__sw_roomsOps('sw.rooms.server', '/v1/rooms/server/', __sw_roomsServerHeaders)),
         event: __sw_roomsEvent,
-        // A live list: the declared composed read plus a refresh subscription
-        // (worker/src/runtime/db.ts __sw_liveDeclare). Rows stay in the read.
+
+
         live: function live(name, read) {
           if (arguments.length !== 2) throw __sw_roomsError('VALIDATION_ERROR', 'sw.rooms.live takes exactly (name, read): a declared name and sw.db.from(...).', 400);
           const declare = __sw_liveDoor.get(sw.db);
@@ -16104,8 +16104,8 @@ var ROOMS_JS = `    rooms: (function () {
         },
       });
       Object.freeze(__sw_rooms);
-      // Platform-private: the browser ticket door (/__sw/rooms/ticket) asks for a
-      // ticket as this request's person. Module-scoped, never reachable from sw.
+
+
       __sw_roomsDoor.set(__sw_rooms, {
         async ticket(table, id) {
           const ref = __sw_roomsRef('joinRoom', table, id);
@@ -16116,13 +16116,13 @@ var ROOMS_JS = `    rooms: (function () {
     })(),
 `;
 var CONTEXT_TAIL_JS = `  };
-  // sw.realtime is RETIRED. There is no namespace: the property
-  // is a non-enumerable accessor, so it never appears on Object.keys(sw), in a
-  // catalog, or in a runtime type. Reaching for it throws a typed, documented
-  // error naming the replacement. Without this accessor the access is a bare
-  // "Cannot read properties of undefined (reading 'publish')" TypeError that
-  // teaches nothing. One thrower, mounted on both the
-  // standard sw and the draft proxy, so the answer is identical either way.
+
+
+
+
+
+
+
   function __sw_realtimeRetired() {
     const err = new Error('sw.realtime is not part of the runtime. For browser live updates, declare the read in a function with sw.rooms.live(name, sw.db.from(...)) and subscribe with watchLive from /__sw/rooms/client.js. For durable events and history, write rows with sw.db.');
     err.code = 'REALTIME_RETIRED';
@@ -16130,11 +16130,11 @@ var CONTEXT_TAIL_JS = `  };
     throw __sw_markExpected(err);
   }
   if (isDraftExecution) {
-    // One capability boundary for draft execution. Drafts receive local
-    // computation plus their isolated database/files and diagnostic logs.
-    // Shared/external capabilities stay outside this object; a method whose
-    // name must remain discoverable but whose effect is shared fails with the
-    // same typed draft error.
+
+
+
+
+
     function draftScopeBlocked() {
       const err = new Error('sw.db.scope is unavailable in a draft because scope declarations change shared project configuration. Declare the scope in production code, then open a new draft.');
       err.code = 'DRAFT_SIDE_EFFECT_BLOCKED';
@@ -16178,8 +16178,8 @@ var CONTEXT_TAIL_JS = `  };
       publicUrl: sw.fs.publicUrl,
       setOwner: sw.fs.setOwner,
       uploadFromRequest: sw.fs.uploadFromRequest,
-      // The explicit trusted view, as draftDb keeps sw.db.server. Its transport
-      // carries this draft's identity, so it reaches only the draft file clone.
+
+
       server: sw.fs.server,
     });
     function draftReadNamespace(name, original, methods) {
@@ -16210,21 +16210,21 @@ var CONTEXT_TAIL_JS = `  };
       has: sw.billing.has,
       entitlements: sw.billing.entitlements,
     });
-    // A preview's send is stored in the project's test inbox, never delivered
-    // to a real recipient; the API enforces that on the exact draft channel.
+
+
     const draftEmail = draftReadNamespace('email', sw.email, {
       send: sw.email.send,
     });
-    // A preview's checkout and portal run in test mode; the API refuses shared quotes, bookings and
-    // holds and never delivers their webhooks to the production URL.
+
+
     const draftPayments = draftReadNamespace('payments', sw.payments, {
       checkout: sw.payments.checkout,
       checkoutForUser: sw.payments.checkoutForUser,
       portal: sw.payments.portal,
       portalForUser: sw.payments.portalForUser,
     });
-    // Rooms are a live-app feature: every operation refuses with one typed code,
-    // before any transport, and the real namespace is never reachable here.
+
+
     function draftRoomsUnavailable() {
       const err = new Error('Rooms work on the live app only, not in a preview. Deploy, then open the live app.');
       err.code = 'ROOMS_DRAFT_UNAVAILABLE';
@@ -16233,7 +16233,7 @@ var CONTEXT_TAIL_JS = `  };
       throw err;
     }
     const draftRoomsOps = { act: draftRoomsUnavailable, set: draftRoomsUnavailable, send: draftRoomsUnavailable, get: draftRoomsUnavailable };
-    // A preview still shows a live list's rows; only the subscription is unavailable.
+
     async function draftRoomsLive(name, read) {
       if (arguments.length !== 2) draftRoomsUnavailable();
       const result = await read;
@@ -16242,29 +16242,29 @@ var CONTEXT_TAIL_JS = `  };
     const draftRooms = Object.freeze(Object.assign({}, draftRoomsOps, { server: Object.freeze(Object.assign({}, draftRoomsOps)), event: draftRoomsUnavailable, live: draftRoomsLive }));
     const draftSafe = new Set([
       'project_id', 'subdomain', 'tier', 'env', 'request_id', 'params',
-      // Groups stays discoverable only to return its draft refusal before transport.
+
       'groups',
       'crypto', 'db', 'fs', 'auth', 'billing', 'email', 'payments', 'logs', 'rooms', 'sw', 'ctx',
       '__sw_pendingRefresh', '__sw_pendingCookies', '__sw_pendingBackground',
-      // Response state the shim's attachPendingRefresh reads on every answer (#439). A draft's
-      // read session is inert by construction (context-head: envelope null when isDraftExecution),
-      // so it never issues a header; omitting it threw DRAFT_SIDE_EFFECT_BLOCKED and turned every
-      // draft response into a 409/500 (pfb ticket in the commit).
+
+
+
+
       '__sw_readSession',
-      // The response gate the shim releases after the answer.
-      // The shim READS these off whatever buildPlatformContext returned, which
-      // in a draft is this proxy \u2014 an unlisted name throws from inside the
-      // shim's finally and would replace the draft's own response with a 409.
+
+
+
+
       '__sw_afterResponse', '__sw_releaseAfterResponse', '__sw_nativeConsole',
-      // Tracing is observation, not a side effect: a draft must be able to
-      // read its own trace id, and the request shim must be able to drain its
-      // spans. Omitting these would make the draft proxy throw
-      // DRAFT_SIDE_EFFECT_BLOCKED on every draft request.
+
+
+
+
       'trace', '__sw_trace',
       '__sw_serverTiming',
-      // The handler wrapper reads this on every request to pick the MCP delivery's request. It is never
-      // defined in a draft (app MCP runs only on releases), so the read must yield undefined, not throw
-      // DRAFT_SIDE_EFFECT_BLOCKED for every draft function call.
+
+
+
       '__sw_mcpRequest',
     ]);
     const draftTarget = Object.create(null);
@@ -16307,12 +16307,12 @@ var CONTEXT_TAIL_JS = `  };
   sw.ctx = sw;
   Object.defineProperty(sw, 'realtime', { get: __sw_realtimeRetired, enumerable: false, configurable: false });
 
-  // sol round 6: there is no post-construction "decide the context" step. The
-  // project/developer file view (sw.fs.dev) is CONSTRUCTED at the entrypoint
-  // structurally allowed to have it (run_code, via devFsEnabled) \u2014 see fs.ts and
-  // buildPlatformContext. The function bundle never sets that flag, so no HTTP-
-  // reached context (fetch handlers, cron, queue, job) has dev, and there is no
-  // header to inspect or replay. The round-5 __sw_init classifier is deleted.
+
+
+
+
+
+
   return sw;
 }`;
 var PARTS = [
@@ -17453,8 +17453,8 @@ function deviceLabel() {
   return os ? browser + ' on ' + os : browser;
 }
 
-// navigator.serviceWorker.ready only settles for a worker that controls this
-// page; the push worker deliberately controls none, so wait for it directly.
+
+
 async function activeRegistration() {
   const reg = await navigator.serviceWorker.register(WORKER_URL, { scope: WORKER_SCOPE });
   if (reg.active) return reg;
@@ -17587,7 +17587,7 @@ self.addEventListener('push', function (event) {
   event.waitUntil(Promise.all(work));
 });
 
-// Clicks open same-origin URLs only; anything else opens the app root.
+
 self.addEventListener('notificationclick', function (event) {
   event.notification.close();
   const data = event.notification.data || {};
@@ -17608,8 +17608,8 @@ self.addEventListener('notificationclick', function (event) {
   })());
 });
 
-// The push service rotated this browser's subscription: register the new one
-// for the same signed-in user and drop the old endpoint.
+
+
 self.addEventListener('pushsubscriptionchange', function (event) {
   event.waitUntil((async function () {
     async function door(body) {
@@ -17708,8 +17708,8 @@ const LIVE_PING_MS = 25000;
 const LIVE_PONG_TIMEOUT_MS = 10000;
 const LIVE_SAFETY_REFRESH_MS = 60000;
 const LIVE_RETRY_LIMIT = 6;
-// Refusals that another attempt cannot change: report once, do not retry.
-// The next reconnect, focus or safety refresh still asks again.
+
+
 const LIVE_FINAL = { LIVE_ROLE_REQUIRED: 1, LIVE_MEMBERSHIP_REQUIRED: 1, LIVE_SCOPE_NOT_SUBSCRIBABLE: 1, LIVE_VIEW_NOT_DECLARED: 1, LIVE_VIEW_POLICY_SCOPE_UNSUPPORTED: 1, LIVE_NOT_DECLARED: 1, ROOMS_DRAFT_UNAVAILABLE: 1 };
 
 function liveError(code, message, cause) {
@@ -17736,11 +17736,11 @@ export function watchLive(load, render, onError) {
   let pongTimer = null;
   let reconnectTimer = null;
   let drops = 0;
-  // Set by an account_full control: terminal until the page is deliberately shown again or comes
-  // back online; the automatic safety refresh does not re-ask, so a full account never causes a reconnect storm.
+
+
   let accountFull = null;
-  // Set by an admission_unavailable control: a temporary refusal. The reconnect backs off (never at once) and the
-  // back-off is kept across refused handshakes; only a healthy admission (the socket's first resync) resets it.
+
+
   let refused = null;
 
   function report(err) {
@@ -17786,15 +17786,15 @@ export function watchLive(load, render, onError) {
       let frame = null;
       try { frame = JSON.parse(message.data); } catch (_) { return; }
       if (!frame || frame.type !== 'live_control') return;
-      // resync_required: rows changed, or this socket just went live.
-      // release_changed / access_revoked / reauthorize_required: the socket
-      // closes next; the close handler reconnects through a fresh load.
-      // Only an admitted socket is sent resync_required, so it is the healthy-admission signal that resets back-off.
+
+
+
+
       if (frame.event === 'resync_required') { drops = 0; refused = null; refresh(false); }
       if (frame.event === 'admission_unavailable') refused = { code: frame.code || 'ROOM_ADMISSION_UNAVAILABLE', message: frame.message || 'Live list admission is temporarily unavailable.' };
       if (frame.event === 'account_full') {
         accountFull = { code: frame.code || 'ROOM_ACCOUNT_FULL', message: frame.message || 'This app has reached its limit of people connected at once.' };
-        // Terminal: cancel pending retries and reconnects; an in-flight load will not reconnect either (see refresh).
+
         if (retryTimer !== null) { clearTimeout(retryTimer); retryTimer = null; }
         if (reconnectTimer !== null) { clearTimeout(reconnectTimer); reconnectTimer = null; }
       }
@@ -17803,7 +17803,7 @@ export function watchLive(load, render, onError) {
       if (stopped || generation !== socketGeneration) return;
       pingTimer = setInterval(function () {
         if (stopped || generation !== socketGeneration) return;
-        // A socket that is no longer open is dead even if its close event is late.
+
         if (ws.readyState !== 1) { onClose(); return; }
         try { ws.send(LIVE_PING_FRAME); } catch (_) { onClose(); return; }
         if (pongTimer === null) pongTimer = setTimeout(function () {
@@ -17823,21 +17823,21 @@ export function watchLive(load, render, onError) {
         report(liveError(accountFull.code, accountFull.message));
         return;
       }
-      // An error may leave the socket half-open; close it explicitly so no stale
-      // connection lingers behind the replacement.
+
+
       try { ws.close(1000, 'replaced'); } catch (_) {}
       socket = null;
       liveKey = null;
-      // A fresh load re-checks access and mints a new ticket; it also shows
-      // anything that changed while the socket was down. The first drop
-      // reconnects at once; repeated drops back off and are reported.
+
+
+
       drops += 1;
       const wasRefused = refused;
       refused = null;
       if (wasRefused) report(liveError(wasRefused.code, wasRefused.message));
       else if (drops > 3) report(liveError('LIVE_DISCONNECTED', 'The live connection keeps closing; reconnecting.'));
       if (reconnectTimer !== null) return;
-      // A temporary admission refusal never reconnects at once; the back-off grows across refused handshakes.
+
       const delay = wasRefused ? Math.min(1000 * Math.pow(2, drops - 1), 30000) : drops === 1 ? 0 : Math.min(500 * Math.pow(2, drops - 2), 15000);
       reconnectTimer = setTimeout(function () { reconnectTimer = null; refresh(true); }, delay);
     }
@@ -17861,13 +17861,13 @@ export function watchLive(load, render, onError) {
       render(snapshot && snapshot.data, snapshot);
       const live = snapshot && snapshot.live;
       if (!live || live.state !== 'ready' || typeof live.subscribe_url !== 'string') {
-        // The rows rendered, but nothing will tell this page about changes.
+
         throw liveError((live && live.reason) || 'LIVE_NOT_DECLARED',
           live ? 'The list loaded, but it could not subscribe to changes (' + (live.reason || live.state) + ').'
                : 'load() must return the JSON of a function that returns sw.rooms.live(name, read).');
       }
       failures = 0;
-      // A full account is terminal until a deliberate retry: a load already in flight renders but never reconnects.
+
       if (accountFull) return;
       const nextKey = String(live.release_id) + ':' + String(live.fingerprint);
       if (reconnect || !socket || nextKey !== liveKey) connect(live);
@@ -18096,8 +18096,8 @@ class Room {
     if (this._ping !== null) { clearInterval(this._ping); this._ping = null; }
   }
 
-  // Unanswered operations whose connection is gone: their outcome is unknown.
-  // Never re-sent; the caller gets the fresh state with the refusal.
+
+
   _failUnanswered(reasonCode) {
     const state = this.state;
     const unknown = (kind) => roomError('ROOM_OUTCOME_UNKNOWN', 'The connection dropped before the room answered this ' + kind + '. It may or may not have been applied; err.state is the room\\'s current state.', { state: state, version: this.version, cause: reasonCode });
@@ -18132,7 +18132,7 @@ class Room {
         this.people = this._decoratePeople(Array.isArray(frame.people) ? frame.people : []);
         this._failures = 0;
         this._setStatus('open');
-        // Anything unanswered from the previous connection gets this fresh state.
+
         this.state = this._base;
         this._failUnanswered('reconnected');
         this._recompute({ by: null, joined: true });
@@ -18245,7 +18245,7 @@ class Room {
         return this._finish(roomError(finalCode, FINAL_MESSAGE[finalCode]));
       }
       this._setStatus('reconnecting', { code: this._bye || 'dropped' });
-      // expired / app_updated rejoin at once with a fresh ticket; a drop backs off.
+
       if (this._bye === 'expired' || this._bye === 'app_updated') this._connect();
       else this._scheduleRetry();
     };
@@ -18261,9 +18261,9 @@ class Room {
     };
   }
 
-  // Every 4 minutes: a fresh ticket over the open connection. The row's read
-  // rule is evaluated again each time; a refusal means access was removed and
-  // the room closes the connection when the current ticket expires.
+
+
+
   async _renewTicket(generation) {
     try {
       const ticket = await requestTicket(this.table, this.id);

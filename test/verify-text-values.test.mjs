@@ -1,4 +1,4 @@
-// tsk_32e81790 / tsk_3e62d9b5: `verify` text output prints eval values and
+//  / : `verify` text output prints eval values and
 // readable wait steps, and a page wider than the phone viewport is named in
 // the verdict instead of passing silently.
 import test from 'node:test';

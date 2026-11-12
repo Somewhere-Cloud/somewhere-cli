@@ -11,7 +11,7 @@ import { loadConfig, updateTokens } from './config.js';
  *  PoW endpoints) reuse this one env-resolution instead of duplicating it. */
 export const API_BASE_URL = process.env.SOMEWHERE_API_URL?.replace(/\/$/, '') || 'https://api.somewhere.cloud/v1';
 
-/** The dedicated run_code runner worker (somewhere-tech-runner). `somewhere run`
+/** The dedicated run_code runner worker (execution runner). `somewhere run`
  *  MUST hit this host, NOT the /v1 API: the runner is the request ROOT — it
  *  invokes the sandbox, the sandbox fetches the API worker as a LEAF, so there's
  *  no self-loop (CF returns 522 when a worker re-enters itself). There is
@@ -71,9 +71,9 @@ export class ApiClient {
    *  cli-pair access key timed out — and with a stored refresh token, this
    *  swaps in a fresh access key via POST /v1/keys/cli-pair/refresh and
    *  retries ONCE, so a long-lived agent session never logs itself out
-   *  (tsk_3642f3c4). Without a refresh token (older login flows) refreshAccessKey
+   *. Without a refresh token (older login flows) refreshAccessKey
    *  throws a clear SESSION_EXPIRED "run `somewhere login`" error rather than
-   *  letting the opaque 401 propagate (tsk_8ba2113d). */
+   *  letting the opaque 401 propagate. */
   async call<T = unknown>(
     method: string,
     path: string,
@@ -212,7 +212,7 @@ export class ApiClient {
       // stdio-MCP path reached the agent as an opaque "(HTTP 401)" with no hint
       // that `somewhere login` fixes it for good — so the user re-paired every
       // ~24h without knowing why. Surface the cause + the one-line fix instead
-      // (tsk_8ba2113d). Same SESSION_EXPIRED contract as the dead-refresh-token
+      //. Same SESSION_EXPIRED contract as the dead-refresh-token
       // case below: both mean "re-login required".
       throw new CliApiError(
         'SESSION_EXPIRED',
@@ -308,13 +308,13 @@ export class ApiClient {
       // "fetch failed" and buries the real reason (ENOTFOUND,
       // ECONNRESET, UND_ERR_*) in err.cause. Surfacing only the bare
       // message cost a customer an hour of guessing whether it was
-      // auth, payload, or network (pfb_70e9d140c5a0) — name the
+      // auth, payload, or network — name the
       // endpoint and the underlying cause.
       const cause = (err as { cause?: { code?: string; message?: string } }).cause;
       const code = cause?.code;
       // undici's own header/body timeout means the CONNECTION established but the
       // server was slow to respond — NOT the user's network. Common on a first
-      // deploy while the project is provisioned (tsk_896f9c7b). With the matching
+      // deploy while the project is provisioned. With the matching
       // dispatcher above this should rarely fire now, but if it does, say what's
       // actually happening instead of blaming the network.
       if (code === 'UND_ERR_HEADERS_TIMEOUT' || code === 'UND_ERR_BODY_TIMEOUT') {
@@ -346,7 +346,7 @@ export class ApiClient {
     // `X-Request-Id` is the edge ray, `X-Trace-Id` finds the request in our own
     // logs. Read them BEFORE anything can throw, so a failure the CLI cannot
     // classify still hands the developer something we can look up
-    // (tsk_9c5ed7f8 — the sole artefact of one 503 was the word "Unknown").
+    // ( — the sole artefact of one 503 was the word "Unknown").
     const meta: CliApiErrorMeta = {
       requestId: res.headers.get('x-request-id') ?? undefined,
       traceId: res.headers.get('x-trace-id') ?? undefined,
@@ -423,7 +423,7 @@ export class ApiClient {
 
   /** Like call(), but returns the raw response TEXT instead of JSON-parsing it
    *  — for endpoints that legitimately return non-JSON (e.g. a SQL db dump). A
-   *  200 with a non-JSON body is NOT an error (audit #14 / tsk_30633bb3). Used
+   *  200 with a non-JSON body is NOT an error (audit #14 / ). Used
    *  by `somewhere api --raw`. call() is intentionally left untouched so every
    *  existing command keeps its exact behavior. */
   async callRaw(
@@ -548,7 +548,7 @@ export function incompleteResponseFailure(
  * `JSON.parse` succeeded and both fields were absent, so this is structured
  * JSON of a shape the CLI does not know — not an HTML error page, which raises
  * INVALID_RESPONSE and prints its first bytes. Rendering it as the bare string
- * "Unknown error" threw away the only evidence there was (tsk_9c5ed7f8): show
+ * "Unknown error" threw away the only evidence there was: show
  * the status and the body, and let the caller add the correlation ids.
  */
 export function unclassifiedResponseMessage(status: number, body: string): string {
@@ -583,7 +583,7 @@ const UNTYPED_CODES = new Set([
 /**
  * A typed refusal: an HTTP answer that carries an error code (the platform's, or the
  * CLI's own named login state such as SESSION_EXPIRED). Every formatter prints its code
- * and message rather than guessing a cause (tsk_224b77a0): an out-of-date client told
+ * and message rather than guessing a cause: an out-of-date client told
  * "token may be expired" goes to the wrong fix. Null for an untyped answer or no answer.
  */
 export function typedServerError(err: unknown): { code: string; message: string; status: number } | null {

@@ -1,6 +1,6 @@
 # Handoff: CLI exposure of the agent-native tools (browser + deploy oracle)
 
-Lane: **tsk_11fc5c0c** · branch **feat/cli-agent-tools** (off master 0.15.0).
+Lane: **** · branch **feat/cli-agent-tools** (off master 0.15.0).
 Status: **built + tested locally, committed, NOT published.** Founder review required before publish.
 
 ## TL;DR

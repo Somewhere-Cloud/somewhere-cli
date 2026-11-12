@@ -1,5 +1,5 @@
 // Two CLI processes in different project roots share one temp-session sidecar
-// (pfb_29428f76480e). Each loads it, creates its throwaway, then records it.
+//. Each loads it, creates its throwaway, then records it.
 // A stub server holds both processes at a chosen point so the interleaving is
 // deterministic, not timing luck. Local stub only; tokens are never printed.
 import test from 'node:test';

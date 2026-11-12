@@ -11,7 +11,7 @@ import { createHappyPathTemplate } from '../dist/lib/init-template.js';
 import { createGreenTemplate } from '../dist/lib/init-green-template.js';
 import { createFeatureTemplate } from '../dist/lib/init-feature-template.js';
 
-// tsk_8a68dfa2 item 8: deploys skip dotfiles, so a pulled app has no
+//  item 8: deploys skip dotfiles, so a pulled app has no
 // .gitignore and `somewhere typecheck` left src/__somewhere_data.d.ts
 // (~3100 lines) untracked. pull writes the starters' .gitignore when the
 // folder has none, and never touches one that exists.

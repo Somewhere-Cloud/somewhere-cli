@@ -237,7 +237,7 @@ export function buildBrowserBody(
 
   // Action flags and the single-step flags compose into ONE action sequence:
   // --path first, then the actions in the order given, then --wait and --eval
-  // to inspect the result (tsk_ac45ad01).
+  // to inspect the result.
   const sequenced = Boolean(opts.actionSequence?.length);
   const steps: Array<Record<string, unknown>> = [];
   if (!sequenced) {
@@ -273,8 +273,8 @@ export function buildBrowserBody(
   // is an opt-in section; without this the report rendered whatever the
   // response happened to carry, which was nothing: `--wait button --snapshot`
   // matched a button and then printed "dom: 0 interactive elements" on a page
-  // with three of them (tsk_bdd72f02c2), and the default report said the same
-  // about example.com's one link while `--snapshot` said 1 (pfb_57c43192d553).
+  // with three of them, and the default report said the same
+  // about example.com's one link while `--snapshot` said 1.
   // Added last so an explicit `--include` keeps its own order.
   sections.add('dom');
   if (sections.size) body.include = [...sections];
@@ -286,7 +286,7 @@ export function buildBrowserBody(
 }
 
 /** `--auth-user` takes a user id or an email. An email is looked up in the
- *  project's own users and must match exactly one (tsk_ac45ad01). */
+ *  project's own users and must match exactly one. */
 const AUTH_USER_LOOKUP_PAGES = 10;
 
 export async function resolveAuthUser(
@@ -387,7 +387,7 @@ export function stringifyResult(v: unknown): string {
  *
  * The hosted browser puts the value in `value`; the local loopback browser
  * puts it in `result`. Reading only one of them is how `--eval` came back
- * blank in text mode while `--json` showed the answer (pfb_4a4d8dd84186).
+ * blank in text mode while `--json` showed the answer.
  * A multi-line object is indented under the label so every line still belongs
  * to a visible owner.
  */
@@ -442,7 +442,7 @@ export function formatBrowserReport(
   const fr = r.failed_requests ?? [];
   // No map at all is NOT a count of zero. `?? []` collapsed the two, so a
   // response that never carried the section was reported as the factual claim
-  // "0 interactive elements" about a page full of controls (pfb_57c43192d553).
+  // "0 interactive elements" about a page full of controls.
   const dom = Array.isArray(r.dom_outline) ? r.dom_outline : undefined;
 
   const lifecycle = readBrowserLifecycle(r);
@@ -509,7 +509,7 @@ export function formatBrowserReport(
       // VERIFY mode: the image is a file in the project. Lead with the link
       // that OPENS it — a bare storage path reads like a URL and is not one,
       // so the value the command handed back for "here is your screenshot"
-      // could not be used to see it (tsk_70fd0f63a9). The stored path follows,
+      // could not be used to see it. The stored path follows,
       // because that is the durable handle for reading or replacing it later.
       const openable = shot.url ?? shot.path;
       const stored = shot.fs_path;
@@ -598,7 +598,7 @@ async function runLocalBrowserCommand(url: string, opts: BrowserOptions): Promis
   const viewport = opts.viewport === 'mobile' ? VIEWPORTS.mobile : VIEWPORTS.desktop;
   // Say which half is answering BEFORE the run, not after it: a command that
   // prints nothing until it finishes is indistinguishable from a hung one, and
-  // that is exactly how the local path read (tsk_a605ff7b).
+  // that is exactly how the local path read.
   if (!opts.json) console.log(dim(`local browser — this machine, not the platform's — checking ${url}`));
   let report: LocalBrowserReport;
   try {
@@ -827,7 +827,7 @@ export function registerBrowser(program: Command) {
         }
         if (err instanceof CliApiError) {
           // --json carries the platform's code, status, request id, retry
-          // verdict and allowlisted data (tsk_de3c2c25); text keeps its one line.
+          // verdict and allowlisted data; text keeps its one line.
           reportBrowserRefusal(
             `${err.message} ${dim(`[${err.code}${err.statusCode ? `, HTTP ${err.statusCode}` : ''}]`)}`,
             err,

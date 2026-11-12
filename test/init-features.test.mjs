@@ -87,7 +87,7 @@ test('catalog is machine-readable and lists module files from the generator', ()
   assert.equal(catalog.version, 1);
   assert.deepEqual(catalog.modules.map((m) => [m.id, m.requires]), [['auth', []], ['magic-link', ['auth']], ['private-data', ['auth']], ['agent', ['auth']]]);
   assert.ok(catalog.modules[0].files.includes('api/auth/[...path].ts'));
-  // tsk_28753a0e: the /auth/magic landing is part of auth; magic-link adds
+  // : the /auth/magic landing is part of auth; magic-link adds
   // only the link form, inside files auth already writes.
   for (const path of ['src/auth/magic-link.ts', 'src/pages/MagicLinkPage.tsx', 'src/ui/MagicLink.tsx', 'types/magic-link.ts']) {
     assert.ok(catalog.modules[0].files.includes(path), path);
@@ -158,7 +158,7 @@ test('every combination separates types, services, hooks, pages and presentation
     const app = read('src/App.tsx');
     assert.doesNotMatch(app, /fetch\(|<form|<input|somewhere:data/);
     // No whole-page loading screen: before the server answers, the app's frame
-    // renders at once, without account controls (tsk_c09746b9).
+    // renders at once, without account controls.
     assert.match(app, /session\.status === 'loading' \|\| session\.status === 'signing-out'\) \{\n {4}return \(\n {6}<AppShell appName=\{APP_NAME\} homeLink=\{linkTo\(ROUTES\.home\)\} busy>/);
     assert.match(app, /session\.status === 'signed-out'\) return <SignInPage \/>/);
     assert.match(app, /<PrivateRoutes key=\{session\.user\.id\}/, 'private subtree is keyed by the verified user');
@@ -207,7 +207,7 @@ test('views take props only, and both UI modes share pages, hooks and view signa
   }
 });
 
-test('every auth starter routes /auth/magic before the gate; magic-link adds only the link form (tsk_28753a0e)', () => {
+test('every auth starter routes /auth/magic before the gate; magic-link adds only the link form', () => {
   for (const ui of ['styled', 'headless']) {
     const plain = generate('auth', ui);
     const magic = generate('magic-link', ui);
@@ -221,7 +221,7 @@ test('every auth starter routes /auth/magic before the gate; magic-link adds onl
       const hooks = starter.read('src/auth/magic-link.ts');
       assert.equal(hooks.match(/auth\.verifyMagicLink\(/g)?.length, 1, 'one verify call site');
       assert.match(hooks, /sent\.current/, 'the one-time token is sent once, even on a double press');
-      assert.doesNotMatch(hooks, /useEffect/, 'opening the page sends nothing: no effect redeems the token (tsk_74d3bf0e)');
+      assert.doesNotMatch(hooks, /useEffect/, 'opening the page sends nothing: no effect redeems the token');
       assert.match(hooks, /async function confirm\(shown: string\)[^]*auth\.verifyMagicLink\(/, 'only the Continue press verifies');
       assert.match(hooks, /history\.replaceState/, 'the token is removed from the address bar');
       assert.match(starter.read('src/ui/MagicLink.tsx'), /landing\.confirm\(\)/, 'the landing view has the Continue button');
@@ -264,7 +264,7 @@ test('social sign-in carries the provider to /auth/callback, so GitHub and Disco
       if (file.path.endsWith('.md')) continue;
       assert.doesNotMatch(file.content, /README\.md/, `${ui} ${file.path} names README.md`);
     }
-    // Google is on by default (founder task tsk_bfb12a6d); the platform owns the OAuth client.
+    // Google is on by default (founder task ); the platform owns the OAuth client.
     assert.match(starter.read('src/config.ts'), /export const SIGN_IN_PROVIDERS: SignInProvider\[\] = \['google'\];/, `${ui}: Google by default`);
     // With no provider configured the card has no providers slot, so no "or use email" divider.
     const signIn = starter.read('src/pages/SignInPage.tsx');
@@ -283,7 +283,7 @@ test('index.html escapes the app name for text and for the description attribute
   }
 });
 
-test('every auth starter ships password reset: the sign-in link, both pages and both functions (tsk_b15c7c79)', () => {
+test('every auth starter ships password reset: the sign-in link, both pages and both functions', () => {
   for (const ui of ['styled', 'headless']) {
     const starter = generate('auth', ui);
     assert.match(starter.read('src/ui/AuthCard.tsx'), /href="\/forgot-password">Forgot password\?</);
@@ -422,7 +422,7 @@ test('notes service validates, reports zero-change updates and maps a vanished r
   delete globalThis.__notesFixture;
 });
 
-// The typecheck never installs (read-only, pfb_8f0f7cdd04a1); this test installs
+// The typecheck never installs (read-only, ); this test installs
 // the starter's pinned dependencies itself, the way a developer runs npm install.
 const installStarter = (specs, cwd) => {
   const done = spawnSync(process.platform === 'win32' ? 'npm.cmd' : 'npm',
@@ -605,7 +605,7 @@ test('MFA continuation is shared by password, magic-link and invitation landings
     assert.match(starter.read('src/ui/MfaStep.tsx'), /autoComplete="one-time-code"/);
     assert.equal(JSON.parse(starter.read('package.json')).dependencies['@somewhere-cloud/sdk'], '0.14.1', 'the SDK release with resendMfaCode for the emailed sign-in code');
   }
-  // pfb_81de8a132833: the step asks for the emailed 6-digit code and can ask for a new one.
+  // : the step asks for the emailed 6-digit code and can ask for a new one.
   for (const [features, ui] of [['auth','styled'],['magic-link','headless']]) {
     const view = generate(features, ui).read('src/ui/MfaStep.tsx');
     assert.match(view, /6-digit code from the email/);

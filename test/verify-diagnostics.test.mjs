@@ -1,4 +1,4 @@
-// Verify diagnostics (tsk_64e1bf6e2a38425895a1bfed32669501), reproduced from the
+// Verify diagnostics, reproduced from the
 // solo Bookclub r10 evidence (coordination/root-20260926/browser-efficiency-evidence):
 //  - failure 1: two of five signed-out probes returned 401 but were not declared;
 //    the verdict said only "console error … status of 401 (Unauthorized)";
@@ -162,7 +162,7 @@ test('undeclared-status summaries carry no query, fragment, or credential-shaped
   assert.doesNotMatch(report.verdict, /secret|frag|eyJ/);
 });
 
-// pfb_82e8752b7581: desktop and mobile each run the whole flow as their own
+// : desktop and mobile each run the whole flow as their own
 // session against the same live app, so a sign-up step creates the account in
 // one viewport and is refused 409 in the other. The run still fails and the
 // 409 stays reported; the diagnosis says why and never says to declare it.
@@ -254,7 +254,7 @@ test('a viewport that never reached the request is not evidence for duplicate cr
   assert.doesNotMatch(report.verdict + formatVerifyReport(report).join('\n'), /once per viewport|possible cause|created once/);
 });
 
-// Journey 7e6163b7 (tsk_8a68dfa2 item 13): expect_requests {/api/deny, 200} that came back 403
+// Journey 7e6163b7 ( item 13): expect_requests {/api/deny, 200} that came back 403
 // reported only "403 undeclared"; the failed expectation now leads.
 const denyFlow = (expected) => ({
   actions: [{ eval: "fetch('/api/deny').then((r) => r.status)" }],

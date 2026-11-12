@@ -1,4 +1,4 @@
-// tsk_ac45ad01 (CLI half): --path/--wait/--eval compose with action flags,
+//  (CLI half): --path/--wait/--eval compose with action flags,
 // --url with --session is only the start URL (no extra goto), --auth-user
 // resolves an email to exactly one user, and the cron/preview helpers state
 // what they found.
@@ -95,7 +95,7 @@ test('preview link picks the only open preview, a named one, or explains', () =>
   assert.throws(() => choosePreviewCandidate(status, 'draft_z'), /No open preview has preview_session_id draft_z/);
 });
 
-// tsk_7f43965c: hosted sessions belong to the project they were opened for, so
+// : hosted sessions belong to the project they were opened for, so
 // --close names the same project a run would use.
 test('--close with --project closes that project\'s session', () => {
   assert.deepEqual(buildBrowserCloseBody('bob', 'crew', 'linked-app'), { project_id: 'crew', session_id: 'bob', close: true });

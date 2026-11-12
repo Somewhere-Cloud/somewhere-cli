@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 
 // last-run.json keeps the registered command path, the names of the options
 // given, the exit code and the time; never operand or option values, request
-// bodies or command output (pfb_04b5a285eed0). Sentinels match no secret
+// bodies or command output. Sentinels match no secret
 // pattern on purpose: nothing is kept because nothing free-form is recorded.
 const cli = join(dirname(fileURLToPath(import.meta.url)), '../dist/index.js');
 const RESPONSE_SECRET = 'rsp7-plainvalue-QW93';

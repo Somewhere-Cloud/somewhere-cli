@@ -2,7 +2,7 @@
 // answer `reference_check: { status: 'pending' }`. Text output names the
 // existing read that carries the result — the deploy log for this exact
 // version — instead of leaving the user with no way to see it
-// (tsk_8a68dfa2 item 4). Both directions:
+// ( item 4). Both directions:
 //   - pending → one hint whose JSON `call` resolves to the deployed project;
 //   - checked / absent / no version → no hint; --json output is unchanged.
 import test from 'node:test';

@@ -1,4 +1,4 @@
-// tsk_51155c7d: signed out, `somewhere docs <alias>` resolves through the
+// : signed out, `somewhere docs <alias>` resolves through the
 // public manifest's `aliases` — the same names the signed-in docs tool knows —
 // so the starter's `schema-changes` skill name reaches sw.db instead of
 // "No documentation topic". An older manifest without `aliases` behaves as
@@ -95,7 +95,7 @@ test('inherited object names never resolve through aliases', async () => {
   assert.equal(findPublicDocsPage(pages, {}, 'constructor'), undefined);
 });
 
-test('Object.prototype names are unknown topics, never a false network error (tsk_409858c5)', async () => {
+test('Object.prototype names are unknown topics, never a false network error', async () => {
   await withManifest(WITH_ALIASES, async (base) => {
     for (const name of ['constructor', '__proto__', 'toString', 'hasOwnProperty']) {
       const r = await run(['docs', name], base);

@@ -66,7 +66,7 @@ test('detectable clock disagreement or invalid local clock never invents a longe
   assert.equal(formatTempExpiry(expires, 10800, Number.NaN), `Expires at: ${expires} (UTC)`);
 });
 
-test('a run where no browser started is not summarised as "0 failed steps" (Haiku w2-invites, tsk_70d6db11)', () => {
+test('a run where no browser started is not summarised as "0 failed steps" (Haiku w2-invites, )', () => {
   // The w2-invites journey shape: the only segment never started its browser.
   const journey = {
     passed: false, mode: 'journey', steps: [], incomplete: [], refusals: null, browser_runs: 0, cleanup_confirmed: true,
@@ -98,7 +98,7 @@ test('a run where no browser started is not summarised as "0 failed steps" (Haik
   assert.equal(formatVerifySummaryLine(summarizeVerifyReport(pass)), 'Verify PASS: 0 failed steps, 0 refusals, 12 ms in steps; full report saved to --out destination');
 });
 
-test('an existing --out names the next free report path; reports are still never overwritten (Haiku w2/w3, tsk_70d6db11)', () => {
+test('an existing --out names the next free report path; reports are still never overwritten (Haiku w2/w3, )', () => {
   const taken = new Set(['flows/run2-report.json', 'flows/run2-report-2.json']);
   const exists = (p) => taken.has(p);
   assert.equal(nextFreeOutPath('flows/run2-report.json', exists), 'flows/run2-report-3.json', 'skips names already taken');

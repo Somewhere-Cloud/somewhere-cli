@@ -5,7 +5,7 @@ import { cliConfigDir } from './config.js';
 
 /**
  * Which platform consumer contract this CLI implements, and whether the platform it talks to has
- * moved on (tsk_0f3d05b9). `somewhere typecheck` and `somewhere lint` judge a project by the
+ * moved on. `somewhere typecheck` and `somewhere lint` judge a project by the
  * platform code this CLI vendors (runtime/declared-data.cjs, runtime/source-lint.cjs). That
  * bundle carries CONSUMER_CONTRACT { version, digest }; every platform API response announces
  * its own on X-SW-Consumer-Contract. The last announcement per API origin is kept in

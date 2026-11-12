@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-// pfb_e653dbb1fa74: with no stored credential, a deploy that names an existing
+// : with no stored credential, a deploy that names an existing
 // project (--project or a folder link) cannot use a fresh temporary account,
 // which owns no project. It is refused before anything is minted or sent.
 // Legitimate paths keep working: a first unlinked anonymous deploy, and a live

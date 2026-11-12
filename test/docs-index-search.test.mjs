@@ -1,6 +1,6 @@
-// tsk_a86f8a12: bare `somewhere docs` prints the topic index (not the
+// : bare `somewhere docs` prints the topic index (not the
 // 18k-line manual), `somewhere docs search <term>` finds sections, and
-// tsk_f681c871: docs warn when they describe a newer CLI than the one running.
+// : docs warn when they describe a newer CLI than the one running.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';

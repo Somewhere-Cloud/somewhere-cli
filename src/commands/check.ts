@@ -355,7 +355,7 @@ export function registerCheck(program: Command) {
       if (collected.sensitive.length && !opts.json) printSensitiveFiles(collected.sensitive);
       // Same publish surface the deploy uses — `deploy-check` saying "0 errors"
       // while a private note was about to ship is what made this a real
-      // incident, so the check names the held-back files too (tsk_c166924f).
+      // incident, so the check names the held-back files too.
       if (collected.excluded.length && !opts.json) {
         printExcludedFiles(collected.excluded, targetDir);
       }
@@ -447,7 +447,7 @@ export function registerCheck(program: Command) {
         }
         if (err instanceof CliApiError) {
           // The error itself is the cause, so --json carries the platform's
-          // code and ids rather than CLI_ERROR (pfb_3769086f6aa7).
+          // code and ids rather than CLI_ERROR.
           error(
             `${err.message} ${dim(err.statusCode ? `[${err.code}, HTTP ${err.statusCode}]` : `[${err.code}]`)}`,
             err,

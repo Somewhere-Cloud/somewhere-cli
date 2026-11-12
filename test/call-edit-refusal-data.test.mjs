@@ -1,4 +1,4 @@
-// tsk_81dd50f0 follow-up: a typed ordered-edit refusal keeps its handles through
+//  follow-up: a typed ordered-edit refusal keeps its handles through
 // `somewhere call`. The MCP response carries data.edit_index / path / expected /
 // actual / conflicts_with; --json printed the code and message but dropped them,
 // and text output never showed them. Only these validated fields are kept: a

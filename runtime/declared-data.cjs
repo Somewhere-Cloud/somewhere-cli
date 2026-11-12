@@ -6,398 +6,475 @@ var __getOwnPropNames = Object.getOwnPropertyNames;
 var __getProtoOf = Object.getPrototypeOf;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
 var __esm = (fn, res) => function __init() {
-  return fn && (res = (0, fn[__getOwnPropNames(fn)[0]])(fn = 0)), res;
+    return fn && (res = (0, fn[__getOwnPropNames(fn)[0]])(fn = 0)), res;
 };
 var __commonJS = (cb, mod) => function __require() {
-  return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
+    return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
 };
 var __export = (target, all) => {
-  for (var name in all)
-    __defProp(target, name, { get: all[name], enumerable: true });
+    for (var name in all)
+        __defProp(target, name, { get: all[name], enumerable: true });
 };
 var __copyProps = (to, from, except, desc) => {
-  if (from && typeof from === "object" || typeof from === "function") {
-    for (let key of __getOwnPropNames(from))
-      if (!__hasOwnProp.call(to, key) && key !== except)
-        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-  }
-  return to;
+    if (from && typeof from === "object" || typeof from === "function") {
+        for (let key of __getOwnPropNames(from))
+            if (!__hasOwnProp.call(to, key) && key !== except)
+                __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+    }
+    return to;
 };
-var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__getProtoOf(mod)) : {}, __copyProps(
-  // If the importer is in node compatibility mode or this is not an ESM
-  // file that has been converted to a CommonJS file using a Babel-
-  // compatible transform (i.e. "__esModule" has not been set), then set
-  // "default" to the CommonJS "module.exports" for node compatibility.
-  isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
-  mod
-));
+var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__getProtoOf(mod)) : {}, __copyProps(isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target, mod));
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
-
-// worker/src/utils/log-sanitize.ts
 var SENSITIVE_PARAMS, SENSITIVE_PARAM_NAMES;
 var init_log_sanitize = __esm({
-  "worker/src/utils/log-sanitize.ts"() {
-    "use strict";
-    SENSITIVE_PARAMS = [
-      "access_token",
-      "refresh_token",
-      // OAuth callbacks carry one-use credentials even when validation refuses them.
-      "code",
-      "state",
-      // A creator or link secret belongs only in a request body; a stray query copy is never kept.
-      "creator_secret",
-      "secret",
-      "signature",
-      "api_key",
-      "apikey",
-      "token",
-      "key",
-      "sig",
-      // A DSN carries its own password, and percent-encoding hides it from the
-      // Postgres URI rule below. `password` covers the other connection-string
-      // form, `postgres://reader@host/db?password=…`, which has no userinfo
-      // password for that rule to match.
-      "dsn",
-      "password"
-    ];
-    SENSITIVE_PARAM_NAMES = new Set(SENSITIVE_PARAMS);
-  }
+    "worker/src/utils/log-sanitize.ts"() {
+        "use strict";
+        SENSITIVE_PARAMS = [
+            "access_token",
+            "refresh_token",
+            "code",
+            "state",
+            "creator_secret",
+            "secret",
+            "signature",
+            "api_key",
+            "apikey",
+            "token",
+            "key",
+            "sig",
+            "dsn",
+            "password"
+        ];
+        SENSITIVE_PARAM_NAMES = new Set(SENSITIVE_PARAMS);
+    }
 });
-
-// worker/containers/compile/declared-data-contract.cjs
 var require_declared_data_contract = __commonJS({
-  "worker/containers/compile/declared-data-contract.cjs"(exports2, module2) {
-    "use strict";
-    var identifier = /^[a-z_][a-z0-9_]*$/;
-    var types = /* @__PURE__ */ new Set(["integer", "bigint", "number", "text", "boolean", "timestamp", "json", "blob"]);
-    function canonicalBigintText(value) {
-      if (typeof value !== "string" || !/^(0|-?[1-9][0-9]*)$/.test(value)) return false;
-      const digits = value.startsWith("-") ? value.slice(1) : value;
-      const limit = value.startsWith("-") ? "9223372036854775808" : "9223372036854775807";
-      return digits.length < limit.length || digits.length === limit.length && digits <= limit;
-    }
-    function fail(detail) {
-      throw new Error(`Invalid declared data contract: ${detail}`);
-    }
-    function record2(value, name) {
-      if (!value || typeof value !== "object" || Array.isArray(value)) fail(name);
-    }
-    function fields(value, columns, name, empty = false) {
-      if (!Array.isArray(value) || !empty && !value.length) fail(name);
-      const result = [...value];
-      if (result.some((field) => typeof field !== "string" || !columns.has(field)) || new Set(result).size !== result.length) fail(name);
-      return result.sort();
-    }
-    function policy(value, label, edges = 0) {
-      record2(value, label);
-      const keys = Object.keys(value).sort().join(",");
-      if (value.k === "o" && keys === "c,k" && identifier.test(value.c)) return { k: "o", c: value.c };
-      if (value.k === "m" && keys === "k,m") {
-        record2(value.m, label + ".member");
-        const { g, m, u, mg, o, og } = value.m;
-        const memberKeys = Object.keys(value.m).sort().join(",");
-        const grant = memberKeys === "g,m,mg,o,og,u" && og === true && Array.isArray(g) && Array.isArray(mg) && g[0] === "user_id" && mg[0] === "user_id" && (g.length === 1 || g.length === 2 && g[1] !== "user_id" && mg[1] !== "user_id" && mg[1] !== u) && u !== "user_id" && (JSON.stringify(o) === '["read"]' || JSON.stringify(o) === '["read","update"]');
-        if (!["g,m,mg,u", "g,m,mg,o,u"].includes(memberKeys) && !grant || !identifier.test(m) || !identifier.test(u) || !Array.isArray(g) || !g.length || !Array.isArray(mg) || g.length !== mg.length || [...g, ...mg].some((field) => typeof field !== "string" || !identifier.test(field)) || o !== void 0 && (!Array.isArray(o) || JSON.stringify(o) !== JSON.stringify(["read", "create", "update", "delete"].filter((operation) => o.includes(operation))) || !o.includes("read") && (o.includes("update") || o.includes("delete")))) fail(label);
-        const normalizedOperations = o?.length === 4 ? void 0 : o;
-        return { k: "m", m: { g: [...g], m, u, mg: [...mg], ...normalizedOperations !== void 0 ? { o: [...normalizedOperations] } : {}, ...og ? { og: true } : {} } };
-      }
-      if (value.k === "a" && (keys === "k,p" || keys === "k,p,reads" && edges === 0) && Array.isArray(value.p) && value.p.length === 2) {
-        const left = policy(value.p[0], label), right = policy(value.p[1], label);
-        if (left.k !== "o" || !["m", "g", "r"].includes(right.k)) fail(label);
-        if (right.k === "m" && right.m.og && left.c !== "user_id") fail(label);
-        const reads = value.reads === void 0 ? void 0 : branchReads(value.reads, label);
-        return { k: "a", p: [left, right], ...reads ? { reads } : {} };
-      }
-      if (value.k === "n" && keys === "g,k,w") {
-        const gate = policy(value.g, label), who = policy(value.w, label);
-        if (!["m", "g", "r"].includes(gate.k) || !["o", "a"].includes(who.k)) fail(label);
-        if (gate.k === "m" && gate.m.og) fail(label);
-        if (who.k === "a") {
-          const x = who.p[1];
-          if (x.k === "m" && x.m.og) fail(label);
-          const same = x.k === "r" || x.k === "g" && gate.k === "g" && x.c.toLowerCase() === gate.c.toLowerCase() || x.k === "m" && gate.k === "m" && x.m.m.toLowerCase() === gate.m.m.toLowerCase() && x.m.u.toLowerCase() === gate.m.u.toLowerCase() && JSON.stringify(x.m.g.map((c) => c.toLowerCase())) === JSON.stringify(gate.m.g.map((c) => c.toLowerCase())) && JSON.stringify(x.m.mg.map((c) => c.toLowerCase())) === JSON.stringify(gate.m.mg.map((c) => c.toLowerCase()));
-          if (!same) fail(label);
+    "worker/containers/compile/declared-data-contract.cjs"(exports2, module2) {
+        "use strict";
+        var identifier = /^[a-z_][a-z0-9_]*$/;
+        var types = new Set(["integer", "bigint", "number", "text", "boolean", "timestamp", "json", "blob"]);
+        function canonicalBigintText(value) {
+            if (typeof value !== "string" || !/^(0|-?[1-9][0-9]*)$/.test(value))
+                return false;
+            const digits = value.startsWith("-") ? value.slice(1) : value;
+            const limit = value.startsWith("-") ? "9223372036854775808" : "9223372036854775807";
+            return digits.length < limit.length || digits.length === limit.length && digits <= limit;
         }
-        return { k: "n", g: gate, w: who };
-      }
-      if (value.k === "g" && ["c,k,roles", "c,generation,k,roles"].includes(keys) && identifier.test(value.c)) {
-        return { k: "g", c: value.c, roles: policyRoles(value.roles, label) };
-      }
-      if (value.k === "r" && ["k,roles", "generation,k,roles"].includes(keys)) {
-        return { k: "r", roles: policyRoles(value.roles, label) };
-      }
-      if (value.k === "p" && keys === "k,p,pk,t,v" && [value.v, value.t, value.pk].every((item) => typeof item === "string" && identifier.test(item))) {
-        if (edges + 1 > 4) fail(label);
-        const inherited = policy(value.p, label, edges + 1);
-        if (!["o", "m", "a", "n", "p", "g", "r"].includes(inherited.k)) fail(label);
-        return { k: "p", v: value.v, t: value.t, pk: value.pk, p: inherited };
-      }
-      fail(label);
-    }
-    function branchReads(value, label) {
-      if (!Array.isArray(value) || value.length !== 2 || value[0] === null && value[1] === null) fail(label + ".reads");
-      return value.map((list) => {
-        if (list === null) return null;
-        if (!Array.isArray(list) || !list.length || list.some((name) => typeof name !== "string" || !identifier.test(name)) || new Set(list).size !== list.length) fail(label + ".reads");
-        return [...list].sort();
-      });
-    }
-    function hiddenByBranch(table) {
-      const reads = table.policy && table.policy.k === "a" ? table.policy.reads : void 0;
-      if (!reads) return /* @__PURE__ */ new Set();
-      const hidden = /* @__PURE__ */ new Set();
-      for (const list of reads) if (list) {
-        for (const column of table.columns) if (!list.includes(column.n)) hidden.add(column.n);
-      }
-      return hidden;
-    }
-    function policyRoles(value, label) {
-      record2(value, label + ".roles");
-      if (Object.keys(value).sort().join(",") !== "create,delete,read,update") fail(label);
-      const roles = {};
-      for (const op of ["read", "create", "update", "delete"]) {
-        const list = value[op];
-        if (!Array.isArray(list) || list.some((role) => typeof role !== "string" || !/^[a-z][a-z0-9_]{0,63}$/.test(role)) || new Set(list).size !== list.length) fail(label);
-        roles[op] = [...list].sort();
-      }
-      return roles;
-    }
-    function policyMembershipTables(value, out, grants) {
-      if (!value || typeof value !== "object") return;
-      if (value.k === "m" && value.m) (value.m.og === true ? grants : out).add(value.m.m);
-      else if (value.k === "a") value.p.forEach((item) => policyMembershipTables(item, out, grants));
-      else if (value.k === "n") {
-        policyMembershipTables(value.g, out, grants);
-        policyMembershipTables(value.w, out, grants);
-      } else if (value.k === "p") policyMembershipTables(value.p, out, grants);
-    }
-    function validateInsertReceiptCapability(value) {
-      if (value !== void 0 && value !== "insert-v1") fail("insert receipt capability");
-      return value;
-    }
-    function canonicalize2(schema, intents, scopes, insertReceiptCapability) {
-      validateInsertReceiptCapability(insertReceiptCapability);
-      record2(schema, "schema");
-      record2(intents, "intents");
-      record2(scopes, "scopes");
-      const tables = [];
-      const membershipTables = new Set(Object.values(schema).filter((table) => table && table.member).map((table) => table.member.m));
-      const grantTables = /* @__PURE__ */ new Set();
-      for (const table of Object.values(schema)) if (table?.policy) policyMembershipTables(table.policy, membershipTables, grantTables);
-      for (const name of grantTables) {
-        const grant = schema[name];
-        if (!grant || intents[name] !== "scoped" || scopes[name] !== "user_id" || grant.visitors || grant.policy || grant.member || grant.client?.links || grant.client?.intake || grant.client?.identity === "visitor") fail(`${name} owner grant authority`);
-      }
-      const grantRules = Object.entries(schema).flatMap(([name, table]) => table?.policy?.k === "a" && table.policy.p?.[1]?.k === "m" && table.policy.p[1].m?.og === true ? [{ name, table, m: table.policy.p[1].m }] : []);
-      for (const rule of grantRules.filter((rule2) => rule2.m.g.length === 2)) {
-        const shares = schema[rule.m.m], row = rule.m.mg[1];
-        if (grantRules.filter((other) => other.m.m === rule.m.m).length !== 1 || rule.table.primaryKey !== rule.m.g[1] || !shares?.columns?.some((column) => column?.n === row) || Array.isArray(shares.client?.update) && shares.client.update.includes(row)) fail(`${rule.m.m} row grant authority`);
-      }
-      for (const name of Object.keys(schema).sort()) {
-        const table = schema[name];
-        record2(table, `table ${name}`);
-        if (table.client === void 0) {
-          if (table.clientPrimaryKey !== void 0) fail(`${name} has a primary key without client permissions`);
-          continue;
+        function fail(detail) {
+            throw new Error(`Invalid declared data contract: ${detail}`);
         }
-        if (!identifier.test(name) || name.startsWith("_") || name.startsWith("sqlite_")) fail(`table ${name}`);
-        record2(table.client, `${name}.client`);
-        if (!Array.isArray(table.columns) || !table.columns.length) fail(`${name}.columns`);
-        const seen = /* @__PURE__ */ new Set();
-        const columns = table.columns.map((column) => {
-          record2(column, `${name}.column`);
-          if (typeof column.n !== "string" || !identifier.test(column.n) || seen.has(column.n) || !types.has(column.t)) fail(`${name}.column`);
-          if (column.nul !== void 0 && column.nul !== 1 || column.d !== void 0 && column.d !== 1) fail(`${name}.${column.n} flags`);
-          seen.add(column.n);
-          return { n: column.n, t: column.t, ...column.nul ? { nul: 1 } : {}, ...column.d ? { d: 1 } : {} };
-        }).sort((a, b) => a.n < b.n ? -1 : a.n > b.n ? 1 : 0);
-        const pk = table.clientPrimaryKey;
-        if (!seen.has(pk) || !["integer", "text"].includes(columns.find((column) => column.n === pk).t)) fail(`${name} primary key`);
-        const input = table.client;
-        if (Object.keys(input).some((key) => !["read", "publicRead", "create", "update", "delete", "identity", "links", "intake"].includes(key))) fail(`${name} permissions`);
-        const read = typeof input.read === "boolean" ? input.read : fields(input.read, seen, `${name}.read`);
-        if (Array.isArray(read) && !read.includes(pk)) fail(`${name}.read must include the primary key`);
-        let publicRead = input.publicRead;
-        if (typeof publicRead !== "boolean") {
-          record2(publicRead, `${name} public read`);
-          if (Object.keys(publicRead).some((key) => key !== "where")) fail(`${name} public read`);
-          record2(publicRead.where, `${name} public read predicate`);
-          const entries = Object.entries(publicRead.where);
-          if (!entries.length || entries.length > 8) fail(`${name} public read predicate`);
-          const where = {};
-          for (const [field, value] of entries.sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) {
-            const column = columns.find((column2) => column2.n === field);
-            if (!column || ["json", "blob"].includes(column.t) || !(value === null || typeof value === "string" && value.length <= 256 || typeof value === "boolean" || typeof value === "number" && Number.isFinite(value))) fail(`${name} public read predicate`);
-            if (value === null ? column.nul !== 1 : column.t === "boolean" ? typeof value !== "boolean" : column.t === "integer" ? !Number.isSafeInteger(value) : column.t === "number" ? typeof value !== "number" : column.t === "bigint" ? !canonicalBigintText(value) : ["text", "timestamp"].includes(column.t) ? typeof value !== "string" : true) fail(`${name} public read predicate type`);
-            where[field] = value;
-          }
-          publicRead = { where };
+        function record2(value, name) {
+            if (!value || typeof value !== "object" || Array.isArray(value))
+                fail(name);
         }
-        if (typeof input.delete !== "boolean" || !["authenticated", "visitor"].includes(input.identity)) fail(`${name} permissions`);
-        const create = input.create === null ? null : fields(input.create, seen, `${name}.create`, true);
-        const update = input.update === null ? null : fields(input.update, seen, `${name}.update`);
-        if (membershipTables.has(name) && (create !== null || update !== null || input.delete)) fail(`${name} membership authority writes`);
-        if ([...create || [], ...update || []].some((field) => columns.find((column) => column.n === field).t === "blob")) fail(`${name} blob browser writes require a server function`);
-        const intent = intents[name];
-        if (!["scoped", "shared", "member", "policy"].includes(intent)) fail(`${name} intent`);
-        let owner = intent === "scoped" ? scopes[name] || null : null;
-        if (intent === "scoped" && (typeof owner !== "string" || !identifier.test(owner))) fail(`${name} owner`);
-        if (table.visitors !== void 0 && table.visitors !== true) fail(`${name} visitors`);
-        const visitors = table.visitors === true;
-        if (visitors && intent !== "scoped") fail(`${name} visitors require ownership`);
-        if (input.identity !== (visitors ? "visitor" : "authenticated")) fail(`${name} identity must match visitor declaration`);
-        const author = intent === "shared" ? table.author : null;
-        if (intent === "shared" && (author !== "_sw_author_id" || !columns.some((column) => column.n === author && column.t === "text" && column.nul === 1))) fail(`${name} author`);
-        if (Array.isArray(read) && read.includes(author)) fail(`${name} internal author projection`);
-        if (input.identity === "visitor" && intent !== "scoped") fail(`${name} visitor identity`);
-        if (publicRead && !Array.isArray(read)) fail(`${name} public read`);
-        if (typeof publicRead === "object" && [...create || [], ...update || []].some((field) => Object.prototype.hasOwnProperty.call(publicRead.where, field))) fail(`${name} publication writes require a server function`);
-        if ([...create || [], ...update || []].some((field) => field === pk || field === owner || field === author)) fail(`${name} identity writes`);
-        let member = null;
-        if (intent === "member") {
-          record2(table.member, `${name}.member`);
-          const { g, m, u, mg, o } = table.member;
-          if (typeof m !== "string" || typeof u !== "string" || !identifier.test(m) || !identifier.test(u) || !Array.isArray(mg) || mg.some((field) => typeof field !== "string" || !identifier.test(field))) fail(`${name}.member`);
-          fields(g, seen, `${name}.member.g`);
-          if (g.length !== mg.length || new Set(mg).size !== mg.length) fail(`${name}.member`);
-          if ((update || []).some((field) => g.includes(field))) fail(`${name} membership writes`);
-          if (o !== void 0 && (!Array.isArray(o) || JSON.stringify(o) !== JSON.stringify(["read", "create", "update", "delete"].filter((operation) => o.includes(operation))) || !o.includes("read") && (o.includes("update") || o.includes("delete")))) fail(`${name}.member operations`);
-          const normalizedOperations = o?.length === 4 ? void 0 : o;
-          member = { g: [...g], m, u, mg: [...mg], ...normalizedOperations !== void 0 ? { o: [...normalizedOperations] } : {} };
+        function fields(value, columns, name, empty = false) {
+            if (!Array.isArray(value) || !empty && !value.length)
+                fail(name);
+            const result = [...value];
+            if (result.some((field) => typeof field !== "string" || !columns.has(field)) || new Set(result).size !== result.length)
+                fail(name);
+            return result.sort();
         }
-        const normalizedPolicy = intent === "policy" ? policy(table.policy, `${name}.policy`) : null;
-        if (normalizedPolicy && !["a", "n", "p", "g", "r"].includes(normalizedPolicy.k)) fail(`${name}.policy root`);
-        if (normalizedPolicy?.k === "g" && create !== null && !create.includes(normalizedPolicy.c)) fail(`${name}.policy group create`);
-        if (normalizedPolicy?.k === "a") {
-          owner = normalizedPolicy.p[0].c;
-          const branch = normalizedPolicy.p[1];
-          const fixed = branch.k === "m" ? branch.m.g : branch.k === "g" ? [branch.c] : [];
-          if ([...create || [], ...update || []].includes(owner) || (update || []).some((field) => fixed.includes(field))) fail(`${name}.policy identity writes`);
-          if (branch.k === "g" && create !== null && !create.includes(branch.c)) fail(`${name}.policy group create`);
+        function policy(value, label, edges = 0) {
+            record2(value, label);
+            const keys = Object.keys(value).sort().join(",");
+            if (value.k === "o" && keys === "c,k" && identifier.test(value.c))
+                return { k: "o", c: value.c };
+            if (value.k === "m" && keys === "k,m") {
+                record2(value.m, label + ".member");
+                const { g, m, u, mg, o, og } = value.m;
+                const memberKeys = Object.keys(value.m).sort().join(",");
+                const grant = memberKeys === "g,m,mg,o,og,u" && og === true && Array.isArray(g) && Array.isArray(mg) && g[0] === "user_id" && mg[0] === "user_id" && (g.length === 1 || g.length === 2 && g[1] !== "user_id" && mg[1] !== "user_id" && mg[1] !== u) && u !== "user_id" && (JSON.stringify(o) === '["read"]' || JSON.stringify(o) === '["read","update"]');
+                if (!["g,m,mg,u", "g,m,mg,o,u"].includes(memberKeys) && !grant || !identifier.test(m) || !identifier.test(u) || !Array.isArray(g) || !g.length || !Array.isArray(mg) || g.length !== mg.length || [...g, ...mg].some((field) => typeof field !== "string" || !identifier.test(field)) || o !== void 0 && (!Array.isArray(o) || JSON.stringify(o) !== JSON.stringify(["read", "create", "update", "delete"].filter((operation) => o.includes(operation))) || !o.includes("read") && (o.includes("update") || o.includes("delete"))))
+                    fail(label);
+                const normalizedOperations = o?.length === 4 ? void 0 : o;
+                return { k: "m", m: { g: [...g], m, u, mg: [...mg], ...normalizedOperations !== void 0 ? { o: [...normalizedOperations] } : {}, ...og ? { og: true } : {} } };
+            }
+            if (value.k === "a" && (keys === "k,p" || keys === "k,p,reads" && edges === 0) && Array.isArray(value.p) && value.p.length === 2) {
+                const left = policy(value.p[0], label), right = policy(value.p[1], label);
+                if (left.k !== "o" || !["m", "g", "r"].includes(right.k))
+                    fail(label);
+                if (right.k === "m" && right.m.og && left.c !== "user_id")
+                    fail(label);
+                const reads = value.reads === void 0 ? void 0 : branchReads(value.reads, label);
+                return { k: "a", p: [left, right], ...reads ? { reads } : {} };
+            }
+            if (value.k === "n" && keys === "g,k,w") {
+                const gate = policy(value.g, label), who = policy(value.w, label);
+                if (!["m", "g", "r"].includes(gate.k) || !["o", "a"].includes(who.k))
+                    fail(label);
+                if (gate.k === "m" && gate.m.og)
+                    fail(label);
+                if (who.k === "a") {
+                    const x = who.p[1];
+                    if (x.k === "m" && x.m.og)
+                        fail(label);
+                    const same = x.k === "r" || x.k === "g" && gate.k === "g" && x.c.toLowerCase() === gate.c.toLowerCase() || x.k === "m" && gate.k === "m" && x.m.m.toLowerCase() === gate.m.m.toLowerCase() && x.m.u.toLowerCase() === gate.m.u.toLowerCase() && JSON.stringify(x.m.g.map((c) => c.toLowerCase())) === JSON.stringify(gate.m.g.map((c) => c.toLowerCase())) && JSON.stringify(x.m.mg.map((c) => c.toLowerCase())) === JSON.stringify(gate.m.mg.map((c) => c.toLowerCase()));
+                    if (!same)
+                        fail(label);
+                }
+                return { k: "n", g: gate, w: who };
+            }
+            if (value.k === "g" && ["c,k,roles", "c,generation,k,roles"].includes(keys) && identifier.test(value.c)) {
+                return { k: "g", c: value.c, roles: policyRoles(value.roles, label) };
+            }
+            if (value.k === "r" && ["k,roles", "generation,k,roles"].includes(keys)) {
+                return { k: "r", roles: policyRoles(value.roles, label) };
+            }
+            if (value.k === "p" && keys === "k,p,pk,t,v" && [value.v, value.t, value.pk].every((item) => typeof item === "string" && identifier.test(item))) {
+                if (edges + 1 > 4)
+                    fail(label);
+                const inherited = policy(value.p, label, edges + 1);
+                if (!["o", "m", "a", "n", "p", "g", "r"].includes(inherited.k))
+                    fail(label);
+                return { k: "p", v: value.v, t: value.t, pk: value.pk, p: inherited };
+            }
+            fail(label);
         }
-        if (normalizedPolicy?.k === "n") {
-          owner = normalizedPolicy.w.k === "o" ? normalizedPolicy.w.c : normalizedPolicy.w.p[0].c;
-          const gate = normalizedPolicy.g;
-          const fixed = gate.k === "m" ? gate.m.g : gate.k === "g" ? [gate.c] : [];
-          if ([...create || [], ...update || []].includes(owner) || (update || []).some((field) => fixed.includes(field))) fail(`${name}.policy identity writes`);
-          if (gate.k === "g" && create !== null && !create.includes(gate.c)) fail(`${name}.policy group create`);
+        function branchReads(value, label) {
+            if (!Array.isArray(value) || value.length !== 2 || value[0] === null && value[1] === null)
+                fail(label + ".reads");
+            return value.map((list) => {
+                if (list === null)
+                    return null;
+                if (!Array.isArray(list) || !list.length || list.some((name) => typeof name !== "string" || !identifier.test(name)) || new Set(list).size !== list.length)
+                    fail(label + ".reads");
+                return [...list].sort();
+            });
         }
-        if (normalizedPolicy?.k === "p" && create !== null && !create.includes(normalizedPolicy.v)) fail(`${name}.policy parent create`);
-        let links = null;
-        if (input.links !== void 0) {
-          record2(input.links, `${name}.links`);
-          const linkKeys = Object.keys(input.links).sort().join();
-          if (linkKeys !== "children,edit,maxDays,read" && !(linkKeys === "anonymousCreate,children,edit,maxDays,read" && input.links.anonymousCreate === true)) fail(`${name}.links`);
-          if (!(intent === "scoped" && !visitors) && normalizedPolicy?.k !== "a") fail(`${name}.links owner`);
-          const readable = read === true ? columns.filter((column) => column.n !== author).map((column) => column.n) : read || [];
-          const linkRead = fields(input.links.read, new Set(readable), `${name}.links.read`);
-          if (!linkRead.includes(pk)) fail(`${name}.links.read must include the primary key`);
-          const linkEdit = fields(input.links.edit, new Set(update || []), `${name}.links.edit`, true);
-          const children = input.links.children;
-          if (!Array.isArray(children) || children.some((child) => typeof child !== "string" || !identifier.test(child)) || new Set(children).size !== children.length) fail(`${name}.links.children`);
-          const maxDays = input.links.maxDays;
-          if (maxDays !== null && !(Number.isSafeInteger(maxDays) && maxDays >= 1 && maxDays <= 365)) fail(`${name}.links.maxDays`);
-          const anonymousCreate = input.links.anonymousCreate === true;
-          if (anonymousCreate && (intent !== "scoped" || visitors || normalizedPolicy || !create || create.length === 0 || columns.find((column) => column.n === pk).t !== "integer" || columns.some((column) => column.t === "blob"))) fail(`${name}.links.anonymousCreate`);
-          links = { read: linkRead, edit: linkEdit, children: [...children].sort(), maxDays, ...anonymousCreate ? { anonymousCreate: true } : {} };
+        function hiddenByBranch(table) {
+            const reads = table.policy && table.policy.k === "a" ? table.policy.reads : void 0;
+            if (!reads)
+                return new Set();
+            const hidden = new Set();
+            for (const list of reads)
+                if (list) {
+                    for (const column of table.columns)
+                        if (!list.includes(column.n))
+                            hidden.add(column.n);
+                }
+            return hidden;
         }
-        let intake;
-        if (input.intake !== void 0) {
-          record2(input.intake, `${name}.intake`);
-          if (!["fields,target", "fields,target,where"].includes(Object.keys(input.intake).sort().join(","))) fail(`${name}.intake`);
-          record2(input.intake.target, `${name}.intake.target`);
-          if (Object.keys(input.intake.target).sort().join(",") !== "field,table" || ![input.intake.target.table, input.intake.target.field].every((value) => typeof value === "string" && identifier.test(value))) fail(`${name}.intake.target`);
-          if (membershipTables.has(name) || intent !== "scoped" || visitors || normalizedPolicy || columns.find((column) => column.n === pk).t !== "integer" || publicRead === true) fail(`${name}.intake owner`);
-          const accepted = fields(input.intake.fields, seen, `${name}.intake.fields`);
-          if (accepted.some((field) => field === pk || field === owner || field === author || columns.find((column) => column.n === field).t === "blob" || typeof publicRead === "object" && Object.hasOwn(publicRead.where, field)) || columns.some((column) => column.n !== pk && column.n !== owner && column.nul !== 1 && column.d !== 1 && !accepted.includes(column.n))) fail(`${name}.intake.fields`);
-          intake = { target: { table: input.intake.target.table, field: input.intake.target.field }, fields: accepted };
-          if (input.intake.where !== void 0) {
-            record2(input.intake.where, `${name}.intake.where`);
-            const keys = Object.keys(input.intake.where).sort();
-            if (!keys.length || keys.length > 8) fail(`${name}.intake.where`);
-            intake.where = Object.fromEntries(keys.map((field) => [field, input.intake.where[field]]));
-          }
+        function policyRoles(value, label) {
+            record2(value, label + ".roles");
+            if (Object.keys(value).sort().join(",") !== "create,delete,read,update")
+                fail(label);
+            const roles = {};
+            for (const op of ["read", "create", "update", "delete"]) {
+                const list = value[op];
+                if (!Array.isArray(list) || list.some((role) => typeof role !== "string" || !/^[a-z][a-z0-9_]{0,63}$/.test(role)) || new Set(list).size !== list.length)
+                    fail(label);
+                roles[op] = [...list].sort();
+            }
+            return roles;
         }
-        tables.push({
-          name,
-          columns,
-          client: { identity: input.identity, read, publicRead, create, update, delete: input.delete, ...links ? { links } : {}, ...intake ? { intake } : {} },
-          primaryKey: pk,
-          intent,
-          owner,
-          author,
-          visitors,
-          member,
-          ...normalizedPolicy ? { policy: normalizedPolicy } : {}
-        });
-      }
-      const tableByName = new Map(tables.map((table) => [table.name, table]));
-      for (const table of tables) {
-        const intake = table.client.intake;
-        if (!intake) continue;
-        const target = tableByName.get(intake.target.table);
-        const column = target?.columns.find((column2) => column2.n === intake.target.field);
-        const rawColumn = schema[intake.target.table]?.columns?.find((column2) => column2.n === intake.target.field);
-        if (!target || target.intent !== "scoped" || target.visitors || !target.client.publicRead || !Array.isArray(target.client.read) || !target.client.read.includes(intake.target.field) || !column || column.nul === 1 || !["text", "integer", "bigint"].includes(column.t) || rawColumn?.u !== 1) fail(`${table.name}.intake target`);
-        for (const [field, value] of Object.entries(intake.where || {})) {
-          const c = target.columns.find((column2) => column2.n === field);
-          if (!c) fail(`${table.name}.intake.where field`);
-          if (value === null ? c.nul !== 1 : c.t === "boolean" ? typeof value !== "boolean" : c.t === "integer" ? !Number.isSafeInteger(value) : c.t === "number" ? typeof value !== "number" || !Number.isFinite(value) : c.t === "bigint" ? !canonicalBigintText(value) : ["text", "timestamp"].includes(c.t) ? typeof value !== "string" || value.length > 256 : true) fail(`${table.name}.intake.where type`);
+        function policyMembershipTables(value, out, grants) {
+            if (!value || typeof value !== "object")
+                return;
+            if (value.k === "m" && value.m)
+                (value.m.og === true ? grants : out).add(value.m.m);
+            else if (value.k === "a")
+                value.p.forEach((item) => policyMembershipTables(item, out, grants));
+            else if (value.k === "n") {
+                policyMembershipTables(value.g, out, grants);
+                policyMembershipTables(value.w, out, grants);
+            }
+            else if (value.k === "p")
+                policyMembershipTables(value.p, out, grants);
         }
-      }
-      for (const table of tables) {
-        const declared = schema[table.name].relations;
-        if (declared === void 0) continue;
-        if (!Array.isArray(declared)) fail(`${table.name}.relations`);
-        const relations = [];
-        const names = /* @__PURE__ */ new Set();
-        for (const relation of declared) {
-          record2(relation, `${table.name}.relation`);
-          if (Object.keys(relation).some((key) => !["name", "kind", "table", "fk", "parentKey"].includes(key))) fail(`${table.name}.relation`);
-          const { name, kind, table: relatedName, fk, parentKey } = relation;
-          if (![name, relatedName, fk, parentKey].every((value) => typeof value === "string" && identifier.test(value)) || names.has(name)) {
-            fail(`${table.name}.relation`);
-          }
-          if (kind !== void 0 && kind !== "hasMany" && kind !== "belongsTo") fail(`${table.name}.relation`);
-          names.add(name);
-          const related = schema[relatedName];
-          if (!related || !Array.isArray(related.columns)) fail(`${table.name}.relation`);
-          const declaring = schema[table.name];
-          if (kind === "belongsTo") {
-            if (!declaring.columns.some((column) => column && column.n === fk) || !related.columns.some((column) => column && column.n === parentKey)) fail(`${table.name}.relation`);
-            continue;
-          }
-          if (parentKey !== table.primaryKey || !related.columns.some((column) => column && column.n === fk)) fail(`${table.name}.relation`);
-          const child = tableByName.get(relatedName);
-          if (table.client.read !== false && child && child.client.read !== false) {
-            relations.push({ name, table: relatedName, fk, parentKey });
-          }
+        function validateInsertReceiptCapability(value) {
+            if (value !== void 0 && value !== "insert-v1")
+                fail("insert receipt capability");
+            return value;
         }
-        if (relations.length) table.relations = relations.sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
-      }
-      for (const table of tables) {
-        for (const name of table.client.links ? table.client.links.children : []) {
-          const relation = (table.relations || []).find((item) => item.name === name);
-          const child = relation && tableByName.get(relation.table);
-          if (!relation || !child || child.policy?.k !== "p" || child.policy.v !== relation.fk || child.policy.t !== table.name) fail(`${table.name}.links.children`);
+        function canonicalize2(schema, intents, scopes, insertReceiptCapability) {
+            validateInsertReceiptCapability(insertReceiptCapability);
+            record2(schema, "schema");
+            record2(intents, "intents");
+            record2(scopes, "scopes");
+            const tables = [];
+            const membershipTables = new Set(Object.values(schema).filter((table) => table && table.member).map((table) => table.member.m));
+            const grantTables = new Set();
+            for (const table of Object.values(schema))
+                if (table?.policy)
+                    policyMembershipTables(table.policy, membershipTables, grantTables);
+            for (const name of grantTables) {
+                const grant = schema[name];
+                if (!grant || intents[name] !== "scoped" || scopes[name] !== "user_id" || grant.visitors || grant.policy || grant.member || grant.client?.links || grant.client?.intake || grant.client?.identity === "visitor")
+                    fail(`${name} owner grant authority`);
+            }
+            const grantRules = Object.entries(schema).flatMap(([name, table]) => table?.policy?.k === "a" && table.policy.p?.[1]?.k === "m" && table.policy.p[1].m?.og === true ? [{ name, table, m: table.policy.p[1].m }] : []);
+            for (const rule of grantRules.filter((rule2) => rule2.m.g.length === 2)) {
+                const shares = schema[rule.m.m], row = rule.m.mg[1];
+                if (grantRules.filter((other) => other.m.m === rule.m.m).length !== 1 || rule.table.primaryKey !== rule.m.g[1] || !shares?.columns?.some((column) => column?.n === row) || Array.isArray(shares.client?.update) && shares.client.update.includes(row))
+                    fail(`${rule.m.m} row grant authority`);
+            }
+            for (const name of Object.keys(schema).sort()) {
+                const table = schema[name];
+                record2(table, `table ${name}`);
+                if (table.client === void 0) {
+                    if (table.clientPrimaryKey !== void 0)
+                        fail(`${name} has a primary key without client permissions`);
+                    continue;
+                }
+                if (!identifier.test(name) || name.startsWith("_") || name.startsWith("sqlite_"))
+                    fail(`table ${name}`);
+                record2(table.client, `${name}.client`);
+                if (!Array.isArray(table.columns) || !table.columns.length)
+                    fail(`${name}.columns`);
+                const seen = new Set();
+                const columns = table.columns.map((column) => {
+                    record2(column, `${name}.column`);
+                    if (typeof column.n !== "string" || !identifier.test(column.n) || seen.has(column.n) || !types.has(column.t))
+                        fail(`${name}.column`);
+                    if (column.nul !== void 0 && column.nul !== 1 || column.d !== void 0 && column.d !== 1)
+                        fail(`${name}.${column.n} flags`);
+                    seen.add(column.n);
+                    return { n: column.n, t: column.t, ...column.nul ? { nul: 1 } : {}, ...column.d ? { d: 1 } : {} };
+                }).sort((a, b) => a.n < b.n ? -1 : a.n > b.n ? 1 : 0);
+                const pk = table.clientPrimaryKey;
+                if (!seen.has(pk) || !["integer", "text"].includes(columns.find((column) => column.n === pk).t))
+                    fail(`${name} primary key`);
+                const input = table.client;
+                if (Object.keys(input).some((key) => !["read", "publicRead", "create", "update", "delete", "identity", "links", "intake"].includes(key)))
+                    fail(`${name} permissions`);
+                const read = typeof input.read === "boolean" ? input.read : fields(input.read, seen, `${name}.read`);
+                if (Array.isArray(read) && !read.includes(pk))
+                    fail(`${name}.read must include the primary key`);
+                let publicRead = input.publicRead;
+                if (typeof publicRead !== "boolean") {
+                    record2(publicRead, `${name} public read`);
+                    if (Object.keys(publicRead).some((key) => key !== "where"))
+                        fail(`${name} public read`);
+                    record2(publicRead.where, `${name} public read predicate`);
+                    const entries = Object.entries(publicRead.where);
+                    if (!entries.length || entries.length > 8)
+                        fail(`${name} public read predicate`);
+                    const where = {};
+                    for (const [field, value] of entries.sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) {
+                        const column = columns.find((column2) => column2.n === field);
+                        if (!column || ["json", "blob"].includes(column.t) || !(value === null || typeof value === "string" && value.length <= 256 || typeof value === "boolean" || typeof value === "number" && Number.isFinite(value)))
+                            fail(`${name} public read predicate`);
+                        if (value === null ? column.nul !== 1 : column.t === "boolean" ? typeof value !== "boolean" : column.t === "integer" ? !Number.isSafeInteger(value) : column.t === "number" ? typeof value !== "number" : column.t === "bigint" ? !canonicalBigintText(value) : ["text", "timestamp"].includes(column.t) ? typeof value !== "string" : true)
+                            fail(`${name} public read predicate type`);
+                        where[field] = value;
+                    }
+                    publicRead = { where };
+                }
+                if (typeof input.delete !== "boolean" || !["authenticated", "visitor"].includes(input.identity))
+                    fail(`${name} permissions`);
+                const create = input.create === null ? null : fields(input.create, seen, `${name}.create`, true);
+                const update = input.update === null ? null : fields(input.update, seen, `${name}.update`);
+                if (membershipTables.has(name) && (create !== null || update !== null || input.delete))
+                    fail(`${name} membership authority writes`);
+                if ([...create || [], ...update || []].some((field) => columns.find((column) => column.n === field).t === "blob"))
+                    fail(`${name} blob browser writes require a server function`);
+                const intent = intents[name];
+                if (!["scoped", "shared", "member", "policy"].includes(intent))
+                    fail(`${name} intent`);
+                let owner = intent === "scoped" ? scopes[name] || null : null;
+                if (intent === "scoped" && (typeof owner !== "string" || !identifier.test(owner)))
+                    fail(`${name} owner`);
+                if (table.visitors !== void 0 && table.visitors !== true)
+                    fail(`${name} visitors`);
+                const visitors = table.visitors === true;
+                if (visitors && intent !== "scoped")
+                    fail(`${name} visitors require ownership`);
+                if (input.identity !== (visitors ? "visitor" : "authenticated"))
+                    fail(`${name} identity must match visitor declaration`);
+                const author = intent === "shared" ? table.author : null;
+                if (intent === "shared" && (author !== "_sw_author_id" || !columns.some((column) => column.n === author && column.t === "text" && column.nul === 1)))
+                    fail(`${name} author`);
+                if (Array.isArray(read) && read.includes(author))
+                    fail(`${name} internal author projection`);
+                if (input.identity === "visitor" && intent !== "scoped")
+                    fail(`${name} visitor identity`);
+                if (publicRead && !Array.isArray(read))
+                    fail(`${name} public read`);
+                if (typeof publicRead === "object" && [...create || [], ...update || []].some((field) => Object.prototype.hasOwnProperty.call(publicRead.where, field)))
+                    fail(`${name} publication writes require a server function`);
+                if ([...create || [], ...update || []].some((field) => field === pk || field === owner || field === author))
+                    fail(`${name} identity writes`);
+                let member = null;
+                if (intent === "member") {
+                    record2(table.member, `${name}.member`);
+                    const { g, m, u, mg, o } = table.member;
+                    if (typeof m !== "string" || typeof u !== "string" || !identifier.test(m) || !identifier.test(u) || !Array.isArray(mg) || mg.some((field) => typeof field !== "string" || !identifier.test(field)))
+                        fail(`${name}.member`);
+                    fields(g, seen, `${name}.member.g`);
+                    if (g.length !== mg.length || new Set(mg).size !== mg.length)
+                        fail(`${name}.member`);
+                    if ((update || []).some((field) => g.includes(field)))
+                        fail(`${name} membership writes`);
+                    if (o !== void 0 && (!Array.isArray(o) || JSON.stringify(o) !== JSON.stringify(["read", "create", "update", "delete"].filter((operation) => o.includes(operation))) || !o.includes("read") && (o.includes("update") || o.includes("delete"))))
+                        fail(`${name}.member operations`);
+                    const normalizedOperations = o?.length === 4 ? void 0 : o;
+                    member = { g: [...g], m, u, mg: [...mg], ...normalizedOperations !== void 0 ? { o: [...normalizedOperations] } : {} };
+                }
+                const normalizedPolicy = intent === "policy" ? policy(table.policy, `${name}.policy`) : null;
+                if (normalizedPolicy && !["a", "n", "p", "g", "r"].includes(normalizedPolicy.k))
+                    fail(`${name}.policy root`);
+                if (normalizedPolicy?.k === "g" && create !== null && !create.includes(normalizedPolicy.c))
+                    fail(`${name}.policy group create`);
+                if (normalizedPolicy?.k === "a") {
+                    owner = normalizedPolicy.p[0].c;
+                    const branch = normalizedPolicy.p[1];
+                    const fixed = branch.k === "m" ? branch.m.g : branch.k === "g" ? [branch.c] : [];
+                    if ([...create || [], ...update || []].includes(owner) || (update || []).some((field) => fixed.includes(field)))
+                        fail(`${name}.policy identity writes`);
+                    if (branch.k === "g" && create !== null && !create.includes(branch.c))
+                        fail(`${name}.policy group create`);
+                }
+                if (normalizedPolicy?.k === "n") {
+                    owner = normalizedPolicy.w.k === "o" ? normalizedPolicy.w.c : normalizedPolicy.w.p[0].c;
+                    const gate = normalizedPolicy.g;
+                    const fixed = gate.k === "m" ? gate.m.g : gate.k === "g" ? [gate.c] : [];
+                    if ([...create || [], ...update || []].includes(owner) || (update || []).some((field) => fixed.includes(field)))
+                        fail(`${name}.policy identity writes`);
+                    if (gate.k === "g" && create !== null && !create.includes(gate.c))
+                        fail(`${name}.policy group create`);
+                }
+                if (normalizedPolicy?.k === "p" && create !== null && !create.includes(normalizedPolicy.v))
+                    fail(`${name}.policy parent create`);
+                let links = null;
+                if (input.links !== void 0) {
+                    record2(input.links, `${name}.links`);
+                    const linkKeys = Object.keys(input.links).sort().join();
+                    if (linkKeys !== "children,edit,maxDays,read" && !(linkKeys === "anonymousCreate,children,edit,maxDays,read" && input.links.anonymousCreate === true))
+                        fail(`${name}.links`);
+                    if (!(intent === "scoped" && !visitors) && normalizedPolicy?.k !== "a")
+                        fail(`${name}.links owner`);
+                    const readable = read === true ? columns.filter((column) => column.n !== author).map((column) => column.n) : read || [];
+                    const linkRead = fields(input.links.read, new Set(readable), `${name}.links.read`);
+                    if (!linkRead.includes(pk))
+                        fail(`${name}.links.read must include the primary key`);
+                    const linkEdit = fields(input.links.edit, new Set(update || []), `${name}.links.edit`, true);
+                    const children = input.links.children;
+                    if (!Array.isArray(children) || children.some((child) => typeof child !== "string" || !identifier.test(child)) || new Set(children).size !== children.length)
+                        fail(`${name}.links.children`);
+                    const maxDays = input.links.maxDays;
+                    if (maxDays !== null && !(Number.isSafeInteger(maxDays) && maxDays >= 1 && maxDays <= 365))
+                        fail(`${name}.links.maxDays`);
+                    const anonymousCreate = input.links.anonymousCreate === true;
+                    if (anonymousCreate && (intent !== "scoped" || visitors || normalizedPolicy || !create || create.length === 0 || columns.find((column) => column.n === pk).t !== "integer" || columns.some((column) => column.t === "blob")))
+                        fail(`${name}.links.anonymousCreate`);
+                    links = { read: linkRead, edit: linkEdit, children: [...children].sort(), maxDays, ...anonymousCreate ? { anonymousCreate: true } : {} };
+                }
+                let intake;
+                if (input.intake !== void 0) {
+                    record2(input.intake, `${name}.intake`);
+                    if (!["fields,target", "fields,target,where"].includes(Object.keys(input.intake).sort().join(",")))
+                        fail(`${name}.intake`);
+                    record2(input.intake.target, `${name}.intake.target`);
+                    if (Object.keys(input.intake.target).sort().join(",") !== "field,table" || ![input.intake.target.table, input.intake.target.field].every((value) => typeof value === "string" && identifier.test(value)))
+                        fail(`${name}.intake.target`);
+                    if (membershipTables.has(name) || intent !== "scoped" || visitors || normalizedPolicy || columns.find((column) => column.n === pk).t !== "integer" || publicRead === true)
+                        fail(`${name}.intake owner`);
+                    const accepted = fields(input.intake.fields, seen, `${name}.intake.fields`);
+                    if (accepted.some((field) => field === pk || field === owner || field === author || columns.find((column) => column.n === field).t === "blob" || typeof publicRead === "object" && Object.hasOwn(publicRead.where, field)) || columns.some((column) => column.n !== pk && column.n !== owner && column.nul !== 1 && column.d !== 1 && !accepted.includes(column.n)))
+                        fail(`${name}.intake.fields`);
+                    intake = { target: { table: input.intake.target.table, field: input.intake.target.field }, fields: accepted };
+                    if (input.intake.where !== void 0) {
+                        record2(input.intake.where, `${name}.intake.where`);
+                        const keys = Object.keys(input.intake.where).sort();
+                        if (!keys.length || keys.length > 8)
+                            fail(`${name}.intake.where`);
+                        intake.where = Object.fromEntries(keys.map((field) => [field, input.intake.where[field]]));
+                    }
+                }
+                tables.push({
+                    name,
+                    columns,
+                    client: { identity: input.identity, read, publicRead, create, update, delete: input.delete, ...links ? { links } : {}, ...intake ? { intake } : {} },
+                    primaryKey: pk,
+                    intent,
+                    owner,
+                    author,
+                    visitors,
+                    member,
+                    ...normalizedPolicy ? { policy: normalizedPolicy } : {}
+                });
+            }
+            const tableByName = new Map(tables.map((table) => [table.name, table]));
+            for (const table of tables) {
+                const intake = table.client.intake;
+                if (!intake)
+                    continue;
+                const target = tableByName.get(intake.target.table);
+                const column = target?.columns.find((column2) => column2.n === intake.target.field);
+                const rawColumn = schema[intake.target.table]?.columns?.find((column2) => column2.n === intake.target.field);
+                if (!target || target.intent !== "scoped" || target.visitors || !target.client.publicRead || !Array.isArray(target.client.read) || !target.client.read.includes(intake.target.field) || !column || column.nul === 1 || !["text", "integer", "bigint"].includes(column.t) || rawColumn?.u !== 1)
+                    fail(`${table.name}.intake target`);
+                for (const [field, value] of Object.entries(intake.where || {})) {
+                    const c = target.columns.find((column2) => column2.n === field);
+                    if (!c)
+                        fail(`${table.name}.intake.where field`);
+                    if (value === null ? c.nul !== 1 : c.t === "boolean" ? typeof value !== "boolean" : c.t === "integer" ? !Number.isSafeInteger(value) : c.t === "number" ? typeof value !== "number" || !Number.isFinite(value) : c.t === "bigint" ? !canonicalBigintText(value) : ["text", "timestamp"].includes(c.t) ? typeof value !== "string" || value.length > 256 : true)
+                        fail(`${table.name}.intake.where type`);
+                }
+            }
+            for (const table of tables) {
+                const declared = schema[table.name].relations;
+                if (declared === void 0)
+                    continue;
+                if (!Array.isArray(declared))
+                    fail(`${table.name}.relations`);
+                const relations = [];
+                const names = new Set();
+                for (const relation of declared) {
+                    record2(relation, `${table.name}.relation`);
+                    if (Object.keys(relation).some((key) => !["name", "kind", "table", "fk", "parentKey"].includes(key)))
+                        fail(`${table.name}.relation`);
+                    const { name, kind, table: relatedName, fk, parentKey } = relation;
+                    if (![name, relatedName, fk, parentKey].every((value) => typeof value === "string" && identifier.test(value)) || names.has(name)) {
+                        fail(`${table.name}.relation`);
+                    }
+                    if (kind !== void 0 && kind !== "hasMany" && kind !== "belongsTo")
+                        fail(`${table.name}.relation`);
+                    names.add(name);
+                    const related = schema[relatedName];
+                    if (!related || !Array.isArray(related.columns))
+                        fail(`${table.name}.relation`);
+                    const declaring = schema[table.name];
+                    if (kind === "belongsTo") {
+                        if (!declaring.columns.some((column) => column && column.n === fk) || !related.columns.some((column) => column && column.n === parentKey))
+                            fail(`${table.name}.relation`);
+                        continue;
+                    }
+                    if (parentKey !== table.primaryKey || !related.columns.some((column) => column && column.n === fk))
+                        fail(`${table.name}.relation`);
+                    const child = tableByName.get(relatedName);
+                    if (table.client.read !== false && child && child.client.read !== false) {
+                        relations.push({ name, table: relatedName, fk, parentKey });
+                    }
+                }
+                if (relations.length)
+                    table.relations = relations.sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
+            }
+            for (const table of tables) {
+                for (const name of table.client.links ? table.client.links.children : []) {
+                    const relation = (table.relations || []).find((item) => item.name === name);
+                    const child = relation && tableByName.get(relation.table);
+                    if (!relation || !child || child.policy?.k !== "p" || child.policy.v !== relation.fk || child.policy.t !== table.name)
+                        fail(`${table.name}.links.children`);
+                }
+            }
+            return JSON.stringify({ version: 1, tables, ...insertReceiptCapability === void 0 ? {} : { insert_receipt: insertReceiptCapability } });
         }
-      }
-      return JSON.stringify({ version: 1, tables, ...insertReceiptCapability === void 0 ? {} : { insert_receipt: insertReceiptCapability } });
-    }
-    function columnType(column) {
-      const type = { integer: "number", bigint: "string", number: "number", text: "string", timestamp: "string", boolean: "boolean", json: "Json", blob: "number[]" }[column.t];
-      return column.nul ? `${type} | null` : type;
-    }
-    function shape(columns, names, mode, required = /* @__PURE__ */ new Set(), hidden = /* @__PURE__ */ new Set()) {
-      const values = names.map((name) => {
-        const column = columns.find((candidate) => candidate.n === name);
-        const optional = mode === "update" || mode === "create" && !required.has(name) && (column.d || column.nul) || mode === "read" && hidden.has(name);
-        return `${JSON.stringify(name)}${optional ? "?" : ""}: ${columnType(column)}`;
-      });
-      return values.length ? `{ ${values.join("; ")} }` : "Record<string, never>";
-    }
-    var LINK_CLIENT_RUNTIME = 'const b64url=s=>btoa(unescape(encodeURIComponent(s))).replace(/\\+/g,"-").replace(/\\//g,"_").replace(/=+$/,"");const createLink=async(table,id,options={})=>{const result=await invoke(table,"link_create",{id,access:options.access,...(options.expiresInDays===undefined?{}:{expires_in_days:options.expiresInDays})});const route=typeof options.returnTo==="string"?options.returnTo:location.pathname+location.search+location.hash;return{link_id:result.link_id,url:location.origin+"/__sw/link#"+result.secret+"."+b64url(route),expires_at:result.expires_at}};const linkDoor=async(path,init)=>{swReadSessionVoid();const response=await fetch(path,{credentials:"same-origin",cache:"no-store",...init});const payload=await response.json().catch(()=>({error:"INVALID_DATA_RESPONSE",message:"Link operation returned an invalid response"}));if(!response.ok)throw new DataError(response.status,payload);return payload};const links=Object.freeze({opened:()=>{try{const list=JSON.parse(sessionStorage.getItem("__sw_links_opened")||"[]");return Array.isArray(list)?list:[]}catch(_){return[]}},sessions:async()=>{const payload=await linkDoor("/__sw/link/sessions",{method:"GET"});return{data:payload.data}},forget:async linkId=>{await linkDoor("/__sw/link/forget",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(linkId===undefined?{}:{link_id:linkId})})}});const linkedView=spec=>link=>{if(typeof link!=="string"||!/^lnk_[0-9a-f]{32}$/.test(link))throw new DataError(400,{error:"DATA_INPUT_INVALID",message:"linked() needs a link id"});const view={};for(const[table,canUpdate,children]of spec){const relations={};const root={get:id=>invoke(table,"get",{id,link})};if(canUpdate)root.update=(id,values)=>invoke(table,"update",{id,values,link});for(const[relation,child,canCreate,canUpdateChild]of children){relations[relation]=Object.freeze({list:(parent_id,options={})=>invoke(table,"relation_list",{...options,relation,parent_id,link})});const childOps={};if(canCreate)childOps.create=values=>invoke(child,"create",{values,link});if(canUpdateChild)childOps.update=(id,values)=>invoke(child,"update",{id,values,link});if(canCreate||canUpdateChild)view[child]=Object.freeze(childOps)}if(children.length)root.relations=Object.freeze(relations);view[table]=Object.freeze(root)}return Object.freeze(view)};\n';
-    var INSERT_CLIENT_RUNTIME = String.raw`
+        function columnType(column) {
+            const type = { integer: "number", bigint: "string", number: "number", text: "string", timestamp: "string", boolean: "boolean", json: "Json", blob: "number[]" }[column.t];
+            return column.nul ? `${type} | null` : type;
+        }
+        function shape(columns, names, mode, required = new Set(), hidden = new Set()) {
+            const values = names.map((name) => {
+                const column = columns.find((candidate) => candidate.n === name);
+                const optional = mode === "update" || mode === "create" && !required.has(name) && (column.d || column.nul) || mode === "read" && hidden.has(name);
+                return `${JSON.stringify(name)}${optional ? "?" : ""}: ${columnType(column)}`;
+            });
+            return values.length ? `{ ${values.join("; ")} }` : "Record<string, never>";
+        }
+        var LINK_CLIENT_RUNTIME = 'const b64url=s=>btoa(unescape(encodeURIComponent(s))).replace(/\\+/g,"-").replace(/\\//g,"_").replace(/=+$/,"");const createLink=async(table,id,options={})=>{const result=await invoke(table,"link_create",{id,access:options.access,...(options.expiresInDays===undefined?{}:{expires_in_days:options.expiresInDays})});const route=typeof options.returnTo==="string"?options.returnTo:location.pathname+location.search+location.hash;return{link_id:result.link_id,url:location.origin+"/__sw/link#"+result.secret+"."+b64url(route),expires_at:result.expires_at}};const linkDoor=async(path,init)=>{swReadSessionVoid();const response=await fetch(path,{credentials:"same-origin",cache:"no-store",...init});const payload=await response.json().catch(()=>({error:"INVALID_DATA_RESPONSE",message:"Link operation returned an invalid response"}));if(!response.ok)throw new DataError(response.status,payload);return payload};const links=Object.freeze({opened:()=>{try{const list=JSON.parse(sessionStorage.getItem("__sw_links_opened")||"[]");return Array.isArray(list)?list:[]}catch(_){return[]}},sessions:async()=>{const payload=await linkDoor("/__sw/link/sessions",{method:"GET"});return{data:payload.data}},forget:async linkId=>{await linkDoor("/__sw/link/forget",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(linkId===undefined?{}:{link_id:linkId})})}});const linkedView=spec=>link=>{if(typeof link!=="string"||!/^lnk_[0-9a-f]{32}$/.test(link))throw new DataError(400,{error:"DATA_INPUT_INVALID",message:"linked() needs a link id"});const view={};for(const[table,canUpdate,children]of spec){const relations={};const root={get:id=>invoke(table,"get",{id,link})};if(canUpdate)root.update=(id,values)=>invoke(table,"update",{id,values,link});for(const[relation,child,canCreate,canUpdateChild]of children){relations[relation]=Object.freeze({list:(parent_id,options={})=>invoke(table,"relation_list",{...options,relation,parent_id,link})});const childOps={};if(canCreate)childOps.create=values=>invoke(child,"create",{values,link});if(canUpdateChild)childOps.update=(id,values)=>invoke(child,"update",{id,values,link});if(canCreate||canUpdateChild)view[child]=Object.freeze(childOps)}if(children.length)root.relations=Object.freeze(relations);view[table]=Object.freeze(root)}return Object.freeze(view)};\n';
+        var INSERT_CLIENT_RUNTIME = String.raw `
 function insertReceipt(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)
     || Object.keys(value).sort().join(',') !== 'created_at,refuse_until,replayed,result_until'
@@ -472,7 +549,7 @@ async function createWithReceipt(table, values, extra, eligible) {
   return send();
 }
 `;
-    var ANONYMOUS_CLIENT_RUNTIME = String.raw`
+        var ANONYMOUS_CLIENT_RUNTIME = String.raw `
 function creatorCapability(grant, secret, table) {
   const capability = {grant};
   Object.defineProperty(capability, 'secret', {value:secret, enumerable:false, writable:false, configurable:false});
@@ -513,7 +590,7 @@ async function createAnonymous(table, values, extra) {
   return send();
 }
 `;
-    var INTAKE_CLIENT_RUNTIME = String.raw`
+        var INTAKE_CLIENT_RUNTIME = String.raw `
 async function intake(table, reference, values, extra) {
   if (extra.length !== 0) throw new DataError(400, {error:'DATA_INPUT_INVALID', message:'intake takes only the reference and the values to submit. Nothing was sent.'});
   const key = Array.from(crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2,'0')).join('');
@@ -545,291 +622,316 @@ async function intake(table, reference, values, extra) {
   return send();
 }
 `;
-    var CREATOR_CLIENT_RUNTIME = 'const creatorError=(status,payload)=>{const e=new DataError(status,payload);if(payload&&["committed","unknown","read_failed","not_committed"].includes(payload.outcome))e.outcome=payload.outcome;if(payload&&payload.write_committed===true)e.write_committed=true;e.retry=false;e.retryable=false;return e};const creatorDoor=async(path,init,write)=>{const lost=(status,code)=>creatorError(status,{error:code,message:write?"The creator operation could not be confirmed. Do not repeat it automatically.":"The creator operation result could not be read.",outcome:write?"unknown":"read_failed"});let response;swReadSessionVoid();try{response=await fetch(path,{credentials:"same-origin",cache:"no-store",...init})}catch(_){throw lost(503,"CREATOR_OUTCOME_UNKNOWN")}let payload;try{payload=await response.json()}catch(_){throw lost(response.status,"INVALID_DATA_RESPONSE")}if(!response.ok){if(!payload||typeof payload!=="object"||typeof payload.error!=="string")throw lost(response.status,"INVALID_DATA_RESPONSE");throw creatorError(response.status,payload)}if(!payload||typeof payload!=="object"||payload.ok!==true||!("data" in payload)||payload.data===undefined)throw lost(502,"INVALID_DATA_RESPONSE");return payload.data};const creatorPost=(body,write)=>creatorDoor("/__sw/creator",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...body,contract})},write);const claimOutcomes=new Map();const creatorsOpened=()=>{try{const list=JSON.parse(sessionStorage.getItem("__sw_creators_opened")||"[]");return Array.isArray(list)?list:[]}catch(_){return[]}};const creators=Object.freeze({opened:creatorsOpened,sessions:async()=>({data:await creatorDoor("/__sw/creator/sessions",{method:"GET"})}),forget:async creatorId=>{await creatorDoor("/__sw/creator/forget",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(creatorId===undefined?{}:{creator_id:creatorId})},true)}});const creatorView=spec=>creatorId=>{if(typeof creatorId!=="string"||!/^crt_[0-9a-f]{32}$/.test(creatorId))throw new DataError(400,{error:"DATA_INPUT_INVALID",message:"creator() needs a creator id"});const view={};for(const[table,canUpdate,children]of spec){const call=async(action,fields,write)=>{if(action==="relation_list")validateListLimit(fields);return creatorPost({action,creator_id:creatorId,table,...fields},write)};const root={get:id=>call("get",{id}).then(r=>({data:r.data})),links:id=>call("link_list",{id}),revokeLink:(id,linkId)=>call("link_revoke",{id,link_id:linkId},true),createLink:async(id,options={})=>{const result=await call("link_create",{id,access:options.access,...(options.expiresInDays===undefined?{}:{expires_in_days:options.expiresInDays})},true);const route=typeof options.returnTo==="string"?options.returnTo:location.pathname+location.search+location.hash;return{link_id:result.link_id,url:location.origin+"/__sw/link#"+result.secret+"."+b64url(route),expires_at:result.expires_at}},claim:async(id,options={})=>{const key=creatorId+"|"+table+"|"+String(id);let result;try{result=await call("claim",{id,keep_shares:options.keepShares===true},true)}catch(e){const known=claimOutcomes.get(key);if(e.outcome==="committed"||e.write_committed===true)claimOutcomes.set(key,"committed");else if(e.outcome==="unknown")claimOutcomes.set(key,"unknown");else if(known){e.outcome=known==="committed"?"committed":"unknown";if(known==="committed")e.write_committed=true;e.message+=" An earlier attempt of this claim may already have applied; check claimStatus() or your account."}throw e}claimOutcomes.set(key,"committed");try{sessionStorage.setItem("__sw_creators_opened",JSON.stringify(creatorsOpened().filter(e=>e&&e.creator_id!==creatorId)))}catch(_){}return result},claimStatus:id=>call("claim_status",{id})};if(canUpdate)root.update=(id,values)=>call("update",{id,values},true);const relations={};for(const[relation,child,canCreate,canUpdateChild]of children){relations[relation]=Object.freeze({list:(parentId,options={})=>call("relation_list",{relation,parent_id:parentId,...(options.after===undefined?{}:{after:options.after}),...(options.limit===undefined?{}:{limit:options.limit})})});const childOps={};if(canCreate)childOps.create=values=>call("child_create",{child,values},true);if(canUpdateChild)childOps.update=(id,values)=>call("child_update",{child,id,values},true);if(canCreate||canUpdateChild)view[child]=Object.freeze(childOps)}if(children.length)root.relations=Object.freeze(relations);view[table]=Object.freeze(root)}return Object.freeze(view)};\n';
-    var ANONYMOUS_CLIENT_DECLARATIONS = `
+        var CREATOR_CLIENT_RUNTIME = 'const creatorError=(status,payload)=>{const e=new DataError(status,payload);if(payload&&["committed","unknown","read_failed","not_committed"].includes(payload.outcome))e.outcome=payload.outcome;if(payload&&payload.write_committed===true)e.write_committed=true;e.retry=false;e.retryable=false;return e};const creatorDoor=async(path,init,write)=>{const lost=(status,code)=>creatorError(status,{error:code,message:write?"The creator operation could not be confirmed. Do not repeat it automatically.":"The creator operation result could not be read.",outcome:write?"unknown":"read_failed"});let response;swReadSessionVoid();try{response=await fetch(path,{credentials:"same-origin",cache:"no-store",...init})}catch(_){throw lost(503,"CREATOR_OUTCOME_UNKNOWN")}let payload;try{payload=await response.json()}catch(_){throw lost(response.status,"INVALID_DATA_RESPONSE")}if(!response.ok){if(!payload||typeof payload!=="object"||typeof payload.error!=="string")throw lost(response.status,"INVALID_DATA_RESPONSE");throw creatorError(response.status,payload)}if(!payload||typeof payload!=="object"||payload.ok!==true||!("data" in payload)||payload.data===undefined)throw lost(502,"INVALID_DATA_RESPONSE");return payload.data};const creatorPost=(body,write)=>creatorDoor("/__sw/creator",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...body,contract})},write);const claimOutcomes=new Map();const creatorsOpened=()=>{try{const list=JSON.parse(sessionStorage.getItem("__sw_creators_opened")||"[]");return Array.isArray(list)?list:[]}catch(_){return[]}};const creators=Object.freeze({opened:creatorsOpened,sessions:async()=>({data:await creatorDoor("/__sw/creator/sessions",{method:"GET"})}),forget:async creatorId=>{await creatorDoor("/__sw/creator/forget",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(creatorId===undefined?{}:{creator_id:creatorId})},true)}});const creatorView=spec=>creatorId=>{if(typeof creatorId!=="string"||!/^crt_[0-9a-f]{32}$/.test(creatorId))throw new DataError(400,{error:"DATA_INPUT_INVALID",message:"creator() needs a creator id"});const view={};for(const[table,canUpdate,children]of spec){const call=async(action,fields,write)=>{if(action==="relation_list")validateListLimit(fields);return creatorPost({action,creator_id:creatorId,table,...fields},write)};const root={get:id=>call("get",{id}).then(r=>({data:r.data})),links:id=>call("link_list",{id}),revokeLink:(id,linkId)=>call("link_revoke",{id,link_id:linkId},true),createLink:async(id,options={})=>{const result=await call("link_create",{id,access:options.access,...(options.expiresInDays===undefined?{}:{expires_in_days:options.expiresInDays})},true);const route=typeof options.returnTo==="string"?options.returnTo:location.pathname+location.search+location.hash;return{link_id:result.link_id,url:location.origin+"/__sw/link#"+result.secret+"."+b64url(route),expires_at:result.expires_at}},claim:async(id,options={})=>{const key=creatorId+"|"+table+"|"+String(id);let result;try{result=await call("claim",{id,keep_shares:options.keepShares===true},true)}catch(e){const known=claimOutcomes.get(key);if(e.outcome==="committed"||e.write_committed===true)claimOutcomes.set(key,"committed");else if(e.outcome==="unknown")claimOutcomes.set(key,"unknown");else if(known){e.outcome=known==="committed"?"committed":"unknown";if(known==="committed")e.write_committed=true;e.message+=" An earlier attempt of this claim may already have applied; check claimStatus() or your account."}throw e}claimOutcomes.set(key,"committed");try{sessionStorage.setItem("__sw_creators_opened",JSON.stringify(creatorsOpened().filter(e=>e&&e.creator_id!==creatorId)))}catch(_){}return result},claimStatus:id=>call("claim_status",{id})};if(canUpdate)root.update=(id,values)=>call("update",{id,values},true);const relations={};for(const[relation,child,canCreate,canUpdateChild]of children){relations[relation]=Object.freeze({list:(parentId,options={})=>call("relation_list",{relation,parent_id:parentId,...(options.after===undefined?{}:{after:options.after}),...(options.limit===undefined?{}:{limit:options.limit})})});const childOps={};if(canCreate)childOps.create=values=>call("child_create",{child,values},true);if(canUpdateChild)childOps.update=(id,values)=>call("child_update",{child,id,values},true);if(canCreate||canUpdateChild)view[child]=Object.freeze(childOps)}if(children.length)root.relations=Object.freeze(relations);view[table]=Object.freeze(root)}return Object.freeze(view)};\n';
+        var ANONYMOUS_CLIENT_DECLARATIONS = `
   /** The private creator capability of a row created with createAnonymous. Keep it, and its url, private: anyone opening the url can read, edit, share and claim the row until it is claimed. */
   export interface CreatorCapability { readonly grant: string; readonly secret: string; readonly url: string; }
   export type AnonymousCreateResult<T> = T & { readonly grant: string; readonly idempotency: InsertReceipt; readonly creator: CreatorCapability; readonly request: InsertRequest<AnonymousCreateResult<T>> };
 `;
-    var INTAKE_CLIENT_DECLARATIONS = `
+        var INTAKE_CLIENT_DECLARATIONS = `
   export interface IntakeResult { readonly accepted: true; readonly idempotency: InsertReceipt; readonly request: InsertRequest<IntakeResult> }
 `;
-    var ROW_CAN_DECLARATION = "  /** Row capability hint (list/get with can: true): whether the signed-in caller may update or delete this row now, by the same rule the write enforces. A hint for UI; the write is still the final answer. */\n  export interface RowCan { readonly update: boolean; readonly delete: boolean; }\n";
-    var ROW_HINTS_DECLARATION = ROW_CAN_DECLARATION + '  /** Row hints (list/get with can: true): can says what the signed-in caller may change; mine is true when this caller created the row (the owner or author the platform recorded). Show edit and delete controls, a "you" label or a "mine" filter from these; the identity column itself is never sent. */\n  export interface RowHints { readonly can: RowCan; readonly mine: boolean; }\n';
-    var INSERT_CLIENT_DECLARATIONS = `
+        var ROW_CAN_DECLARATION = "  /** Row capability hint (list/get with can: true): whether the signed-in caller may update or delete this row now, by the same rule the write enforces. A hint for UI; the write is still the final answer. */\n  export interface RowCan { readonly update: boolean; readonly delete: boolean; }\n";
+        var ROW_HINTS_DECLARATION = ROW_CAN_DECLARATION + '  /** Row hints (list/get with can: true): can says what the signed-in caller may change; mine is true when this caller created the row (the owner or author the platform recorded). Show edit and delete controls, a "you" label or a "mine" filter from these; the identity column itself is never sent. */\n  export interface RowHints { readonly can: RowCan; readonly mine: boolean; }\n';
+        var INSERT_CLIENT_DECLARATIONS = `
   export interface InsertReceipt { readonly replayed: boolean; readonly created_at: number; readonly result_until: number; readonly refuse_until: number; }
   export interface InsertRequest<T> { readonly key: string; readonly createdAt: number; retry(): Promise<T>; }
   export type InsertResult<T> = T & { readonly idempotency: InsertReceipt; readonly request: InsertRequest<InsertResult<T>> };
 `;
-    var CLIENT_GENERATION2 = 5;
-    var ACCEPTED_CLIENT_GENERATIONS2 = Object.freeze([5, 4, 3, 2, 1]);
-    var PUBLIC_BOOTSTRAP_CLIENT_RUNTIME = 'const swCanon=(v,d)=>{if(v===null||typeof v==="string"||typeof v==="boolean"||(typeof v==="number"&&Number.isFinite(v)))return JSON.stringify(v);if(d===0||typeof v!=="object"||Array.isArray(v))return null;const parts=[];for(const k of Object.keys(v).sort()){if(v[k]===undefined)continue;const e=swCanon(v[k],d-1);if(e===null)return null;parts.push(JSON.stringify(k)+":"+e)}return"{"+parts.join(",")+"}"};let swBoot;const swBootTake=body=>{try{if(swBoot===undefined){swBoot=null;const el=typeof document!=="undefined"&&document.getElementById?document.getElementById("__sw_public_data"):null;if(el&&el.type==="application/json"&&(el.parentNode===document.head||el.parentNode===document.body)){const p=JSON.parse(el.textContent||"null");if(p&&p.v===1&&p.contract===contract&&Number.isSafeInteger(p.validated_at)&&p.validated_at<=Date.now()&&Number.isInteger(p.max_age)&&p.max_age>0&&p.max_age<=120&&p.entries&&typeof p.entries==="object"&&!Array.isArray(p.entries)&&typeof p.path==="string"&&typeof location!=="undefined")swBoot={until:p.validated_at+p.max_age*1000,path:p.path,entries:new Map(Object.entries(p.entries))}}if(el&&el.parentNode)el.parentNode.removeChild(el)}if(!swBoot)return undefined;if(Date.now()>=swBoot.until||location.pathname!==swBoot.path){swBoot=null;return undefined}const key=swCanon(body,2);if(key===null||!swBoot.entries.has(key))return undefined;const value=swBoot.entries.get(key);swBoot.entries.delete(key);return value}catch(error){swBoot=null;return undefined}};';
-    var PUBLIC_BOOTSTRAP_INVOKE = 'if(operation==="list"||operation==="get"||operation==="aggregate"||operation==="relation_list"){const booted=swBootTake({...input,contract,table,operation});if(booted!==undefined)return booted}else swBoot=null;';
-    function describeDataClient2(authority, contract_digest, insertReceiptCapability, localTypes = false, generation = CLIENT_GENERATION2) {
-      if (!ACCEPTED_CLIENT_GENERATIONS2.includes(generation)) throw new Error(`Unknown data client generation ${generation}.`);
-      const canonical = authority ? canonicalize2(authority.schema, authority.intents, authority.scopes, insertReceiptCapability) : canonicalize2({}, {}, {}, insertReceiptCapability);
-      const { tables } = JSON.parse(canonical);
-      const declarations = [];
-      const runtimeTables = [];
-      const receiptTables = [];
-      const receiptCapable = insertReceiptCapability === "insert-v1";
-      const anonymousTables = [];
-      const intakeTables = [];
-      const creatorDeclarations = [];
-      const creatorSpec = [];
-      const linkedDeclarations = [];
-      const linkedSpec = [];
-      for (const table of tables) {
-        const { name, columns, client, primaryKey } = table;
-        const readable = client.read === true ? columns.filter((column) => column.n !== table.author).map((column) => column.n) : client.read || [];
-        const hidden = generation >= 5 ? hiddenByBranch(table) : /* @__PURE__ */ new Set();
-        const row = shape(columns, readable, "read", /* @__PURE__ */ new Set(), hidden);
-        const id = columnType(columns.find((column) => column.n === primaryKey));
-        const operations = [];
-        const methods = [];
-        if (client.read !== false) {
-          const equality = readable.filter((field) => !["json", "blob"].includes(columns.find((column) => column.n === field).t) && !hidden.has(field));
-          if (generation >= 2) {
-            const listOptions = `limit?: L & (number extends L ? unknown : [L] extends [PageSize] ? unknown : never); after?: ${id}; where?: ${shape(columns, equality, "update")}`;
-            const hinted = generation >= 4 ? "RowHints" : "{ can: RowCan }";
-            operations.push(`list<const L extends number = number>(options: { ${listOptions}; can: true }): Promise<{ data: (${row} & ${hinted})[]; next: ${id} | null; has_more: boolean }>`);
-            operations.push(`list<const L extends number = number>(options?: { ${listOptions}; can?: false }): Promise<{ data: ${row}[]; next: ${id} | null; has_more: boolean }>`);
-            operations.push(`get(id: ${id}, options: { can: true }): Promise<{ data: (${row} & ${hinted}) | null }>`);
-            operations.push(`get(id: ${id}, options?: { can?: false }): Promise<{ data: ${row} | null }>`);
-          } else {
-            operations.push(`list<const L extends number = number>(options?: { limit?: L & (number extends L ? unknown : [L] extends [PageSize] ? unknown : never); after?: ${id}; where?: ${shape(columns, equality, "update")} }): Promise<{ data: ${row}[]; next: ${id} | null; has_more: boolean }>`);
-            operations.push(`get(id: ${id}): Promise<{ data: ${row} | null }>`);
-          }
-          methods.push("list", "get");
-          const numeric = equality.filter((field) => ["integer", "number"].includes(columns.find((column) => column.n === field).t));
-          const fieldUnion = (list) => list.map((field) => JSON.stringify(field)).join(" | ");
-          const aggregateOptions = ["count?: true"];
-          if (numeric.length) aggregateOptions.push(`sum?: ${fieldUnion(numeric)}`, `avg?: ${fieldUnion(numeric)}`);
-          if (equality.length) {
-            aggregateOptions.push(`min?: ${fieldUnion(equality)}`, `max?: ${fieldUnion(equality)}`);
-            aggregateOptions.push(`groupBy?: Array<${fieldUnion(equality)}>`);
-          }
-          aggregateOptions.push(`where?: ${shape(columns, equality, "update")}`);
-          aggregateOptions.push("having?: Record<string, { eq?: number; ne?: number; lt?: number; lte?: number; gt?: number; gte?: number }>");
-          aggregateOptions.push(`order?: string | [string, 'asc' | 'desc'] | Array<[string, 'asc' | 'desc']>`);
-          aggregateOptions.push("limit?: number");
-          operations.push(`aggregate(options: { ${aggregateOptions.join("; ")} }): Promise<{ data: Array<Record<string, number | string | boolean | null>>; has_more?: boolean }>`);
-          methods.push("aggregate");
-        }
-        const mutation = client.read === false ? "{ count: number; changes: number }" : `{ data: ${row} | null; count: number; changes: number }`;
-        if (client.create !== null) {
-          const required = table.policy?.k === "p" ? /* @__PURE__ */ new Set([table.policy.v]) : /* @__PURE__ */ new Set();
-          const eligible = columns.some((column) => column.n === primaryKey && column.t === "integer") && !columns.some((column) => column.t === "blob");
-          if (receiptCapable && eligible) receiptTables.push(name);
-          operations.push(`create(values: ${shape(columns, client.create, "create", required)}): Promise<${receiptCapable && eligible ? `InsertResult<${mutation}>` : mutation}>`);
-          methods.push("create");
-          if (receiptCapable && eligible && client.links && client.links.anonymousCreate === true) {
-            operations.push(`createAnonymous(values: ${shape(columns, client.create, "create", required)}): Promise<AnonymousCreateResult<{ data: ${row} | null }>>`);
-            methods.push("createAnonymous");
-            anonymousTables.push(name);
-            const ownerUpdate = (client.update || []).filter((field) => field !== table.owner && field !== primaryKey);
-            const creatorRow = shape(columns, readable, "read");
-            const rootOps = [
-              `get(id: ${id}): Promise<{ data: ${creatorRow} | null }>`,
-              `links(id: ${id}): Promise<{ data: Array<{ link_id: string; access: 'read' | 'edit'; created_at: number; expires_at: number | null }> }>`,
-              `createLink(id: ${id}, options: { access: ${client.links.edit.length ? "'read' | 'edit'" : "'read'"}; expiresInDays?: number; returnTo?: string }): Promise<{ link_id: string; url: string; expires_at: number | null }>`,
-              `revokeLink(id: ${id}, linkId: string): Promise<{ revoked: boolean }>`,
-              `claim(id: ${id}, options?: { keepShares?: boolean }): Promise<{ claimed: true; table: string; id: ${id}; shares: 'kept' | 'revoked' | 'unknown'; reconciled?: true }>`,
-              `claimStatus(id: ${id}): Promise<{ status: 'claimed_by_you' | 'not_claimed' | 'unknown' }>`
-            ];
-            if (ownerUpdate.length) rootOps.push(`update(id: ${id}, values: ${shape(columns, ownerUpdate, "update")}): Promise<{ data: ${creatorRow} | null; count: number; changes: number }>`);
-            const childRelations = [], childSpecs = [];
-            for (const relationName of client.links.children) {
-              const relation = table.relations.find((item) => item.name === relationName);
-              const child = tables.find((candidate) => candidate.name === relation.table);
-              const childReadable = child.client.read === true ? child.columns.filter((column) => column.n !== child.author).map((column) => column.n) : child.client.read;
-              const childRow = shape(child.columns, childReadable, "read");
-              const childId = columnType(child.columns.find((column) => column.n === child.primaryKey));
-              childRelations.push(`${JSON.stringify(relationName)}: { list<const L extends number = number>(parentId: ${id}, options?: { limit?: L & (number extends L ? unknown : [L] extends [PageSize] ? unknown : never); after?: ${childId} }): Promise<{ data: ${childRow}[]; next: ${childId} | null; has_more: boolean }> }`);
-              const childUpdate = child.client.update ? child.client.update.filter((field) => field !== relation.fk) : [];
-              const childOps = [];
-              if (child.client.create !== null) childOps.push(`create(values: ${shape(child.columns, child.client.create, "create", /* @__PURE__ */ new Set([relation.fk]))}): Promise<{ data: ${childRow} | null; count: number; changes: number }>`);
-              if (childUpdate.length) childOps.push(`update(id: ${childId}, values: ${shape(child.columns, childUpdate, "update")}): Promise<{ data: ${childRow} | null; count: number; changes: number }>`);
-              if (childOps.length) creatorDeclarations.push(`${JSON.stringify(child.name)}: { ${childOps.join("; ")} }`);
-              childSpecs.push([relationName, child.name, child.client.create !== null, childUpdate.length > 0]);
+        var CLIENT_GENERATION2 = 5;
+        var ACCEPTED_CLIENT_GENERATIONS2 = Object.freeze([5, 4, 3, 2, 1]);
+        var PUBLIC_BOOTSTRAP_CLIENT_RUNTIME = 'const swCanon=(v,d)=>{if(v===null||typeof v==="string"||typeof v==="boolean"||(typeof v==="number"&&Number.isFinite(v)))return JSON.stringify(v);if(d===0||typeof v!=="object"||Array.isArray(v))return null;const parts=[];for(const k of Object.keys(v).sort()){if(v[k]===undefined)continue;const e=swCanon(v[k],d-1);if(e===null)return null;parts.push(JSON.stringify(k)+":"+e)}return"{"+parts.join(",")+"}"};let swBoot;const swBootTake=body=>{try{if(swBoot===undefined){swBoot=null;const el=typeof document!=="undefined"&&document.getElementById?document.getElementById("__sw_public_data"):null;if(el&&el.type==="application/json"&&(el.parentNode===document.head||el.parentNode===document.body)){const p=JSON.parse(el.textContent||"null");if(p&&p.v===1&&p.contract===contract&&Number.isSafeInteger(p.validated_at)&&p.validated_at<=Date.now()&&Number.isInteger(p.max_age)&&p.max_age>0&&p.max_age<=120&&p.entries&&typeof p.entries==="object"&&!Array.isArray(p.entries)&&typeof p.path==="string"&&typeof location!=="undefined")swBoot={until:p.validated_at+p.max_age*1000,path:p.path,entries:new Map(Object.entries(p.entries))}}if(el&&el.parentNode)el.parentNode.removeChild(el)}if(!swBoot)return undefined;if(Date.now()>=swBoot.until||location.pathname!==swBoot.path){swBoot=null;return undefined}const key=swCanon(body,2);if(key===null||!swBoot.entries.has(key))return undefined;const value=swBoot.entries.get(key);swBoot.entries.delete(key);return value}catch(error){swBoot=null;return undefined}};';
+        var PUBLIC_BOOTSTRAP_INVOKE = 'if(operation==="list"||operation==="get"||operation==="aggregate"||operation==="relation_list"){const booted=swBootTake({...input,contract,table,operation});if(booted!==undefined)return booted}else swBoot=null;';
+        function describeDataClient2(authority, contract_digest, insertReceiptCapability, localTypes = false, generation = CLIENT_GENERATION2) {
+            if (!ACCEPTED_CLIENT_GENERATIONS2.includes(generation))
+                throw new Error(`Unknown data client generation ${generation}.`);
+            const canonical = authority ? canonicalize2(authority.schema, authority.intents, authority.scopes, insertReceiptCapability) : canonicalize2({}, {}, {}, insertReceiptCapability);
+            const { tables } = JSON.parse(canonical);
+            const declarations = [];
+            const runtimeTables = [];
+            const receiptTables = [];
+            const receiptCapable = insertReceiptCapability === "insert-v1";
+            const anonymousTables = [];
+            const intakeTables = [];
+            const creatorDeclarations = [];
+            const creatorSpec = [];
+            const linkedDeclarations = [];
+            const linkedSpec = [];
+            for (const table of tables) {
+                const { name, columns, client, primaryKey } = table;
+                const readable = client.read === true ? columns.filter((column) => column.n !== table.author).map((column) => column.n) : client.read || [];
+                const hidden = generation >= 5 ? hiddenByBranch(table) : new Set();
+                const row = shape(columns, readable, "read", new Set(), hidden);
+                const id = columnType(columns.find((column) => column.n === primaryKey));
+                const operations = [];
+                const methods = [];
+                if (client.read !== false) {
+                    const equality = readable.filter((field) => !["json", "blob"].includes(columns.find((column) => column.n === field).t) && !hidden.has(field));
+                    if (generation >= 2) {
+                        const listOptions = `limit?: L & (number extends L ? unknown : [L] extends [PageSize] ? unknown : never); after?: ${id}; where?: ${shape(columns, equality, "update")}`;
+                        const hinted = generation >= 4 ? "RowHints" : "{ can: RowCan }";
+                        operations.push(`list<const L extends number = number>(options: { ${listOptions}; can: true }): Promise<{ data: (${row} & ${hinted})[]; next: ${id} | null; has_more: boolean }>`);
+                        operations.push(`list<const L extends number = number>(options?: { ${listOptions}; can?: false }): Promise<{ data: ${row}[]; next: ${id} | null; has_more: boolean }>`);
+                        operations.push(`get(id: ${id}, options: { can: true }): Promise<{ data: (${row} & ${hinted}) | null }>`);
+                        operations.push(`get(id: ${id}, options?: { can?: false }): Promise<{ data: ${row} | null }>`);
+                    }
+                    else {
+                        operations.push(`list<const L extends number = number>(options?: { limit?: L & (number extends L ? unknown : [L] extends [PageSize] ? unknown : never); after?: ${id}; where?: ${shape(columns, equality, "update")} }): Promise<{ data: ${row}[]; next: ${id} | null; has_more: boolean }>`);
+                        operations.push(`get(id: ${id}): Promise<{ data: ${row} | null }>`);
+                    }
+                    methods.push("list", "get");
+                    const numeric = equality.filter((field) => ["integer", "number"].includes(columns.find((column) => column.n === field).t));
+                    const fieldUnion = (list) => list.map((field) => JSON.stringify(field)).join(" | ");
+                    const aggregateOptions = ["count?: true"];
+                    if (numeric.length)
+                        aggregateOptions.push(`sum?: ${fieldUnion(numeric)}`, `avg?: ${fieldUnion(numeric)}`);
+                    if (equality.length) {
+                        aggregateOptions.push(`min?: ${fieldUnion(equality)}`, `max?: ${fieldUnion(equality)}`);
+                        aggregateOptions.push(`groupBy?: Array<${fieldUnion(equality)}>`);
+                    }
+                    aggregateOptions.push(`where?: ${shape(columns, equality, "update")}`);
+                    aggregateOptions.push("having?: Record<string, { eq?: number; ne?: number; lt?: number; lte?: number; gt?: number; gte?: number }>");
+                    aggregateOptions.push(`order?: string | [string, 'asc' | 'desc'] | Array<[string, 'asc' | 'desc']>`);
+                    aggregateOptions.push("limit?: number");
+                    operations.push(`aggregate(options: { ${aggregateOptions.join("; ")} }): Promise<{ data: Array<Record<string, number | string | boolean | null>>; has_more?: boolean }>`);
+                    methods.push("aggregate");
+                }
+                const mutation = client.read === false ? "{ count: number; changes: number }" : `{ data: ${row} | null; count: number; changes: number }`;
+                if (client.create !== null) {
+                    const required = table.policy?.k === "p" ? new Set([table.policy.v]) : new Set();
+                    const eligible = columns.some((column) => column.n === primaryKey && column.t === "integer") && !columns.some((column) => column.t === "blob");
+                    if (receiptCapable && eligible)
+                        receiptTables.push(name);
+                    operations.push(`create(values: ${shape(columns, client.create, "create", required)}): Promise<${receiptCapable && eligible ? `InsertResult<${mutation}>` : mutation}>`);
+                    methods.push("create");
+                    if (receiptCapable && eligible && client.links && client.links.anonymousCreate === true) {
+                        operations.push(`createAnonymous(values: ${shape(columns, client.create, "create", required)}): Promise<AnonymousCreateResult<{ data: ${row} | null }>>`);
+                        methods.push("createAnonymous");
+                        anonymousTables.push(name);
+                        const ownerUpdate = (client.update || []).filter((field) => field !== table.owner && field !== primaryKey);
+                        const creatorRow = shape(columns, readable, "read");
+                        const rootOps = [
+                            `get(id: ${id}): Promise<{ data: ${creatorRow} | null }>`,
+                            `links(id: ${id}): Promise<{ data: Array<{ link_id: string; access: 'read' | 'edit'; created_at: number; expires_at: number | null }> }>`,
+                            `createLink(id: ${id}, options: { access: ${client.links.edit.length ? "'read' | 'edit'" : "'read'"}; expiresInDays?: number; returnTo?: string }): Promise<{ link_id: string; url: string; expires_at: number | null }>`,
+                            `revokeLink(id: ${id}, linkId: string): Promise<{ revoked: boolean }>`,
+                            `claim(id: ${id}, options?: { keepShares?: boolean }): Promise<{ claimed: true; table: string; id: ${id}; shares: 'kept' | 'revoked' | 'unknown'; reconciled?: true }>`,
+                            `claimStatus(id: ${id}): Promise<{ status: 'claimed_by_you' | 'not_claimed' | 'unknown' }>`
+                        ];
+                        if (ownerUpdate.length)
+                            rootOps.push(`update(id: ${id}, values: ${shape(columns, ownerUpdate, "update")}): Promise<{ data: ${creatorRow} | null; count: number; changes: number }>`);
+                        const childRelations = [], childSpecs = [];
+                        for (const relationName of client.links.children) {
+                            const relation = table.relations.find((item) => item.name === relationName);
+                            const child = tables.find((candidate) => candidate.name === relation.table);
+                            const childReadable = child.client.read === true ? child.columns.filter((column) => column.n !== child.author).map((column) => column.n) : child.client.read;
+                            const childRow = shape(child.columns, childReadable, "read");
+                            const childId = columnType(child.columns.find((column) => column.n === child.primaryKey));
+                            childRelations.push(`${JSON.stringify(relationName)}: { list<const L extends number = number>(parentId: ${id}, options?: { limit?: L & (number extends L ? unknown : [L] extends [PageSize] ? unknown : never); after?: ${childId} }): Promise<{ data: ${childRow}[]; next: ${childId} | null; has_more: boolean }> }`);
+                            const childUpdate = child.client.update ? child.client.update.filter((field) => field !== relation.fk) : [];
+                            const childOps = [];
+                            if (child.client.create !== null)
+                                childOps.push(`create(values: ${shape(child.columns, child.client.create, "create", new Set([relation.fk]))}): Promise<{ data: ${childRow} | null; count: number; changes: number }>`);
+                            if (childUpdate.length)
+                                childOps.push(`update(id: ${childId}, values: ${shape(child.columns, childUpdate, "update")}): Promise<{ data: ${childRow} | null; count: number; changes: number }>`);
+                            if (childOps.length)
+                                creatorDeclarations.push(`${JSON.stringify(child.name)}: { ${childOps.join("; ")} }`);
+                            childSpecs.push([relationName, child.name, child.client.create !== null, childUpdate.length > 0]);
+                        }
+                        if (childRelations.length)
+                            rootOps.push(`relations: { ${childRelations.join("; ")} }`);
+                        creatorDeclarations.push(`${JSON.stringify(name)}: { ${rootOps.join("; ")} }`);
+                        creatorSpec.push([name, ownerUpdate.length > 0, childSpecs]);
+                    }
+                }
+                if (receiptCapable && client.intake) {
+                    const target = tables.find((candidate) => candidate.name === client.intake.target.table);
+                    const reference = columnType({ ...target.columns.find((column) => column.n === client.intake.target.field), nul: void 0 });
+                    operations.push(`intake(reference: ${reference}, values: ${shape(columns, client.intake.fields, "create")}): Promise<IntakeResult>`);
+                    methods.push("intake");
+                    intakeTables.push(name);
+                }
+                if (client.update !== null) {
+                    operations.push(`update(id: ${id}, values: ${shape(columns, client.update, "update")}): Promise<${mutation}>`);
+                    methods.push("update");
+                }
+                if (client.delete) {
+                    operations.push(`delete(id: ${id}): Promise<${mutation}>`);
+                    methods.push("delete");
+                }
+                const relationDeclarations = [];
+                const relationNames = [];
+                for (const relation of table.relations || []) {
+                    const child = tables.find((candidate) => candidate.name === relation.table);
+                    const childReadable = child.client.read === true ? child.columns.filter((column) => column.n !== child.author).map((column) => column.n) : child.client.read;
+                    const childRow = shape(child.columns, childReadable, "read");
+                    const childId = columnType(child.columns.find((column) => column.n === child.primaryKey));
+                    const parentId = columnType(columns.find((column) => column.n === primaryKey));
+                    const equality = childReadable.filter((field) => !["json", "blob"].includes(child.columns.find((column) => column.n === field).t));
+                    relationDeclarations.push(`${JSON.stringify(relation.name)}: { list<const L extends number = number>(parentId: ${parentId}, options?: { limit?: L & (number extends L ? unknown : [L] extends [PageSize] ? unknown : never); after?: ${childId}; where?: ${shape(child.columns, equality, "update")} }): Promise<{ data: ${childRow}[]; next: ${childId} | null; has_more: boolean }> }`);
+                    relationNames.push(relation.name);
+                }
+                if (relationDeclarations.length)
+                    operations.push(`relations: { ${relationDeclarations.join("; ")} }`);
+                const links = client.links;
+                if (links) {
+                    operations.push(`createLink(id: ${id}, options: { access: ${links.edit.length ? "'read' | 'edit'" : "'read'"}; expiresInDays?: number; returnTo?: string }): Promise<{ link_id: string; url: string; expires_at: number | null }>`);
+                    operations.push(`links(id: ${id}): Promise<{ data: Array<{ link_id: string; access: 'read' | 'edit'; created_at: number; expires_at: number | null }> }>`);
+                    operations.push(`revokeLink(id: ${id}, linkId: string): Promise<{ revoked: boolean }>`);
+                    methods.push("createLink", "links", "revokeLink");
+                    const linkRow = shape(columns, links.read, "read");
+                    const rootOps = [`get(id: ${id}): Promise<{ data: ${linkRow} | null }>`];
+                    if (links.edit.length)
+                        rootOps.push(`update(id: ${id}, values: ${shape(columns, links.edit, "update")}): Promise<{ data: ${linkRow} | null; count: number; changes: number }>`);
+                    const childRelations = [];
+                    const childSpecs = [];
+                    for (const relationName of links.children) {
+                        const relation = table.relations.find((item) => item.name === relationName);
+                        const child = tables.find((candidate) => candidate.name === relation.table);
+                        const childReadable = child.client.read === true ? child.columns.filter((column) => column.n !== child.author).map((column) => column.n) : child.client.read;
+                        const childRow = shape(child.columns, childReadable, "read");
+                        const childId = columnType(child.columns.find((column) => column.n === child.primaryKey));
+                        childRelations.push(`${JSON.stringify(relationName)}: { list<const L extends number = number>(parentId: ${id}, options?: { limit?: L & (number extends L ? unknown : [L] extends [PageSize] ? unknown : never); after?: ${childId} }): Promise<{ data: ${childRow}[]; next: ${childId} | null; has_more: boolean }> }`);
+                        const childOps = [];
+                        const canCreate = links.edit.length > 0 && child.client.create !== null;
+                        const childUpdate = child.client.update ? child.client.update.filter((field) => field !== relation.fk) : [];
+                        const canUpdate = links.edit.length > 0 && childUpdate.length > 0;
+                        if (canCreate)
+                            childOps.push(`create(values: ${shape(child.columns, child.client.create, "create", new Set([relation.fk]))}): Promise<{ data: ${childRow} | null; count: number; changes: number }>`);
+                        if (canUpdate)
+                            childOps.push(`update(id: ${childId}, values: ${shape(child.columns, childUpdate, "update")}): Promise<{ data: ${childRow} | null; count: number; changes: number }>`);
+                        if (childOps.length)
+                            linkedDeclarations.push(`${JSON.stringify(child.name)}: { ${childOps.join("; ")} }`);
+                        childSpecs.push([relationName, child.name, canCreate, canUpdate]);
+                    }
+                    if (childRelations.length)
+                        rootOps.push(`relations: { ${childRelations.join("; ")} }`);
+                    linkedDeclarations.push(`${JSON.stringify(name)}: { ${rootOps.join("; ")} }`);
+                    linkedSpec.push([name, links.edit.length > 0, childSpecs]);
+                }
+                declarations.push(`${JSON.stringify(name)}: { ${operations.join("; ")} }`);
+                runtimeTables.push([name, methods, relationNames]);
             }
-            if (childRelations.length) rootOps.push(`relations: { ${childRelations.join("; ")} }`);
-            creatorDeclarations.push(`${JSON.stringify(name)}: { ${rootOps.join("; ")} }`);
-            creatorSpec.push([name, ownerUpdate.length > 0, childSpecs]);
-          }
-        }
-        if (receiptCapable && client.intake) {
-          const target = tables.find((candidate) => candidate.name === client.intake.target.table);
-          const reference = columnType({ ...target.columns.find((column) => column.n === client.intake.target.field), nul: void 0 });
-          operations.push(`intake(reference: ${reference}, values: ${shape(columns, client.intake.fields, "create")}): Promise<IntakeResult>`);
-          methods.push("intake");
-          intakeTables.push(name);
-        }
-        if (client.update !== null) {
-          operations.push(`update(id: ${id}, values: ${shape(columns, client.update, "update")}): Promise<${mutation}>`);
-          methods.push("update");
-        }
-        if (client.delete) {
-          operations.push(`delete(id: ${id}): Promise<${mutation}>`);
-          methods.push("delete");
-        }
-        const relationDeclarations = [];
-        const relationNames = [];
-        for (const relation of table.relations || []) {
-          const child = tables.find((candidate) => candidate.name === relation.table);
-          const childReadable = child.client.read === true ? child.columns.filter((column) => column.n !== child.author).map((column) => column.n) : child.client.read;
-          const childRow = shape(child.columns, childReadable, "read");
-          const childId = columnType(child.columns.find((column) => column.n === child.primaryKey));
-          const parentId = columnType(columns.find((column) => column.n === primaryKey));
-          const equality = childReadable.filter((field) => !["json", "blob"].includes(child.columns.find((column) => column.n === field).t));
-          relationDeclarations.push(`${JSON.stringify(relation.name)}: { list<const L extends number = number>(parentId: ${parentId}, options?: { limit?: L & (number extends L ? unknown : [L] extends [PageSize] ? unknown : never); after?: ${childId}; where?: ${shape(child.columns, equality, "update")} }): Promise<{ data: ${childRow}[]; next: ${childId} | null; has_more: boolean }> }`);
-          relationNames.push(relation.name);
-        }
-        if (relationDeclarations.length) operations.push(`relations: { ${relationDeclarations.join("; ")} }`);
-        const links = client.links;
-        if (links) {
-          operations.push(`createLink(id: ${id}, options: { access: ${links.edit.length ? "'read' | 'edit'" : "'read'"}; expiresInDays?: number; returnTo?: string }): Promise<{ link_id: string; url: string; expires_at: number | null }>`);
-          operations.push(`links(id: ${id}): Promise<{ data: Array<{ link_id: string; access: 'read' | 'edit'; created_at: number; expires_at: number | null }> }>`);
-          operations.push(`revokeLink(id: ${id}, linkId: string): Promise<{ revoked: boolean }>`);
-          methods.push("createLink", "links", "revokeLink");
-          const linkRow = shape(columns, links.read, "read");
-          const rootOps = [`get(id: ${id}): Promise<{ data: ${linkRow} | null }>`];
-          if (links.edit.length) rootOps.push(`update(id: ${id}, values: ${shape(columns, links.edit, "update")}): Promise<{ data: ${linkRow} | null; count: number; changes: number }>`);
-          const childRelations = [];
-          const childSpecs = [];
-          for (const relationName of links.children) {
-            const relation = table.relations.find((item) => item.name === relationName);
-            const child = tables.find((candidate) => candidate.name === relation.table);
-            const childReadable = child.client.read === true ? child.columns.filter((column) => column.n !== child.author).map((column) => column.n) : child.client.read;
-            const childRow = shape(child.columns, childReadable, "read");
-            const childId = columnType(child.columns.find((column) => column.n === child.primaryKey));
-            childRelations.push(`${JSON.stringify(relationName)}: { list<const L extends number = number>(parentId: ${id}, options?: { limit?: L & (number extends L ? unknown : [L] extends [PageSize] ? unknown : never); after?: ${childId} }): Promise<{ data: ${childRow}[]; next: ${childId} | null; has_more: boolean }> }`);
-            const childOps = [];
-            const canCreate = links.edit.length > 0 && child.client.create !== null;
-            const childUpdate = child.client.update ? child.client.update.filter((field) => field !== relation.fk) : [];
-            const canUpdate = links.edit.length > 0 && childUpdate.length > 0;
-            if (canCreate) childOps.push(`create(values: ${shape(child.columns, child.client.create, "create", /* @__PURE__ */ new Set([relation.fk]))}): Promise<{ data: ${childRow} | null; count: number; changes: number }>`);
-            if (canUpdate) childOps.push(`update(id: ${childId}, values: ${shape(child.columns, childUpdate, "update")}): Promise<{ data: ${childRow} | null; count: number; changes: number }>`);
-            if (childOps.length) linkedDeclarations.push(`${JSON.stringify(child.name)}: { ${childOps.join("; ")} }`);
-            childSpecs.push([relationName, child.name, canCreate, canUpdate]);
-          }
-          if (childRelations.length) rootOps.push(`relations: { ${childRelations.join("; ")} }`);
-          linkedDeclarations.push(`${JSON.stringify(name)}: { ${rootOps.join("; ")} }`);
-          linkedSpec.push([name, links.edit.length > 0, childSpecs]);
-        }
-        declarations.push(`${JSON.stringify(name)}: { ${operations.join("; ")} }`);
-        runtimeTables.push([name, methods, relationNames]);
-      }
-      if (creatorSpec.length) {
-        declarations.push(`creators: { opened(): Array<{ creator_id: string; table: string; row_id: string }>; sessions(): Promise<{ data: Array<{ creator_id: string; table: string; row_id: string; expires_at: number }> }>; forget(creatorId?: string): Promise<void> }`);
-        declarations.push(`creator(creatorId: string): { ${creatorDeclarations.join("; ")} }`);
-      }
-      if (linkedSpec.length) {
-        declarations.push(`links: { opened(): Array<{ link_id: string; table: string; row_id: string; access: 'read' | 'edit' }>; sessions(): Promise<{ data: Array<{ link_id: string; table: string; row_id: string; access: 'read' | 'edit'; expires_at: number }> }>; forget(linkId?: string): Promise<void> }`);
-        declarations.push(`linked(linkId: string): { ${linkedDeclarations.join("; ")} }`);
-      }
-      const declaration = `declare module ${JSON.stringify("somewhere:data")} {
+            if (creatorSpec.length) {
+                declarations.push(`creators: { opened(): Array<{ creator_id: string; table: string; row_id: string }>; sessions(): Promise<{ data: Array<{ creator_id: string; table: string; row_id: string; expires_at: number }> }>; forget(creatorId?: string): Promise<void> }`);
+                declarations.push(`creator(creatorId: string): { ${creatorDeclarations.join("; ")} }`);
+            }
+            if (linkedSpec.length) {
+                declarations.push(`links: { opened(): Array<{ link_id: string; table: string; row_id: string; access: 'read' | 'edit' }>; sessions(): Promise<{ data: Array<{ link_id: string; table: string; row_id: string; access: 'read' | 'edit'; expires_at: number }> }>; forget(linkId?: string): Promise<void> }`);
+                declarations.push(`linked(linkId: string): { ${linkedDeclarations.join("; ")} }`);
+            }
+            const declaration = `declare module ${JSON.stringify("somewhere:data")} {
   type PageSize = ${Array.from({ length: 100 }, (_, i) => i + 1).join(" | ")};
   export type Json = string | number | boolean | null | Json[] | { [key: string]: Json };
 ${generation >= 4 ? ROW_HINTS_DECLARATION : generation >= 2 ? ROW_CAN_DECLARATION : ""}${receiptCapable ? localTypes ? INSERT_CLIENT_DECLARATIONS.replace("readonly idempotency:", "readonly idempotency?:").replace("readonly request:", "readonly request?:") : INSERT_CLIENT_DECLARATIONS : ""}${anonymousTables.length ? ANONYMOUS_CLIENT_DECLARATIONS : ""}${intakeTables.length ? INTAKE_CLIENT_DECLARATIONS : ""}  export class DataError extends Error { readonly status: number; readonly code: string | null;${receiptCapable ? " readonly request?: InsertRequest<unknown>; readonly outcome?: string; readonly write_committed?: boolean; readonly retry?: false; readonly retryable?: false; readonly idempotency?: InsertReceipt;" : ""} constructor(status: number, payload: unknown); }
   export const data: { ${declarations.join(";\n    ")} };
 }
 `;
-      const runtime = `const contract=${JSON.stringify(contract_digest)};
+            const runtime = `const contract=${JSON.stringify(contract_digest)};
 class DataError extends Error{constructor(status,payload){super(payload&&typeof payload.message==="string"?payload.message:payload&&typeof payload.error==="string"?payload.error:"Data operation failed");this.name="DataError";this.status=status;this.code=payload&&typeof payload.error==="string"?payload.error:null}}
 const validateListLimit=input=>{if(input.limit!==undefined&&(!Number.isInteger(input.limit)||input.limit<1||input.limit>100))throw new DataError(400,{error:"DATA_INPUT_INVALID",message:"limit must be an integer from 1 to 100"})};
 let swReadSession=null,swInFlight=0,swStarts=0;const swReadSessionVoid=()=>{swReadSession=null;swStarts++};${generation >= 3 ? PUBLIC_BOOTSTRAP_CLIENT_RUNTIME : ""}const invoke=async(table,operation,input)=>{if(operation==="list"||operation==="relation_list")validateListLimit(input);${generation >= 3 ? PUBLIC_BOOTSTRAP_INVOKE : ""}const alone=swInFlight===0,start=++swStarts,isRead=operation==="list"||operation==="get"||operation==="aggregate"||operation==="relation_list";swInFlight++;let response;try{response=await fetch("/__sw/data",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json",...(swReadSession?{"X-Sw-Read-Session":swReadSession}:{})},body:JSON.stringify({...input,contract,table,operation})})}catch(error){if(!isRead)swReadSession=null;throw error}finally{swInFlight--}const next=response.headers&&typeof response.headers.get==="function"?response.headers.get("X-Sw-Read-Session"):null;if(!alone||swStarts!==start||swInFlight!==0)swReadSession=null;else if(next&&/^swrs1[.][A-Za-z0-9_-]+[.][A-Za-z0-9_-]+$/.test(next))swReadSession=next;else if(!isRead||!response.ok)swReadSession=null;const payload=await response.json().catch(()=>{throw new DataError(response.status,{error:"INVALID_DATA_RESPONSE",message:"Data operation returned an invalid response"})});if(!response.ok)throw new DataError(response.status,payload);return payload};
 ${receiptCapable ? INSERT_CLIENT_RUNTIME + "const receiptTables=" + JSON.stringify(receiptTables) + ";\n" : ""}${anonymousTables.length ? ANONYMOUS_CLIENT_RUNTIME + CREATOR_CLIENT_RUNTIME : ""}${intakeTables.length ? INTAKE_CLIENT_RUNTIME : ""}${linkedSpec.length ? LINK_CLIENT_RUNTIME : ""}const data=Object.freeze(Object.fromEntries(${JSON.stringify(runtimeTables)}.map(([table,operations,relations])=>{const entries=operations.map(operation=>[operation,operation==="list"||operation==="aggregate"?(options={})=>invoke(table,operation,options):operation==="create"?${receiptCapable ? "(values,...extra)=>createWithReceipt(table,values,extra,receiptTables.includes(table))" : '(values,...extra)=>{if(extra.length!==0)throw new DataError(400,{error:"DATA_INPUT_INVALID",message:"create takes only the values to insert. Nothing was sent."});return invoke(table,operation,{values})}'}:${anonymousTables.length ? 'operation==="createAnonymous"?(values,...extra)=>createAnonymous(table,values,extra):' : ""}${intakeTables.length ? 'operation==="intake"?(reference,values,...extra)=>intake(table,reference,values,extra):' : ""}operation==="update"?(id,values)=>invoke(table,operation,{id,values}):operation==="createLink"?(id,options)=>createLink(table,id,options):operation==="links"?id=>invoke(table,"link_list",{id}):operation==="revokeLink"?(id,link_id)=>invoke(table,"link_revoke",{id,link_id}):${generation >= 2 ? 'operation==="get"?(id,options={})=>invoke(table,operation,options&&options.can===true?{id,can:true}:{id}):' : ""}id=>invoke(table,operation,{id})]);if(relations.length)entries.push(["relations",Object.freeze(Object.fromEntries(relations.map(relation=>[relation,Object.freeze({list:(parent_id,options={})=>invoke(table,"relation_list",{...options,relation,parent_id})})])))]);return[table,Object.freeze(Object.fromEntries(entries))];}).concat(${linkedSpec.length ? `[["links",links],["linked",linkedView(${JSON.stringify(linkedSpec)})]]` : "[]"})${creatorSpec.length ? `.concat([["creators",creators],["creator",creatorView(${JSON.stringify(creatorSpec)})]])` : ""}));
 export{data,DataError};
 `;
-      return { contract_digest, declaration, runtime, manifest: { version: 1, contract_digest, tables, declaration, ...insertReceiptCapability === void 0 ? {} : { insert_receipt: insertReceiptCapability } } };
-    }
-    function describeDataClientLocalDeclaration2(authority) {
-      return describeDataClient2(authority, "", "insert-v1", true).declaration;
-    }
-    module2.exports = { canonicalize: canonicalize2, describeDataClient: describeDataClient2, describeDataClientLocalDeclaration: describeDataClientLocalDeclaration2, validateInsertReceiptCapability, CLIENT_GENERATION: CLIENT_GENERATION2, ACCEPTED_CLIENT_GENERATIONS: ACCEPTED_CLIENT_GENERATIONS2 };
-  }
-});
-
-// worker/containers/compile/typed-data.cjs
-var require_typed_data = __commonJS({
-  "worker/containers/compile/typed-data.cjs"(exports2, module2) {
-    "use strict";
-    var crypto2 = require("node:crypto");
-    var { canonicalize: canonicalize2, describeDataClient: describeDataClient2 } = require_declared_data_contract();
-    var MODULE_NAME = "somewhere:data";
-    var CLIENT_FILE2 = "__somewhere_data.d.ts";
-    var MANIFEST_PATH = "_internal/declared-data.json";
-    function generateDataClient2(authority, insertReceiptCapability) {
-      const canonical = authority ? canonicalize2(authority.schema, authority.intents, authority.scopes, insertReceiptCapability) : canonicalize2({}, {}, {}, insertReceiptCapability);
-      return describeDataClient2(authority, crypto2.createHash("sha256").update(canonical).digest("hex"), insertReceiptCapability);
-    }
-    function virtualDataPlugin(analysis) {
-      return {
-        name: "somewhere-declared-data",
-        setup(build) {
-          build.onResolve({ filter: /^somewhere:data$/ }, () => ({ path: MODULE_NAME, namespace: "somewhere-declared-data" }));
-          build.onLoad({ filter: /.*/, namespace: "somewhere-declared-data" }, () => {
-            if (!analysis || !analysis.manifest.tables.length) return { errors: [{ text: "somewhere:data requires db/schema.ts with explicit client permissions." }] };
-            return { contents: analysis.runtime, loader: "js" };
-          });
+            return { contract_digest, declaration, runtime, manifest: { version: 1, contract_digest, tables, declaration, ...insertReceiptCapability === void 0 ? {} : { insert_receipt: insertReceiptCapability } } };
         }
-      };
+        function describeDataClientLocalDeclaration2(authority) {
+            return describeDataClient2(authority, "", "insert-v1", true).declaration;
+        }
+        module2.exports = { canonicalize: canonicalize2, describeDataClient: describeDataClient2, describeDataClientLocalDeclaration: describeDataClientLocalDeclaration2, validateInsertReceiptCapability, CLIENT_GENERATION: CLIENT_GENERATION2, ACCEPTED_CLIENT_GENERATIONS: ACCEPTED_CLIENT_GENERATIONS2 };
     }
-    module2.exports = { MODULE_NAME, CLIENT_FILE: CLIENT_FILE2, MANIFEST_PATH, generateDataClient: generateDataClient2, virtualDataPlugin };
-  }
 });
-
-// worker/containers/compile/groups-types.cjs
+var require_typed_data = __commonJS({
+    "worker/containers/compile/typed-data.cjs"(exports2, module2) {
+        "use strict";
+        var crypto2 = require("node:crypto");
+        var { canonicalize: canonicalize2, describeDataClient: describeDataClient2 } = require_declared_data_contract();
+        var MODULE_NAME = "somewhere:data";
+        var CLIENT_FILE2 = "__somewhere_data.d.ts";
+        var MANIFEST_PATH = "_internal/declared-data.json";
+        function generateDataClient2(authority, insertReceiptCapability) {
+            const canonical = authority ? canonicalize2(authority.schema, authority.intents, authority.scopes, insertReceiptCapability) : canonicalize2({}, {}, {}, insertReceiptCapability);
+            return describeDataClient2(authority, crypto2.createHash("sha256").update(canonical).digest("hex"), insertReceiptCapability);
+        }
+        function virtualDataPlugin(analysis) {
+            return {
+                name: "somewhere-declared-data",
+                setup(build) {
+                    build.onResolve({ filter: /^somewhere:data$/ }, () => ({ path: MODULE_NAME, namespace: "somewhere-declared-data" }));
+                    build.onLoad({ filter: /.*/, namespace: "somewhere-declared-data" }, () => {
+                        if (!analysis || !analysis.manifest.tables.length)
+                            return { errors: [{ text: "somewhere:data requires db/schema.ts with explicit client permissions." }] };
+                        return { contents: analysis.runtime, loader: "js" };
+                    });
+                }
+            };
+        }
+        module2.exports = { MODULE_NAME, CLIENT_FILE: CLIENT_FILE2, MANIFEST_PATH, generateDataClient: generateDataClient2, virtualDataPlugin };
+    }
+});
 var require_groups_types = __commonJS({
-  "worker/containers/compile/groups-types.cjs"(exports2, module2) {
-    "use strict";
-    var ROLE_NAME2 = /^[a-z][a-z0-9_]{0,63}$/;
-    var BUILT_IN_GROUP_ROLES3 = ["owner", "admin", "member"];
-    function fail(detail) {
-      throw new Error(`Invalid declared roles: ${detail}`);
-    }
-    function roleList(value, field) {
-      if (!Array.isArray(value)) fail(`${field} must be an array`);
-      const seen = /* @__PURE__ */ new Set();
-      for (const name of value) {
-        if (typeof name !== "string" || !ROLE_NAME2.test(name)) fail(`${field} has an invalid role name`);
-        if (seen.has(name)) fail(`${field} repeats ${name}`);
-        seen.add(name);
-      }
-      return [...value];
-    }
-    function declaredRoles2(text) {
-      if (text === void 0) return {};
-      if (typeof text !== "string") fail("expected canonical JSON text");
-      let value;
-      try {
-        value = JSON.parse(text);
-      } catch {
-        fail("not JSON");
-      }
-      if (!value || typeof value !== "object" || Array.isArray(value) || value.v !== 1) fail("expected { v: 1 }");
-      const keys = Object.keys(value).sort().join(",");
-      if (keys !== "adminGrantableGroupRoles,appRoles,groupRoles,v") fail("unexpected fields");
-      const groupRoles = roleList(value.groupRoles, "groupRoles");
-      if (groupRoles.some((name) => BUILT_IN_GROUP_ROLES3.includes(name))) fail("groupRoles repeats a built-in role");
-      const grantable = roleList(value.adminGrantableGroupRoles, "adminGrantableGroupRoles");
-      if (grantable.some((name) => !groupRoles.includes(name))) fail("adminGrantableGroupRoles names an undeclared role");
-      if (!Array.isArray(value.appRoles)) fail("appRoles must be an array");
-      const appRoles = roleList(value.appRoles.map((role) => {
-        if (!role || typeof role !== "object" || Array.isArray(role) || Object.keys(role).sort().join(",") !== "grantableBy,name") fail("appRoles entry");
-        return role.name;
-      }), "appRoles");
-      for (const role of value.appRoles) {
-        if (roleList(role.grantableBy, "grantableBy").some((name) => !appRoles.includes(name))) fail("grantableBy names an undeclared app role");
-      }
-      return { groupRoles, appRoles };
-    }
-    function groupsTypeDeclarations(roles = {}) {
-      const literal = (names) => names.map((name) => JSON.stringify(name)).join(" | ");
-      const groupRoles = literal([...BUILT_IN_GROUP_ROLES3, ...roles.groupRoles || []]);
-      const appRoles = (roles.appRoles || []).length ? literal(roles.appRoles) : "never";
-      return `
+    "worker/containers/compile/groups-types.cjs"(exports2, module2) {
+        "use strict";
+        var ROLE_NAME2 = /^[a-z][a-z0-9_]{0,63}$/;
+        var BUILT_IN_GROUP_ROLES3 = ["owner", "admin", "member"];
+        function fail(detail) {
+            throw new Error(`Invalid declared roles: ${detail}`);
+        }
+        function roleList(value, field) {
+            if (!Array.isArray(value))
+                fail(`${field} must be an array`);
+            const seen = new Set();
+            for (const name of value) {
+                if (typeof name !== "string" || !ROLE_NAME2.test(name))
+                    fail(`${field} has an invalid role name`);
+                if (seen.has(name))
+                    fail(`${field} repeats ${name}`);
+                seen.add(name);
+            }
+            return [...value];
+        }
+        function declaredRoles2(text) {
+            if (text === void 0)
+                return {};
+            if (typeof text !== "string")
+                fail("expected canonical JSON text");
+            let value;
+            try {
+                value = JSON.parse(text);
+            }
+            catch {
+                fail("not JSON");
+            }
+            if (!value || typeof value !== "object" || Array.isArray(value) || value.v !== 1)
+                fail("expected { v: 1 }");
+            const keys = Object.keys(value).sort().join(",");
+            if (keys !== "adminGrantableGroupRoles,appRoles,groupRoles,v")
+                fail("unexpected fields");
+            const groupRoles = roleList(value.groupRoles, "groupRoles");
+            if (groupRoles.some((name) => BUILT_IN_GROUP_ROLES3.includes(name)))
+                fail("groupRoles repeats a built-in role");
+            const grantable = roleList(value.adminGrantableGroupRoles, "adminGrantableGroupRoles");
+            if (grantable.some((name) => !groupRoles.includes(name)))
+                fail("adminGrantableGroupRoles names an undeclared role");
+            if (!Array.isArray(value.appRoles))
+                fail("appRoles must be an array");
+            const appRoles = roleList(value.appRoles.map((role) => {
+                if (!role || typeof role !== "object" || Array.isArray(role) || Object.keys(role).sort().join(",") !== "grantableBy,name")
+                    fail("appRoles entry");
+                return role.name;
+            }), "appRoles");
+            for (const role of value.appRoles) {
+                if (roleList(role.grantableBy, "grantableBy").some((name) => !appRoles.includes(name)))
+                    fail("grantableBy names an undeclared app role");
+            }
+            return { groupRoles, appRoles };
+        }
+        function groupsTypeDeclarations(roles = {}) {
+            const literal = (names) => names.map((name) => JSON.stringify(name)).join(" | ");
+            const groupRoles = literal([...BUILT_IN_GROUP_ROLES3, ...roles.groupRoles || []]);
+            const appRoles = (roles.appRoles || []).length ? literal(roles.appRoles) : "never";
+            return `
 type SomewhereGroupRole = ${groupRoles};
 type SomewhereAppRole = ${appRoles};
 
@@ -972,16 +1074,14 @@ interface SomewhereRuntimeContext {
   readonly groups: SomewhereGroups;
 }
 `;
+        }
+        module2.exports = { groupsTypeDeclarations, declaredRoles: declaredRoles2 };
     }
-    module2.exports = { groupsTypeDeclarations, declaredRoles: declaredRoles2 };
-  }
 });
-
-// worker/containers/compile/runtime-types.cjs
 var require_runtime_types = __commonJS({
-  "worker/containers/compile/runtime-types.cjs"(exports2, module2) {
-    "use strict";
-    var BASE_RUNTIME_CONTEXT_DECLARATION = `
+    "worker/containers/compile/runtime-types.cjs"(exports2, module2) {
+        "use strict";
+        var BASE_RUNTIME_CONTEXT_DECLARATION = `
 type __SomewhereJsonPrimitive = string | number | boolean | null;
 type __SomewhereJson = __SomewhereJsonPrimitive | { [key: string]: __SomewhereJson } | __SomewhereJson[];
 type SomewhereDbScalar = string | number | boolean | null;
@@ -1509,7 +1609,7 @@ interface SomewhereRuntimeAuthModeration {
     user: { id: string; email: string; role: SomewhereAuthRole };
   }>;
 }
-// Email sign-in codes (tsk_8fe91eb5). Authenticator-app activation (reauthenticate*) answers 501 AUTH_FEATURE_UNAVAILABLE.
+// Email sign-in codes. Authenticator-app activation (reauthenticate*) answers 501 AUTH_FEATURE_UNAVAILABLE.
 type SomewhereMfaDelivery = 'sent' | 'pending' | 'unknown';
 interface SomewhereMfaCodeSent { challenge_id: string; delivery: SomewhereMfaDelivery; expires_in: number }
 type SomewhereMfaRecovery =
@@ -3463,7 +3563,7 @@ interface SomewhereRuntimePush {
   deliveries(options?: SomewherePushHistoryOptions): Promise<{ deliveries: SomewherePushDelivery[] }>;
 }
 
-// The push browser helper (tsk_80c0ed92). The compiler maps this specifier to
+// The push browser helper. The compiler maps this specifier to
 // the same-origin /__sw/push/client.js the project origin serves.
 declare module 'somewhere:push' {
   export interface PushDeviceResult {
@@ -3863,7 +3963,7 @@ interface SomewhereRuntimeTasks {
   };
 }
 
-// \u2500\u2500 sw.rooms (tsk_4e67d49d) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+// \u2500\u2500 sw.rooms \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
 type SomewhereRoomWho = { user: string } | { visitor: string } | { anonymous: true } | 'server';
 interface SomewhereRoomEvent {
   type: 'join' | 'leave' | 'action' | 'timer';
@@ -3913,12 +4013,12 @@ type ServerFunction<Contract extends { input: unknown; output: unknown }> =
 interface Response { readonly webSocket: WebSocket | null }
 interface WebSocket { accept(): void }
 `;
-    var { groupsTypeDeclarations } = require_groups_types();
-    function runtimeContextDeclaration2(roles) {
-      return BASE_RUNTIME_CONTEXT_DECLARATION + groupsTypeDeclarations(roles);
-    }
-    var RUNTIME_CONTEXT_DECLARATION2 = runtimeContextDeclaration2({});
-    var ENDPOINT_DECLARATION2 = `
+        var { groupsTypeDeclarations } = require_groups_types();
+        function runtimeContextDeclaration2(roles) {
+            return BASE_RUNTIME_CONTEXT_DECLARATION + groupsTypeDeclarations(roles);
+        }
+        var RUNTIME_CONTEXT_DECLARATION2 = runtimeContextDeclaration2({});
+        var ENDPOINT_DECLARATION2 = `
 interface SomewhereEndpointUser {
   id: string;
   email?: string | null;
@@ -3968,110 +4068,125 @@ interface SomewhereEndpointConfig<Auth extends SomewhereEndpointAuth, Schema ext
   ): unknown;
 }
 `;
-    var DECLARED_COLUMN_TYPES = { integer: "number", bigint: "string", number: "number", text: "string", timestamp: "string", boolean: "boolean", json: "__SomewhereJson", blob: "number[]" };
-    function declaredOwnerColumn2(name, table, scopes) {
-      if (Object.prototype.hasOwnProperty.call(scopes, name)) return scopes[name];
-      const find = (policy) => !policy ? null : policy.k === "o" ? policy.c : policy.k === "a" ? find(policy.p[0]) || find(policy.p[1]) : policy.k === "n" ? find(policy.w) : null;
-      return find(table.policy);
+        var DECLARED_COLUMN_TYPES = { integer: "number", bigint: "string", number: "number", text: "string", timestamp: "string", boolean: "boolean", json: "__SomewhereJson", blob: "number[]" };
+        function declaredOwnerColumn2(name, table, scopes) {
+            if (Object.prototype.hasOwnProperty.call(scopes, name))
+                return scopes[name];
+            const find = (policy) => !policy ? null : policy.k === "o" ? policy.c : policy.k === "a" ? find(policy.p[0]) || find(policy.p[1]) : policy.k === "n" ? find(policy.w) : null;
+            return find(table.policy);
+        }
+        function declaredRuleGrants(policy, op) {
+            if (!policy)
+                return true;
+            if (policy.k === "o")
+                return true;
+            if (policy.k === "m")
+                return !policy.m.o || policy.m.o.includes(op);
+            if (policy.k === "a")
+                return declaredRuleGrants(policy.p[0], op) || declaredRuleGrants(policy.p[1], op);
+            if (policy.k === "n")
+                return declaredRuleGrants(policy.g, op) && declaredRuleGrants(policy.w, op) && (op !== "update" || declaredRuleGrants(policy.g, "read") && declaredRuleGrants(policy.w, "read"));
+            if (policy.k === "g" || policy.k === "r")
+                return !!(policy.roles && policy.roles[op] && policy.roles[op].length);
+            if (policy.k === "p")
+                return declaredRuleGrants(policy.p, op);
+            return true;
+        }
+        function declaredTablesDeclaration3(authority) {
+            const schema = authority && authority.schema || {};
+            const scopes = authority && authority.scopes || {};
+            const names = Object.keys(schema).sort();
+            if (!names.length)
+                return "";
+            const rowShares = new Set();
+            for (const name of names) {
+                const policy = schema[name].policy, branch = policy && policy.k === "a" ? policy.p[1] : null;
+                if (branch && branch.k === "m" && branch.m.og && branch.m.g.length === 2)
+                    rowShares.add(String(branch.m.m).toLowerCase());
+            }
+            const key = JSON.stringify;
+            const shape = (fields) => fields.length ? "{ " + fields.join("; ") + " }" : "Record<string, never>";
+            const union = (columns) => columns.length ? columns.map((column) => key(column.n)).join(" | ") : "never";
+            const field = (column, optional) => key(column.n) + (optional ? "?" : "") + ": " + column.type;
+            const entries = names.map((name) => {
+                const table = schema[name];
+                const columns = table.columns.map((column) => ({
+                    n: column.n,
+                    t: column.t,
+                    optional: column.d === 1 || column.nul === 1,
+                    identity: column.n === table.author,
+                    type: DECLARED_COLUMN_TYPES[column.t] + (column.nul === 1 ? " | null" : "")
+                }));
+                const owner = declaredOwnerColumn2(name, table, scopes);
+                if (owner && !columns.some((column) => column.n === owner))
+                    columns.push({ n: owner, t: "text", optional: false, identity: true, type: "string" });
+                const declared = columns.filter((column) => !column.identity);
+                const relations = (table.relations || []).filter((relation) => Object.prototype.hasOwnProperty.call(schema, relation.table)).map((relation) => key(relation.name) + ": SomewhereDeclaredTables[" + key(relation.table) + "]['row']" + (relation.kind === "belongsTo" ? " | null" : "[]"));
+                return "  " + key(name) + ": {\n    row: " + shape(columns.map((column) => field(column, false))) + ";\n    insert: " + shape(declared.map((column) => field(column, column.optional))) + ";\n    serverInsert: " + shape(columns.map((column) => field(column, column.optional))) + ";\n    set: " + shape(declared.map((column) => field(column, true))) + ";\n    serverSet: " + shape(columns.map((column) => field(column, true))) + ";\n    numeric: " + union(declared.filter((column) => column.t === "integer" || column.t === "number")) + ";\n    scalar: " + union(columns.filter((column) => (!column.identity || column.n === owner) && column.t !== "json" && column.t !== "blob")) + ";\n    relations: " + (relations.length ? shape(relations) : "{}") + ";\n    conflict: " + (rowShares.has(name.toLowerCase()) || !declaredRuleGrants(table.policy || (table.member ? { k: "m", m: table.member } : null), "update") ? "'ignore'" : "'ignore' | 'update'") + ";\n  };\n";
+            });
+            return "interface SomewhereDeclaredTables {\n" + entries.join("") + "}\n";
+        }
+        module2.exports = { RUNTIME_CONTEXT_DECLARATION: RUNTIME_CONTEXT_DECLARATION2, ENDPOINT_DECLARATION: ENDPOINT_DECLARATION2, declaredTablesDeclaration: declaredTablesDeclaration3, runtimeContextDeclaration: runtimeContextDeclaration2 };
     }
-    function declaredRuleGrants(policy, op) {
-      if (!policy) return true;
-      if (policy.k === "o") return true;
-      if (policy.k === "m") return !policy.m.o || policy.m.o.includes(op);
-      if (policy.k === "a") return declaredRuleGrants(policy.p[0], op) || declaredRuleGrants(policy.p[1], op);
-      if (policy.k === "n") return declaredRuleGrants(policy.g, op) && declaredRuleGrants(policy.w, op) && (op !== "update" || declaredRuleGrants(policy.g, "read") && declaredRuleGrants(policy.w, "read"));
-      if (policy.k === "g" || policy.k === "r") return !!(policy.roles && policy.roles[op] && policy.roles[op].length);
-      if (policy.k === "p") return declaredRuleGrants(policy.p, op);
-      return true;
-    }
-    function declaredTablesDeclaration3(authority) {
-      const schema = authority && authority.schema || {};
-      const scopes = authority && authority.scopes || {};
-      const names = Object.keys(schema).sort();
-      if (!names.length) return "";
-      const rowShares = /* @__PURE__ */ new Set();
-      for (const name of names) {
-        const policy = schema[name].policy, branch = policy && policy.k === "a" ? policy.p[1] : null;
-        if (branch && branch.k === "m" && branch.m.og && branch.m.g.length === 2) rowShares.add(String(branch.m.m).toLowerCase());
-      }
-      const key = JSON.stringify;
-      const shape = (fields) => fields.length ? "{ " + fields.join("; ") + " }" : "Record<string, never>";
-      const union = (columns) => columns.length ? columns.map((column) => key(column.n)).join(" | ") : "never";
-      const field = (column, optional) => key(column.n) + (optional ? "?" : "") + ": " + column.type;
-      const entries = names.map((name) => {
-        const table = schema[name];
-        const columns = table.columns.map((column) => ({
-          n: column.n,
-          t: column.t,
-          optional: column.d === 1 || column.nul === 1,
-          identity: column.n === table.author,
-          type: DECLARED_COLUMN_TYPES[column.t] + (column.nul === 1 ? " | null" : "")
-        }));
-        const owner = declaredOwnerColumn2(name, table, scopes);
-        if (owner && !columns.some((column) => column.n === owner)) columns.push({ n: owner, t: "text", optional: false, identity: true, type: "string" });
-        const declared = columns.filter((column) => !column.identity);
-        const relations = (table.relations || []).filter((relation) => Object.prototype.hasOwnProperty.call(schema, relation.table)).map((relation) => key(relation.name) + ": SomewhereDeclaredTables[" + key(relation.table) + "]['row']" + (relation.kind === "belongsTo" ? " | null" : "[]"));
-        return "  " + key(name) + ": {\n    row: " + shape(columns.map((column) => field(column, false))) + ";\n    insert: " + shape(declared.map((column) => field(column, column.optional))) + ";\n    serverInsert: " + shape(columns.map((column) => field(column, column.optional))) + ";\n    set: " + shape(declared.map((column) => field(column, true))) + ";\n    serverSet: " + shape(columns.map((column) => field(column, true))) + ";\n    numeric: " + union(declared.filter((column) => column.t === "integer" || column.t === "number")) + ";\n    scalar: " + union(columns.filter((column) => (!column.identity || column.n === owner) && column.t !== "json" && column.t !== "blob")) + ";\n    relations: " + (relations.length ? shape(relations) : "{}") + ";\n    conflict: " + (rowShares.has(name.toLowerCase()) || !declaredRuleGrants(table.policy || (table.member ? { k: "m", m: table.member } : null), "update") ? "'ignore'" : "'ignore' | 'update'") + ";\n  };\n";
-      });
-      return "interface SomewhereDeclaredTables {\n" + entries.join("") + "}\n";
-    }
-    module2.exports = { RUNTIME_CONTEXT_DECLARATION: RUNTIME_CONTEXT_DECLARATION2, ENDPOINT_DECLARATION: ENDPOINT_DECLARATION2, declaredTablesDeclaration: declaredTablesDeclaration3, runtimeContextDeclaration: runtimeContextDeclaration2 };
-  }
 });
-
-// worker/containers/compile/typed-files.cjs
 var require_typed_files = __commonJS({
-  "worker/containers/compile/typed-files.cjs"(exports2, module2) {
-    "use strict";
-    var crypto2 = require("node:crypto");
-    var MODULE_NAME = "somewhere:files";
-    var CLIENT_FILE2 = "__somewhere_files.d.ts";
-    var SINGLE_REQUEST_MAX_BYTES = 90 * 1024 * 1024;
-    function parseDeclaration(canonical) {
-      const parsed = JSON.parse(canonical);
-      if (!parsed || parsed.v !== 1 || !Array.isArray(parsed.collections)) throw new Error("declared_files is not a file collection declaration");
-      return parsed.collections;
-    }
-    function memberOf(collection) {
-      const scope = collection.scope || {};
-      return scope.kind === "member" || scope.kind === "owner_or_member" ? scope.member : null;
-    }
-    function fieldOf(collection) {
-      const member = memberOf(collection);
-      if (member) return { name: member.group, input: "string | number", meta: "string", parent: false };
-      const scope = collection.scope || {};
-      if (scope.kind === "parent") {
-        const type = scope.parent.keyType === "text" ? "string" : "number";
-        return { name: scope.parent.via, input: type, meta: type, parent: true };
-      }
-      return null;
-    }
-    function describeCollection(collection) {
-      const field = fieldOf(collection);
-      const fieldKey = field ? JSON.stringify(field.name) : null;
-      const meta = field ? `FileMeta & { ${fieldKey}: ${field.meta} }` : "FileMeta";
-      const fieldOption = field ? `${fieldKey}: ${field.input}; ` : "";
-      const listOptions = field && field.parent ? `options: { ${fieldOption}limit?: number; cursor?: string | null }` : `options?: { ${field ? `${fieldKey}?: ${field.input}; ` : ""}limit?: number; cursor?: string | null }`;
-      const ops = [];
-      if (collection.client.read) {
-        ops.push(`list(${listOptions}): Promise<FileResult<{ items: Array<${meta}>; next: string | null; has_more: boolean }>>`);
-        ops.push(`get(id: string): Promise<FileResult<${meta}>>`);
-        ops.push("url(id: string): string");
-        ops.push("shareLink(id: string, options?: { expiresIn?: number }): Promise<FileResult<{ url: string; expires_at: string; expires_in: number }>>");
-      }
-      if (collection.client.upload) ops.push(`upload(file: Blob, options${field ? "" : "?"}: { ${fieldOption}name?: string; contentType?: string; onProgress?: (progress: { loaded: number; total: number }) => void }): Promise<FileResult<UploadedFile>>`);
-      if (collection.client.replace) ops.push("replace(id: string, file: Blob, options?: { contentType?: string; onProgress?: (progress: { loaded: number; total: number }) => void }): Promise<FileResult<UploadedFile>>");
-      if (collection.client.replace && field && field.parent) ops.push(`move(id: string, to: { ${fieldOption}}): Promise<FileResult<${meta}>>`);
-      if (collection.client.delete) ops.push("delete(id: string): Promise<FileResult<{ id: string; deleted: true }>>");
-      if (collection.public) {
-        ops.push(collection.scope.kind === "server_only" ? "publicUrl(path: string): string" : "publicUrl(id: string, name: string): string");
-      }
-      return `${JSON.stringify(collection.name)}: { ${ops.join("; ")} }`;
-    }
-    function describeFilesClient2(canonical, singleRequestMaxBytes = SINGLE_REQUEST_MAX_BYTES) {
-      const collections = parseDeclaration(canonical);
-      const contract = crypto2.createHash("sha256").update(canonical).digest("hex");
-      const declaration = `declare module ${JSON.stringify(MODULE_NAME)} {
+    "worker/containers/compile/typed-files.cjs"(exports2, module2) {
+        "use strict";
+        var crypto2 = require("node:crypto");
+        var MODULE_NAME = "somewhere:files";
+        var CLIENT_FILE2 = "__somewhere_files.d.ts";
+        var SINGLE_REQUEST_MAX_BYTES = 90 * 1024 * 1024;
+        function parseDeclaration(canonical) {
+            const parsed = JSON.parse(canonical);
+            if (!parsed || parsed.v !== 1 || !Array.isArray(parsed.collections))
+                throw new Error("declared_files is not a file collection declaration");
+            return parsed.collections;
+        }
+        function memberOf(collection) {
+            const scope = collection.scope || {};
+            return scope.kind === "member" || scope.kind === "owner_or_member" ? scope.member : null;
+        }
+        function fieldOf(collection) {
+            const member = memberOf(collection);
+            if (member)
+                return { name: member.group, input: "string | number", meta: "string", parent: false };
+            const scope = collection.scope || {};
+            if (scope.kind === "parent") {
+                const type = scope.parent.keyType === "text" ? "string" : "number";
+                return { name: scope.parent.via, input: type, meta: type, parent: true };
+            }
+            return null;
+        }
+        function describeCollection(collection) {
+            const field = fieldOf(collection);
+            const fieldKey = field ? JSON.stringify(field.name) : null;
+            const meta = field ? `FileMeta & { ${fieldKey}: ${field.meta} }` : "FileMeta";
+            const fieldOption = field ? `${fieldKey}: ${field.input}; ` : "";
+            const listOptions = field && field.parent ? `options: { ${fieldOption}limit?: number; cursor?: string | null }` : `options?: { ${field ? `${fieldKey}?: ${field.input}; ` : ""}limit?: number; cursor?: string | null }`;
+            const ops = [];
+            if (collection.client.read) {
+                ops.push(`list(${listOptions}): Promise<FileResult<{ items: Array<${meta}>; next: string | null; has_more: boolean }>>`);
+                ops.push(`get(id: string): Promise<FileResult<${meta}>>`);
+                ops.push("url(id: string): string");
+                ops.push("shareLink(id: string, options?: { expiresIn?: number }): Promise<FileResult<{ url: string; expires_at: string; expires_in: number }>>");
+            }
+            if (collection.client.upload)
+                ops.push(`upload(file: Blob, options${field ? "" : "?"}: { ${fieldOption}name?: string; contentType?: string; onProgress?: (progress: { loaded: number; total: number }) => void }): Promise<FileResult<UploadedFile>>`);
+            if (collection.client.replace)
+                ops.push("replace(id: string, file: Blob, options?: { contentType?: string; onProgress?: (progress: { loaded: number; total: number }) => void }): Promise<FileResult<UploadedFile>>");
+            if (collection.client.replace && field && field.parent)
+                ops.push(`move(id: string, to: { ${fieldOption}}): Promise<FileResult<${meta}>>`);
+            if (collection.client.delete)
+                ops.push("delete(id: string): Promise<FileResult<{ id: string; deleted: true }>>");
+            if (collection.public) {
+                ops.push(collection.scope.kind === "server_only" ? "publicUrl(path: string): string" : "publicUrl(id: string, name: string): string");
+            }
+            return `${JSON.stringify(collection.name)}: { ${ops.join("; ")} }`;
+        }
+        function describeFilesClient2(canonical, singleRequestMaxBytes = SINGLE_REQUEST_MAX_BYTES) {
+            const collections = parseDeclaration(canonical);
+            const contract = crypto2.createHash("sha256").update(canonical).digest("hex");
+            const declaration = `declare module ${JSON.stringify(MODULE_NAME)} {
   /** Why an operation did not happen. Expected refusals resolve here; nothing throws for them. */
   export interface FileError { code: string; message: string; status: number }
   export type FileResult<T> = { data: T; error: null } | { data: null; error: FileError };
@@ -4080,20 +4195,20 @@ var require_typed_files = __commonJS({
   export const files: { ${collections.map(describeCollection).join(";\n    ")} };
 }
 `;
-      const shapes = collections.map((c) => {
-        const field = fieldOf(c);
-        return {
-          name: c.name,
-          root: c.path,
-          ops: Object.keys(c.client).filter((op) => c.client[op]),
-          public: c.public ? c.scope.kind === "server_only" ? "path" : "id" : null,
-          group: field ? field.name : null,
-          move: Boolean(field && field.parent && c.client.replace),
-          maxSize: c.limits.maxSize,
-          types: c.limits.types
-        };
-      });
-      const runtime = `const contract=${JSON.stringify(contract)};
+            const shapes = collections.map((c) => {
+                const field = fieldOf(c);
+                return {
+                    name: c.name,
+                    root: c.path,
+                    ops: Object.keys(c.client).filter((op) => c.client[op]),
+                    public: c.public ? c.scope.kind === "server_only" ? "path" : "id" : null,
+                    group: field ? field.name : null,
+                    move: Boolean(field && field.parent && c.client.replace),
+                    maxSize: c.limits.maxSize,
+                    types: c.limits.types
+                };
+            });
+            const runtime = `const contract=${JSON.stringify(contract)};
 const SINGLE=${singleRequestMaxBytes};
 const shapes=${JSON.stringify(shapes)};
 const fail=(status,code,message)=>({data:null,error:{code,message,status}});
@@ -4168,32 +4283,31 @@ function makeCollection(shape){
 const files=Object.freeze(Object.fromEntries(shapes.map(shape=>[shape.name,makeCollection(shape)])));
 export{files};
 `;
-      return { contract_digest: contract, declaration, runtime };
-    }
-    function generateFilesClient(declaredFiles) {
-      return typeof declaredFiles === "string" ? describeFilesClient2(declaredFiles) : null;
-    }
-    function virtualFilesPlugin(analysis) {
-      return {
-        name: "somewhere-declared-files",
-        setup(build) {
-          build.onResolve({ filter: /^somewhere:files$/ }, () => ({ path: MODULE_NAME, namespace: "somewhere-declared-files" }));
-          build.onLoad({ filter: /.*/, namespace: "somewhere-declared-files" }, () => {
-            if (!analysis) return { errors: [{ text: "somewhere:files requires db/schema.ts with a files: { \u2026 } declaration." }] };
-            return { contents: analysis.runtime, loader: "js" };
-          });
+            return { contract_digest: contract, declaration, runtime };
         }
-      };
+        function generateFilesClient(declaredFiles) {
+            return typeof declaredFiles === "string" ? describeFilesClient2(declaredFiles) : null;
+        }
+        function virtualFilesPlugin(analysis) {
+            return {
+                name: "somewhere-declared-files",
+                setup(build) {
+                    build.onResolve({ filter: /^somewhere:files$/ }, () => ({ path: MODULE_NAME, namespace: "somewhere-declared-files" }));
+                    build.onLoad({ filter: /.*/, namespace: "somewhere-declared-files" }, () => {
+                        if (!analysis)
+                            return { errors: [{ text: "somewhere:files requires db/schema.ts with a files: { \u2026 } declaration." }] };
+                        return { contents: analysis.runtime, loader: "js" };
+                    });
+                }
+            };
+        }
+        module2.exports = { MODULE_NAME, CLIENT_FILE: CLIENT_FILE2, SINGLE_REQUEST_MAX_BYTES, describeFilesClient: describeFilesClient2, generateFilesClient, virtualFilesPlugin };
     }
-    module2.exports = { MODULE_NAME, CLIENT_FILE: CLIENT_FILE2, SINGLE_REQUEST_MAX_BYTES, describeFilesClient: describeFilesClient2, generateFilesClient, virtualFilesPlugin };
-  }
 });
-
-// worker/containers/compile/schema-types.cjs
 var require_schema_types = __commonJS({
-  "worker/containers/compile/schema-types.cjs"(exports2, module2) {
-    "use strict";
-    var types = `declare namespace SomewhereSchemaDeclaration {
+    "worker/containers/compile/schema-types.cjs"(exports2, module2) {
+        "use strict";
+        var types = `declare namespace SomewhereSchemaDeclaration {
   interface Column { readonly __somewhereColumn: unique symbol }
   interface Table { readonly __somewhereTable: unique symbol }
   interface TableMarker { readonly __somewhereTableMarker: unique symbol }
@@ -4241,7 +4355,7 @@ var require_schema_types = __commonJS({
   }
 }
 `;
-    var signatures = `function schema(tables: Record<string, SomewhereSchemaDeclaration.Table | SomewhereSchemaDeclaration.TableMarker>, options?: { search?: SomewhereSchemaDeclaration.OwnerScope; files?: Record<string, SomewhereSchemaDeclaration.FileCollection>; groups?: { roles?: string[]; adminGrantableRoles?: string[] }; appRoles?: Record<string, { grantableBy?: string[] }>; payments?: Record<string, SomewhereSchemaDeclaration.PaymentBinding>; jobs?: Record<string, SomewhereSchemaDeclaration.JobBinding>; serviceRoles?: Record<string, SomewhereSchemaDeclaration.ServiceRole> }): unknown;
+        var signatures = `function schema(tables: Record<string, SomewhereSchemaDeclaration.Table | SomewhereSchemaDeclaration.TableMarker>, options?: { search?: SomewhereSchemaDeclaration.OwnerScope; files?: Record<string, SomewhereSchemaDeclaration.FileCollection>; groups?: { roles?: string[]; adminGrantableRoles?: string[] }; appRoles?: Record<string, { grantableBy?: string[] }>; payments?: Record<string, SomewhereSchemaDeclaration.PaymentBinding>; jobs?: Record<string, SomewhereSchemaDeclaration.JobBinding>; serviceRoles?: Record<string, SomewhereSchemaDeclaration.ServiceRole> }): unknown;
 function table<Columns extends Record<string, SomewhereSchemaDeclaration.Column | SomewhereSchemaDeclaration.ColumnMarker>>(columns: Columns, options?: SomewhereSchemaDeclaration.TableOptions<Extract<keyof Columns, string>>): SomewhereSchemaDeclaration.Table;
 function id(options?: { uuid?: boolean }): SomewhereSchemaDeclaration.Column;
 function text(options?: SomewhereSchemaDeclaration.ColumnOptions<string>): SomewhereSchemaDeclaration.Column;
@@ -4263,7 +4377,7 @@ function removed(): SomewhereSchemaDeclaration.ColumnMarker;
 function removedTable(): SomewhereSchemaDeclaration.TableMarker;
 function exported(): SomewhereSchemaDeclaration.TableMarker;
 `;
-    var policySignatures = `function grant(options: { table: string; grantee: string; row?: string; operations: readonly ['read'] | readonly ['read', 'update']; read?: string[] }): SomewhereSchemaDeclaration.GrantScope;
+        var policySignatures = `function grant(options: { table: string; grantee: string; row?: string; operations: readonly ['read'] | readonly ['read', 'update']; read?: string[] }): SomewhereSchemaDeclaration.GrantScope;
 function anyOf(owner: SomewhereSchemaDeclaration.OwnerScope, other: SomewhereSchemaDeclaration.GrantScope | SomewhereSchemaDeclaration.MemberScope | SomewhereSchemaDeclaration.GroupScope | SomewhereSchemaDeclaration.AppRoleScope): SomewhereSchemaDeclaration.AnyOfScope;
 function anyOf(other: SomewhereSchemaDeclaration.GrantScope | SomewhereSchemaDeclaration.MemberScope | SomewhereSchemaDeclaration.GroupScope | SomewhereSchemaDeclaration.AppRoleScope, owner: SomewhereSchemaDeclaration.OwnerScope): SomewhereSchemaDeclaration.AnyOfScope;
 function allOf(gate: SomewhereSchemaDeclaration.MemberScope | SomewhereSchemaDeclaration.GroupScope | SomewhereSchemaDeclaration.AppRoleScope, who: SomewhereSchemaDeclaration.OwnerScope | SomewhereSchemaDeclaration.AnyOfScope): SomewhereSchemaDeclaration.Scope;
@@ -4271,860 +4385,959 @@ function parent(options: { via: string; table?: string }): SomewhereSchemaDeclar
 function group(options?: { column?: string; roles?: Partial<Record<'read' | 'create' | 'update' | 'delete', string[]>>; read?: string[] }): SomewhereSchemaDeclaration.GroupScope;
 function appRole(options: { roles: Partial<Record<'read' | 'create' | 'update' | 'delete', string[]>>; read?: string[] }): SomewhereSchemaDeclaration.AppRoleScope;
 `;
-    var SCHEMA_DECLARATION2 = types + signatures.replace(/^function /gm, "declare function ") + `declare module 'somewhere/db' {
+        var SCHEMA_DECLARATION2 = types + signatures.replace(/^function /gm, "declare function ") + `declare module 'somewhere/db' {
 ${(signatures + policySignatures).replace(/^function /gm, "  export function ")}}
 `;
-    module2.exports = { SCHEMA_DECLARATION: SCHEMA_DECLARATION2 };
-  }
+        module2.exports = { SCHEMA_DECLARATION: SCHEMA_DECLARATION2 };
+    }
 });
-
-// worker/containers/compile/checker-contract.cjs
 var require_checker_contract = __commonJS({
-  "worker/containers/compile/checker-contract.cjs"(exports2, module2) {
-    "use strict";
-    var TYPESCRIPT_VERSION = "5.6.3";
-    var REFERENCE_SOURCE = /\.(?:tsx?|jsx?|mjs|cjs)$/;
-    var IGNORED_CODES = Object.freeze([2307, 7016, 2792, 6053]);
-    var REFERENCE_CODES = Object.freeze([2304, 2552, 2448, 2454, 18004]);
-    var TYPE_SHAPE_CODES = Object.freeze([2339, 2551, 2345, 2322, 2554]);
-    var PROJECT_TYPE_ROOTS = Object.freeze(["./node_modules/@types"]);
-    var ignored = new Set(IGNORED_CODES);
-    var reference = new Set(REFERENCE_CODES);
-    var typeShape = new Set(TYPE_SHAPE_CODES);
-    function isReferenceSource(relativePath) {
-      const segments = String(relativePath).split(/[\\/]/);
-      if (segments.some((segment) => segment === "node_modules" || segment.startsWith("."))) return false;
-      return REFERENCE_SOURCE.test(segments[segments.length - 1]);
+    "worker/containers/compile/checker-contract.cjs"(exports2, module2) {
+        "use strict";
+        var TYPESCRIPT_VERSION = "5.6.3";
+        var REFERENCE_SOURCE = /\.(?:tsx?|jsx?|mjs|cjs)$/;
+        var IGNORED_CODES = Object.freeze([2307, 7016, 2792, 6053]);
+        var REFERENCE_CODES = Object.freeze([2304, 2552, 2448, 2454, 18004]);
+        var TYPE_SHAPE_CODES = Object.freeze([2339, 2551, 2345, 2322, 2554]);
+        var PROJECT_TYPE_ROOTS = Object.freeze(["./node_modules/@types"]);
+        var ignored = new Set(IGNORED_CODES);
+        var reference = new Set(REFERENCE_CODES);
+        var typeShape = new Set(TYPE_SHAPE_CODES);
+        function isReferenceSource(relativePath) {
+            const segments = String(relativePath).split(/[\\/]/);
+            if (segments.some((segment) => segment === "node_modules" || segment.startsWith(".")))
+                return false;
+            return REFERENCE_SOURCE.test(segments[segments.length - 1]);
+        }
+        function referenceCheckCompilerOptions(projectCompilerOptions) {
+            const own = projectCompilerOptions && typeof projectCompilerOptions === "object" && !Array.isArray(projectCompilerOptions) ? projectCompilerOptions : {};
+            return {
+                jsx: "react-jsx",
+                target: "es2022",
+                module: "esnext",
+                moduleResolution: "bundler",
+                esModuleInterop: true,
+                skipLibCheck: true,
+                strict: false,
+                noImplicitAny: false,
+                lib: ["es2022", "dom", "dom.iterable"],
+                typeRoots: [...PROJECT_TYPE_ROOTS],
+                ...own,
+                allowJs: true,
+                checkJs: true,
+                noEmit: true
+            };
+        }
+        function projectTsconfigCompilerOptions(compilerOptions) {
+            if (!compilerOptions || typeof compilerOptions !== "object" || Array.isArray(compilerOptions))
+                return compilerOptions;
+            return compilerOptions.paths && compilerOptions.baseUrl === void 0 ? { ...compilerOptions, baseUrl: "." } : compilerOptions;
+        }
+        function localCheckCompilerOptions(projectCompilerOptions) {
+            return referenceCheckCompilerOptions(projectTsconfigCompilerOptions(projectCompilerOptions));
+        }
+        function diagnosticNumber(code) {
+            if (typeof code === "number")
+                return code;
+            const parsed = Number(String(code).replace(/^TS/i, ""));
+            return Number.isFinite(parsed) ? parsed : NaN;
+        }
+        function isIgnoredDiagnostic(code) {
+            return ignored.has(diagnosticNumber(code));
+        }
+        function classifyDiagnostic(code) {
+            const number = diagnosticNumber(code);
+            if (reference.has(number))
+                return "reference";
+            if (typeShape.has(number))
+                return "type";
+            return null;
+        }
+        function diagnosticMessage(code, message) {
+            const number = diagnosticNumber(code);
+            if ((number === 2322 || number === 2345) && message.includes("'string[]'") && /readonly \(\s*["'][^"']+["'](?:\s*\|\s*["'][^"']+["'])*\s*\)\[\]/.test(message)) {
+                return message + "\nHint: For a fixed list, declare the array with `as const` so its values stay literal. For dynamic values, validate and narrow them to the allowed values; do not cast arbitrary strings.";
+            }
+            if ((number === 2322 || number === 2345) && message.includes("Record<string, unknown>")) {
+                return message + "\nHint: Use an object literal or a builder with explicitly typed fields. Validate unknown input before passing it to a typed API; do not hide the mismatch with a cast.";
+            }
+            return message;
+        }
+        module2.exports = {
+            TYPESCRIPT_VERSION,
+            REFERENCE_SOURCE,
+            IGNORED_CODES,
+            REFERENCE_CODES,
+            TYPE_SHAPE_CODES,
+            PROJECT_TYPE_ROOTS,
+            isReferenceSource,
+            referenceCheckCompilerOptions,
+            projectTsconfigCompilerOptions,
+            localCheckCompilerOptions,
+            isIgnoredDiagnostic,
+            classifyDiagnostic,
+            diagnosticMessage
+        };
     }
-    function referenceCheckCompilerOptions(projectCompilerOptions) {
-      const own = projectCompilerOptions && typeof projectCompilerOptions === "object" && !Array.isArray(projectCompilerOptions) ? projectCompilerOptions : {};
-      return {
-        jsx: "react-jsx",
-        target: "es2022",
-        module: "esnext",
-        moduleResolution: "bundler",
-        esModuleInterop: true,
-        skipLibCheck: true,
-        strict: false,
-        noImplicitAny: false,
-        lib: ["es2022", "dom", "dom.iterable"],
-        typeRoots: [...PROJECT_TYPE_ROOTS],
-        ...own,
-        allowJs: true,
-        checkJs: true,
-        noEmit: true
-      };
-    }
-    function projectTsconfigCompilerOptions(compilerOptions) {
-      if (!compilerOptions || typeof compilerOptions !== "object" || Array.isArray(compilerOptions)) return compilerOptions;
-      return compilerOptions.paths && compilerOptions.baseUrl === void 0 ? { ...compilerOptions, baseUrl: "." } : compilerOptions;
-    }
-    function localCheckCompilerOptions(projectCompilerOptions) {
-      return referenceCheckCompilerOptions(projectTsconfigCompilerOptions(projectCompilerOptions));
-    }
-    function diagnosticNumber(code) {
-      if (typeof code === "number") return code;
-      const parsed = Number(String(code).replace(/^TS/i, ""));
-      return Number.isFinite(parsed) ? parsed : NaN;
-    }
-    function isIgnoredDiagnostic(code) {
-      return ignored.has(diagnosticNumber(code));
-    }
-    function classifyDiagnostic(code) {
-      const number = diagnosticNumber(code);
-      if (reference.has(number)) return "reference";
-      if (typeShape.has(number)) return "type";
-      return null;
-    }
-    function diagnosticMessage(code, message) {
-      const number = diagnosticNumber(code);
-      if ((number === 2322 || number === 2345) && message.includes("'string[]'") && /readonly \(\s*["'][^"']+["'](?:\s*\|\s*["'][^"']+["'])*\s*\)\[\]/.test(message)) {
-        return message + "\nHint: For a fixed list, declare the array with `as const` so its values stay literal. For dynamic values, validate and narrow them to the allowed values; do not cast arbitrary strings.";
-      }
-      if ((number === 2322 || number === 2345) && message.includes("Record<string, unknown>")) {
-        return message + "\nHint: Use an object literal or a builder with explicitly typed fields. Validate unknown input before passing it to a typed API; do not hide the mismatch with a cast.";
-      }
-      return message;
-    }
-    module2.exports = {
-      TYPESCRIPT_VERSION,
-      REFERENCE_SOURCE,
-      IGNORED_CODES,
-      REFERENCE_CODES,
-      TYPE_SHAPE_CODES,
-      PROJECT_TYPE_ROOTS,
-      isReferenceSource,
-      referenceCheckCompilerOptions,
-      projectTsconfigCompilerOptions,
-      localCheckCompilerOptions,
-      isIgnoredDiagnostic,
-      classifyDiagnostic,
-      diagnosticMessage
-    };
-  }
 });
-
-// worker/containers/compile/generated-declarations.cjs
 var require_generated_declarations = __commonJS({
-  "worker/containers/compile/generated-declarations.cjs"(exports2, module2) {
-    "use strict";
-    var GENERATED_DECLARATIONS_VERSION = 1;
-    var AMBIENT_FILE2 = "__somewhere_typed_functions.d.ts";
-    var SCHEMA_FILE2 = "__somewhere_schema.d.ts";
-    var MAX_GENERATED_DECLARATION_BYTES = 2 * 1024 * 1024;
-    function expectedDeclarationFiles(hasSchema) {
-      return hasSchema ? [AMBIENT_FILE2, SCHEMA_FILE2] : [AMBIENT_FILE2];
+    "worker/containers/compile/generated-declarations.cjs"(exports2, module2) {
+        "use strict";
+        var GENERATED_DECLARATIONS_VERSION = 1;
+        var AMBIENT_FILE2 = "__somewhere_typed_functions.d.ts";
+        var SCHEMA_FILE2 = "__somewhere_schema.d.ts";
+        var MAX_GENERATED_DECLARATION_BYTES = 2 * 1024 * 1024;
+        function expectedDeclarationFiles(hasSchema) {
+            return hasSchema ? [AMBIENT_FILE2, SCHEMA_FILE2] : [AMBIENT_FILE2];
+        }
+        function canonicalDeclarationsText(version, files) {
+            return JSON.stringify({ version, files: Object.keys(files).sort().map((name) => [name, files[name]]) });
+        }
+        function generatedDeclarationsProblem(envelope, hasSchema) {
+            if (!envelope || typeof envelope !== "object" || Array.isArray(envelope))
+                return "generated declarations are required";
+            if (envelope.version !== GENERATED_DECLARATIONS_VERSION)
+                return "unsupported generated declarations version";
+            if (typeof envelope.sha256 !== "string" || !/^[0-9a-f]{64}$/.test(envelope.sha256))
+                return "generated declarations digest is missing";
+            const files = envelope.files;
+            if (!files || typeof files !== "object" || Array.isArray(files))
+                return "generated declaration files are missing";
+            const names = Object.keys(files).sort();
+            const expected = expectedDeclarationFiles(hasSchema).sort();
+            if (names.length !== expected.length || names.some((name, i) => name !== expected[i]))
+                return "unexpected generated declaration file set";
+            let bytes = 0;
+            const encoder = new TextEncoder();
+            for (const name of names) {
+                if (typeof files[name] !== "string")
+                    return "generated declarations must be text";
+                bytes += encoder.encode(files[name]).length;
+            }
+            if (bytes > MAX_GENERATED_DECLARATION_BYTES)
+                return "generated declarations are too large";
+            return null;
+        }
+        module2.exports = {
+            GENERATED_DECLARATIONS_VERSION,
+            AMBIENT_FILE: AMBIENT_FILE2,
+            SCHEMA_FILE: SCHEMA_FILE2,
+            MAX_GENERATED_DECLARATION_BYTES,
+            expectedDeclarationFiles,
+            canonicalDeclarationsText,
+            generatedDeclarationsProblem
+        };
     }
-    function canonicalDeclarationsText(version, files) {
-      return JSON.stringify({ version, files: Object.keys(files).sort().map((name) => [name, files[name]]) });
-    }
-    function generatedDeclarationsProblem(envelope, hasSchema) {
-      if (!envelope || typeof envelope !== "object" || Array.isArray(envelope)) return "generated declarations are required";
-      if (envelope.version !== GENERATED_DECLARATIONS_VERSION) return "unsupported generated declarations version";
-      if (typeof envelope.sha256 !== "string" || !/^[0-9a-f]{64}$/.test(envelope.sha256)) return "generated declarations digest is missing";
-      const files = envelope.files;
-      if (!files || typeof files !== "object" || Array.isArray(files)) return "generated declaration files are missing";
-      const names = Object.keys(files).sort();
-      const expected = expectedDeclarationFiles(hasSchema).sort();
-      if (names.length !== expected.length || names.some((name, i) => name !== expected[i])) return "unexpected generated declaration file set";
-      let bytes = 0;
-      const encoder = new TextEncoder();
-      for (const name of names) {
-        if (typeof files[name] !== "string") return "generated declarations must be text";
-        bytes += encoder.encode(files[name]).length;
-      }
-      if (bytes > MAX_GENERATED_DECLARATION_BYTES) return "generated declarations are too large";
-      return null;
-    }
-    module2.exports = {
-      GENERATED_DECLARATIONS_VERSION,
-      AMBIENT_FILE: AMBIENT_FILE2,
-      SCHEMA_FILE: SCHEMA_FILE2,
-      MAX_GENERATED_DECLARATION_BYTES,
-      expectedDeclarationFiles,
-      canonicalDeclarationsText,
-      generatedDeclarationsProblem
-    };
-  }
 });
-
-// worker/containers/compile/generated-declarations-render.cjs
 var require_generated_declarations_render = __commonJS({
-  "worker/containers/compile/generated-declarations-render.cjs"(exports2, module2) {
-    "use strict";
-    var { runtimeContextDeclaration: runtimeContextDeclaration2, ENDPOINT_DECLARATION: ENDPOINT_DECLARATION2 } = require_runtime_types();
-    var { SCHEMA_DECLARATION: SCHEMA_DECLARATION2 } = require_schema_types();
-    var { declaredRoles: declaredRoles2 } = require_groups_types();
-    var { AMBIENT_FILE: AMBIENT_FILE2, SCHEMA_FILE: SCHEMA_FILE2 } = require_generated_declarations();
-    function ambientDeclaration(declaredRolesText, declaredTables) {
-      return runtimeContextDeclaration2(declaredRoles2(declaredRolesText)) + ENDPOINT_DECLARATION2 + (declaredTables ?? "");
+    "worker/containers/compile/generated-declarations-render.cjs"(exports2, module2) {
+        "use strict";
+        var { runtimeContextDeclaration: runtimeContextDeclaration2, ENDPOINT_DECLARATION: ENDPOINT_DECLARATION2 } = require_runtime_types();
+        var { SCHEMA_DECLARATION: SCHEMA_DECLARATION2 } = require_schema_types();
+        var { declaredRoles: declaredRoles2 } = require_groups_types();
+        var { AMBIENT_FILE: AMBIENT_FILE2, SCHEMA_FILE: SCHEMA_FILE2 } = require_generated_declarations();
+        function ambientDeclaration(declaredRolesText, declaredTables) {
+            return runtimeContextDeclaration2(declaredRoles2(declaredRolesText)) + ENDPOINT_DECLARATION2 + (declaredTables ?? "");
+        }
+        function renderGeneratedDeclarationFiles2({ declaredRoles: rolesText, declaredTables, hasSchema }) {
+            return {
+                [AMBIENT_FILE2]: ambientDeclaration(rolesText, declaredTables),
+                ...hasSchema ? { [SCHEMA_FILE2]: SCHEMA_DECLARATION2 } : {}
+            };
+        }
+        function declarationInputsOf(payload) {
+            return {
+                declaredRoles: payload.declared_roles,
+                declaredTables: payload.declared_tables,
+                hasSchema: !!payload.files && payload.files["db/schema.ts"] !== void 0
+            };
+        }
+        module2.exports = {
+            ambientDeclaration,
+            renderGeneratedDeclarationFiles: renderGeneratedDeclarationFiles2,
+            declarationInputsOf
+        };
     }
-    function renderGeneratedDeclarationFiles2({ declaredRoles: rolesText, declaredTables, hasSchema }) {
-      return {
-        [AMBIENT_FILE2]: ambientDeclaration(rolesText, declaredTables),
-        ...hasSchema ? { [SCHEMA_FILE2]: SCHEMA_DECLARATION2 } : {}
-      };
-    }
-    function declarationInputsOf(payload) {
-      return {
-        declaredRoles: payload.declared_roles,
-        declaredTables: payload.declared_tables,
-        hasSchema: !!payload.files && payload.files["db/schema.ts"] !== void 0
-      };
-    }
-    module2.exports = {
-      ambientDeclaration,
-      renderGeneratedDeclarationFiles: renderGeneratedDeclarationFiles2,
-      declarationInputsOf
-    };
-  }
 });
-
-// worker/containers/compile/consumer-contract.cjs
 var require_consumer_contract = __commonJS({
-  "worker/containers/compile/consumer-contract.cjs"(exports2, module2) {
-    "use strict";
-    var CONSUMER_CONTRACT2 = Object.freeze({
-      version: 6,
-      digest: "8318cd690fc6072c5429b9c64791ead8c4af99058b37b7e83d038dda97308832"
-    });
-    var MEMBERSHIPS = "memberships: table({ id: id(), team_id: text(), member_id: text() }, { scope: owner(), client: { read: true } }),";
-    var SHARES = "shares: table({ id: id(), grantee_id: text() }, { scope: owner(), client: { read: true, create: ['grantee_id'], delete: true }, unique: [['user_id', 'grantee_id']] }),";
-    var MEMBER = "member({ group: ['team_id'], membership: 'memberships', member_user: 'member_id', member_group: ['team_id'], operations: ['read', 'create', 'update', 'delete'] })";
-    var one = (imports, tables, options = "") => `import { schema, table, id, text, integer, ${imports} } from 'somewhere/db';
+    "worker/containers/compile/consumer-contract.cjs"(exports2, module2) {
+        "use strict";
+        var CONSUMER_CONTRACT2 = Object.freeze({
+            version: 6,
+            digest: "8318cd690fc6072c5429b9c64791ead8c4af99058b37b7e83d038dda97308832"
+        });
+        var MEMBERSHIPS = "memberships: table({ id: id(), team_id: text(), member_id: text() }, { scope: owner(), client: { read: true } }),";
+        var SHARES = "shares: table({ id: id(), grantee_id: text() }, { scope: owner(), client: { read: true, create: ['grantee_id'], delete: true }, unique: [['user_id', 'grantee_id']] }),";
+        var MEMBER = "member({ group: ['team_id'], membership: 'memberships', member_user: 'member_id', member_group: ['team_id'], operations: ['read', 'create', 'update', 'delete'] })";
+        var one = (imports, tables, options = "") => `import { schema, table, id, text, integer, ${imports} } from 'somewhere/db';
 export default schema({
   ${tables}
 }${options});
 `;
-    var contacts = (scope, extra = "") => `contacts: table({ id: id(), team_id: text({ default: '' }), name: text()${extra} }, { scope: ${scope}, client: { read: true, create: ['name'], update: ['name'], delete: true } }),`;
-    var CONSUMER_CONTRACT_FORMS = Object.freeze([
-      ["owner()", one("owner", "notes: table({ id: id(), title: text() }, { scope: owner(), client: { read: true, create: ['title'], update: ['title'], delete: true } }),")],
-      ["shared()", one("shared", "posts: table({ id: id(), body: text() }, { scope: shared(), client: { read: true, create: ['body'] } }),")],
-      ["publicRead", one("owner", "cards: table({ id: id(), title: text() }, { scope: owner(), client: { read: ['id', 'title'], publicRead: true } }),")],
-      ["member()", one("owner, member", `${MEMBERSHIPS}
+        var contacts = (scope, extra = "") => `contacts: table({ id: id(), team_id: text({ default: '' }), name: text()${extra} }, { scope: ${scope}, client: { read: true, create: ['name'], update: ['name'], delete: true } }),`;
+        var CONSUMER_CONTRACT_FORMS = Object.freeze([
+            ["owner()", one("owner", "notes: table({ id: id(), title: text() }, { scope: owner(), client: { read: true, create: ['title'], update: ['title'], delete: true } }),")],
+            ["shared()", one("shared", "posts: table({ id: id(), body: text() }, { scope: shared(), client: { read: true, create: ['body'] } }),")],
+            ["publicRead", one("owner", "cards: table({ id: id(), title: text() }, { scope: owner(), client: { read: ['id', 'title'], publicRead: true } }),")],
+            ["member()", one("owner, member", `${MEMBERSHIPS}
   ${contacts(MEMBER)}`)],
-      ["anyOf(owner(), member())", one("owner, member, anyOf", `${MEMBERSHIPS}
+            ["anyOf(owner(), member())", one("owner, member, anyOf", `${MEMBERSHIPS}
   ${contacts(`anyOf(owner(), ${MEMBER})`)}`)],
-      ["anyOf(owner(), appRole())", one("owner, anyOf, appRole", "tickets: table({ id: id(), subject: text() }, { scope: anyOf(owner(), appRole({ roles: { read: ['staff'] } })), client: { read: true } }),", ", { appRoles: { staff: { grantableBy: [] } } }")],
-      ["anyOf(owner(), grant())", one("owner, anyOf, grant", `${SHARES}
+            ["anyOf(owner(), appRole())", one("owner, anyOf, appRole", "tickets: table({ id: id(), subject: text() }, { scope: anyOf(owner(), appRole({ roles: { read: ['staff'] } })), client: { read: true } }),", ", { appRoles: { staff: { grantableBy: [] } } }")],
+            ["anyOf(owner(), grant())", one("owner, anyOf, grant", `${SHARES}
   ${contacts("anyOf(owner(), grant({ table: 'shares', grantee: 'grantee_id', operations: ['read'] }))")}`)],
-      ["anyOf(owner(), grant({ row }))", one("owner, anyOf, grant", "doc_shares: table({ id: id(), doc_id: text({ references: 'docs', onDelete: 'cascade' }), grantee_id: text() }, { scope: owner(), unique: [['doc_id', 'grantee_id']] }),\n  docs: table({ id: id(), title: text() }, { scope: anyOf(owner(), grant({ table: 'doc_shares', grantee: 'grantee_id', row: 'doc_id', operations: ['read', 'update'] })), client: { read: true, update: ['title'] } }),")],
-      ["anyOf(owner({ read }), appRole())", one("owner, anyOf, appRole", "tickets: table({ id: id(), subject: text(), customer_email: text() }, { scope: anyOf(owner({ read: ['id', 'subject'] }), appRole({ roles: { read: ['staff'] } })), client: { read: ['id', 'subject', 'customer_email'] } }),", ", { appRoles: { staff: { grantableBy: [] } } }")],
-      ["allOf(member(), owner())", one("owner, member, allOf", `${MEMBERSHIPS}
+            ["anyOf(owner(), grant({ row }))", one("owner, anyOf, grant", "doc_shares: table({ id: id(), doc_id: text({ references: 'docs', onDelete: 'cascade' }), grantee_id: text() }, { scope: owner(), unique: [['doc_id', 'grantee_id']] }),\n  docs: table({ id: id(), title: text() }, { scope: anyOf(owner(), grant({ table: 'doc_shares', grantee: 'grantee_id', row: 'doc_id', operations: ['read', 'update'] })), client: { read: true, update: ['title'] } }),")],
+            ["anyOf(owner({ read }), appRole())", one("owner, anyOf, appRole", "tickets: table({ id: id(), subject: text(), customer_email: text() }, { scope: anyOf(owner({ read: ['id', 'subject'] }), appRole({ roles: { read: ['staff'] } })), client: { read: ['id', 'subject', 'customer_email'] } }),", ", { appRoles: { staff: { grantableBy: [] } } }")],
+            ["allOf(member(), owner())", one("owner, member, allOf", `${MEMBERSHIPS}
   ${contacts(`allOf(${MEMBER}, owner())`)}`)],
-      ["parent()", one("owner, parent, hasMany", "tickets: table({ id: id(), subject: text() }, { scope: owner(), client: { read: true }, relations: { comments: hasMany('comments', 'ticket_id') } }),\n  comments: table({ id: id(), ticket_id: text({ references: 'tickets' }), body: text() }, { scope: parent({ via: 'ticket_id' }), client: { read: true } }),")],
-      // Refused by deploy (scripts/check-cli-vendor-parity.mjs asserts the same reasons).
-      ["refused: grant() inside allOf", one("owner, member, anyOf, allOf, grant", `${SHARES}
+            ["parent()", one("owner, parent, hasMany", "tickets: table({ id: id(), subject: text() }, { scope: owner(), client: { read: true }, relations: { comments: hasMany('comments', 'ticket_id') } }),\n  comments: table({ id: id(), ticket_id: text({ references: 'tickets' }), body: text() }, { scope: parent({ via: 'ticket_id' }), client: { read: true } }),")],
+            ["refused: grant() inside allOf", one("owner, member, anyOf, allOf, grant", `${SHARES}
   ${MEMBERSHIPS}
   ${contacts(`allOf(${MEMBER}, anyOf(owner(), grant({ table: 'shares', grantee: 'grantee_id', operations: ['read'] })))`)}`)],
-      ["refused: grant() update without read", one("owner, anyOf, grant", `${SHARES}
+            ["refused: grant() update without read", one("owner, anyOf, grant", `${SHARES}
   ${contacts("anyOf(owner(), grant({ table: 'shares', grantee: 'grantee_id', operations: ['update'] }))")}`)],
-      ["refused: grant() delete", one("owner, anyOf, grant", `${SHARES}
+            ["refused: grant() delete", one("owner, anyOf, grant", `${SHARES}
   ${contacts("anyOf(owner(), grant({ table: 'shares', grantee: 'grantee_id', operations: ['read', 'update', 'delete'] }))")}`)],
-      ["refused: grant() alone", one("owner, grant", `${SHARES}
+            ["refused: grant() alone", one("owner, grant", `${SHARES}
   ${contacts("grant({ table: 'shares', grantee: 'grantee_id', operations: ['read'] })")}`)],
-      ["refused: a column named mine", one("owner", "notes: table({ id: id(), mine: text() }, { scope: owner(), client: { read: true } }),")]
-    ]);
-    var DERIVED = ["generateFromFiles", "localDeclarationFromFiles", "declaredTablesFromFiles", "runtimeDeclarationFromFiles", "filesDeclarationFromFiles"];
-    function consumerContractComponents2(data, sourceLintVersion, hash, sourceLintImplementation) {
-      const forms = {};
-      for (const [name, source] of CONSUMER_CONTRACT_FORMS) {
-        const files = { "db/schema.ts": source };
-        let verdict;
-        try {
-          verdict = { accepted: true, outputs: DERIVED.map((key) => typeof data[key] === "function" ? data[key](files) ?? null : `missing ${key}`) };
-        } catch (error) {
-          verdict = { accepted: false, refusal: String(error && error.message || error) };
+            ["refused: a column named mine", one("owner", "notes: table({ id: id(), mine: text() }, { scope: owner(), client: { read: true } }),")]
+        ]);
+        var DERIVED = ["generateFromFiles", "localDeclarationFromFiles", "declaredTablesFromFiles", "runtimeDeclarationFromFiles", "filesDeclarationFromFiles"];
+        function consumerContractComponents2(data, sourceLintVersion, hash, sourceLintImplementation) {
+            const forms = {};
+            for (const [name, source] of CONSUMER_CONTRACT_FORMS) {
+                const files = { "db/schema.ts": source };
+                let verdict;
+                try {
+                    verdict = { accepted: true, outputs: DERIVED.map((key) => typeof data[key] === "function" ? data[key](files) ?? null : `missing ${key}`) };
+                }
+                catch (error) {
+                    verdict = { accepted: false, refusal: String(error && error.message || error) };
+                }
+                forms[name] = hash(JSON.stringify(verdict));
+            }
+            return {
+                schema_declaration: hash(String(data.SCHEMA_DECLARATION)),
+                runtime_context_declaration: hash(String(data.RUNTIME_CONTEXT_DECLARATION)),
+                endpoint_declaration: hash(String(data.ENDPOINT_DECLARATION)),
+                files_declaration: hash(String(data.FILES_DECLARATION_FILE)),
+                source_lint_version: String(sourceLintVersion),
+                source_lint_implementation: hash(sourceLintImplementation),
+                forms
+            };
         }
-        forms[name] = hash(JSON.stringify(verdict));
-      }
-      return {
-        schema_declaration: hash(String(data.SCHEMA_DECLARATION)),
-        runtime_context_declaration: hash(String(data.RUNTIME_CONTEXT_DECLARATION)),
-        endpoint_declaration: hash(String(data.ENDPOINT_DECLARATION)),
-        files_declaration: hash(String(data.FILES_DECLARATION_FILE)),
-        source_lint_version: String(sourceLintVersion),
-        source_lint_implementation: hash(sourceLintImplementation),
-        forms
-      };
+        function consumerContractFingerprint2(components) {
+            const sorted3 = (value) => value && typeof value === "object" && !Array.isArray(value) ? Object.fromEntries(Object.keys(value).sort().map((k) => [k, sorted3(value[k])])) : value;
+            return JSON.stringify(sorted3(components));
+        }
+        function consumerContractHeader(contract = CONSUMER_CONTRACT2) {
+            return `${contract.version}; digest=${contract.digest}`;
+        }
+        function parseConsumerContractHeader2(value) {
+            const m = /^\s*(\d{1,9}); digest=([0-9a-f]{64})\s*$/.exec(String(value || ""));
+            return m ? { version: Number(m[1]), digest: m[2] } : null;
+        }
+        function consumerContractVerdict2(cli, seen, now = Date.now()) {
+            if (!cli || !Number.isInteger(cli.version) || !/^[0-9a-f]{64}$/.test(cli.digest || "")) {
+                return { status: "unknown", compatible: null, message: "This CLI does not record which platform consumer contract it implements." };
+            }
+            if (!seen) {
+                return { status: "unknown", compatible: null, message: `The platform's consumer contract is not known on this machine yet (no platform response recorded). This CLI checks against contract ${cli.version}.` };
+            }
+            const age = Number.isFinite(seen.seen_at) ? ` (last seen ${Math.max(0, Math.round((now - seen.seen_at) / 36e5))} h ago${seen.origin ? ` from ${seen.origin}` : ""})` : "";
+            if (seen.digest === cli.digest)
+                return { status: "current", compatible: true, message: Number.isFinite(seen.seen_at) ? `This CLI implements consumer contract ${cli.version}, the one the platform last announced${age}. A platform release since then is not known until the CLI next talks to the platform.` : `This CLI implements consumer contract ${cli.version}.` };
+            if (seen.version > cli.version) {
+                return { status: "outdated", compatible: false, message: `This CLI implements consumer contract ${cli.version}; the platform is at ${seen.version}${age}. Checks continue using this CLI's rules.` };
+            }
+            if (seen.version < cli.version) {
+                return { status: "ahead", compatible: false, message: `This CLI implements consumer contract ${cli.version}; the platform is still at ${seen.version}${age}. Checks continue using this CLI's rules.` };
+            }
+            return { status: "mismatch", compatible: false, message: `This CLI and the platform both say consumer contract ${cli.version} but with different digests${age}; checks continue using this CLI's rules.` };
+        }
+        module2.exports = {
+            CONSUMER_CONTRACT: CONSUMER_CONTRACT2,
+            CONSUMER_CONTRACT_FORMS,
+            consumerContractComponents: consumerContractComponents2,
+            consumerContractFingerprint: consumerContractFingerprint2,
+            consumerContractHeader,
+            parseConsumerContractHeader: parseConsumerContractHeader2,
+            consumerContractVerdict: consumerContractVerdict2
+        };
     }
-    function consumerContractFingerprint2(components) {
-      const sorted3 = (value) => value && typeof value === "object" && !Array.isArray(value) ? Object.fromEntries(Object.keys(value).sort().map((k) => [k, sorted3(value[k])])) : value;
-      return JSON.stringify(sorted3(components));
-    }
-    function consumerContractHeader(contract = CONSUMER_CONTRACT2) {
-      return `${contract.version}; digest=${contract.digest}`;
-    }
-    function parseConsumerContractHeader2(value) {
-      const m = /^\s*(\d{1,9}); digest=([0-9a-f]{64})\s*$/.exec(String(value || ""));
-      return m ? { version: Number(m[1]), digest: m[2] } : null;
-    }
-    function consumerContractVerdict2(cli, seen, now = Date.now()) {
-      if (!cli || !Number.isInteger(cli.version) || !/^[0-9a-f]{64}$/.test(cli.digest || "")) {
-        return { status: "unknown", compatible: null, message: "This CLI does not record which platform consumer contract it implements." };
-      }
-      if (!seen) {
-        return { status: "unknown", compatible: null, message: `The platform's consumer contract is not known on this machine yet (no platform response recorded). This CLI checks against contract ${cli.version}.` };
-      }
-      const age = Number.isFinite(seen.seen_at) ? ` (last seen ${Math.max(0, Math.round((now - seen.seen_at) / 36e5))} h ago${seen.origin ? ` from ${seen.origin}` : ""})` : "";
-      if (seen.digest === cli.digest) return { status: "current", compatible: true, message: Number.isFinite(seen.seen_at) ? `This CLI implements consumer contract ${cli.version}, the one the platform last announced${age}. A platform release since then is not known until the CLI next talks to the platform.` : `This CLI implements consumer contract ${cli.version}.` };
-      if (seen.version > cli.version) {
-        return { status: "outdated", compatible: false, message: `This CLI implements consumer contract ${cli.version}; the platform is at ${seen.version}${age}. Checks continue using this CLI's rules.` };
-      }
-      if (seen.version < cli.version) {
-        return { status: "ahead", compatible: false, message: `This CLI implements consumer contract ${cli.version}; the platform is still at ${seen.version}${age}. Checks continue using this CLI's rules.` };
-      }
-      return { status: "mismatch", compatible: false, message: `This CLI and the platform both say consumer contract ${cli.version} but with different digests${age}; checks continue using this CLI's rules.` };
-    }
-    module2.exports = {
-      CONSUMER_CONTRACT: CONSUMER_CONTRACT2,
-      CONSUMER_CONTRACT_FORMS,
-      consumerContractComponents: consumerContractComponents2,
-      consumerContractFingerprint: consumerContractFingerprint2,
-      consumerContractHeader,
-      parseConsumerContractHeader: parseConsumerContractHeader2,
-      consumerContractVerdict: consumerContractVerdict2
-    };
-  }
 });
-
-// declared-data-vendor-entry.js
 var declared_data_vendor_entry_exports = {};
 __export(declared_data_vendor_entry_exports, {
-  CONSUMER_CONTRACT: () => import_consumer_contract.CONSUMER_CONTRACT,
-  ENDPOINT_DECLARATION: () => import_runtime_types3.ENDPOINT_DECLARATION,
-  FILES_DECLARATION_FILE: () => import_typed_files2.CLIENT_FILE,
-  RUNTIME_CONTEXT_DECLARATION: () => import_runtime_types3.RUNTIME_CONTEXT_DECLARATION,
-  SCHEMA_DECLARATION: () => import_schema_types.SCHEMA_DECLARATION,
-  checkerContract: () => checkerContract,
-  consumerContractComponents: () => import_consumer_contract.consumerContractComponents,
-  consumerContractFingerprint: () => import_consumer_contract.consumerContractFingerprint,
-  consumerContractVerdict: () => import_consumer_contract.consumerContractVerdict,
-  declaredTablesFromFiles: () => declaredTablesFromFiles,
-  filesDeclarationFromFiles: () => filesDeclarationFromFiles,
-  generateFromFiles: () => generateFromFiles,
-  isRuntimeEndpointGlobal: () => isRuntimeEndpointGlobal,
-  localDeclarationFromFiles: () => localDeclarationFromFiles,
-  parseConsumerContractHeader: () => import_consumer_contract.parseConsumerContractHeader,
-  referenceCheckDeclarations: () => referenceCheckDeclarations,
-  runtimeDeclarationFromFiles: () => runtimeDeclarationFromFiles
+    CONSUMER_CONTRACT: () => import_consumer_contract.CONSUMER_CONTRACT,
+    ENDPOINT_DECLARATION: () => import_runtime_types3.ENDPOINT_DECLARATION,
+    FILES_DECLARATION_FILE: () => import_typed_files2.CLIENT_FILE,
+    RUNTIME_CONTEXT_DECLARATION: () => import_runtime_types3.RUNTIME_CONTEXT_DECLARATION,
+    SCHEMA_DECLARATION: () => import_schema_types.SCHEMA_DECLARATION,
+    checkerContract: () => checkerContract,
+    consumerContractComponents: () => import_consumer_contract.consumerContractComponents,
+    consumerContractFingerprint: () => import_consumer_contract.consumerContractFingerprint,
+    consumerContractVerdict: () => import_consumer_contract.consumerContractVerdict,
+    declaredTablesFromFiles: () => declaredTablesFromFiles,
+    filesDeclarationFromFiles: () => filesDeclarationFromFiles,
+    generateFromFiles: () => generateFromFiles,
+    isRuntimeEndpointGlobal: () => isRuntimeEndpointGlobal,
+    localDeclarationFromFiles: () => localDeclarationFromFiles,
+    parseConsumerContractHeader: () => import_consumer_contract.parseConsumerContractHeader,
+    referenceCheckDeclarations: () => referenceCheckDeclarations,
+    runtimeDeclarationFromFiles: () => runtimeDeclarationFromFiles
 });
 module.exports = __toCommonJS(declared_data_vendor_entry_exports);
-
-// worker/src/utils/db-schema-deploy/bigint-text.ts
 function isCanonicalBigintText(value) {
-  if (!/^(0|-?[1-9][0-9]*)$/.test(value)) return false;
-  const negative = value.startsWith("-");
-  const digits = negative ? value.slice(1) : value;
-  const limit = negative ? "9223372036854775808" : "9223372036854775807";
-  return digits.length < limit.length || digits.length === limit.length && digits <= limit;
+    if (!/^(0|-?[1-9][0-9]*)$/.test(value))
+        return false;
+    const negative = value.startsWith("-");
+    const digits = negative ? value.slice(1) : value;
+    const limit = negative ? "9223372036854775808" : "9223372036854775807";
+    return digits.length < limit.length || digits.length === limit.length && digits <= limit;
 }
-
-// worker/src/utils/db-schema-deploy/schema-ownership.ts
 var SHARED_AUTHOR_COLUMN = "_sw_author_id";
-
-// worker/src/utils/db-schema-deploy/client-permissions.ts
 function tableAllowsClientWrites(table) {
-  return Boolean(table.client && (table.client.create !== null || table.client.update !== null || table.client.delete || table.client.intake !== void 0));
+    return Boolean(table.client && (table.client.create !== null || table.client.update !== null || table.client.delete || table.client.intake !== void 0));
 }
 function parseClientPermissions(value, columns, scope) {
-  const fail = (message) => ({ ok: false, message });
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return fail("client must be an object declaring read, publicRead, create, update, delete, or identity.");
-  }
-  const input = value;
-  for (const key of Object.keys(input)) {
-    if (!["identity", "read", "publicRead", "create", "update", "delete", "links", "intake"].includes(key)) {
-      return fail(`Unknown client permission "${key}".`);
+    const fail = (message) => ({ ok: false, message });
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+        return fail("client must be an object declaring read, publicRead, create, update, delete, or identity.");
     }
-  }
-  if (!["owner", "member", "shared", "policy"].includes(scope.kind)) {
-    return fail("serverOnly() tables cannot declare client access; their rows are reached only from server functions.");
-  }
-  if (scope.policy?.kind === "all_of") {
-    if (input.publicRead !== void 0 && input.publicRead !== false) return fail("allOf() tables cannot declare client.publicRead; their rows are reachable only by current members.");
-    if (input.links !== void 0) return fail("allOf() tables cannot declare client.links yet; a link would bypass current membership.");
-    if (input.intake !== void 0) return fail("allOf() tables cannot accept client.intake; public intake targets a plain owner() table.");
-  }
-  const identity = scope.kind === "owner" && scope.visitors === true ? "visitor" : "authenticated";
-  if (input.identity !== void 0 && input.identity !== "authenticated" && input.identity !== "visitor") {
-    return fail('client.identity must be "authenticated" or "visitor".');
-  }
-  if (input.identity !== void 0 && input.identity !== identity) {
-    return fail("client.identity must match the owner() declaration. Visitor access requires owner({ visitors: true }); owner() and other scopes require authenticated identity.");
-  }
-  let read = input.read ?? false;
-  const rawPublicRead = input.publicRead ?? false;
-  let publicRead;
-  if (typeof rawPublicRead === "boolean") publicRead = rawPublicRead;
-  else {
-    if (!rawPublicRead || typeof rawPublicRead !== "object" || Array.isArray(rawPublicRead) || Object.keys(rawPublicRead).some((key) => key !== "where")) {
-      return fail("client.publicRead must be true, false, or { where: { field: literal } }.");
+    const input = value;
+    for (const key of Object.keys(input)) {
+        if (!["identity", "read", "publicRead", "create", "update", "delete", "links", "intake"].includes(key)) {
+            return fail(`Unknown client permission "${key}".`);
+        }
     }
-    const where = parseEqualityWhere(rawPublicRead.where, columns, "client.publicRead.where");
-    if (typeof where === "string") return fail(where);
-    publicRead = { where };
-  }
-  if (read !== true && read !== false && !Array.isArray(read)) return fail("client.read must list readable fields, or be true or false.");
-  if (publicRead && (!Array.isArray(read) || read.length === 0)) {
-    return fail("client.publicRead requires an explicit non-empty client.read field list.");
-  }
-  const remove = input.delete ?? false;
-  if (typeof remove !== "boolean") return fail("client.delete must be true or false.");
-  const fields = new Map(columns.map((column) => [column.name, column]));
-  if (Array.isArray(read)) {
-    const names = [];
-    for (const entry of read) {
-      if (typeof entry === "string" && ((scope.kind === "owner" || scope.kind === "policy") && entry.toLowerCase() === scope.column || entry.toLowerCase() === SHARED_AUTHOR_COLUMN)) {
-        return fail(`client.read cannot list "${entry}": the platform assigns who created each row and never sends that identity to the browser. To show the signed-in user which rows are theirs, read with { can: true }: each row then carries mine (true for rows this user created) and can.update / can.delete.`);
-      }
-      if (typeof entry !== "string" || !fields.has(entry.toLowerCase())) return fail("client.read must contain only declared column names.");
-      const name = entry.toLowerCase();
-      if (names.includes(name)) return fail(`client.read declares field "${entry}" twice.`);
-      names.push(name);
+    if (!["owner", "member", "shared", "policy"].includes(scope.kind)) {
+        return fail("serverOnly() tables cannot declare client access; their rows are reached only from server functions.");
     }
-    if (names.length === 0) return fail("client.read must name at least one field, or be false.");
-    read = names.sort();
-  }
-  const writes = { create: null, update: null };
-  for (const operation of ["create", "update"]) {
-    const declared = input[operation];
-    if (declared === void 0 || declared === false || declared === null) continue;
-    if (!Array.isArray(declared)) return fail(`client.${operation} must list the writable fields, or be false.`);
-    const allowed = [];
-    for (const entry of declared) {
-      if (typeof entry !== "string") return fail(`client.${operation} fields must be column names.`);
-      const name = entry.toLowerCase();
-      const column = fields.get(name);
-      if (!column) return fail(`client.${operation} names undeclared or platform-managed field "${entry}".`);
-      if (column.helper === "id" || (scope.kind === "owner" || scope.kind === "policy") && name === scope.column) {
-        return fail(`client.${operation} cannot write the platform-assigned identity field "${entry}".`);
-      }
-      if (column.helper === "blob") return fail(`client.${operation} cannot write binary field "${entry}"; uploads go to project files.`);
-      if (typeof publicRead === "object" && Object.prototype.hasOwnProperty.call(publicRead.where, name)) {
-        return fail(`client.${operation} cannot write publication field "${entry}"; rows are published by a server operation.`);
-      }
-      if (operation === "update" && (scope.kind === "member" || scope.kind === "policy") && scope.group?.includes(name)) {
-        return fail(`client.update cannot move a row between membership groups by changing "${entry}".`);
-      }
-      if (allowed.includes(name)) return fail(`client.${operation} declares field "${entry}" twice.`);
-      allowed.push(name);
+    if (scope.policy?.kind === "all_of") {
+        if (input.publicRead !== void 0 && input.publicRead !== false)
+            return fail("allOf() tables cannot declare client.publicRead; their rows are reachable only by current members.");
+        if (input.links !== void 0)
+            return fail("allOf() tables cannot declare client.links yet; a link would bypass current membership.");
+        if (input.intake !== void 0)
+            return fail("allOf() tables cannot accept client.intake; public intake targets a plain owner() table.");
     }
-    if (operation === "update" && allowed.length === 0) return fail("client.update must name at least one writable field, or be false.");
-    writes[operation] = allowed.sort();
-  }
-  if (writes.create !== null) {
-    if (typeof publicRead === "object" && !privateByDefault(publicRead.where, fields)) {
-      return fail("client.create has no fixed publication-field default that guarantees a private row. It is accepted when at least one predicate field has a private default; otherwise rows are created by a server operation.");
+    const identity = scope.kind === "owner" && scope.visitors === true ? "visitor" : "authenticated";
+    if (input.identity !== void 0 && input.identity !== "authenticated" && input.identity !== "visitor") {
+        return fail('client.identity must be "authenticated" or "visitor".');
     }
-    for (const column of columns) {
-      if (column.helper !== "id" && !column.nullable && !column.hasDefault && !column.autoNow && !writes.create.includes(column.name)) {
-        return fail(`client.create must include required field "${column.name}", or that field needs a declared default.`);
-      }
+    if (input.identity !== void 0 && input.identity !== identity) {
+        return fail("client.identity must match the owner() declaration. Visitor access requires owner({ visitors: true }); owner() and other scopes require authenticated identity.");
     }
-  }
-  let links;
-  if (input.links !== void 0) {
-    const parsed = parseLinkPermissions(input.links, read, writes.update, writes.create, columns, scope);
-    if (typeof parsed === "string") return fail(parsed);
-    links = parsed;
-  }
-  let intake;
-  if (input.intake !== void 0) {
-    const parsed = parseIntakePermissions(input.intake, columns, scope, publicRead);
-    if (typeof parsed === "string") return fail(parsed);
-    intake = parsed;
-  }
-  return { ok: true, permissions: { identity, read, publicRead, ...writes, delete: remove, ...links ? { links } : {}, ...intake ? { intake } : {} } };
+    let read = input.read ?? false;
+    const rawPublicRead = input.publicRead ?? false;
+    let publicRead;
+    if (typeof rawPublicRead === "boolean")
+        publicRead = rawPublicRead;
+    else {
+        if (!rawPublicRead || typeof rawPublicRead !== "object" || Array.isArray(rawPublicRead) || Object.keys(rawPublicRead).some((key) => key !== "where")) {
+            return fail("client.publicRead must be true, false, or { where: { field: literal } }.");
+        }
+        const where = parseEqualityWhere(rawPublicRead.where, columns, "client.publicRead.where");
+        if (typeof where === "string")
+            return fail(where);
+        publicRead = { where };
+    }
+    if (read !== true && read !== false && !Array.isArray(read))
+        return fail("client.read must list readable fields, or be true or false.");
+    if (publicRead && (!Array.isArray(read) || read.length === 0)) {
+        return fail("client.publicRead requires an explicit non-empty client.read field list.");
+    }
+    const remove = input.delete ?? false;
+    if (typeof remove !== "boolean")
+        return fail("client.delete must be true or false.");
+    const fields = new Map(columns.map((column) => [column.name, column]));
+    if (Array.isArray(read)) {
+        const names = [];
+        for (const entry of read) {
+            if (typeof entry === "string" && ((scope.kind === "owner" || scope.kind === "policy") && entry.toLowerCase() === scope.column || entry.toLowerCase() === SHARED_AUTHOR_COLUMN)) {
+                return fail(`client.read cannot list "${entry}": the platform assigns who created each row and never sends that identity to the browser. To show the signed-in user which rows are theirs, read with { can: true }: each row then carries mine (true for rows this user created) and can.update / can.delete.`);
+            }
+            if (typeof entry !== "string" || !fields.has(entry.toLowerCase()))
+                return fail("client.read must contain only declared column names.");
+            const name = entry.toLowerCase();
+            if (names.includes(name))
+                return fail(`client.read declares field "${entry}" twice.`);
+            names.push(name);
+        }
+        if (names.length === 0)
+            return fail("client.read must name at least one field, or be false.");
+        read = names.sort();
+    }
+    const writes = { create: null, update: null };
+    for (const operation of ["create", "update"]) {
+        const declared = input[operation];
+        if (declared === void 0 || declared === false || declared === null)
+            continue;
+        if (!Array.isArray(declared))
+            return fail(`client.${operation} must list the writable fields, or be false.`);
+        const allowed = [];
+        for (const entry of declared) {
+            if (typeof entry !== "string")
+                return fail(`client.${operation} fields must be column names.`);
+            const name = entry.toLowerCase();
+            const column = fields.get(name);
+            if (!column)
+                return fail(`client.${operation} names undeclared or platform-managed field "${entry}".`);
+            if (column.helper === "id" || (scope.kind === "owner" || scope.kind === "policy") && name === scope.column) {
+                return fail(`client.${operation} cannot write the platform-assigned identity field "${entry}".`);
+            }
+            if (column.helper === "blob")
+                return fail(`client.${operation} cannot write binary field "${entry}"; uploads go to project files.`);
+            if (typeof publicRead === "object" && Object.prototype.hasOwnProperty.call(publicRead.where, name)) {
+                return fail(`client.${operation} cannot write publication field "${entry}"; rows are published by a server operation.`);
+            }
+            if (operation === "update" && (scope.kind === "member" || scope.kind === "policy") && scope.group?.includes(name)) {
+                return fail(`client.update cannot move a row between membership groups by changing "${entry}".`);
+            }
+            if (allowed.includes(name))
+                return fail(`client.${operation} declares field "${entry}" twice.`);
+            allowed.push(name);
+        }
+        if (operation === "update" && allowed.length === 0)
+            return fail("client.update must name at least one writable field, or be false.");
+        writes[operation] = allowed.sort();
+    }
+    if (writes.create !== null) {
+        if (typeof publicRead === "object" && !privateByDefault(publicRead.where, fields)) {
+            return fail("client.create has no fixed publication-field default that guarantees a private row. It is accepted when at least one predicate field has a private default; otherwise rows are created by a server operation.");
+        }
+        for (const column of columns) {
+            if (column.helper !== "id" && !column.nullable && !column.hasDefault && !column.autoNow && !writes.create.includes(column.name)) {
+                return fail(`client.create must include required field "${column.name}", or that field needs a declared default.`);
+            }
+        }
+    }
+    let links;
+    if (input.links !== void 0) {
+        const parsed = parseLinkPermissions(input.links, read, writes.update, writes.create, columns, scope);
+        if (typeof parsed === "string")
+            return fail(parsed);
+        links = parsed;
+    }
+    let intake;
+    if (input.intake !== void 0) {
+        const parsed = parseIntakePermissions(input.intake, columns, scope, publicRead);
+        if (typeof parsed === "string")
+            return fail(parsed);
+        intake = parsed;
+    }
+    return { ok: true, permissions: { identity, read, publicRead, ...writes, delete: remove, ...links ? { links } : {}, ...intake ? { intake } : {} } };
 }
 function parseEqualityWhere(where, columns, label) {
-  if (!where || typeof where !== "object" || Array.isArray(where)) return `${label} must be a non-empty object.`;
-  const entries = Object.entries(where);
-  if (entries.length === 0 || entries.length > 8) return `${label} must declare 1 to 8 equality fields.`;
-  const normalized = {};
-  for (const [rawName, literal] of entries) {
-    const name = rawName.toLowerCase();
-    const column = columns?.find((candidate) => candidate.name === name);
-    if (Object.prototype.hasOwnProperty.call(normalized, name)) return `${label} declares field "${rawName}" twice.`;
-    if (columns && (!column || ["json", "blob"].includes(column.helper))) return `${label} names undeclared or non-scalar field "${rawName}".`;
-    if (!(literal === null || typeof literal === "boolean" || typeof literal === "string" || typeof literal === "number" && Number.isFinite(literal))) return `${label} field "${rawName}" must equal a literal scalar.`;
-    if (typeof literal === "string" && literal.length > 256) return `${label} field "${rawName}" exceeds 256 characters.`;
-    if (column && literal === null && !column.nullable) return `${label} field "${rawName}" cannot equal null because it is required.`;
-    if (column && literal !== null && (column.helper === "boolean" && typeof literal !== "boolean" || ["integer", "number"].includes(column.helper) && typeof literal !== "number" || column.helper === "integer" && !Number.isSafeInteger(literal) || column.helper === "bigint" && (typeof literal !== "string" || !isCanonicalBigintText(literal)) || ["text", "timestamp"].includes(column.helper) && typeof literal !== "string")) {
-      return `${label} field "${rawName}" must match its declared type.`;
+    if (!where || typeof where !== "object" || Array.isArray(where))
+        return `${label} must be a non-empty object.`;
+    const entries = Object.entries(where);
+    if (entries.length === 0 || entries.length > 8)
+        return `${label} must declare 1 to 8 equality fields.`;
+    const normalized = {};
+    for (const [rawName, literal] of entries) {
+        const name = rawName.toLowerCase();
+        const column = columns?.find((candidate) => candidate.name === name);
+        if (Object.prototype.hasOwnProperty.call(normalized, name))
+            return `${label} declares field "${rawName}" twice.`;
+        if (columns && (!column || ["json", "blob"].includes(column.helper)))
+            return `${label} names undeclared or non-scalar field "${rawName}".`;
+        if (!(literal === null || typeof literal === "boolean" || typeof literal === "string" || typeof literal === "number" && Number.isFinite(literal)))
+            return `${label} field "${rawName}" must equal a literal scalar.`;
+        if (typeof literal === "string" && literal.length > 256)
+            return `${label} field "${rawName}" exceeds 256 characters.`;
+        if (column && literal === null && !column.nullable)
+            return `${label} field "${rawName}" cannot equal null because it is required.`;
+        if (column && literal !== null && (column.helper === "boolean" && typeof literal !== "boolean" || ["integer", "number"].includes(column.helper) && typeof literal !== "number" || column.helper === "integer" && !Number.isSafeInteger(literal) || column.helper === "bigint" && (typeof literal !== "string" || !isCanonicalBigintText(literal)) || ["text", "timestamp"].includes(column.helper) && typeof literal !== "string")) {
+            return `${label} field "${rawName}" must match its declared type.`;
+        }
+        normalized[name] = literal;
     }
-    normalized[name] = literal;
-  }
-  return Object.fromEntries(Object.entries(normalized).sort(([a], [b]) => a.localeCompare(b)));
+    return Object.fromEntries(Object.entries(normalized).sort(([a], [b]) => a.localeCompare(b)));
 }
 function privateByDefault(where, fields) {
-  for (const [name, publishedValue] of Object.entries(where)) {
-    const column = fields.get(name);
-    if (column.autoNow) continue;
-    const defaultValue = column.hasDefault ? column.default : column.nullable ? null : void 0;
-    if (defaultValue !== void 0 && defaultValue !== publishedValue) return true;
-  }
-  return false;
+    for (const [name, publishedValue] of Object.entries(where)) {
+        const column = fields.get(name);
+        if (column.autoNow)
+            continue;
+        const defaultValue = column.hasDefault ? column.default : column.nullable ? null : void 0;
+        if (defaultValue !== void 0 && defaultValue !== publishedValue)
+            return true;
+    }
+    return false;
 }
 function parseIntakePermissions(value, columns, scope, publicRead) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return "client.intake must be an object: { target: { table, field }, fields, where? }.";
-  const input = value;
-  for (const key of Object.keys(input)) {
-    if (!["target", "fields", "where"].includes(key)) return `Unknown client.intake option "${key}". Allowed: target, fields, where.`;
-  }
-  if (scope.kind !== "owner" || scope.visitors === true) return "client.intake needs owner() without visitors: each accepted row belongs to the target row's owner.";
-  const id = columns.find((column) => column.helper === "id");
-  if (!id || id.uuid === true) return "client.intake needs an integer key: declare id({ uuid: false }).";
-  if (publicRead === true) return "client.intake cannot accept rows into a table whose rows are all public (client.publicRead: true).";
-  const target = input.target;
-  if (!target || typeof target !== "object" || Array.isArray(target) || Object.keys(target).sort().join() !== "field,table") {
-    return "client.intake.target must be { table, field }: the public table and its unique reference field.";
-  }
-  const { table, field } = target;
-  if (typeof table !== "string" || !/^[A-Za-z_][A-Za-z0-9_]{0,63}$/.test(table) || typeof field !== "string" || !/^[A-Za-z_][A-Za-z0-9_]{0,63}$/.test(field)) {
-    return "client.intake.target must name a table and one of its fields.";
-  }
-  if (!Array.isArray(input.fields) || input.fields.length === 0) return "client.intake.fields must list at least one field a submission supplies.";
-  const byName2 = new Map(columns.map((column) => [column.name, column]));
-  const fields = [];
-  for (const entry of input.fields) {
-    if (typeof entry !== "string") return "client.intake.fields must be column names.";
-    const name = entry.toLowerCase();
-    const column = byName2.get(name);
-    if (!column) return `client.intake.fields names undeclared or platform-managed field "${entry}".`;
-    if (column.helper === "id" || name === scope.column) return `client.intake.fields cannot set the platform-assigned identity field "${entry}".`;
-    if (column.helper === "blob") return `client.intake.fields cannot accept binary field "${entry}"; uploads go to project files.`;
-    if (column.autoNow) return `client.intake.fields cannot set "${entry}", which the platform fills in.`;
-    if (typeof publicRead === "object" && Object.prototype.hasOwnProperty.call(publicRead.where, name)) {
-      return `client.intake.fields cannot set publication field "${entry}".`;
+    if (!value || typeof value !== "object" || Array.isArray(value))
+        return "client.intake must be an object: { target: { table, field }, fields, where? }.";
+    const input = value;
+    for (const key of Object.keys(input)) {
+        if (!["target", "fields", "where"].includes(key))
+            return `Unknown client.intake option "${key}". Allowed: target, fields, where.`;
     }
-    if (fields.includes(name)) return `client.intake.fields declares field "${entry}" twice.`;
-    fields.push(name);
-  }
-  for (const column of columns) {
-    if (column.helper !== "id" && !column.nullable && !column.hasDefault && !column.autoNow && !fields.includes(column.name)) {
-      return `client.intake.fields must include required field "${column.name}", or that field needs a declared default.`;
+    if (scope.kind !== "owner" || scope.visitors === true)
+        return "client.intake needs owner() without visitors: each accepted row belongs to the target row's owner.";
+    const id = columns.find((column) => column.helper === "id");
+    if (!id || id.uuid === true)
+        return "client.intake needs an integer key: declare id({ uuid: false }).";
+    if (publicRead === true)
+        return "client.intake cannot accept rows into a table whose rows are all public (client.publicRead: true).";
+    const target = input.target;
+    if (!target || typeof target !== "object" || Array.isArray(target) || Object.keys(target).sort().join() !== "field,table") {
+        return "client.intake.target must be { table, field }: the public table and its unique reference field.";
     }
-  }
-  if (typeof publicRead === "object" && !privateByDefault(publicRead.where, byName2)) {
-    return "client.intake has no fixed publication-field default that guarantees a private row; it is accepted when at least one predicate field has a private default.";
-  }
-  let where;
-  if (input.where !== void 0) {
-    const parsed = parseEqualityWhere(input.where, null, "client.intake.where");
-    if (typeof parsed === "string") return parsed;
-    where = parsed;
-  }
-  return { target: { table: table.toLowerCase(), field: field.toLowerCase() }, fields: fields.sort(), ...where ? { where } : {} };
+    const { table, field } = target;
+    if (typeof table !== "string" || !/^[A-Za-z_][A-Za-z0-9_]{0,63}$/.test(table) || typeof field !== "string" || !/^[A-Za-z_][A-Za-z0-9_]{0,63}$/.test(field)) {
+        return "client.intake.target must name a table and one of its fields.";
+    }
+    if (!Array.isArray(input.fields) || input.fields.length === 0)
+        return "client.intake.fields must list at least one field a submission supplies.";
+    const byName2 = new Map(columns.map((column) => [column.name, column]));
+    const fields = [];
+    for (const entry of input.fields) {
+        if (typeof entry !== "string")
+            return "client.intake.fields must be column names.";
+        const name = entry.toLowerCase();
+        const column = byName2.get(name);
+        if (!column)
+            return `client.intake.fields names undeclared or platform-managed field "${entry}".`;
+        if (column.helper === "id" || name === scope.column)
+            return `client.intake.fields cannot set the platform-assigned identity field "${entry}".`;
+        if (column.helper === "blob")
+            return `client.intake.fields cannot accept binary field "${entry}"; uploads go to project files.`;
+        if (column.autoNow)
+            return `client.intake.fields cannot set "${entry}", which the platform fills in.`;
+        if (typeof publicRead === "object" && Object.prototype.hasOwnProperty.call(publicRead.where, name)) {
+            return `client.intake.fields cannot set publication field "${entry}".`;
+        }
+        if (fields.includes(name))
+            return `client.intake.fields declares field "${entry}" twice.`;
+        fields.push(name);
+    }
+    for (const column of columns) {
+        if (column.helper !== "id" && !column.nullable && !column.hasDefault && !column.autoNow && !fields.includes(column.name)) {
+            return `client.intake.fields must include required field "${column.name}", or that field needs a declared default.`;
+        }
+    }
+    if (typeof publicRead === "object" && !privateByDefault(publicRead.where, byName2)) {
+        return "client.intake has no fixed publication-field default that guarantees a private row; it is accepted when at least one predicate field has a private default.";
+    }
+    let where;
+    if (input.where !== void 0) {
+        const parsed = parseEqualityWhere(input.where, null, "client.intake.where");
+        if (typeof parsed === "string")
+            return parsed;
+        where = parsed;
+    }
+    return { target: { table: table.toLowerCase(), field: field.toLowerCase() }, fields: fields.sort(), ...where ? { where } : {} };
 }
 function authoredClientFromCanonical(client) {
-  if (!client || typeof client !== "object" || Array.isArray(client)) return client;
-  const links = client.links;
-  if (!links || typeof links !== "object" || Array.isArray(links)) return client;
-  const l = links;
-  const keys = Object.keys(l).sort().join(",");
-  if (keys !== "children,edit,maxDays,read" && !(keys === "anonymousCreate,children,edit,maxDays,read" && l.anonymousCreate === true) || !Array.isArray(l.read) || !Array.isArray(l.edit) || !Array.isArray(l.children) || !(l.maxDays === null || typeof l.maxDays === "number")) return client;
-  const authored = { read: l.read, edit: l.edit.length === 0 ? false : l.edit, children: l.children };
-  if (l.maxDays !== null) authored.maxDays = l.maxDays;
-  if (l.anonymousCreate === true) authored.anonymousCreate = true;
-  return { ...client, links: authored };
+    if (!client || typeof client !== "object" || Array.isArray(client))
+        return client;
+    const links = client.links;
+    if (!links || typeof links !== "object" || Array.isArray(links))
+        return client;
+    const l = links;
+    const keys = Object.keys(l).sort().join(",");
+    if (keys !== "children,edit,maxDays,read" && !(keys === "anonymousCreate,children,edit,maxDays,read" && l.anonymousCreate === true) || !Array.isArray(l.read) || !Array.isArray(l.edit) || !Array.isArray(l.children) || !(l.maxDays === null || typeof l.maxDays === "number"))
+        return client;
+    const authored = { read: l.read, edit: l.edit.length === 0 ? false : l.edit, children: l.children };
+    if (l.maxDays !== null)
+        authored.maxDays = l.maxDays;
+    if (l.anonymousCreate === true)
+        authored.anonymousCreate = true;
+    return { ...client, links: authored };
 }
 function parseLinkPermissions(value, read, update, create, columns, scope) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return "client.links must be an object: { read, edit?, children?, maxDays?, anonymousCreate? }.";
-  const input = value;
-  for (const key2 of Object.keys(input)) {
-    if (!["read", "edit", "children", "maxDays", "anonymousCreate"].includes(key2)) return `Unknown client.links option "${key2}". Allowed: read, edit, children, maxDays, anonymousCreate.`;
-  }
-  const owned = scope.kind === "owner" && scope.visitors !== true || scope.kind === "policy" && typeof scope.column === "string";
-  if (!owned) return "client.links needs rows with one signed-in owner: owner() (without visitors) or anyOf(owner(), ...).";
-  if (read === false) return "client.links needs client.read: a link can only read fields the app data client reads.";
-  const readable = read === true ? columns.filter((column) => column.helper !== "blob").map((column) => column.name) : read;
-  const list = (raw, label, allowed, allowedLabel) => {
-    if (!Array.isArray(raw)) return `client.links.${label} must list field names.`;
-    const names = [];
-    for (const entry of raw) {
-      if (typeof entry !== "string") return `client.links.${label} fields must be column names.`;
-      const name = entry.toLowerCase();
-      if (!allowed.includes(name)) return `client.links.${label} names "${entry}", which is not in ${allowedLabel}.`;
-      if (names.includes(name)) return `client.links.${label} declares field "${entry}" twice.`;
-      names.push(name);
+    if (!value || typeof value !== "object" || Array.isArray(value))
+        return "client.links must be an object: { read, edit?, children?, maxDays?, anonymousCreate? }.";
+    const input = value;
+    for (const key2 of Object.keys(input)) {
+        if (!["read", "edit", "children", "maxDays", "anonymousCreate"].includes(key2))
+            return `Unknown client.links option "${key2}". Allowed: read, edit, children, maxDays, anonymousCreate.`;
     }
-    return names.sort();
-  };
-  const linkRead = input.read === true ? [...readable].sort() : list(input.read, "read", readable, "client.read");
-  if (typeof linkRead === "string") return linkRead;
-  if (linkRead.length === 0) return "client.links.read must name at least one field, or be true.";
-  const key = columns.find((column) => column.helper === "id")?.name;
-  if (!key || !linkRead.includes(key)) return "client.links.read must include the primary key.";
-  let edit = [];
-  if (input.edit !== void 0 && input.edit !== false) {
-    if (!update) return "client.links.edit needs client.update: a link can only update fields the app data client updates.";
-    const parsed = list(input.edit, "edit", update, "client.update");
-    if (typeof parsed === "string") return parsed;
-    if (parsed.length === 0) return "client.links.edit must name at least one field, or be false.";
-    if (scope.column && parsed.includes(scope.column)) return `client.links.edit cannot write the owner field "${scope.column}".`;
-    edit = parsed;
-  }
-  let children = [];
-  if (input.children !== void 0) {
-    if (!Array.isArray(input.children) || input.children.some((entry) => typeof entry !== "string" || !/^[A-Za-z_][A-Za-z0-9_]{0,63}$/.test(entry))) {
-      return "client.links.children must list relation names declared on this table.";
+    const owned = scope.kind === "owner" && scope.visitors !== true || scope.kind === "policy" && typeof scope.column === "string";
+    if (!owned)
+        return "client.links needs rows with one signed-in owner: owner() (without visitors) or anyOf(owner(), ...).";
+    if (read === false)
+        return "client.links needs client.read: a link can only read fields the app data client reads.";
+    const readable = read === true ? columns.filter((column) => column.helper !== "blob").map((column) => column.name) : read;
+    const list = (raw, label, allowed, allowedLabel) => {
+        if (!Array.isArray(raw))
+            return `client.links.${label} must list field names.`;
+        const names = [];
+        for (const entry of raw) {
+            if (typeof entry !== "string")
+                return `client.links.${label} fields must be column names.`;
+            const name = entry.toLowerCase();
+            if (!allowed.includes(name))
+                return `client.links.${label} names "${entry}", which is not in ${allowedLabel}.`;
+            if (names.includes(name))
+                return `client.links.${label} declares field "${entry}" twice.`;
+            names.push(name);
+        }
+        return names.sort();
+    };
+    const linkRead = input.read === true ? [...readable].sort() : list(input.read, "read", readable, "client.read");
+    if (typeof linkRead === "string")
+        return linkRead;
+    if (linkRead.length === 0)
+        return "client.links.read must name at least one field, or be true.";
+    const key = columns.find((column) => column.helper === "id")?.name;
+    if (!key || !linkRead.includes(key))
+        return "client.links.read must include the primary key.";
+    let edit = [];
+    if (input.edit !== void 0 && input.edit !== false) {
+        if (!update)
+            return "client.links.edit needs client.update: a link can only update fields the app data client updates.";
+        const parsed = list(input.edit, "edit", update, "client.update");
+        if (typeof parsed === "string")
+            return parsed;
+        if (parsed.length === 0)
+            return "client.links.edit must name at least one field, or be false.";
+        if (scope.column && parsed.includes(scope.column))
+            return `client.links.edit cannot write the owner field "${scope.column}".`;
+        edit = parsed;
     }
-    children = [...new Set(input.children.map((entry) => entry.toLowerCase()))].sort();
-    if (children.length !== input.children.length) return "client.links.children names a relation twice.";
-  }
-  let maxDays = null;
-  if (input.maxDays !== void 0) {
-    if (typeof input.maxDays !== "number" || !Number.isSafeInteger(input.maxDays) || input.maxDays < 1 || input.maxDays > 365) {
-      return "client.links.maxDays must be a whole number of days from 1 to 365.";
+    let children = [];
+    if (input.children !== void 0) {
+        if (!Array.isArray(input.children) || input.children.some((entry) => typeof entry !== "string" || !/^[A-Za-z_][A-Za-z0-9_]{0,63}$/.test(entry))) {
+            return "client.links.children must list relation names declared on this table.";
+        }
+        children = [...new Set(input.children.map((entry) => entry.toLowerCase()))].sort();
+        if (children.length !== input.children.length)
+            return "client.links.children names a relation twice.";
     }
-    maxDays = input.maxDays;
-  }
-  if (input.anonymousCreate !== void 0 && typeof input.anonymousCreate !== "boolean") return "client.links.anonymousCreate must be true or false.";
-  if (input.anonymousCreate === true) {
-    if (scope.kind !== "owner" || scope.visitors === true) return "client.links.anonymousCreate needs owner() without visitors.";
-    if (!create || create.length === 0) return "client.links.anonymousCreate needs client.create: it creates rows with the fields the app data client creates.";
-    if (columns.find((column) => column.helper === "id")?.uuid === true) return "client.links.anonymousCreate needs an integer key: declare id({ uuid: false }).";
-    if (columns.some((column) => column.helper === "blob")) return "client.links.anonymousCreate is not available on a table with a blob() column.";
-  }
-  return { read: linkRead, edit, children, maxDays, ...input.anonymousCreate === true ? { anonymousCreate: true } : {} };
+    let maxDays = null;
+    if (input.maxDays !== void 0) {
+        if (typeof input.maxDays !== "number" || !Number.isSafeInteger(input.maxDays) || input.maxDays < 1 || input.maxDays > 365) {
+            return "client.links.maxDays must be a whole number of days from 1 to 365.";
+        }
+        maxDays = input.maxDays;
+    }
+    if (input.anonymousCreate !== void 0 && typeof input.anonymousCreate !== "boolean")
+        return "client.links.anonymousCreate must be true or false.";
+    if (input.anonymousCreate === true) {
+        if (scope.kind !== "owner" || scope.visitors === true)
+            return "client.links.anonymousCreate needs owner() without visitors.";
+        if (!create || create.length === 0)
+            return "client.links.anonymousCreate needs client.create: it creates rows with the fields the app data client creates.";
+        if (columns.find((column) => column.helper === "id")?.uuid === true)
+            return "client.links.anonymousCreate needs an integer key: declare id({ uuid: false }).";
+        if (columns.some((column) => column.helper === "blob"))
+            return "client.links.anonymousCreate is not available on a table with a blob() column.";
+    }
+    return { read: linkRead, edit, children, maxDays, ...input.anonymousCreate === true ? { anonymousCreate: true } : {} };
 }
-
-// worker/src/utils/authority/intake-bake.ts
 function record(value) {
-  return value !== null && typeof value === "object" && !Array.isArray(value) ? value : null;
+    return value !== null && typeof value === "object" && !Array.isArray(value) ? value : null;
 }
 function bakeIntakePermissions(schema, declarations, intents, scopes) {
-  const membershipTables = /* @__PURE__ */ new Set();
-  const members = (policy) => {
-    if (policy.k === "m") membershipTables.add(policy.m.m);
-    else if (policy.k === "a") policy.p.forEach(members);
-    else if (policy.k === "n") {
-      members(policy.g);
-      members(policy.w);
-    } else if (policy.k === "p") members(policy.p);
-  };
-  for (const table of Object.values(schema)) {
-    if (table.member) membershipTables.add(table.member.m);
-    if (table.policy) members(table.policy);
-  }
-  for (const [name, table] of Object.entries(schema)) {
-    const intake = table.client?.intake;
-    if (!intake) continue;
-    let valid = false;
-    const target = schema[intake.target.table];
-    try {
-      const declared = record(JSON.parse(declarations[intake.target.table]));
-      const scope = record(declared?.scope);
-      const destination = record(JSON.parse(declarations[name]));
-      const destinationScope = record(destination?.scope);
-      const rawColumns = declared?.columns;
-      const matches = Array.isArray(rawColumns) ? rawColumns.map(record).filter((c) => c?.name === intake.target.field) : [];
-      const column = matches.length === 1 ? matches[0] : null;
-      const bakedColumn = target?.columns.find((c) => c.n === intake.target.field);
-      const owner = scope?.column;
-      if (!membershipTables.has(name) && destination?.name === name && destinationScope?.kind === "owner" && destinationScope.column === scopes[name] && declared?.name === intake.target.table && scope?.kind === "owner" && scope.visitors !== true && typeof owner === "string" && scopes[intake.target.table] === owner && intents[intake.target.table] === "scoped" && intents[name] === "scoped" && scopes[name] && !table.visitors && !table.member && !table.policy && target && !target.visitors && !target.member && !target.policy && target.client?.publicRead && Array.isArray(target.client.read) && target.client.read.includes(intake.target.field) && column && column.nullable === false && ["id", "text", "integer", "bigint"].includes(String(column.helper)) && (column.helper === "id" || column.unique === true) && bakedColumn && !bakedColumn.nul && bakedColumn.t === (column.helper === "id" ? column.uuid === true ? "text" : "integer" : column.helper)) {
-        const predicateColumns = rawColumns;
-        const columns = predicateColumns.map((c) => ({ name: String(c.name), helper: String(c.helper), nullable: c.nullable === true }));
-        valid = !intake.where || typeof parseEqualityWhere(intake.where, columns, "client.intake.where") !== "string";
-        if (valid) target.columns = target.columns.map((c) => c.n === intake.target.field ? { ...c, u: 1 } : c);
-      }
-    } catch {
+    const membershipTables = new Set();
+    const members = (policy) => {
+        if (policy.k === "m")
+            membershipTables.add(policy.m.m);
+        else if (policy.k === "a")
+            policy.p.forEach(members);
+        else if (policy.k === "n") {
+            members(policy.g);
+            members(policy.w);
+        }
+        else if (policy.k === "p")
+            members(policy.p);
+    };
+    for (const table of Object.values(schema)) {
+        if (table.member)
+            membershipTables.add(table.member.m);
+        if (table.policy)
+            members(table.policy);
     }
-    if (!valid && table.client) {
-      const { intake: _intake, ...client } = table.client;
-      table.client = client;
+    for (const [name, table] of Object.entries(schema)) {
+        const intake = table.client?.intake;
+        if (!intake)
+            continue;
+        let valid = false;
+        const target = schema[intake.target.table];
+        try {
+            const declared = record(JSON.parse(declarations[intake.target.table]));
+            const scope = record(declared?.scope);
+            const destination = record(JSON.parse(declarations[name]));
+            const destinationScope = record(destination?.scope);
+            const rawColumns = declared?.columns;
+            const matches = Array.isArray(rawColumns) ? rawColumns.map(record).filter((c) => c?.name === intake.target.field) : [];
+            const column = matches.length === 1 ? matches[0] : null;
+            const bakedColumn = target?.columns.find((c) => c.n === intake.target.field);
+            const owner = scope?.column;
+            if (!membershipTables.has(name) && destination?.name === name && destinationScope?.kind === "owner" && destinationScope.column === scopes[name] && declared?.name === intake.target.table && scope?.kind === "owner" && scope.visitors !== true && typeof owner === "string" && scopes[intake.target.table] === owner && intents[intake.target.table] === "scoped" && intents[name] === "scoped" && scopes[name] && !table.visitors && !table.member && !table.policy && target && !target.visitors && !target.member && !target.policy && target.client?.publicRead && Array.isArray(target.client.read) && target.client.read.includes(intake.target.field) && column && column.nullable === false && ["id", "text", "integer", "bigint"].includes(String(column.helper)) && (column.helper === "id" || column.unique === true) && bakedColumn && !bakedColumn.nul && bakedColumn.t === (column.helper === "id" ? column.uuid === true ? "text" : "integer" : column.helper)) {
+                const predicateColumns = rawColumns;
+                const columns = predicateColumns.map((c) => ({ name: String(c.name), helper: String(c.helper), nullable: c.nullable === true }));
+                valid = !intake.where || typeof parseEqualityWhere(intake.where, columns, "client.intake.where") !== "string";
+                if (valid)
+                    target.columns = target.columns.map((c) => c.n === intake.target.field ? { ...c, u: 1 } : c);
+            }
+        }
+        catch {
+        }
+        if (!valid && table.client) {
+            const { intake: _intake, ...client } = table.client;
+            table.client = client;
+        }
     }
-  }
 }
-
-// worker/src/services/jobs/limits.ts
 var STALE_JOB_WINDOW_MS = 45 * 60 * 1e3;
-
-// worker/src/utils/db-schema-deploy/extract-schema-bindings.ts
 var BINDING_OPERATIONS = ["read", "create", "update", "delete"];
 var ROW_OPERATIONS = ["read", "update", "delete"];
 var MAX_JOB_BINDING_SECONDS = STALE_JOB_WINDOW_MS / 1e3;
 var NAME = /^[a-z][a-z0-9_]{0,63}$/;
 var BUILT_IN_GROUP_ROLES = ["admin", "member", "owner"];
-var lines = /* @__PURE__ */ new WeakMap();
+var lines = new WeakMap();
 var byName = (list) => list.sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
 function readString(r, fail, ctx) {
-  const t = r.next();
-  if (t.kind !== "string") fail(t.line, `${ctx} must be a quoted literal string.`);
-  return t;
+    const t = r.next();
+    if (t.kind !== "string")
+        fail(t.line, `${ctx} must be a quoted literal string.`);
+    return t;
 }
 function readStrings(r, fail, ctx) {
-  const open = r.next();
-  if (open.kind !== "punct" || open.value !== "[") fail(open.line, `${ctx} must be a list of quoted literal strings, such as ['read'].`);
-  const out = [];
-  while (!r.tryPunct("]")) {
-    const t = r.next();
-    if (t.kind !== "string") fail(t.line, `${ctx} must be a list of quoted literal strings.`);
-    if (out.some((seen) => seen.value === t.value)) fail(t.line, `${ctx} lists "${t.value}" twice.`);
-    out.push(t);
-    if (!r.tryPunct(",")) {
-      r.expectPunct("]", `closing ${ctx}`);
-      break;
+    const open = r.next();
+    if (open.kind !== "punct" || open.value !== "[")
+        fail(open.line, `${ctx} must be a list of quoted literal strings, such as ['read'].`);
+    const out = [];
+    while (!r.tryPunct("]")) {
+        const t = r.next();
+        if (t.kind !== "string")
+            fail(t.line, `${ctx} must be a list of quoted literal strings.`);
+        if (out.some((seen) => seen.value === t.value))
+            fail(t.line, `${ctx} lists "${t.value}" twice.`);
+        out.push(t);
+        if (!r.tryPunct(",")) {
+            r.expectPunct("]", `closing ${ctx}`);
+            break;
+        }
     }
-  }
-  return out;
+    return out;
 }
 function readOperations(r, fail, ctx, allowed) {
-  const list = readStrings(r, fail, ctx);
-  if (list.length === 0) fail(r.peek().line, `${ctx} must name at least one operation.`);
-  for (const t of list) {
-    if (!allowed.includes(t.value)) fail(t.line, `${ctx} has an unknown operation "${t.value}". Allowed: ${allowed.join(", ")}.`);
-  }
-  const ops = BINDING_OPERATIONS.filter((op) => list.some((t) => t.value === op));
-  if (!ops.includes("read") && (ops.includes("update") || ops.includes("delete"))) {
-    fail(list[0].line, `${ctx} allows ${ops.filter((op) => op !== "create").join(" and ")} without read. Update and delete return the existing row, so they also need read; create alone is allowed because it returns only the row it created.`);
-  }
-  return ops;
+    const list = readStrings(r, fail, ctx);
+    if (list.length === 0)
+        fail(r.peek().line, `${ctx} must name at least one operation.`);
+    for (const t of list) {
+        if (!allowed.includes(t.value))
+            fail(t.line, `${ctx} has an unknown operation "${t.value}". Allowed: ${allowed.join(", ")}.`);
+    }
+    const ops = BINDING_OPERATIONS.filter((op) => list.some((t) => t.value === op));
+    if (!ops.includes("read") && (ops.includes("update") || ops.includes("delete"))) {
+        fail(list[0].line, `${ctx} allows ${ops.filter((op) => op !== "create").join(" and ")} without read. Update and delete return the existing row, so they also need read; create alone is allowed because it returns only the row it created.`);
+    }
+    return ops;
 }
 function readNamed(r, fail, option, kind, keys, readField) {
-  r.expectPunct("{", `opening schema option ${option}`);
-  const out = [];
-  while (!r.tryPunct("}")) {
-    const key = r.readKey(`for a ${kind} name`);
-    if (!NAME.test(key.name)) fail(key.line, `${kind} name "${key.name}" must be lowercase letters, digits and underscores, starting with a letter (at most 64).`);
-    if (out.some((entry) => entry.name === key.name)) fail(key.line, `${kind} "${key.name}" is declared twice.`);
-    r.expectPunct(":", `after ${kind} "${key.name}"`);
-    r.expectPunct("{", `opening ${kind} "${key.name}"`);
-    const fields = {};
-    const fieldLines = { "": key.line };
-    const seen = /* @__PURE__ */ new Set();
+    r.expectPunct("{", `opening schema option ${option}`);
+    const out = [];
     while (!r.tryPunct("}")) {
-      const opt = r.readKey(`for an option of ${kind} "${key.name}"`);
-      if (!keys.includes(opt.name)) fail(opt.line, `${kind} "${key.name}" has an unknown option "${opt.name}". Allowed: ${keys.join(", ")}.`);
-      if (seen.has(opt.name)) fail(opt.line, `${kind} "${key.name}" declares ${opt.name} twice.`);
-      seen.add(opt.name);
-      r.expectPunct(":", `after ${option}.${key.name}.${opt.name}`);
-      fieldLines[opt.name] = r.peek().line;
-      readField(opt.name, fields, key.name);
-      if (!r.tryPunct(",")) {
-        r.expectPunct("}", `closing ${kind} "${key.name}"`);
-        break;
-      }
+        const key = r.readKey(`for a ${kind} name`);
+        if (!NAME.test(key.name))
+            fail(key.line, `${kind} name "${key.name}" must be lowercase letters, digits and underscores, starting with a letter (at most 64).`);
+        if (out.some((entry) => entry.name === key.name))
+            fail(key.line, `${kind} "${key.name}" is declared twice.`);
+        r.expectPunct(":", `after ${kind} "${key.name}"`);
+        r.expectPunct("{", `opening ${kind} "${key.name}"`);
+        const fields = {};
+        const fieldLines = { "": key.line };
+        const seen = new Set();
+        while (!r.tryPunct("}")) {
+            const opt = r.readKey(`for an option of ${kind} "${key.name}"`);
+            if (!keys.includes(opt.name))
+                fail(opt.line, `${kind} "${key.name}" has an unknown option "${opt.name}". Allowed: ${keys.join(", ")}.`);
+            if (seen.has(opt.name))
+                fail(opt.line, `${kind} "${key.name}" declares ${opt.name} twice.`);
+            seen.add(opt.name);
+            r.expectPunct(":", `after ${option}.${key.name}.${opt.name}`);
+            fieldLines[opt.name] = r.peek().line;
+            readField(opt.name, fields, key.name);
+            if (!r.tryPunct(",")) {
+                r.expectPunct("}", `closing ${kind} "${key.name}"`);
+                break;
+            }
+        }
+        const missing = keys.filter((k) => !seen.has(k));
+        if (missing.length)
+            fail(key.line, `${kind} "${key.name}" is missing ${missing.join(", ")}.`);
+        lines.set(fields, fieldLines);
+        out.push({ name: key.name, line: key.line, fields });
+        if (!r.tryPunct(",")) {
+            r.expectPunct("}", `closing schema option ${option}`);
+            break;
+        }
     }
-    const missing = keys.filter((k) => !seen.has(k));
-    if (missing.length) fail(key.line, `${kind} "${key.name}" is missing ${missing.join(", ")}.`);
-    lines.set(fields, fieldLines);
-    out.push({ name: key.name, line: key.line, fields });
-    if (!r.tryPunct(",")) {
-      r.expectPunct("}", `closing schema option ${option}`);
-      break;
-    }
-  }
-  return out;
+    return out;
 }
 function readPaymentBindings(r, fail) {
-  const entries = readNamed(r, fail, "payments", "payment binding", ["table", "amount", "currency", "onPaid"], (key, fields, name) => {
-    if (key !== "onPaid") {
-      fields[key] = readString(r, fail, `payments.${name}.${key}`).value.toLowerCase();
-      return;
-    }
-    r.expectPunct("{", `opening payments.${name}.onPaid, which takes one transition: { status: { from: [...], to: '...' } }`);
-    const column = r.readKey(`for the status column in payments.${name}.onPaid`);
-    r.expectPunct(":", `after payments.${name}.onPaid.${column.name}`);
-    r.expectPunct("{", `opening payments.${name}.onPaid.${column.name}, which takes { from: [...], to: '...' }`);
-    const transition = {};
-    while (!r.tryPunct("}")) {
-      const opt = r.readKey(`for an option of payments.${name}.onPaid.${column.name}`);
-      if (opt.name !== "from" && opt.name !== "to") fail(opt.line, `payments.${name}.onPaid.${column.name} has an unknown option "${opt.name}". Allowed: from, to.`);
-      if (transition[opt.name]) fail(opt.line, `payments.${name}.onPaid.${column.name} declares ${opt.name} twice.`);
-      r.expectPunct(":", `after ${opt.name}`);
-      if (opt.name === "from") transition.from = readStrings(r, fail, `payments.${name}.onPaid.${column.name}.from`);
-      else transition.to = readString(r, fail, `payments.${name}.onPaid.${column.name}.to`);
-      if (!r.tryPunct(",")) {
-        r.expectPunct("}", `closing payments.${name}.onPaid.${column.name}`);
-        break;
-      }
-    }
-    if (!transition.from || !transition.to) fail(column.line, `payments.${name}.onPaid.${column.name} needs both from and to.`);
-    r.tryPunct(",");
-    if (!r.tryPunct("}")) {
-      const extra = r.peek();
-      fail(extra.line, `payments.${name}.onPaid declares one status transition only; this one has a second entry. Other paid effects run from the signed payment event.`);
-    }
-    const values = [...transition.from, transition.to];
-    for (const t of values) {
-      if (t.value.length < 1 || t.value.length > 64 || /[\u0000-\u001f]/.test(t.value)) fail(t.line, `payments.${name}.onPaid.${column.name} status values must be 1 to 64 characters, without control characters.`);
-    }
-    if (transition.from.length === 0) fail(column.line, `payments.${name}.onPaid.${column.name}.from must list at least one unpaid state.`);
-    if (transition.from.some((t) => t.value === transition.to.value)) fail(transition.to.line, `payments.${name}.onPaid.${column.name}.to must differ from every from state.`);
-    fields.status = { column: column.name.toLowerCase(), from: transition.from.map((t) => t.value).sort(), to: transition.to.value };
-  });
-  return byName(entries.map(({ name, fields }) => {
-    const binding = { name, ...fields };
-    lines.set(binding, lines.get(fields));
-    return binding;
-  }));
+    const entries = readNamed(r, fail, "payments", "payment binding", ["table", "amount", "currency", "onPaid"], (key, fields, name) => {
+        if (key !== "onPaid") {
+            fields[key] = readString(r, fail, `payments.${name}.${key}`).value.toLowerCase();
+            return;
+        }
+        r.expectPunct("{", `opening payments.${name}.onPaid, which takes one transition: { status: { from: [...], to: '...' } }`);
+        const column = r.readKey(`for the status column in payments.${name}.onPaid`);
+        r.expectPunct(":", `after payments.${name}.onPaid.${column.name}`);
+        r.expectPunct("{", `opening payments.${name}.onPaid.${column.name}, which takes { from: [...], to: '...' }`);
+        const transition = {};
+        while (!r.tryPunct("}")) {
+            const opt = r.readKey(`for an option of payments.${name}.onPaid.${column.name}`);
+            if (opt.name !== "from" && opt.name !== "to")
+                fail(opt.line, `payments.${name}.onPaid.${column.name} has an unknown option "${opt.name}". Allowed: from, to.`);
+            if (transition[opt.name])
+                fail(opt.line, `payments.${name}.onPaid.${column.name} declares ${opt.name} twice.`);
+            r.expectPunct(":", `after ${opt.name}`);
+            if (opt.name === "from")
+                transition.from = readStrings(r, fail, `payments.${name}.onPaid.${column.name}.from`);
+            else
+                transition.to = readString(r, fail, `payments.${name}.onPaid.${column.name}.to`);
+            if (!r.tryPunct(",")) {
+                r.expectPunct("}", `closing payments.${name}.onPaid.${column.name}`);
+                break;
+            }
+        }
+        if (!transition.from || !transition.to)
+            fail(column.line, `payments.${name}.onPaid.${column.name} needs both from and to.`);
+        r.tryPunct(",");
+        if (!r.tryPunct("}")) {
+            const extra = r.peek();
+            fail(extra.line, `payments.${name}.onPaid declares one status transition only; this one has a second entry. Other paid effects run from the signed payment event.`);
+        }
+        const values = [...transition.from, transition.to];
+        for (const t of values) {
+            if (t.value.length < 1 || t.value.length > 64 || /[\u0000-\u001f]/.test(t.value))
+                fail(t.line, `payments.${name}.onPaid.${column.name} status values must be 1 to 64 characters, without control characters.`);
+        }
+        if (transition.from.length === 0)
+            fail(column.line, `payments.${name}.onPaid.${column.name}.from must list at least one unpaid state.`);
+        if (transition.from.some((t) => t.value === transition.to.value))
+            fail(transition.to.line, `payments.${name}.onPaid.${column.name}.to must differ from every from state.`);
+        fields.status = { column: column.name.toLowerCase(), from: transition.from.map((t) => t.value).sort(), to: transition.to.value };
+    });
+    return byName(entries.map(({ name, fields }) => {
+        const binding = { name, ...fields };
+        lines.set(binding, lines.get(fields));
+        return binding;
+    }));
 }
 function readJobBindings(r, fail) {
-  const entries = readNamed(r, fail, "jobs", "job binding", ["table", "operations", "maxDurationSeconds"], (key, fields, name) => {
-    if (key === "table") fields.table = readString(r, fail, `jobs.${name}.table`).value.toLowerCase();
-    else if (key === "operations") fields.operations = readOperations(r, fail, `jobs.${name}.operations`, ROW_OPERATIONS);
-    else {
-      const t = r.next();
-      if (t.kind !== "number" || !/^[1-9][0-9]{0,9}$/.test(t.value) || Number(t.value) > MAX_JOB_BINDING_SECONDS) {
-        fail(t.line, `jobs.${name}.maxDurationSeconds must be a whole number of seconds from 1 to ${MAX_JOB_BINDING_SECONDS}: how long the row grant lasts from the job's scheduled start, retries included.`);
-      }
-      fields.maxDurationSeconds = Number(t.value);
-    }
-  });
-  return byName(entries.map(({ name, fields }) => {
-    const binding = { name, ...fields };
-    lines.set(binding, lines.get(fields));
-    return binding;
-  }));
+    const entries = readNamed(r, fail, "jobs", "job binding", ["table", "operations", "maxDurationSeconds"], (key, fields, name) => {
+        if (key === "table")
+            fields.table = readString(r, fail, `jobs.${name}.table`).value.toLowerCase();
+        else if (key === "operations")
+            fields.operations = readOperations(r, fail, `jobs.${name}.operations`, ROW_OPERATIONS);
+        else {
+            const t = r.next();
+            if (t.kind !== "number" || !/^[1-9][0-9]{0,9}$/.test(t.value) || Number(t.value) > MAX_JOB_BINDING_SECONDS) {
+                fail(t.line, `jobs.${name}.maxDurationSeconds must be a whole number of seconds from 1 to ${MAX_JOB_BINDING_SECONDS}: how long the row grant lasts from the job's scheduled start, retries included.`);
+            }
+            fields.maxDurationSeconds = Number(t.value);
+        }
+    });
+    return byName(entries.map(({ name, fields }) => {
+        const binding = { name, ...fields };
+        lines.set(binding, lines.get(fields));
+        return binding;
+    }));
 }
 function readServiceRoles(r, fail) {
-  const entries = readNamed(r, fail, "serviceRoles", "service role", ["tables"], (_key, fields, name) => {
-    r.expectPunct("{", `opening serviceRoles.${name}.tables, which takes { table: ['read', ...] }`);
-    const tables = [];
-    const tableLines = {};
-    while (!r.tryPunct("}")) {
-      const t = r.readKey(`for a table in serviceRoles.${name}.tables`);
-      const table = t.name.toLowerCase();
-      if (tables.some((entry) => entry.table === table)) fail(t.line, `serviceRoles.${name}.tables names "${t.name}" twice.`);
-      r.expectPunct(":", `after serviceRoles.${name}.tables.${t.name}`);
-      tables.push({ table, operations: readOperations(r, fail, `serviceRoles.${name}.tables.${t.name}`, BINDING_OPERATIONS) });
-      tableLines[table] = t.line;
-      if (!r.tryPunct(",")) {
-        r.expectPunct("}", `closing serviceRoles.${name}.tables`);
-        break;
-      }
-    }
-    if (tables.length === 0) fail(r.peek().line, `serviceRoles.${name}.tables must grant at least one table.`);
-    fields.tables = tables.sort((a, b) => a.table < b.table ? -1 : a.table > b.table ? 1 : 0);
-    lines.set(fields.tables, tableLines);
-  });
-  return byName(entries.map(({ name, fields }) => {
-    const role = { name, tables: fields.tables };
-    lines.set(role, lines.get(fields));
-    return role;
-  }));
+    const entries = readNamed(r, fail, "serviceRoles", "service role", ["tables"], (_key, fields, name) => {
+        r.expectPunct("{", `opening serviceRoles.${name}.tables, which takes { table: ['read', ...] }`);
+        const tables = [];
+        const tableLines = {};
+        while (!r.tryPunct("}")) {
+            const t = r.readKey(`for a table in serviceRoles.${name}.tables`);
+            const table = t.name.toLowerCase();
+            if (tables.some((entry) => entry.table === table))
+                fail(t.line, `serviceRoles.${name}.tables names "${t.name}" twice.`);
+            r.expectPunct(":", `after serviceRoles.${name}.tables.${t.name}`);
+            tables.push({ table, operations: readOperations(r, fail, `serviceRoles.${name}.tables.${t.name}`, BINDING_OPERATIONS) });
+            tableLines[table] = t.line;
+            if (!r.tryPunct(",")) {
+                r.expectPunct("}", `closing serviceRoles.${name}.tables`);
+                break;
+            }
+        }
+        if (tables.length === 0)
+            fail(r.peek().line, `serviceRoles.${name}.tables must grant at least one table.`);
+        fields.tables = tables.sort((a, b) => a.table < b.table ? -1 : a.table > b.table ? 1 : 0);
+        lines.set(fields.tables, tableLines);
+    });
+    return byName(entries.map(({ name, fields }) => {
+        const role = { name, tables: fields.tables };
+        lines.set(role, lines.get(fields));
+        return role;
+    }));
 }
 function validateBindings(input, tableInfo, errors) {
-  const at = (entry, field) => `line ${lines.get(entry)?.[field] ?? lines.get(entry)?.[""] ?? 0}: `;
-  const rowTable = (entry, kind) => {
-    const info = tableInfo(entry.table);
-    if (!info) {
-      errors.push(`${at(entry, "table")}${kind} "${entry.name}" names table "${entry.table}", which is not declared in db/schema.ts.`);
-      return null;
+    const at = (entry, field) => `line ${lines.get(entry)?.[field] ?? lines.get(entry)?.[""] ?? 0}: `;
+    const rowTable = (entry, kind) => {
+        const info = tableInfo(entry.table);
+        if (!info) {
+            errors.push(`${at(entry, "table")}${kind} "${entry.name}" names table "${entry.table}", which is not declared in db/schema.ts.`);
+            return null;
+        }
+        if (!info.privateUser)
+            errors.push(`${at(entry, "table")}${kind} "${entry.name}" names table "${entry.table}", whose scope is not owner(), member(), anyOf(), group(), appRole() or parent(). It binds rows a signed-in user holds; other tables are reached from server functions.`);
+        if (!info.key)
+            errors.push(`${at(entry, "table")}${kind} "${entry.name}" names table "${entry.table}", which needs exactly one id() key.`);
+        return info;
+    };
+    const reachesAllOf = (node) => !!node && (node.kind === "all_of" || node.kind === "parent" && reachesAllOf(node.policy));
+    for (const p of input.payments ?? []) {
+        const info = rowTable(p, "payment binding");
+        if (!info)
+            continue;
+        if (info.table.scope.kind === "policy" && reachesAllOf(info.table.scope.policy)) {
+            errors.push(`${at(p, "table")}payment binding "${p.name}" names table "${p.table}", which uses allOf(); payment bindings on allOf tables are not supported yet; such tables are reached from server functions.`);
+            continue;
+        }
+        const column = (name) => info.table.columns.find((c) => c.name === name);
+        const checks = [
+            ["amount", p.amount, "integer", "a required integer() column holding the amount in minor units (cents)"],
+            ["currency", p.currency, "text", "a required text() column holding the currency code"],
+            ["onPaid", p.status.column, "text", "a required text() status column"]
+        ];
+        for (const [field, name, helper, what] of checks) {
+            const c = column(name);
+            if (!c) {
+                errors.push(`${at(p, field)}payment binding "${p.name}" names "${name}", which is not a declared column of "${p.table}".`);
+                continue;
+            }
+            if (c.helper !== helper || c.nullable)
+                errors.push(`${at(p, field)}payment binding "${p.name}": "${p.table}"."${name}" must be ${what}.`);
+            if (info.identity.includes(name))
+                errors.push(`${at(p, field)}payment binding "${p.name}": "${p.table}"."${name}" is the table's access column; a payment never moves a row.`);
+            const writable = [...info.table.client?.create ?? [], ...info.table.client?.update ?? [], ...info.table.client?.intake?.fields ?? []];
+            if (writable.includes(name))
+                errors.push(`${at(p, field)}payment binding "${p.name}": "${p.table}"."${name}" is browser-writable through client.create, client.update or client.intake, and a payment binding requires it not to be; the server sets prices and the payment sets the status.`);
+        }
+        if ((new Set([p.amount, p.currency, p.status.column])).size !== 3)
+            errors.push(`${at(p, "")}payment binding "${p.name}" must name three different columns for amount, currency and status.`);
+        const status = column(p.status.column);
+        if (status && !(status.hasDefault && typeof status.default === "string" && p.status.from.includes(status.default))) {
+            errors.push(`${at(p, "onPaid")}payment binding "${p.name}": "${p.table}"."${p.status.column}" must declare a default that is one of its unpaid from states (${p.status.from.join(", ")}), so a new row starts unpaid.`);
+        }
     }
-    if (!info.privateUser) errors.push(`${at(entry, "table")}${kind} "${entry.name}" names table "${entry.table}", whose scope is not owner(), member(), anyOf(), group(), appRole() or parent(). It binds rows a signed-in user holds; other tables are reached from server functions.`);
-    if (!info.key) errors.push(`${at(entry, "table")}${kind} "${entry.name}" names table "${entry.table}", which needs exactly one id() key.`);
-    return info;
-  };
-  const reachesAllOf = (node) => !!node && (node.kind === "all_of" || node.kind === "parent" && reachesAllOf(node.policy));
-  for (const p of input.payments ?? []) {
-    const info = rowTable(p, "payment binding");
-    if (!info) continue;
-    if (info.table.scope.kind === "policy" && reachesAllOf(info.table.scope.policy)) {
-      errors.push(`${at(p, "table")}payment binding "${p.name}" names table "${p.table}", which uses allOf(); payment bindings on allOf tables are not supported yet; such tables are reached from server functions.`);
-      continue;
+    for (const j of input.jobs ?? [])
+        rowTable(j, "job binding");
+    const taken = new Set([...BUILT_IN_GROUP_ROLES, ...input.groups?.roles ?? [], ...(input.appRoles ?? []).map((role) => role.name)]);
+    for (const s of input.serviceRoles ?? []) {
+        if (taken.has(s.name))
+            errors.push(`${at(s, "")}service role "${s.name}" has the name of a group or app role. Service roles are a separate namespace for unattended work, so the name must differ.`);
+        const tableLines = lines.get(s.tables) ?? {};
+        for (const grant of s.tables) {
+            if (!tableInfo(grant.table))
+                errors.push(`line ${tableLines[grant.table] ?? 0}: service role "${s.name}" grants table "${grant.table}", which is not declared in db/schema.ts.`);
+        }
     }
-    const column = (name) => info.table.columns.find((c) => c.name === name);
-    const checks = [
-      ["amount", p.amount, "integer", "a required integer() column holding the amount in minor units (cents)"],
-      ["currency", p.currency, "text", "a required text() column holding the currency code"],
-      ["onPaid", p.status.column, "text", "a required text() status column"]
-    ];
-    for (const [field, name, helper, what] of checks) {
-      const c = column(name);
-      if (!c) {
-        errors.push(`${at(p, field)}payment binding "${p.name}" names "${name}", which is not a declared column of "${p.table}".`);
-        continue;
-      }
-      if (c.helper !== helper || c.nullable) errors.push(`${at(p, field)}payment binding "${p.name}": "${p.table}"."${name}" must be ${what}.`);
-      if (info.identity.includes(name)) errors.push(`${at(p, field)}payment binding "${p.name}": "${p.table}"."${name}" is the table's access column; a payment never moves a row.`);
-      const writable = [...info.table.client?.create ?? [], ...info.table.client?.update ?? [], ...info.table.client?.intake?.fields ?? []];
-      if (writable.includes(name)) errors.push(`${at(p, field)}payment binding "${p.name}": "${p.table}"."${name}" is browser-writable through client.create, client.update or client.intake, and a payment binding requires it not to be; the server sets prices and the payment sets the status.`);
-    }
-    if ((/* @__PURE__ */ new Set([p.amount, p.currency, p.status.column])).size !== 3) errors.push(`${at(p, "")}payment binding "${p.name}" must name three different columns for amount, currency and status.`);
-    const status = column(p.status.column);
-    if (status && !(status.hasDefault && typeof status.default === "string" && p.status.from.includes(status.default))) {
-      errors.push(`${at(p, "onPaid")}payment binding "${p.name}": "${p.table}"."${p.status.column}" must declare a default that is one of its unpaid from states (${p.status.from.join(", ")}), so a new row starts unpaid.`);
-    }
-  }
-  for (const j of input.jobs ?? []) rowTable(j, "job binding");
-  const taken = /* @__PURE__ */ new Set([...BUILT_IN_GROUP_ROLES, ...input.groups?.roles ?? [], ...(input.appRoles ?? []).map((role) => role.name)]);
-  for (const s of input.serviceRoles ?? []) {
-    if (taken.has(s.name)) errors.push(`${at(s, "")}service role "${s.name}" has the name of a group or app role. Service roles are a separate namespace for unattended work, so the name must differ.`);
-    const tableLines = lines.get(s.tables) ?? {};
-    for (const grant of s.tables) {
-      if (!tableInfo(grant.table)) errors.push(`line ${tableLines[grant.table] ?? 0}: service role "${s.name}" grants table "${grant.table}", which is not declared in db/schema.ts.`);
-    }
-  }
 }
-
-// worker/src/utils/authority/role-domain-map.ts
 var ROLE_NAME_PATTERN = /^[a-z][a-z0-9_]{0,63}$/;
 var EMAIL_DOMAIN_PATTERN = /^(?=.{4,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z][a-z0-9-]{0,61}[a-z0-9]$/;
 function validRoleDomainMap(value) {
-  return !!value && typeof value === "object" && !Array.isArray(value) && Object.entries(value).every(([role, domain]) => ROLE_NAME_PATTERN.test(role) && typeof domain === "string" && EMAIL_DOMAIN_PATTERN.test(domain));
+    return !!value && typeof value === "object" && !Array.isArray(value) && Object.entries(value).every(([role, domain]) => ROLE_NAME_PATTERN.test(role) && typeof domain === "string" && EMAIL_DOMAIN_PATTERN.test(domain));
 }
 var ROLE_DOMAIN_MAP_JS = `
       function __sw_structRoleDomains(value) {
@@ -5136,905 +5349,988 @@ var ROLE_DOMAIN_MAP_JS = `
         }
         return true;
       }`;
-
-// worker/src/utils/platform-compile-failure.ts
 var COMPILE_UNAVAILABLE_REALERT_MS = 60 * 60 * 1e3;
-
-// worker/src/utils/authority.ts
 init_log_sanitize();
-
-// worker/src/utils/authority/scope-enforcement.ts
 var SAFE_SCOPE_IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*$/;
 var GROUP_ROLE_NAME = /^[a-z][a-z0-9_]{0,63}$/;
 function validGroupRoles(value) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
-  const roles = value;
-  return exactKeys(roles, ["read", "create", "update", "delete"]) && ["read", "create", "update", "delete"].every((op) => Array.isArray(roles[op]) && roles[op].every((role) => typeof role === "string" && GROUP_ROLE_NAME.test(role)) && new Set(roles[op]).size === roles[op].length);
+    if (!value || typeof value !== "object" || Array.isArray(value))
+        return false;
+    const roles = value;
+    return exactKeys(roles, ["read", "create", "update", "delete"]) && ["read", "create", "update", "delete"].every((op) => Array.isArray(roles[op]) && roles[op].every((role) => typeof role === "string" && GROUP_ROLE_NAME.test(role)) && new Set(roles[op]).size === roles[op].length);
 }
 function validBranchReads(value) {
-  if (!Array.isArray(value) || value.length !== 2) return false;
-  const list = (entry) => entry === null || Array.isArray(entry) && entry.length > 0 && entry.every((name, i) => typeof name === "string" && SAFE_SCOPE_IDENTIFIER.test(name) && name === name.toLowerCase() && (i === 0 || entry[i - 1] < name));
-  return list(value[0]) && list(value[1]) && !(value[0] === null && value[1] === null);
+    if (!Array.isArray(value) || value.length !== 2)
+        return false;
+    const list = (entry) => entry === null || Array.isArray(entry) && entry.length > 0 && entry.every((name, i) => typeof name === "string" && SAFE_SCOPE_IDENTIFIER.test(name) && name === name.toLowerCase() && (i === 0 || entry[i - 1] < name));
+    return list(value[0]) && list(value[1]) && !(value[0] === null && value[1] === null);
 }
 function exactKeys(value, keys) {
-  const actual = Object.keys(value).sort();
-  return actual.length === keys.length && actual.every((key, index) => key === [...keys].sort()[index]);
+    const actual = Object.keys(value).sort();
+    return actual.length === keys.length && actual.every((key, index) => key === [...keys].sort()[index]);
 }
 function validBakedMemberScope(value) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
-  const member = value;
-  const memberKeys = Object.keys(member).sort().join(",");
-  const ident = (candidate) => typeof candidate === "string" && SAFE_SCOPE_IDENTIFIER.test(candidate);
-  const operations = member.o;
-  const operationOrder = ["read", "create", "update", "delete"];
-  const validOperations = operations === void 0 || Array.isArray(operations) && JSON.stringify(operations) === JSON.stringify(operationOrder.filter((operation) => operations.includes(operation))) && (operations.includes("read") || !operations.includes("update") && !operations.includes("delete"));
-  const g = member.g, mg = member.mg;
-  const grant = memberKeys === "g,m,mg,o,og,u" && member.og === true && Array.isArray(g) && Array.isArray(mg) && g[0] === "user_id" && mg[0] === "user_id" && (g.length === 1 || g.length === 2 && g[1] !== "user_id" && mg[1] !== "user_id" && mg[1] !== member.u) && member.u !== "user_id" && (JSON.stringify(operations) === '["read"]' || JSON.stringify(operations) === '["read","update"]');
-  return (memberKeys === "g,m,mg,u" || memberKeys === "g,m,mg,o,u" || grant) && validOperations && Array.isArray(member.g) && member.g.length > 0 && member.g.every(ident) && Array.isArray(member.mg) && member.mg.length === member.g.length && member.mg.every(ident) && ident(member.m) && ident(member.u);
+    if (!value || typeof value !== "object" || Array.isArray(value))
+        return false;
+    const member = value;
+    const memberKeys = Object.keys(member).sort().join(",");
+    const ident = (candidate) => typeof candidate === "string" && SAFE_SCOPE_IDENTIFIER.test(candidate);
+    const operations = member.o;
+    const operationOrder = ["read", "create", "update", "delete"];
+    const validOperations = operations === void 0 || Array.isArray(operations) && JSON.stringify(operations) === JSON.stringify(operationOrder.filter((operation) => operations.includes(operation))) && (operations.includes("read") || !operations.includes("update") && !operations.includes("delete"));
+    const g = member.g, mg = member.mg;
+    const grant = memberKeys === "g,m,mg,o,og,u" && member.og === true && Array.isArray(g) && Array.isArray(mg) && g[0] === "user_id" && mg[0] === "user_id" && (g.length === 1 || g.length === 2 && g[1] !== "user_id" && mg[1] !== "user_id" && mg[1] !== member.u) && member.u !== "user_id" && (JSON.stringify(operations) === '["read"]' || JSON.stringify(operations) === '["read","update"]');
+    return (memberKeys === "g,m,mg,u" || memberKeys === "g,m,mg,o,u" || grant) && validOperations && Array.isArray(member.g) && member.g.length > 0 && member.g.every(ident) && Array.isArray(member.mg) && member.mg.length === member.g.length && member.mg.every(ident) && ident(member.m) && ident(member.u);
 }
 var MAX_PARENT_EDGES = 4;
 function pinShape(policy) {
-  return policy.k === "g" || policy.k === "r" ? { ...policy, generation: 1 } : policy.k === "p" ? { ...policy, p: pinShape(policy.p) } : policy.k === "a" ? { ...policy, p: [pinShape(policy.p[0]), pinShape(policy.p[1])] } : policy.k === "n" ? { ...policy, g: pinShape(policy.g), w: pinShape(policy.w) } : policy;
+    return policy.k === "g" || policy.k === "r" ? { ...policy, generation: 1 } : policy.k === "p" ? { ...policy, p: pinShape(policy.p) } : policy.k === "a" ? { ...policy, p: [pinShape(policy.p[0]), pinShape(policy.p[1])] } : policy.k === "n" ? { ...policy, g: pinShape(policy.g), w: pinShape(policy.w) } : policy;
 }
 var ALLOF_POLICY_ADMITTED = true;
 function sameAllOfRelation(gate, x) {
-  const lower = (value) => String(value).toLowerCase();
-  if (x.k === "r") return true;
-  if (x.k === "g") return gate.k === "g" && lower(x.c) === lower(gate.c) && x.generation === gate.generation;
-  if (x.k !== "m" || gate.k !== "m") return false;
-  const a = gate.m;
-  const b = x.m;
-  return !a.og && !b.og && lower(a.m) === lower(b.m) && lower(a.u) === lower(b.u) && a.g.length === b.g.length && a.g.every((column, i) => lower(column) === lower(b.g[i])) && a.mg.length === b.mg.length && a.mg.every((column, i) => lower(column) === lower(b.mg[i]));
+    const lower = (value) => String(value).toLowerCase();
+    if (x.k === "r")
+        return true;
+    if (x.k === "g")
+        return gate.k === "g" && lower(x.c) === lower(gate.c) && x.generation === gate.generation;
+    if (x.k !== "m" || gate.k !== "m")
+        return false;
+    const a = gate.m;
+    const b = x.m;
+    return !a.og && !b.og && lower(a.m) === lower(b.m) && lower(a.u) === lower(b.u) && a.g.length === b.g.length && a.g.every((column, i) => lower(column) === lower(b.g[i])) && a.mg.length === b.mg.length && a.mg.every((column, i) => lower(column) === lower(b.mg[i]));
 }
 function validBakedPolicy(value, root = true, edges = 0) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
-  const node = value;
-  const ident = (candidate) => typeof candidate === "string" && SAFE_SCOPE_IDENTIFIER.test(candidate);
-  if (!root && node.k === "o") return exactKeys(node, ["k", "c"]) && ident(node.c);
-  if (!root && node.k === "m") {
-    if (!exactKeys(node, ["k", "m"]) || !node.m || typeof node.m !== "object" || Array.isArray(node.m)) return false;
-    return validBakedMemberScope(node.m);
-  }
-  if (node.k === "a") {
-    const second = node.p?.[1]?.k;
-    return (exactKeys(node, ["k", "p"]) || edges === 0 && exactKeys(node, ["k", "p", "reads"]) && validBranchReads(node.reads)) && Array.isArray(node.p) && node.p.length === 2 && node.p[0]?.k === "o" && validBakedPolicy(node.p[0], false) && (!(node.p[1]?.k === "m" && node.p[1].m?.og) || node.p[0].c === "user_id") && (second === "m" ? validBakedPolicy(node.p[1], false) : (second === "g" || second === "r") && validBakedPolicy(node.p[1], true));
-  }
-  if (root && node.k === "n") {
-    if (!ALLOF_POLICY_ADMITTED || !exactKeys(node, ["k", "g", "w"])) return false;
-    const gate = node.g;
-    const who = node.w;
-    if (!gate || !who) return false;
-    const gateMember = gate.m;
-    const gateValid = gate.k === "m" ? validBakedPolicy(gate, false) && gateMember?.o !== void 0 && !gateMember.og : (gate.k === "g" || gate.k === "r") && validBakedPolicy(gate, true);
-    if (!gateValid) return false;
-    if (who.k === "o") return validBakedPolicy(who, false);
-    const whoBranches = who.p;
-    if (who.k !== "a" || !validBakedPolicy(who, true) || !whoBranches) return false;
-    const x = whoBranches[1];
-    if (x.k === "m" && x.m.o === void 0) return false;
-    return sameAllOfRelation(gate, x);
-  }
-  if (root && node.k === "p") {
-    if (edges + 1 > MAX_PARENT_EDGES) return false;
-    const child = node.p?.k;
-    return exactKeys(node, ["k", "v", "t", "pk", "p"]) && ident(node.v) && ident(node.t) && ident(node.pk) && validBakedPolicy(node.p, child === "a" || child === "n" || child === "p" || child === "g" || child === "r", edges + 1);
-  }
-  if (root && node.k === "g") {
-    return exactKeys(node, ["k", "c", "roles", "generation"]) && ident(node.c) && validGroupRoles(node.roles) && Number.isSafeInteger(node.generation) && node.generation >= 1;
-  }
-  if (root && node.k === "r") {
-    const domains = node.d;
-    const validDomains = domains === void 0 || validRoleDomainMap(domains);
-    return (exactKeys(node, ["k", "roles", "generation"]) || exactKeys(node, ["k", "roles", "generation", "d"])) && validDomains && validGroupRoles(node.roles) && Number.isSafeInteger(node.generation) && node.generation >= 1;
-  }
-  return false;
+    if (!value || typeof value !== "object" || Array.isArray(value))
+        return false;
+    const node = value;
+    const ident = (candidate) => typeof candidate === "string" && SAFE_SCOPE_IDENTIFIER.test(candidate);
+    if (!root && node.k === "o")
+        return exactKeys(node, ["k", "c"]) && ident(node.c);
+    if (!root && node.k === "m") {
+        if (!exactKeys(node, ["k", "m"]) || !node.m || typeof node.m !== "object" || Array.isArray(node.m))
+            return false;
+        return validBakedMemberScope(node.m);
+    }
+    if (node.k === "a") {
+        const second = node.p?.[1]?.k;
+        return (exactKeys(node, ["k", "p"]) || edges === 0 && exactKeys(node, ["k", "p", "reads"]) && validBranchReads(node.reads)) && Array.isArray(node.p) && node.p.length === 2 && node.p[0]?.k === "o" && validBakedPolicy(node.p[0], false) && (!(node.p[1]?.k === "m" && node.p[1].m?.og) || node.p[0].c === "user_id") && (second === "m" ? validBakedPolicy(node.p[1], false) : (second === "g" || second === "r") && validBakedPolicy(node.p[1], true));
+    }
+    if (root && node.k === "n") {
+        if (!ALLOF_POLICY_ADMITTED || !exactKeys(node, ["k", "g", "w"]))
+            return false;
+        const gate = node.g;
+        const who = node.w;
+        if (!gate || !who)
+            return false;
+        const gateMember = gate.m;
+        const gateValid = gate.k === "m" ? validBakedPolicy(gate, false) && gateMember?.o !== void 0 && !gateMember.og : (gate.k === "g" || gate.k === "r") && validBakedPolicy(gate, true);
+        if (!gateValid)
+            return false;
+        if (who.k === "o")
+            return validBakedPolicy(who, false);
+        const whoBranches = who.p;
+        if (who.k !== "a" || !validBakedPolicy(who, true) || !whoBranches)
+            return false;
+        const x = whoBranches[1];
+        if (x.k === "m" && x.m.o === void 0)
+            return false;
+        return sameAllOfRelation(gate, x);
+    }
+    if (root && node.k === "p") {
+        if (edges + 1 > MAX_PARENT_EDGES)
+            return false;
+        const child = node.p?.k;
+        return exactKeys(node, ["k", "v", "t", "pk", "p"]) && ident(node.v) && ident(node.t) && ident(node.pk) && validBakedPolicy(node.p, child === "a" || child === "n" || child === "p" || child === "g" || child === "r", edges + 1);
+    }
+    if (root && node.k === "g") {
+        return exactKeys(node, ["k", "c", "roles", "generation"]) && ident(node.c) && validGroupRoles(node.roles) && Number.isSafeInteger(node.generation) && node.generation >= 1;
+    }
+    if (root && node.k === "r") {
+        const domains = node.d;
+        const validDomains = domains === void 0 || validRoleDomainMap(domains);
+        return (exactKeys(node, ["k", "roles", "generation"]) || exactKeys(node, ["k", "roles", "generation", "d"])) && validDomains && validGroupRoles(node.roles) && Number.isSafeInteger(node.generation) && node.generation >= 1;
+    }
+    return false;
 }
 function bakedTableSchemaFromDeclared(declaredJson) {
-  let shape;
-  try {
-    shape = JSON.parse(declaredJson);
-  } catch {
-    return null;
-  }
-  if (shape === null || typeof shape !== "object") return null;
-  const columns = shape.columns;
-  if (!Array.isArray(columns) || columns.length === 0) return null;
-  const out = [];
-  const permissionColumns = [];
-  const primaryKeys = [];
-  for (const c of columns) {
-    if (c === null || typeof c !== "object") return null;
-    const col = c;
-    if (typeof col.name !== "string" || !SAFE_SCOPE_IDENTIFIER.test(col.name) || col.name.toLowerCase() === SHARED_AUTHOR_COLUMN) return null;
-    if (typeof col.helper !== "string") return null;
-    let t;
-    let implicitDefault = false;
-    if (col.helper === "id") {
-      t = col.uuid === true ? "text" : "integer";
-      implicitDefault = true;
-    } else if (col.helper === "integer" || col.helper === "bigint" || col.helper === "number" || col.helper === "text" || col.helper === "boolean" || col.helper === "timestamp" || col.helper === "json" || col.helper === "blob") {
-      t = col.helper;
-    } else {
-      return null;
+    let shape;
+    try {
+        shape = JSON.parse(declaredJson);
     }
-    const entry = { n: col.name.toLowerCase(), t };
-    if (col.nullable === true) entry.nul = 1;
-    if (implicitDefault || col.hasDefault === true || col.autoNow === true) entry.d = 1;
-    out.push(entry);
-    permissionColumns.push({
-      name: entry.n,
-      helper: col.helper,
-      ...col.uuid === true ? { uuid: true } : {},
-      nullable: col.nullable === true,
-      hasDefault: col.hasDefault === true,
-      autoNow: col.autoNow === true,
-      ...col.default === null || ["string", "number", "boolean"].includes(typeof col.default) ? { default: col.default } : {}
-    });
-    if (col.helper === "id") primaryKeys.push(entry.n);
-  }
-  const relations = bakedRelationsFromDeclared(shape.relations);
-  const scope = shape.scope;
-  let visitors;
-  if (scope !== null && typeof scope === "object" && Object.prototype.hasOwnProperty.call(scope, "visitors")) {
-    const declaredScope = scope;
-    if (declaredScope.kind !== "owner" || typeof declaredScope.visitors !== "boolean") return null;
-    if (declaredScope.visitors) visitors = true;
-  }
-  let browser = primaryKeys.length === 1 ? { primaryKey: primaryKeys[0] } : {};
-  if (Object.prototype.hasOwnProperty.call(shape, "client")) {
-    if (!scope || typeof scope !== "object" || primaryKeys.length !== 1) return null;
-    const sc = scope;
-    if (typeof sc.kind !== "string") return null;
-    const policyIdentity = sc.kind === "policy" ? declaredPolicyIdentity(sc.policy) : {};
-    const parsed = parseClientPermissions(authoredClientFromCanonical(shape.client), permissionColumns, {
-      kind: sc.kind,
-      ...visitors ? { visitors: true } : {},
-      ...typeof sc.column === "string" ? { column: sc.column } : {},
-      ...Array.isArray(sc.group) && sc.group.every((value) => typeof value === "string") ? { group: sc.group } : {},
-      ...policyIdentity,
-      ...sc.kind === "policy" ? { policy: sc.policy } : {}
-    });
-    if (!parsed.ok) return null;
-    if (Array.isArray(parsed.permissions.read) && !parsed.permissions.read.includes(primaryKeys[0])) return null;
-    browser = { ...browser, client: parsed.permissions, clientPrimaryKey: primaryKeys[0] };
-  }
-  if (scope !== null && typeof scope === "object" && scope.kind === "member") {
-    const member = bakedMemberFromDeclared(scope);
-    if (!member) return null;
-    return relations ? { columns: out, member, relations, ...browser } : { columns: out, member, ...browser };
-  }
-  if (scope !== null && typeof scope === "object" && scope.kind === "policy") {
-    const policy = bakedPolicyFromDeclared(scope.policy);
-    if (!policy || policy.k !== "a" && policy.k !== "n" && policy.k !== "p" && policy.k !== "g" && policy.k !== "r") return null;
-    return relations ? { columns: out, policy, relations, ...browser } : { columns: out, policy, ...browser };
-  }
-  const author = scope !== null && typeof scope === "object" && scope.kind === "shared" ? SHARED_AUTHOR_COLUMN : void 0;
-  if (author) out.push({ n: author, t: "text", nul: 1 });
-  return { columns: out, ...relations ? { relations } : {}, ...author ? { author } : {}, ...visitors ? { visitors } : {}, ...browser };
+    catch {
+        return null;
+    }
+    if (shape === null || typeof shape !== "object")
+        return null;
+    const columns = shape.columns;
+    if (!Array.isArray(columns) || columns.length === 0)
+        return null;
+    const out = [];
+    const permissionColumns = [];
+    const primaryKeys = [];
+    for (const c of columns) {
+        if (c === null || typeof c !== "object")
+            return null;
+        const col = c;
+        if (typeof col.name !== "string" || !SAFE_SCOPE_IDENTIFIER.test(col.name) || col.name.toLowerCase() === SHARED_AUTHOR_COLUMN)
+            return null;
+        if (typeof col.helper !== "string")
+            return null;
+        let t;
+        let implicitDefault = false;
+        if (col.helper === "id") {
+            t = col.uuid === true ? "text" : "integer";
+            implicitDefault = true;
+        }
+        else if (col.helper === "integer" || col.helper === "bigint" || col.helper === "number" || col.helper === "text" || col.helper === "boolean" || col.helper === "timestamp" || col.helper === "json" || col.helper === "blob") {
+            t = col.helper;
+        }
+        else {
+            return null;
+        }
+        const entry = { n: col.name.toLowerCase(), t };
+        if (col.nullable === true)
+            entry.nul = 1;
+        if (implicitDefault || col.hasDefault === true || col.autoNow === true)
+            entry.d = 1;
+        out.push(entry);
+        permissionColumns.push({
+            name: entry.n,
+            helper: col.helper,
+            ...col.uuid === true ? { uuid: true } : {},
+            nullable: col.nullable === true,
+            hasDefault: col.hasDefault === true,
+            autoNow: col.autoNow === true,
+            ...col.default === null || ["string", "number", "boolean"].includes(typeof col.default) ? { default: col.default } : {}
+        });
+        if (col.helper === "id")
+            primaryKeys.push(entry.n);
+    }
+    const relations = bakedRelationsFromDeclared(shape.relations);
+    const scope = shape.scope;
+    let visitors;
+    if (scope !== null && typeof scope === "object" && Object.prototype.hasOwnProperty.call(scope, "visitors")) {
+        const declaredScope = scope;
+        if (declaredScope.kind !== "owner" || typeof declaredScope.visitors !== "boolean")
+            return null;
+        if (declaredScope.visitors)
+            visitors = true;
+    }
+    let browser = primaryKeys.length === 1 ? { primaryKey: primaryKeys[0] } : {};
+    if (Object.prototype.hasOwnProperty.call(shape, "client")) {
+        if (!scope || typeof scope !== "object" || primaryKeys.length !== 1)
+            return null;
+        const sc = scope;
+        if (typeof sc.kind !== "string")
+            return null;
+        const policyIdentity = sc.kind === "policy" ? declaredPolicyIdentity(sc.policy) : {};
+        const parsed = parseClientPermissions(authoredClientFromCanonical(shape.client), permissionColumns, {
+            kind: sc.kind,
+            ...visitors ? { visitors: true } : {},
+            ...typeof sc.column === "string" ? { column: sc.column } : {},
+            ...Array.isArray(sc.group) && sc.group.every((value) => typeof value === "string") ? { group: sc.group } : {},
+            ...policyIdentity,
+            ...sc.kind === "policy" ? { policy: sc.policy } : {}
+        });
+        if (!parsed.ok)
+            return null;
+        if (Array.isArray(parsed.permissions.read) && !parsed.permissions.read.includes(primaryKeys[0]))
+            return null;
+        browser = { ...browser, client: parsed.permissions, clientPrimaryKey: primaryKeys[0] };
+    }
+    if (scope !== null && typeof scope === "object" && scope.kind === "member") {
+        const member = bakedMemberFromDeclared(scope);
+        if (!member)
+            return null;
+        return relations ? { columns: out, member, relations, ...browser } : { columns: out, member, ...browser };
+    }
+    if (scope !== null && typeof scope === "object" && scope.kind === "policy") {
+        const policy = bakedPolicyFromDeclared(scope.policy);
+        if (!policy || policy.k !== "a" && policy.k !== "n" && policy.k !== "p" && policy.k !== "g" && policy.k !== "r")
+            return null;
+        return relations ? { columns: out, policy, relations, ...browser } : { columns: out, policy, ...browser };
+    }
+    const author = scope !== null && typeof scope === "object" && scope.kind === "shared" ? SHARED_AUTHOR_COLUMN : void 0;
+    if (author)
+        out.push({ n: author, t: "text", nul: 1 });
+    return { columns: out, ...relations ? { relations } : {}, ...author ? { author } : {}, ...visitors ? { visitors } : {}, ...browser };
 }
 function declaredPolicyIdentity(value) {
-  if (!value || typeof value !== "object") return {};
-  const node = value;
-  if (node.kind === "owner" && typeof node.column === "string") return { column: node.column };
-  if (node.kind === "member" && Array.isArray(node.group) && node.group.every((entry) => typeof entry === "string")) return { group: node.group };
-  if (node.kind === "all_of") {
-    const gate = node.gate;
-    const group = gate?.kind === "group" && typeof gate.column === "string" ? [gate.column] : gate?.kind === "member" && Array.isArray(gate.group) && gate.group.every((entry) => typeof entry === "string") ? gate.group : void 0;
-    return { ...declaredPolicyIdentity(node.who), ...group ? { group } : {} };
-  }
-  if (node.kind === "any_of" && Array.isArray(node.policies)) {
-    const branchGroup = (child) => {
-      const c = child;
-      return c && c.kind === "group" && typeof c.column === "string" ? { group: [c.column] } : {};
-    };
-    return node.policies.reduce((all, child) => ({ ...all, ...declaredPolicyIdentity(child), ...branchGroup(child) }), {});
-  }
-  return {};
+    if (!value || typeof value !== "object")
+        return {};
+    const node = value;
+    if (node.kind === "owner" && typeof node.column === "string")
+        return { column: node.column };
+    if (node.kind === "member" && Array.isArray(node.group) && node.group.every((entry) => typeof entry === "string"))
+        return { group: node.group };
+    if (node.kind === "all_of") {
+        const gate = node.gate;
+        const group = gate?.kind === "group" && typeof gate.column === "string" ? [gate.column] : gate?.kind === "member" && Array.isArray(gate.group) && gate.group.every((entry) => typeof entry === "string") ? gate.group : void 0;
+        return { ...declaredPolicyIdentity(node.who), ...group ? { group } : {} };
+    }
+    if (node.kind === "any_of" && Array.isArray(node.policies)) {
+        const branchGroup = (child) => {
+            const c = child;
+            return c && c.kind === "group" && typeof c.column === "string" ? { group: [c.column] } : {};
+        };
+        return node.policies.reduce((all, child) => ({ ...all, ...declaredPolicyIdentity(child), ...branchGroup(child) }), {});
+    }
+    return {};
 }
 function bakedPolicyFromDeclared(value, depth = 0, edges = 0, underParent = false) {
-  if (edges > MAX_PARENT_EDGES || value === null || typeof value !== "object") return null;
-  const node = value;
-  if (node.kind === "owner") {
-    return typeof node.column === "string" && SAFE_SCOPE_IDENTIFIER.test(node.column) ? { k: "o", c: node.column.toLowerCase() } : null;
-  }
-  if (node.kind === "member") {
-    const member = bakedMemberFromDeclared(node);
-    return member ? { k: "m", m: member } : null;
-  }
-  if (node.kind === "any_of" && Array.isArray(node.policies) && node.policies.length === 2) {
-    const second = node.policies[1]?.kind;
-    if (depth !== 0 && !underParent || node.policies[0]?.kind !== "owner" || second !== "member" && second !== "group" && second !== "app_role") return null;
-    const left = bakedPolicyFromDeclared(node.policies[0], depth + 1);
-    const right = bakedPolicyFromDeclared(node.policies[1], depth + 1, edges, second !== "member");
-    const reads = node.reads === void 0 || edges > 0 || underParent ? void 0 : Array.isArray(node.reads) && node.reads.length === 2 ? node.reads.map((list) => Array.isArray(list) ? [...new Set(list.map((name) => String(name).toLowerCase()))].sort() : null) : null;
-    if (reads === null || reads !== void 0 && !validBranchReads(reads)) return null;
-    const baked = left && right ? { k: "a", p: [left, right], ...reads ? { reads } : {} } : null;
-    return baked && validBakedPolicy(pinShape(baked), true, edges) ? baked : null;
-  }
-  if (node.kind === "all_of") {
-    if (depth !== 0 && !underParent) return null;
-    const leaf = (child) => {
-      const c = child;
-      if (c && c.kind === "member") {
-        const member = bakedMemberFromDeclared(c, true);
-        return member && member.o !== void 0 ? { k: "m", m: member } : null;
-      }
-      return c && (c.kind === "group" || c.kind === "app_role") ? bakedPolicyFromDeclared(c, depth + 1, edges, true) : null;
-    };
-    const gate = leaf(node.gate);
-    const whoNode = node.who;
-    let who = null;
-    if (whoNode && whoNode.kind === "owner") who = bakedPolicyFromDeclared(whoNode, depth + 1);
-    else if (whoNode && whoNode.kind === "any_of" && Array.isArray(whoNode.policies) && whoNode.policies.length === 2 && whoNode.policies[0]?.kind === "owner") {
-      const owner = bakedPolicyFromDeclared(whoNode.policies[0], depth + 2);
-      const x = leaf(whoNode.policies[1]);
-      who = owner && x ? { k: "a", p: [owner, x] } : null;
+    if (edges > MAX_PARENT_EDGES || value === null || typeof value !== "object")
+        return null;
+    const node = value;
+    if (node.kind === "owner") {
+        return typeof node.column === "string" && SAFE_SCOPE_IDENTIFIER.test(node.column) ? { k: "o", c: node.column.toLowerCase() } : null;
     }
-    const baked = gate && who ? { k: "n", g: gate, w: who } : null;
-    return baked && validBakedPolicy(pinShape(baked), true, edges) ? baked : null;
-  }
-  if (node.kind === "group") {
-    if (depth !== 0 && !underParent) return null;
-    const roles = node.roles;
-    const baked = { read: roles?.read, create: roles?.create, update: roles?.update, delete: roles?.delete };
-    return typeof node.column === "string" && SAFE_SCOPE_IDENTIFIER.test(node.column) && validGroupRoles(baked) ? { k: "g", c: node.column.toLowerCase(), roles: { read: [...baked.read], create: [...baked.create], update: [...baked.update], delete: [...baked.delete] }, generation: 0 } : null;
-  }
-  if (node.kind === "app_role") {
-    if (depth !== 0 && !underParent || !exactKeys(node, ["kind", "roles"]) || !validGroupRoles(node.roles)) return null;
-    const roles = node.roles;
-    const sorted3 = (list) => list.every((role, i) => i === 0 || list[i - 1] < role);
-    return ["read", "create", "update", "delete"].every((op) => sorted3(roles[op])) ? { k: "r", roles: { read: [...roles.read], create: [...roles.create], update: [...roles.update], delete: [...roles.delete] }, generation: 0 } : null;
-  }
-  if (node.kind === "parent" && typeof node.via === "string" && SAFE_SCOPE_IDENTIFIER.test(node.via) && typeof node.table === "string" && SAFE_SCOPE_IDENTIFIER.test(node.table) && typeof node.parentKey === "string" && SAFE_SCOPE_IDENTIFIER.test(node.parentKey)) {
-    if (depth !== 0 && !underParent || edges + 1 > MAX_PARENT_EDGES) return null;
-    const inherited = bakedPolicyFromDeclared(node.policy, depth + 1, edges + 1, true);
-    return inherited ? { k: "p", v: node.via.toLowerCase(), t: node.table.toLowerCase(), pk: node.parentKey.toLowerCase(), p: inherited } : null;
-  }
-  return null;
+    if (node.kind === "member") {
+        const member = bakedMemberFromDeclared(node);
+        return member ? { k: "m", m: member } : null;
+    }
+    if (node.kind === "any_of" && Array.isArray(node.policies) && node.policies.length === 2) {
+        const second = node.policies[1]?.kind;
+        if (depth !== 0 && !underParent || node.policies[0]?.kind !== "owner" || second !== "member" && second !== "group" && second !== "app_role")
+            return null;
+        const left = bakedPolicyFromDeclared(node.policies[0], depth + 1);
+        const right = bakedPolicyFromDeclared(node.policies[1], depth + 1, edges, second !== "member");
+        const reads = node.reads === void 0 || edges > 0 || underParent ? void 0 : Array.isArray(node.reads) && node.reads.length === 2 ? node.reads.map((list) => Array.isArray(list) ? [...new Set(list.map((name) => String(name).toLowerCase()))].sort() : null) : null;
+        if (reads === null || reads !== void 0 && !validBranchReads(reads))
+            return null;
+        const baked = left && right ? { k: "a", p: [left, right], ...reads ? { reads } : {} } : null;
+        return baked && validBakedPolicy(pinShape(baked), true, edges) ? baked : null;
+    }
+    if (node.kind === "all_of") {
+        if (depth !== 0 && !underParent)
+            return null;
+        const leaf = (child) => {
+            const c = child;
+            if (c && c.kind === "member") {
+                const member = bakedMemberFromDeclared(c, true);
+                return member && member.o !== void 0 ? { k: "m", m: member } : null;
+            }
+            return c && (c.kind === "group" || c.kind === "app_role") ? bakedPolicyFromDeclared(c, depth + 1, edges, true) : null;
+        };
+        const gate = leaf(node.gate);
+        const whoNode = node.who;
+        let who = null;
+        if (whoNode && whoNode.kind === "owner")
+            who = bakedPolicyFromDeclared(whoNode, depth + 1);
+        else if (whoNode && whoNode.kind === "any_of" && Array.isArray(whoNode.policies) && whoNode.policies.length === 2 && whoNode.policies[0]?.kind === "owner") {
+            const owner = bakedPolicyFromDeclared(whoNode.policies[0], depth + 2);
+            const x = leaf(whoNode.policies[1]);
+            who = owner && x ? { k: "a", p: [owner, x] } : null;
+        }
+        const baked = gate && who ? { k: "n", g: gate, w: who } : null;
+        return baked && validBakedPolicy(pinShape(baked), true, edges) ? baked : null;
+    }
+    if (node.kind === "group") {
+        if (depth !== 0 && !underParent)
+            return null;
+        const roles = node.roles;
+        const baked = { read: roles?.read, create: roles?.create, update: roles?.update, delete: roles?.delete };
+        return typeof node.column === "string" && SAFE_SCOPE_IDENTIFIER.test(node.column) && validGroupRoles(baked) ? { k: "g", c: node.column.toLowerCase(), roles: { read: [...baked.read], create: [...baked.create], update: [...baked.update], delete: [...baked.delete] }, generation: 0 } : null;
+    }
+    if (node.kind === "app_role") {
+        if (depth !== 0 && !underParent || !exactKeys(node, ["kind", "roles"]) || !validGroupRoles(node.roles))
+            return null;
+        const roles = node.roles;
+        const sorted3 = (list) => list.every((role, i) => i === 0 || list[i - 1] < role);
+        return ["read", "create", "update", "delete"].every((op) => sorted3(roles[op])) ? { k: "r", roles: { read: [...roles.read], create: [...roles.create], update: [...roles.update], delete: [...roles.delete] }, generation: 0 } : null;
+    }
+    if (node.kind === "parent" && typeof node.via === "string" && SAFE_SCOPE_IDENTIFIER.test(node.via) && typeof node.table === "string" && SAFE_SCOPE_IDENTIFIER.test(node.table) && typeof node.parentKey === "string" && SAFE_SCOPE_IDENTIFIER.test(node.parentKey)) {
+        if (depth !== 0 && !underParent || edges + 1 > MAX_PARENT_EDGES)
+            return null;
+        const inherited = bakedPolicyFromDeclared(node.policy, depth + 1, edges + 1, true);
+        return inherited ? { k: "p", v: node.via.toLowerCase(), t: node.table.toLowerCase(), pk: node.parentKey.toLowerCase(), p: inherited } : null;
+    }
+    return null;
 }
 function bakedRelationsFromDeclared(value) {
-  if (!Array.isArray(value) || value.length === 0) return void 0;
-  const out = [];
-  const seen = /* @__PURE__ */ new Set();
-  for (const entry of value) {
-    if (entry === null || typeof entry !== "object") continue;
-    const rel = entry;
-    if (typeof rel.name !== "string" || !SAFE_SCOPE_IDENTIFIER.test(rel.name)) continue;
-    if (typeof rel.table !== "string" || !SAFE_SCOPE_IDENTIFIER.test(rel.table)) continue;
-    if (typeof rel.fk !== "string" || !SAFE_SCOPE_IDENTIFIER.test(rel.fk)) continue;
-    if (typeof rel.parentKey !== "string" || !SAFE_SCOPE_IDENTIFIER.test(rel.parentKey)) continue;
-    if (rel.kind !== void 0 && rel.kind !== "hasMany" && rel.kind !== "belongsTo") continue;
-    const name = rel.name.toLowerCase();
-    if (seen.has(name)) continue;
-    seen.add(name);
-    out.push({
-      name,
-      ...rel.kind === "belongsTo" ? { kind: "belongsTo" } : {},
-      table: rel.table.toLowerCase(),
-      fk: rel.fk.toLowerCase(),
-      parentKey: rel.parentKey.toLowerCase()
-    });
-  }
-  return out.length > 0 ? out : void 0;
+    if (!Array.isArray(value) || value.length === 0)
+        return void 0;
+    const out = [];
+    const seen = new Set();
+    for (const entry of value) {
+        if (entry === null || typeof entry !== "object")
+            continue;
+        const rel = entry;
+        if (typeof rel.name !== "string" || !SAFE_SCOPE_IDENTIFIER.test(rel.name))
+            continue;
+        if (typeof rel.table !== "string" || !SAFE_SCOPE_IDENTIFIER.test(rel.table))
+            continue;
+        if (typeof rel.fk !== "string" || !SAFE_SCOPE_IDENTIFIER.test(rel.fk))
+            continue;
+        if (typeof rel.parentKey !== "string" || !SAFE_SCOPE_IDENTIFIER.test(rel.parentKey))
+            continue;
+        if (rel.kind !== void 0 && rel.kind !== "hasMany" && rel.kind !== "belongsTo")
+            continue;
+        const name = rel.name.toLowerCase();
+        if (seen.has(name))
+            continue;
+        seen.add(name);
+        out.push({
+            name,
+            ...rel.kind === "belongsTo" ? { kind: "belongsTo" } : {},
+            table: rel.table.toLowerCase(),
+            fk: rel.fk.toLowerCase(),
+            parentKey: rel.parentKey.toLowerCase()
+        });
+    }
+    return out.length > 0 ? out : void 0;
 }
 function bakedMemberFromDeclared(scope, explicitOperations = false) {
-  const s = scope;
-  const cols = (v) => {
-    if (!Array.isArray(v) || v.length === 0) return null;
-    const out = [];
-    for (const c of v) {
-      if (typeof c !== "string" || !SAFE_SCOPE_IDENTIFIER.test(c)) return null;
-      out.push(c.toLowerCase());
-    }
-    return out;
-  };
-  const g = cols(s.group);
-  const mg = cols(s.memberGroup);
-  if (!g || !mg || g.length !== mg.length) return null;
-  if (typeof s.membership !== "string" || !SAFE_SCOPE_IDENTIFIER.test(s.membership)) return null;
-  if (typeof s.memberUser !== "string" || !SAFE_SCOPE_IDENTIFIER.test(s.memberUser)) return null;
-  let o;
-  if (s.operations !== void 0) {
-    if (!Array.isArray(s.operations)) return null;
-    const operations = s.operations;
-    const allowed = ["read", "create", "update", "delete"];
-    if (JSON.stringify(operations) !== JSON.stringify(allowed.filter((operation) => operations.includes(operation))) || !operations.includes("read") && (operations.includes("update") || operations.includes("delete"))) return null;
-    o = operations.length === allowed.length && !explicitOperations ? void 0 : [...operations];
-  }
-  if (s.ownerGrant !== void 0 && s.ownerGrant !== true) return null;
-  const member = { g, m: s.membership.toLowerCase(), u: s.memberUser.toLowerCase(), mg, ...o !== void 0 ? { o } : {}, ...s.ownerGrant ? { og: true } : {} };
-  return validBakedMemberScope(member) ? member : null;
-}
-
-// worker/src/utils/db-schema-deploy/extract-schema-grants.ts
-function readGrantScope(r, table, line, fail) {
-  r.expectPunct("(", "after grant");
-  r.expectPunct("{", "in grant options");
-  let membership, grantee, row;
-  let operations;
-  let read;
-  const seen = /* @__PURE__ */ new Set();
-  while (!r.tryPunct("}")) {
-    const key = r.readKey("in grant options");
-    if (seen.has(key.name)) fail(key.line, `Duplicate grant option "${key.name}".`);
-    seen.add(key.name);
-    r.expectPunct(":", "after grant option");
-    if (key.name === "table" || key.name === "grantee" || key.name === "row") {
-      const value = r.readLiteral("in grant options");
-      if (typeof value !== "string" || !/^[a-zA-Z_][a-zA-Z0-9_]{0,63}$/.test(value)) fail(key.line, "grant table, grantee and row must be column/table identifiers.");
-      if (key.name === "table") membership = value.toLowerCase();
-      else if (key.name === "grantee") grantee = value.toLowerCase();
-      else row = value.toLowerCase();
-    } else if (key.name === "operations") {
-      const ops = [];
-      r.expectPunct("[", "in grant operations");
-      while (!r.tryPunct("]")) {
-        const op = r.readLiteral("in grant operations");
-        if (op !== "read" && op !== "update") fail(key.line, "grant operations allow only read and update.");
-        if (ops.includes(op)) fail(key.line, "Duplicate grant operation.");
-        ops.push(op);
-        if (!r.tryPunct(",")) {
-          r.expectPunct("]", "closing grant operations");
-          break;
+    const s = scope;
+    const cols = (v) => {
+        if (!Array.isArray(v) || v.length === 0)
+            return null;
+        const out = [];
+        for (const c of v) {
+            if (typeof c !== "string" || !SAFE_SCOPE_IDENTIFIER.test(c))
+                return null;
+            out.push(c.toLowerCase());
         }
-      }
-      if (!ops.includes("read")) fail(key.line, "grant operations require read; update alone is not allowed.");
-      operations = ops.includes("update") ? ["read", "update"] : ["read"];
-    } else if (key.name === "read") {
-      read = readBranchReadColumns(r, `grant({ read }) on table "${table}"`);
-    } else fail(key.line, `Unknown grant option "${key.name}". Allowed: table, grantee, row, operations, read.`);
-    if (!r.tryPunct(",")) {
-      r.expectPunct("}", "closing grant options");
-      break;
+        return out;
+    };
+    const g = cols(s.group);
+    const mg = cols(s.memberGroup);
+    if (!g || !mg || g.length !== mg.length)
+        return null;
+    if (typeof s.membership !== "string" || !SAFE_SCOPE_IDENTIFIER.test(s.membership))
+        return null;
+    if (typeof s.memberUser !== "string" || !SAFE_SCOPE_IDENTIFIER.test(s.memberUser))
+        return null;
+    let o;
+    if (s.operations !== void 0) {
+        if (!Array.isArray(s.operations))
+            return null;
+        const operations = s.operations;
+        const allowed = ["read", "create", "update", "delete"];
+        if (JSON.stringify(operations) !== JSON.stringify(allowed.filter((operation) => operations.includes(operation))) || !operations.includes("read") && (operations.includes("update") || operations.includes("delete")))
+            return null;
+        o = operations.length === allowed.length && !explicitOperations ? void 0 : [...operations];
     }
-  }
-  r.tryPunct(",");
-  r.expectPunct(")", "closing grant");
-  if (!membership || !grantee || !operations || grantee === "user_id") fail(line, `grant() on "${table}" requires table, a grantee column distinct from managed user_id, and explicit operations.`);
-  if (row !== void 0 && (row === "user_id" || row === grantee)) fail(line, `grant() on "${table}": row names the shares column holding the shared row's id, distinct from user_id and the grantee.`);
-  return { kind: "member", group: ["user_id"], membership, memberUser: grantee, memberGroup: row === void 0 ? ["user_id"] : ["user_id", row], operations, ownerGrant: true, ...read ? { read } : {} };
+    if (s.ownerGrant !== void 0 && s.ownerGrant !== true)
+        return null;
+    const member = { g, m: s.membership.toLowerCase(), u: s.memberUser.toLowerCase(), mg, ...o !== void 0 ? { o } : {}, ...s.ownerGrant ? { og: true } : {} };
+    return validBakedMemberScope(member) ? member : null;
+}
+function readGrantScope(r, table, line, fail) {
+    r.expectPunct("(", "after grant");
+    r.expectPunct("{", "in grant options");
+    let membership, grantee, row;
+    let operations;
+    let read;
+    const seen = new Set();
+    while (!r.tryPunct("}")) {
+        const key = r.readKey("in grant options");
+        if (seen.has(key.name))
+            fail(key.line, `Duplicate grant option "${key.name}".`);
+        seen.add(key.name);
+        r.expectPunct(":", "after grant option");
+        if (key.name === "table" || key.name === "grantee" || key.name === "row") {
+            const value = r.readLiteral("in grant options");
+            if (typeof value !== "string" || !/^[a-zA-Z_][a-zA-Z0-9_]{0,63}$/.test(value))
+                fail(key.line, "grant table, grantee and row must be column/table identifiers.");
+            if (key.name === "table")
+                membership = value.toLowerCase();
+            else if (key.name === "grantee")
+                grantee = value.toLowerCase();
+            else
+                row = value.toLowerCase();
+        }
+        else if (key.name === "operations") {
+            const ops = [];
+            r.expectPunct("[", "in grant operations");
+            while (!r.tryPunct("]")) {
+                const op = r.readLiteral("in grant operations");
+                if (op !== "read" && op !== "update")
+                    fail(key.line, "grant operations allow only read and update.");
+                if (ops.includes(op))
+                    fail(key.line, "Duplicate grant operation.");
+                ops.push(op);
+                if (!r.tryPunct(",")) {
+                    r.expectPunct("]", "closing grant operations");
+                    break;
+                }
+            }
+            if (!ops.includes("read"))
+                fail(key.line, "grant operations require read; update alone is not allowed.");
+            operations = ops.includes("update") ? ["read", "update"] : ["read"];
+        }
+        else if (key.name === "read") {
+            read = readBranchReadColumns(r, `grant({ read }) on table "${table}"`);
+        }
+        else
+            fail(key.line, `Unknown grant option "${key.name}". Allowed: table, grantee, row, operations, read.`);
+        if (!r.tryPunct(",")) {
+            r.expectPunct("}", "closing grant options");
+            break;
+        }
+    }
+    r.tryPunct(",");
+    r.expectPunct(")", "closing grant");
+    if (!membership || !grantee || !operations || grantee === "user_id")
+        fail(line, `grant() on "${table}" requires table, a grantee column distinct from managed user_id, and explicit operations.`);
+    if (row !== void 0 && (row === "user_id" || row === grantee))
+        fail(line, `grant() on "${table}": row names the shares column holding the shared row's id, distinct from user_id and the grantee.`);
+    return { kind: "member", group: ["user_id"], membership, memberUser: grantee, memberGroup: row === void 0 ? ["user_id"] : ["user_id", row], operations, ownerGrant: true, ...read ? { read } : {} };
 }
 function resolveGrantRowKeys(scope, key, table, line, fail) {
-  const visit = (node) => {
-    if (node.kind === "member" && node.ownerGrant && node.memberGroup.length === 2 && node.group.length === 1) {
-      if (key === void 0) fail(line, `grant() with row on "${table}" needs the table's one id() key: each share names one row by it.`);
-      node.group = ["user_id", key.toLowerCase()];
-    } else if (node.kind === "any_of") node.policies.forEach(visit);
-    else if (node.kind === "all_of") {
-      visit(node.gate);
-      visit(node.who);
-    }
-  };
-  if (scope.kind === "policy") visit(scope.policy);
+    const visit = (node) => {
+        if (node.kind === "member" && node.ownerGrant && node.memberGroup.length === 2 && node.group.length === 1) {
+            if (key === void 0)
+                fail(line, `grant() with row on "${table}" needs the table's one id() key: each share names one row by it.`);
+            node.group = ["user_id", key.toLowerCase()];
+        }
+        else if (node.kind === "any_of")
+            node.policies.forEach(visit);
+        else if (node.kind === "all_of") {
+            visit(node.gate);
+            visit(node.who);
+        }
+    };
+    if (scope.kind === "policy")
+        visit(scope.policy);
 }
 function validateDeclaredMemberships(tables, tableByName, knownColumns, errors) {
-  const memberPolicies = (scope) => {
-    const out = [];
-    const visit = (node) => {
-      if (node.kind === "member") out.push(node);
-      else if (node.kind === "any_of") node.policies.forEach(visit);
-      else if (node.kind === "all_of") {
-        visit(node.gate);
-        visit(node.who);
-      }
+    const memberPolicies = (scope) => {
+        const out = [];
+        const visit = (node) => {
+            if (node.kind === "member")
+                out.push(node);
+            else if (node.kind === "any_of")
+                node.policies.forEach(visit);
+            else if (node.kind === "all_of") {
+                visit(node.gate);
+                visit(node.who);
+            }
+        };
+        if (scope.kind === "member")
+            out.push(scope);
+        else if (scope.kind === "policy")
+            visit(scope.policy);
+        return out;
     };
-    if (scope.kind === "member") out.push(scope);
-    else if (scope.kind === "policy") visit(scope.policy);
-    return out;
-  };
-  for (const t of tables) {
-    for (const sc of memberPolicies(t.scope)) {
-      const own = knownColumns(t);
-      for (const g of sc.group) {
-        if (!own.has(g)) {
-          errors.push(
-            `Table "${t.name}" is member-scoped on "${g}", but "${g}" is not one of its declared columns. The group-key columns must be real columns on the table.`
-          );
+    for (const t of tables) {
+        for (const sc of memberPolicies(t.scope)) {
+            const own = knownColumns(t);
+            for (const g of sc.group) {
+                if (!own.has(g)) {
+                    errors.push(`Table "${t.name}" is member-scoped on "${g}", but "${g}" is not one of its declared columns. The group-key columns must be real columns on the table.`);
+                }
+            }
+            const membershipTable = tableByName.get(sc.membership);
+            if (!membershipTable) {
+                errors.push(`Table "${t.name}" is member-scoped through the membership table "${sc.membership}", which is not declared in db/schema.ts. The membership table must be a managed table in the same schema.`);
+                continue;
+            }
+            const membershipCols = knownColumns(membershipTable);
+            if (sc.ownerGrant) {
+                if (membershipTable.scope.kind !== "owner" || membershipTable.scope.column !== "user_id" || membershipTable.scope.visitors) {
+                    errors.push(`Grant table "${sc.membership}" must use owner() with managed user_id and authenticated owners.`);
+                }
+                if (membershipTable.client?.intake || membershipTable.client?.links)
+                    errors.push(`Grant table "${sc.membership}" cannot expose public intake or row links; only its authenticated owner manages grants.`);
+                const grantee = membershipTable.columns.find((column) => column.name === sc.memberUser);
+                if (!grantee || grantee.helper !== "text" || grantee.nullable)
+                    errors.push(`Grant grantee "${sc.membership}"."${sc.memberUser}" must be a required text column.`);
+                if (sc.memberGroup.length === 2) {
+                    const row = membershipTable.columns.find((column) => column.name === sc.memberGroup[1]);
+                    const key = t.columns.find((column) => column.name === sc.group[1]);
+                    const keyHelper = key?.helper === "id" ? key.uuid ? "text" : "integer" : null;
+                    if (!row || row.nullable || row.helper !== keyHelper) {
+                        errors.push(`Grant row "${sc.membership}"."${sc.memberGroup[1]}" must be a required ${keyHelper ?? "id-typed"} column holding a "${t.name}" id.`);
+                    }
+                    else if (row.hasDefault || row.references !== t.name || row.onDelete !== "cascade") {
+                        errors.push(`Grant row "${sc.membership}"."${sc.memberGroup[1]}" must reference its row with no default: ${sc.memberGroup[1]}: ${keyHelper}({ references: '${t.name}', onDelete: 'cascade' }).`);
+                    }
+                    if (membershipTable.client?.update?.includes(sc.memberGroup[1])) {
+                        errors.push(`Grant row "${sc.membership}"."${sc.memberGroup[1]}" cannot be in client.update: a share names one row for its life. Delete the share and create another.`);
+                    }
+                    const users = tables.filter((other) => memberPolicies(other.scope).some((m) => m.ownerGrant && m.membership === sc.membership));
+                    if (users.length !== 1 || memberPolicies(t.scope).filter((m) => m.ownerGrant && m.membership === sc.membership).length !== 1) {
+                        errors.push(`Grant table "${sc.membership}" names rows of "${t.name}", so it serves only that one grant() rule. Declare another shares table for other grants.`);
+                    }
+                }
+            }
+            else if (tableAllowsClientWrites(membershipTable)) {
+                errors.push(`Table "${sc.membership}" grants membership access to "${t.name}" and cannot allow client writes; membership changes go through a server function.`);
+            }
+            if (!membershipCols.has(sc.memberUser)) {
+                errors.push(`The membership table "${sc.membership}" (for member-scoped "${t.name}") has no "${sc.memberUser}" column named in member({ member_user }).`);
+            }
+            for (const mg of sc.ownerGrant ? [] : sc.memberGroup) {
+                if (!membershipCols.has(mg)) {
+                    errors.push(`The membership table "${sc.membership}" (for member-scoped "${t.name}") has no "${mg}" column named in member({ member_group }).`);
+                }
+            }
         }
-      }
-      const membershipTable = tableByName.get(sc.membership);
-      if (!membershipTable) {
-        errors.push(
-          `Table "${t.name}" is member-scoped through the membership table "${sc.membership}", which is not declared in db/schema.ts. The membership table must be a managed table in the same schema.`
-        );
-        continue;
-      }
-      const membershipCols = knownColumns(membershipTable);
-      if (sc.ownerGrant) {
-        if (membershipTable.scope.kind !== "owner" || membershipTable.scope.column !== "user_id" || membershipTable.scope.visitors) {
-          errors.push(`Grant table "${sc.membership}" must use owner() with managed user_id and authenticated owners.`);
-        }
-        if (membershipTable.client?.intake || membershipTable.client?.links) errors.push(`Grant table "${sc.membership}" cannot expose public intake or row links; only its authenticated owner manages grants.`);
-        const grantee = membershipTable.columns.find((column) => column.name === sc.memberUser);
-        if (!grantee || grantee.helper !== "text" || grantee.nullable) errors.push(`Grant grantee "${sc.membership}"."${sc.memberUser}" must be a required text column.`);
-        if (sc.memberGroup.length === 2) {
-          const row = membershipTable.columns.find((column) => column.name === sc.memberGroup[1]);
-          const key = t.columns.find((column) => column.name === sc.group[1]);
-          const keyHelper = key?.helper === "id" ? key.uuid ? "text" : "integer" : null;
-          if (!row || row.nullable || row.helper !== keyHelper) {
-            errors.push(`Grant row "${sc.membership}"."${sc.memberGroup[1]}" must be a required ${keyHelper ?? "id-typed"} column holding a "${t.name}" id.`);
-          } else if (row.hasDefault || row.references !== t.name || row.onDelete !== "cascade") {
-            errors.push(`Grant row "${sc.membership}"."${sc.memberGroup[1]}" must reference its row with no default: ${sc.memberGroup[1]}: ${keyHelper}({ references: '${t.name}', onDelete: 'cascade' }).`);
-          }
-          if (membershipTable.client?.update?.includes(sc.memberGroup[1])) {
-            errors.push(`Grant row "${sc.membership}"."${sc.memberGroup[1]}" cannot be in client.update: a share names one row for its life. Delete the share and create another.`);
-          }
-          const users = tables.filter((other) => memberPolicies(other.scope).some((m) => m.ownerGrant && m.membership === sc.membership));
-          if (users.length !== 1 || memberPolicies(t.scope).filter((m) => m.ownerGrant && m.membership === sc.membership).length !== 1) {
-            errors.push(`Grant table "${sc.membership}" names rows of "${t.name}", so it serves only that one grant() rule. Declare another shares table for other grants.`);
-          }
-        }
-      } else if (tableAllowsClientWrites(membershipTable)) {
-        errors.push(`Table "${sc.membership}" grants membership access to "${t.name}" and cannot allow client writes; membership changes go through a server function.`);
-      }
-      if (!membershipCols.has(sc.memberUser)) {
-        errors.push(
-          `The membership table "${sc.membership}" (for member-scoped "${t.name}") has no "${sc.memberUser}" column named in member({ member_user }).`
-        );
-      }
-      for (const mg of sc.ownerGrant ? [] : sc.memberGroup) {
-        if (!membershipCols.has(mg)) {
-          errors.push(
-            `The membership table "${sc.membership}" (for member-scoped "${t.name}") has no "${mg}" column named in member({ member_group }).`
-          );
-        }
-      }
     }
-  }
 }
-
-// worker/src/utils/db-schema-deploy/schema-constants.ts
-var LITERAL_WORDS = /* @__PURE__ */ new Set(["true", "false", "null"]);
-var STATEMENT_WORDS = /* @__PURE__ */ new Set([
-  "import",
-  "export",
-  "default",
-  "from",
-  "const",
-  "let",
-  "var",
-  "as",
-  "function",
-  "class"
+var LITERAL_WORDS = new Set(["true", "false", "null"]);
+var STATEMENT_WORDS = new Set([
+    "import",
+    "export",
+    "default",
+    "from",
+    "const",
+    "let",
+    "var",
+    "as",
+    "function",
+    "class"
 ]);
 var isPunct = (t, value) => !!t && t.kind === "punct" && t.value === value;
 var OPENERS = "([{";
 var CLOSERS = ")]}";
 function append(into, tokens) {
-  for (const t of tokens) into.push(t);
+    for (const t of tokens)
+        into.push(t);
 }
 var isIdent = (t, value) => !!t && t.kind === "ident" && t.value === value;
 function resolveSchemaConstants(tokens, callable, maxTokens, fail) {
-  const out = [];
-  let i = 0;
-  const imported = /* @__PURE__ */ new Set();
-  while (isIdent(tokens[i], "import")) {
-    const start = i;
-    while (tokens[i].kind !== "eof" && !isIdent(tokens[i], "from")) {
-      if (tokens[i].kind === "ident" && i > start) imported.add(tokens[i].value);
-      i++;
-    }
-    if (isIdent(tokens[i], "from")) i += 2;
-    if (isPunct(tokens[i], ";")) i++;
-    append(out, tokens.slice(start, i));
-  }
-  const constants = /* @__PURE__ */ new Map();
-  const declaredLater = /* @__PURE__ */ new Map();
-  for (let k = i; k < tokens.length; k++) {
-    const t = tokens[k];
-    if ((isIdent(t, "const") || isIdent(t, "let") || isIdent(t, "var")) && tokens[k + 1]?.kind === "ident") {
-      if (!declaredLater.has(tokens[k + 1].value)) declaredLater.set(tokens[k + 1].value, tokens[k + 1].line);
-    }
-  }
-  let expanded = out.length;
-  const budget = (line, adding) => {
-    expanded += adding;
-    if (expanded > maxTokens) {
-      fail(line, "reusing constants here expands the declaration past the size db/schema.ts allows; fewer copies, or the shared part written once, stay within it.");
-    }
-  };
-  const expandRange = (from, to, into, owner) => {
-    const open2 = [];
-    for (let k = from; k < to; k++) {
-      const t = tokens[k];
-      if (t.kind === "punct" && OPENERS.includes(t.value)) open2.push(t.value);
-      else if (t.kind === "punct" && CLOSERS.includes(t.value)) open2.pop();
-      if (isPunct(t, ".") && isPunct(tokens[k + 1], ".") && isPunct(tokens[k + 2], ".")) {
-        const target = tokens[k + 3];
-        const opener = open2.length > 0 ? open2[open2.length - 1] : null;
-        if (!target || target.kind !== "ident") {
-          fail(t.line, "a spread (...) must name a constant declared above, as in ...sharedColumns.");
+    const out = [];
+    let i = 0;
+    const imported = new Set();
+    while (isIdent(tokens[i], "import")) {
+        const start = i;
+        while (tokens[i].kind !== "eof" && !isIdent(tokens[i], "from")) {
+            if (tokens[i].kind === "ident" && i > start)
+                imported.add(tokens[i].value);
+            i++;
         }
-        const constant = lookup(target, owner);
-        if (opener !== "{") {
-          fail(t.line, `...${target.value} is only supported inside an object literal { \u2026 }; elsewhere ${target.value} is referenced directly or its values are written inline.`);
+        if (isIdent(tokens[i], "from"))
+            i += 2;
+        if (isPunct(tokens[i], ";"))
+            i++;
+        append(out, tokens.slice(start, i));
+    }
+    const constants = new Map();
+    const declaredLater = new Map();
+    for (let k = i; k < tokens.length; k++) {
+        const t = tokens[k];
+        if ((isIdent(t, "const") || isIdent(t, "let") || isIdent(t, "var")) && tokens[k + 1]?.kind === "ident") {
+            if (!declaredLater.has(tokens[k + 1].value))
+                declaredLater.set(tokens[k + 1].value, tokens[k + 1].line);
         }
-        if (!constant.objectLiteral) {
-          fail(t.line, `...${target.value} spreads a constant that is not an object literal { \u2026 }. Only object constants can be spread.`);
+    }
+    let expanded = out.length;
+    const budget = (line, adding) => {
+        expanded += adding;
+        if (expanded > maxTokens) {
+            fail(line, "reusing constants here expands the declaration past the size db/schema.ts allows; fewer copies, or the shared part written once, stay within it.");
         }
-        const inner = constant.tokens.slice(1, -1);
-        if (inner.length > 0 && isPunct(inner[inner.length - 1], ",")) inner.pop();
-        budget(t.line, Math.max(inner.length, 4));
-        append(into, inner);
-        if (inner.length === 0 && isPunct(tokens[k + 4], ",")) k++;
-        k += 3;
-        continue;
-      }
-      if (t.kind !== "ident") {
-        into.push(t);
-        continue;
-      }
-      const next = tokens[k + 1];
-      const prev = tokens[k - 1];
-      const keyPosition = isPunct(next, ":") && (isPunct(prev, "{") || isPunct(prev, ","));
-      if (keyPosition || LITERAL_WORDS.has(t.value) || isPunct(prev, ".")) {
-        into.push(t);
-        continue;
-      }
-      if (owner === null && STATEMENT_WORDS.has(t.value)) {
-        if (isIdent(t, "export") && isIdent(next, "const")) {
-          fail(t.line, '"export const" is not supported in db/schema.ts; the file exports only the schema, and constants are declared without "export".');
+    };
+    const expandRange = (from, to, into, owner) => {
+        const open2 = [];
+        for (let k = from; k < to; k++) {
+            const t = tokens[k];
+            if (t.kind === "punct" && OPENERS.includes(t.value))
+                open2.push(t.value);
+            else if (t.kind === "punct" && CLOSERS.includes(t.value))
+                open2.pop();
+            if (isPunct(t, ".") && isPunct(tokens[k + 1], ".") && isPunct(tokens[k + 2], ".")) {
+                const target = tokens[k + 3];
+                const opener = open2.length > 0 ? open2[open2.length - 1] : null;
+                if (!target || target.kind !== "ident") {
+                    fail(t.line, "a spread (...) must name a constant declared above, as in ...sharedColumns.");
+                }
+                const constant = lookup(target, owner);
+                if (opener !== "{") {
+                    fail(t.line, `...${target.value} is only supported inside an object literal { \u2026 }; elsewhere ${target.value} is referenced directly or its values are written inline.`);
+                }
+                if (!constant.objectLiteral) {
+                    fail(t.line, `...${target.value} spreads a constant that is not an object literal { \u2026 }. Only object constants can be spread.`);
+                }
+                const inner = constant.tokens.slice(1, -1);
+                if (inner.length > 0 && isPunct(inner[inner.length - 1], ","))
+                    inner.pop();
+                budget(t.line, Math.max(inner.length, 4));
+                append(into, inner);
+                if (inner.length === 0 && isPunct(tokens[k + 4], ","))
+                    k++;
+                k += 3;
+                continue;
+            }
+            if (t.kind !== "ident") {
+                into.push(t);
+                continue;
+            }
+            const next = tokens[k + 1];
+            const prev = tokens[k - 1];
+            const keyPosition = isPunct(next, ":") && (isPunct(prev, "{") || isPunct(prev, ","));
+            if (keyPosition || LITERAL_WORDS.has(t.value) || isPunct(prev, ".")) {
+                into.push(t);
+                continue;
+            }
+            if (owner === null && STATEMENT_WORDS.has(t.value)) {
+                if (isIdent(t, "export") && isIdent(next, "const")) {
+                    fail(t.line, '"export const" is not supported in db/schema.ts; the file exports only the schema, and constants are declared without "export".');
+                }
+                into.push(t);
+                continue;
+            }
+            if (constants.has(t.value) || declaredLater.has(t.value)) {
+                const constant = lookup(t, owner);
+                if (isPunct(next, "(")) {
+                    fail(t.line, `${t.value} is a constant, not a function \u2014 write ${t.value} without "( \u2026 )".`);
+                }
+                if (isPunct(next, ".")) {
+                    fail(t.line, `${t.value}.${tokens[k + 2]?.value ?? ""} reads a property of a constant, which db/schema.ts cannot evaluate; that part is accepted as its own constant or written inline.`);
+                }
+                budget(t.line, constant.tokens.length);
+                append(into, constant.tokens);
+                continue;
+            }
+            if (callable.has(t.value)) {
+                into.push(t);
+                continue;
+            }
+            if ((isPunct(next, "(") || isPunct(next, ".")) && owner === null) {
+                into.push(t);
+                continue;
+            }
+            if (isPunct(next, ".")) {
+                fail(t.line, `${t.value}.${tokens[k + 2]?.value ?? ""} reads a value at run time; db/schema.ts is read without running it, so it accepts only the literal value.`);
+            }
+            if (isPunct(next, "(")) {
+                fail(t.line, `${t.value}(\u2026) is a function call; db/schema.ts is read without running it, so only the schema helpers can be called. Values are written inline, or declared with const using schema helpers and literals.`);
+            }
+            fail(t.line, `"${t.value}" is not defined in db/schema.ts. A value is either declared above export default as const ${t.value} = \u2026; or written inline.`);
         }
-        into.push(t);
-        continue;
-      }
-      if (constants.has(t.value) || declaredLater.has(t.value)) {
-        const constant = lookup(t, owner);
-        if (isPunct(next, "(")) {
-          fail(t.line, `${t.value} is a constant, not a function \u2014 write ${t.value} without "( \u2026 )".`);
+    };
+    const lookup = (t, owner) => {
+        const constant = constants.get(t.value);
+        if (constant)
+            return constant;
+        const at = declaredLater.get(t.value);
+        if (owner === t.value) {
+            fail(t.line, `constant ${t.value} refers to itself. A constant must be built from values declared above it.`);
         }
-        if (isPunct(next, ".")) {
-          fail(t.line, `${t.value}.${tokens[k + 2]?.value ?? ""} reads a property of a constant, which db/schema.ts cannot evaluate; that part is accepted as its own constant or written inline.`);
+        if (at !== void 0) {
+            fail(t.line, owner ? `constant ${owner} uses ${t.value}, which is declared later (line ${at}); ${t.value} must come above ${owner}, and constants that refer to each other in a cycle cannot be resolved.` : `${t.value} is used before its declaration on line ${at}; a const must come above export default.`);
         }
-        budget(t.line, constant.tokens.length);
-        append(into, constant.tokens);
-        continue;
-      }
-      if (callable.has(t.value)) {
-        into.push(t);
-        continue;
-      }
-      if ((isPunct(next, "(") || isPunct(next, ".")) && owner === null) {
-        into.push(t);
-        continue;
-      }
-      if (isPunct(next, ".")) {
-        fail(t.line, `${t.value}.${tokens[k + 2]?.value ?? ""} reads a value at run time; db/schema.ts is read without running it, so it accepts only the literal value.`);
-      }
-      if (isPunct(next, "(")) {
-        fail(t.line, `${t.value}(\u2026) is a function call; db/schema.ts is read without running it, so only the schema helpers can be called. Values are written inline, or declared with const using schema helpers and literals.`);
-      }
-      fail(t.line, `"${t.value}" is not defined in db/schema.ts. A value is either declared above export default as const ${t.value} = \u2026; or written inline.`);
+        return fail(t.line, `"${t.value}" is not defined in db/schema.ts. A value is either declared above export default as const ${t.value} = \u2026; or written inline.`);
+    };
+    while (!isIdent(tokens[i], "export")) {
+        const t = tokens[i];
+        if (t.kind === "eof")
+            return [...out, t];
+        if (isIdent(t, "let") || isIdent(t, "var")) {
+            fail(t.line, `"${t.value}" declares a changeable binding; db/schema.ts allows only const, not "${t.value}".`);
+        }
+        if (!isIdent(t, "const")) {
+            if (t.kind === "ident" && constants.has(t.value)) {
+                fail(t.line, `${t.value} is changed after its declaration; constants in db/schema.ts cannot be reassigned or mutated, so each final value is declared once with const.`);
+            }
+            if (isIdent(t, "import"))
+                fail(t.line, "imports must come first in db/schema.ts, before any const.");
+            return [...out, ...tokens.slice(i)];
+        }
+        const nameTok = tokens[i + 1];
+        if (!nameTok || nameTok.kind !== "ident") {
+            fail(t.line, "destructuring (const { \u2026 } = / const [ \u2026 ] =) is not supported in db/schema.ts; it accepts one constant per name: const name = \u2026;");
+        }
+        const name = nameTok.value;
+        if (callable.has(name) || LITERAL_WORDS.has(name) || STATEMENT_WORDS.has(name) || name === "schema") {
+            fail(nameTok.line, `const ${name} shadows a db/schema.ts helper or keyword; a different name, such as ${name}Rule, does not.`);
+        }
+        if (imported.has(name)) {
+            fail(nameTok.line, `const ${name} has the same name as an import; constant names must differ from imports.`);
+        }
+        if (constants.has(name))
+            fail(nameTok.line, `const ${name} is declared twice; a constant is declared once.`);
+        if (isPunct(tokens[i + 2], ":")) {
+            fail(tokens[i + 2].line, `const ${name} has a type annotation; db/schema.ts constants take their type from the helpers, so ": \u2026" is not accepted.`);
+        }
+        if (!isPunct(tokens[i + 2], "="))
+            fail(nameTok.line, `expected "=" after const ${name}.`);
+        const start = i + 3;
+        let k = start;
+        let depth = 0;
+        for (; tokens[k].kind !== "eof"; k++) {
+            const v = tokens[k];
+            if (v.kind === "punct" && OPENERS.includes(v.value))
+                depth++;
+            else if (v.kind === "punct" && CLOSERS.includes(v.value)) {
+                depth--;
+                if (depth < 0)
+                    fail(v.line, `const ${name} has an unmatched "${v.value}"; its brackets are unbalanced.`);
+            }
+            else if (depth === 0 && (isPunct(v, ";") || isPunct(v, ",") || isIdent(v, "const") && !isIdent(tokens[k - 1], "as") || isIdent(v, "let") || isIdent(v, "var") || isIdent(v, "export")))
+                break;
+            if (depth === 0 && isPunct(v, "="))
+                fail(v.line, `${name} is assigned twice; each constant takes one value.`);
+        }
+        if (depth !== 0)
+            fail(nameTok.line, `const ${name} has an unclosed bracket; its brackets are unbalanced.`);
+        let end2 = k;
+        if (end2 - start >= 2 && isIdent(tokens[end2 - 2], "as") && isIdent(tokens[end2 - 1], "const"))
+            end2 -= 2;
+        if (end2 === start)
+            fail(nameTok.line, `const ${name} has no value.`);
+        if (isPunct(tokens[k], ",")) {
+            fail(tokens[k].line, `one declaration declares several constants; db/schema.ts accepts one const per name (const ${name} = \u2026;).`);
+        }
+        const value = [];
+        expandRange(start, end2, value, name);
+        const objectLiteral = isPunct(tokens[start], "{") && matchingClose(tokens, start) === end2 - 1;
+        constants.set(name, { name, line: nameTok.line, tokens: value, objectLiteral });
+        i = isPunct(tokens[k], ";") ? k + 1 : k;
     }
-  };
-  const lookup = (t, owner) => {
-    const constant = constants.get(t.value);
-    if (constant) return constant;
-    const at = declaredLater.get(t.value);
-    if (owner === t.value) {
-      fail(t.line, `constant ${t.value} refers to itself. A constant must be built from values declared above it.`);
+    if (isIdent(tokens[i], "export") && isIdent(tokens[i + 1], "const")) {
+        fail(tokens[i].line, '"export const" is not supported in db/schema.ts; the file exports only the schema, and constants are declared without "export".');
     }
-    if (at !== void 0) {
-      fail(t.line, owner ? `constant ${owner} uses ${t.value}, which is declared later (line ${at}); ${t.value} must come above ${owner}, and constants that refer to each other in a cycle cannot be resolved.` : `${t.value} is used before its declaration on line ${at}; a const must come above export default.`);
+    const body = [];
+    const open = tokens.findIndex((v, k) => k > i && isPunct(v, "(") && isIdent(tokens[k - 1], "schema"));
+    const close = open < 0 ? -1 : matchingClose(tokens, open);
+    const end = close < 0 ? tokens.length : close + 1;
+    expandRange(i, end, body, null);
+    for (let k = end; k < tokens.length; k++) {
+        const v = tokens[k];
+        if (v.kind === "ident" && constants.has(v.value) && (isPunct(tokens[k + 1], "=") || isPunct(tokens[k + 1], "."))) {
+            fail(v.line, `${v.value} is changed after its declaration; constants in db/schema.ts cannot be reassigned or mutated, so each final value is declared once with const.`);
+        }
+        body.push(v);
     }
-    return fail(t.line, `"${t.value}" is not defined in db/schema.ts. A value is either declared above export default as const ${t.value} = \u2026; or written inline.`);
-  };
-  while (!isIdent(tokens[i], "export")) {
-    const t = tokens[i];
-    if (t.kind === "eof") return [...out, t];
-    if (isIdent(t, "let") || isIdent(t, "var")) {
-      fail(t.line, `"${t.value}" declares a changeable binding; db/schema.ts allows only const, not "${t.value}".`);
+    if (out.length + body.length > maxTokens) {
+        fail(tokens[i].line, "reusing constants here expands the declaration past the size db/schema.ts allows; fewer copies, or the shared part written once, stay within it.");
     }
-    if (!isIdent(t, "const")) {
-      if (t.kind === "ident" && constants.has(t.value)) {
-        fail(t.line, `${t.value} is changed after its declaration; constants in db/schema.ts cannot be reassigned or mutated, so each final value is declared once with const.`);
-      }
-      if (isIdent(t, "import")) fail(t.line, "imports must come first in db/schema.ts, before any const.");
-      return [...out, ...tokens.slice(i)];
-    }
-    const nameTok = tokens[i + 1];
-    if (!nameTok || nameTok.kind !== "ident") {
-      fail(t.line, "destructuring (const { \u2026 } = / const [ \u2026 ] =) is not supported in db/schema.ts; it accepts one constant per name: const name = \u2026;");
-    }
-    const name = nameTok.value;
-    if (callable.has(name) || LITERAL_WORDS.has(name) || STATEMENT_WORDS.has(name) || name === "schema") {
-      fail(nameTok.line, `const ${name} shadows a db/schema.ts helper or keyword; a different name, such as ${name}Rule, does not.`);
-    }
-    if (imported.has(name)) {
-      fail(nameTok.line, `const ${name} has the same name as an import; constant names must differ from imports.`);
-    }
-    if (constants.has(name)) fail(nameTok.line, `const ${name} is declared twice; a constant is declared once.`);
-    if (isPunct(tokens[i + 2], ":")) {
-      fail(tokens[i + 2].line, `const ${name} has a type annotation; db/schema.ts constants take their type from the helpers, so ": \u2026" is not accepted.`);
-    }
-    if (!isPunct(tokens[i + 2], "=")) fail(nameTok.line, `expected "=" after const ${name}.`);
-    const start = i + 3;
-    let k = start;
-    let depth = 0;
-    for (; tokens[k].kind !== "eof"; k++) {
-      const v = tokens[k];
-      if (v.kind === "punct" && OPENERS.includes(v.value)) depth++;
-      else if (v.kind === "punct" && CLOSERS.includes(v.value)) {
-        depth--;
-        if (depth < 0) fail(v.line, `const ${name} has an unmatched "${v.value}"; its brackets are unbalanced.`);
-      } else if (depth === 0 && (isPunct(v, ";") || isPunct(v, ",") || isIdent(v, "const") && !isIdent(tokens[k - 1], "as") || isIdent(v, "let") || isIdent(v, "var") || isIdent(v, "export"))) break;
-      if (depth === 0 && isPunct(v, "=")) fail(v.line, `${name} is assigned twice; each constant takes one value.`);
-    }
-    if (depth !== 0) fail(nameTok.line, `const ${name} has an unclosed bracket; its brackets are unbalanced.`);
-    let end2 = k;
-    if (end2 - start >= 2 && isIdent(tokens[end2 - 2], "as") && isIdent(tokens[end2 - 1], "const")) end2 -= 2;
-    if (end2 === start) fail(nameTok.line, `const ${name} has no value.`);
-    if (isPunct(tokens[k], ",")) {
-      fail(tokens[k].line, `one declaration declares several constants; db/schema.ts accepts one const per name (const ${name} = \u2026;).`);
-    }
-    const value = [];
-    expandRange(start, end2, value, name);
-    const objectLiteral = isPunct(tokens[start], "{") && matchingClose(tokens, start) === end2 - 1;
-    constants.set(name, { name, line: nameTok.line, tokens: value, objectLiteral });
-    i = isPunct(tokens[k], ";") ? k + 1 : k;
-  }
-  if (isIdent(tokens[i], "export") && isIdent(tokens[i + 1], "const")) {
-    fail(tokens[i].line, '"export const" is not supported in db/schema.ts; the file exports only the schema, and constants are declared without "export".');
-  }
-  const body = [];
-  const open = tokens.findIndex((v, k) => k > i && isPunct(v, "(") && isIdent(tokens[k - 1], "schema"));
-  const close = open < 0 ? -1 : matchingClose(tokens, open);
-  const end = close < 0 ? tokens.length : close + 1;
-  expandRange(i, end, body, null);
-  for (let k = end; k < tokens.length; k++) {
-    const v = tokens[k];
-    if (v.kind === "ident" && constants.has(v.value) && (isPunct(tokens[k + 1], "=") || isPunct(tokens[k + 1], "."))) {
-      fail(v.line, `${v.value} is changed after its declaration; constants in db/schema.ts cannot be reassigned or mutated, so each final value is declared once with const.`);
-    }
-    body.push(v);
-  }
-  if (out.length + body.length > maxTokens) {
-    fail(tokens[i].line, "reusing constants here expands the declaration past the size db/schema.ts allows; fewer copies, or the shared part written once, stay within it.");
-  }
-  return [...out, ...body];
+    return [...out, ...body];
 }
 function matchingClose(tokens, open) {
-  let depth = 0;
-  for (let k = open; k < tokens.length; k++) {
-    const v = tokens[k];
-    if (v.kind === "punct" && "([{".includes(v.value)) depth++;
-    else if (v.kind === "punct" && ")]}".includes(v.value)) {
-      depth--;
-      if (depth === 0) return k;
+    let depth = 0;
+    for (let k = open; k < tokens.length; k++) {
+        const v = tokens[k];
+        if (v.kind === "punct" && "([{".includes(v.value))
+            depth++;
+        else if (v.kind === "punct" && ")]}".includes(v.value)) {
+            depth--;
+            if (depth === 0)
+                return k;
+        }
     }
-  }
-  return -1;
+    return -1;
 }
-
-// worker/src/utils/db-schema-deploy/extract-schema-parents.ts
 var MAX_PARENT_EDGES2 = 4;
-var parentScopeLines = /* @__PURE__ */ new WeakMap();
+var parentScopeLines = new WeakMap();
 function rememberParentLine(sentinel, line) {
-  parentScopeLines.set(sentinel, line);
+    parentScopeLines.set(sentinel, line);
 }
 function resolveParentChains(tables, tableByName, privatePolicy, errors) {
-  const parentEdges = /* @__PURE__ */ new Map();
-  const resolvingParents = /* @__PURE__ */ new Set();
-  const resolveParent = (t) => {
-    if (t.scope.kind !== "policy" || t.scope.policy.kind !== "parent") return 0;
-    if (parentEdges.has(t.name)) return parentEdges.get(t.name);
-    const pending = t.scope.policy;
-    const at = parentScopeLines.get(pending);
-    const where = at === void 0 ? "" : `line ${at}: `;
-    if (resolvingParents.has(t.name)) {
-      errors.push(`${where}Table "${t.name}" uses parent({ via: '${pending.via}' }), but its parent chain leads back to "${t.name}". Parent chains cannot form a cycle.`);
-      parentEdges.set(t.name, null);
-      return null;
-    }
-    resolvingParents.add(t.name);
-    const fail = (message) => {
-      errors.push(where + message);
-      parentEdges.set(t.name, null);
-      resolvingParents.delete(t.name);
-      return null;
-    };
-    const fk = t.columns.find((column) => column.name === pending.via);
-    if (!fk || !fk.references) {
-      return fail(`Table "${t.name}" uses parent({ via: '${pending.via}' }), but "${pending.via}" is not a declared scalar foreign key.`);
-    }
-    const parentTable = tableByName.get(fk.references);
-    const parentKeys = parentTable ? parentTable.columns.filter((column) => column.helper === "id") : [];
-    const parentKey = parentKeys.length === 1 ? parentKeys[0] : void 0;
-    let inherited = null;
-    let edges = 1;
-    if (parentTable && parentTable.scope.kind === "policy" && parentTable.scope.policy.kind === "parent") {
-      const above = resolveParent(parentTable);
-      if (above === null) {
-        if (parentEdges.get(t.name) !== null) parentEdges.set(t.name, null);
+    const parentEdges = new Map();
+    const resolvingParents = new Set();
+    const resolveParent = (t) => {
+        if (t.scope.kind !== "policy" || t.scope.policy.kind !== "parent")
+            return 0;
+        if (parentEdges.has(t.name))
+            return parentEdges.get(t.name);
+        const pending = t.scope.policy;
+        const at = parentScopeLines.get(pending);
+        const where = at === void 0 ? "" : `line ${at}: `;
+        if (resolvingParents.has(t.name)) {
+            errors.push(`${where}Table "${t.name}" uses parent({ via: '${pending.via}' }), but its parent chain leads back to "${t.name}". Parent chains cannot form a cycle.`);
+            parentEdges.set(t.name, null);
+            return null;
+        }
+        resolvingParents.add(t.name);
+        const fail = (message) => {
+            errors.push(where + message);
+            parentEdges.set(t.name, null);
+            resolvingParents.delete(t.name);
+            return null;
+        };
+        const fk = t.columns.find((column) => column.name === pending.via);
+        if (!fk || !fk.references) {
+            return fail(`Table "${t.name}" uses parent({ via: '${pending.via}' }), but "${pending.via}" is not a declared scalar foreign key.`);
+        }
+        const parentTable = tableByName.get(fk.references);
+        const parentKeys = parentTable ? parentTable.columns.filter((column) => column.helper === "id") : [];
+        const parentKey = parentKeys.length === 1 ? parentKeys[0] : void 0;
+        let inherited = null;
+        let edges = 1;
+        if (parentTable && parentTable.scope.kind === "policy" && parentTable.scope.policy.kind === "parent") {
+            const above = resolveParent(parentTable);
+            if (above === null) {
+                if (parentEdges.get(t.name) !== null)
+                    parentEdges.set(t.name, null);
+                resolvingParents.delete(t.name);
+                return null;
+            }
+            inherited = parentTable.scope.policy;
+            edges = above + 1;
+        }
+        else if (parentTable) {
+            inherited = privatePolicy(parentTable.scope);
+        }
+        if (!parentTable || !parentKey || !inherited) {
+            return fail(`Table "${t.name}" uses parent({ via: '${pending.via}' }), but its referenced parent must have exactly one id() key and a direct owner(), group(), appRole(), member(), anyOf(owner(), member()) or parent() private scope.`);
+        }
+        if (edges > MAX_PARENT_EDGES2) {
+            return fail(`Table "${t.name}" uses parent({ via: '${pending.via}' }), which makes a parent chain of ${edges} edges. At most ${MAX_PARENT_EDGES2} are allowed; inherit from a table nearer the root of the chain.`);
+        }
+        const compatible = fk.helper === parentKey.helper && (fk.helper !== "id" || fk.uuid === parentKey.uuid) || fk.helper === "integer" && parentKey.helper === "id" && !parentKey.uuid || fk.helper === "text" && parentKey.helper === "id" && parentKey.uuid;
+        if (!compatible) {
+            return fail(`Table "${t.name}" uses parent({ via: '${pending.via}' }), but that foreign key does not have the same scalar type as "${parentTable.name}"."${parentKey.name}".`);
+        }
+        t.scope.policy = { kind: "parent", via: pending.via, table: parentTable.name, parentKey: parentKey.name, policy: inherited };
+        if (t.client?.create && !t.client.create.includes(pending.via)) {
+            errors.push(`Table "${t.name}" uses parent({ via: '${pending.via}' }) and client.create must include "${pending.via}" so every new row explicitly selects an authorized parent.`);
+        }
         resolvingParents.delete(t.name);
-        return null;
-      }
-      inherited = parentTable.scope.policy;
-      edges = above + 1;
-    } else if (parentTable) {
-      inherited = privatePolicy(parentTable.scope);
-    }
-    if (!parentTable || !parentKey || !inherited) {
-      return fail(`Table "${t.name}" uses parent({ via: '${pending.via}' }), but its referenced parent must have exactly one id() key and a direct owner(), group(), appRole(), member(), anyOf(owner(), member()) or parent() private scope.`);
-    }
-    if (edges > MAX_PARENT_EDGES2) {
-      return fail(`Table "${t.name}" uses parent({ via: '${pending.via}' }), which makes a parent chain of ${edges} edges. At most ${MAX_PARENT_EDGES2} are allowed; inherit from a table nearer the root of the chain.`);
-    }
-    const compatible = fk.helper === parentKey.helper && (fk.helper !== "id" || fk.uuid === parentKey.uuid) || fk.helper === "integer" && parentKey.helper === "id" && !parentKey.uuid || fk.helper === "text" && parentKey.helper === "id" && parentKey.uuid;
-    if (!compatible) {
-      return fail(`Table "${t.name}" uses parent({ via: '${pending.via}' }), but that foreign key does not have the same scalar type as "${parentTable.name}"."${parentKey.name}".`);
-    }
-    t.scope.policy = { kind: "parent", via: pending.via, table: parentTable.name, parentKey: parentKey.name, policy: inherited };
-    if (t.client?.create && !t.client.create.includes(pending.via)) {
-      errors.push(`Table "${t.name}" uses parent({ via: '${pending.via}' }) and client.create must include "${pending.via}" so every new row explicitly selects an authorized parent.`);
-    }
-    resolvingParents.delete(t.name);
-    parentEdges.set(t.name, edges);
-    return edges;
-  };
-  for (const t of tables) resolveParent(t);
+        parentEdges.set(t.name, edges);
+        return edges;
+    };
+    for (const t of tables)
+        resolveParent(t);
 }
 function policyEdges(policy) {
-  return policy.kind === "parent" ? 1 + policyEdges(policy.policy) : 0;
+    return policy.kind === "parent" ? 1 + policyEdges(policy.policy) : 0;
 }
 function fileParentTarget(t) {
-  const keys = t.columns.filter((column) => column.helper === "id");
-  const key = keys.length === 1 ? keys[0] : null;
-  const scope = t.scope;
-  const privateUserPolicy = scope.kind === "owner" && !scope.visitors || scope.kind === "member" || scope.kind === "policy" && ["owner", "member", "any_of", "all_of", "parent", "group", "app_role"].includes(scope.policy.kind);
-  return {
-    key: key ? key.name : null,
-    keyType: key?.uuid ? "text" : "integer",
-    privateUserPolicy,
-    edges: scope.kind === "policy" ? policyEdges(scope.policy) : 0
-  };
+    const keys = t.columns.filter((column) => column.helper === "id");
+    const key = keys.length === 1 ? keys[0] : null;
+    const scope = t.scope;
+    const privateUserPolicy = scope.kind === "owner" && !scope.visitors || scope.kind === "member" || scope.kind === "policy" && ["owner", "member", "any_of", "all_of", "parent", "group", "app_role"].includes(scope.policy.kind);
+    return {
+        key: key ? key.name : null,
+        keyType: key?.uuid ? "text" : "integer",
+        privateUserPolicy,
+        edges: scope.kind === "policy" ? policyEdges(scope.policy) : 0
+    };
 }
-
-// worker/src/utils/db-schema-deploy/extract-schema-relations.ts
 function validateDeclaredRelations(tables, tableByName, knownColumns, markedGone, errors) {
-  const columnByName = (t, col) => t.columns.find((c) => c.name === col);
-  for (const t of tables) {
-    if (t.relations.length === 0) continue;
-    const rootNames = knownColumns(t);
-    for (const rel of t.relations) {
-      if (rel.name === "__proto__" || rel.name === "prototype" || rel.name === "constructor") {
-        errors.push(
-          `Relation "${t.name}"."${rel.name}" uses a reserved object name; a relation name must be returnable as an ordinary row field.`
-        );
-      } else if (rootNames.has(rel.name)) {
-        errors.push(
-          `Relation "${t.name}"."${rel.name}" has the same name as a column on "${t.name}". A relation name must differ from the columns, so nesting related rows cannot overwrite the root column.`
-        );
-      }
-      const related = tableByName.get(rel.table);
-      if (!related) {
-        const marked = markedGone(rel.table);
-        errors.push(
-          marked ? `Relation "${t.name}"."${rel.name}" targets "${rel.table}", which this file marks ${marked}. The table can go only once no relation targets it.` : `Relation "${t.name}"."${rel.name}" targets ${rel.kind === "hasMany" ? "child" : "parent"} table "${rel.table}", which is not declared in db/schema.ts. A relation can only target a managed table in the same declaration.`
-        );
-        continue;
-      }
-      const keySide = rel.kind === "hasMany" ? t : related;
-      const fkSide = rel.kind === "hasMany" ? related : t;
-      const idCol = keySide.columns.find((c) => c.helper === "id");
-      if (!idCol) {
-        errors.push(
-          rel.kind === "hasMany" ? `Table "${t.name}" declares relation "${rel.name}" but has no id() column to join on. A hasMany relation joins the child's foreign key to this table's primary key, so the table needs an id() column.` : `Relation "${t.name}"."${rel.name}" belongsTo "${rel.table}", but "${rel.table}" has no id() column to join on. A belongsTo relation joins this table's foreign key to the parent's primary key, so "${rel.table}" needs an id() column.`
-        );
-      } else {
-        rel.parentKey = idCol.name;
-      }
-      const fkCol = columnByName(fkSide, rel.fk);
-      if (!fkCol) {
-        errors.push(
-          `Relation "${t.name}"."${rel.name}" joins on "${fkSide.name}"."${rel.fk}", but "${fkSide.name}" has no column "${rel.fk}". The foreign key must be a real column on "${fkSide.name}".`
-        );
-        continue;
-      }
-      if (fkCol.references !== keySide.name) {
-        errors.push(
-          fkCol.references === null ? `Relation "${t.name}"."${rel.name}" joins on "${fkSide.name}"."${rel.fk}", but that column declares no foreign key. The join key must be a proven foreign key, not a free-form join: ${rel.fk}: <type>({ references: '${keySide.name}' }).` : `Relation "${t.name}"."${rel.name}" joins on "${fkSide.name}"."${rel.fk}", but that column references "${fkCol.references}", not "${keySide.name}". The foreign key must reference the table that holds the primary key of this relation.`
-        );
-      } else if (idCol) {
-        const expectedHelper = idCol.uuid ? "text" : "integer";
-        if (fkCol.helper !== expectedHelper) {
-          errors.push(
-            `Relation "${t.name}"."${rel.name}" joins "${fkSide.name}"."${rel.fk}" to "${keySide.name}"."${idCol.name}", but their key types do not match. The foreign key needs ${expectedHelper}() so fetched rows can be stitched to the ${idCol.uuid ? "text" : "whole-number"} key exactly.`
-          );
+    const columnByName = (t, col) => t.columns.find((c) => c.name === col);
+    for (const t of tables) {
+        if (t.relations.length === 0)
+            continue;
+        const rootNames = knownColumns(t);
+        for (const rel of t.relations) {
+            if (rel.name === "__proto__" || rel.name === "prototype" || rel.name === "constructor") {
+                errors.push(`Relation "${t.name}"."${rel.name}" uses a reserved object name; a relation name must be returnable as an ordinary row field.`);
+            }
+            else if (rootNames.has(rel.name)) {
+                errors.push(`Relation "${t.name}"."${rel.name}" has the same name as a column on "${t.name}". A relation name must differ from the columns, so nesting related rows cannot overwrite the root column.`);
+            }
+            const related = tableByName.get(rel.table);
+            if (!related) {
+                const marked = markedGone(rel.table);
+                errors.push(marked ? `Relation "${t.name}"."${rel.name}" targets "${rel.table}", which this file marks ${marked}. The table can go only once no relation targets it.` : `Relation "${t.name}"."${rel.name}" targets ${rel.kind === "hasMany" ? "child" : "parent"} table "${rel.table}", which is not declared in db/schema.ts. A relation can only target a managed table in the same declaration.`);
+                continue;
+            }
+            const keySide = rel.kind === "hasMany" ? t : related;
+            const fkSide = rel.kind === "hasMany" ? related : t;
+            const idCol = keySide.columns.find((c) => c.helper === "id");
+            if (!idCol) {
+                errors.push(rel.kind === "hasMany" ? `Table "${t.name}" declares relation "${rel.name}" but has no id() column to join on. A hasMany relation joins the child's foreign key to this table's primary key, so the table needs an id() column.` : `Relation "${t.name}"."${rel.name}" belongsTo "${rel.table}", but "${rel.table}" has no id() column to join on. A belongsTo relation joins this table's foreign key to the parent's primary key, so "${rel.table}" needs an id() column.`);
+            }
+            else {
+                rel.parentKey = idCol.name;
+            }
+            const fkCol = columnByName(fkSide, rel.fk);
+            if (!fkCol) {
+                errors.push(`Relation "${t.name}"."${rel.name}" joins on "${fkSide.name}"."${rel.fk}", but "${fkSide.name}" has no column "${rel.fk}". The foreign key must be a real column on "${fkSide.name}".`);
+                continue;
+            }
+            if (fkCol.references !== keySide.name) {
+                errors.push(fkCol.references === null ? `Relation "${t.name}"."${rel.name}" joins on "${fkSide.name}"."${rel.fk}", but that column declares no foreign key. The join key must be a proven foreign key, not a free-form join: ${rel.fk}: <type>({ references: '${keySide.name}' }).` : `Relation "${t.name}"."${rel.name}" joins on "${fkSide.name}"."${rel.fk}", but that column references "${fkCol.references}", not "${keySide.name}". The foreign key must reference the table that holds the primary key of this relation.`);
+            }
+            else if (idCol) {
+                const expectedHelper = idCol.uuid ? "text" : "integer";
+                if (fkCol.helper !== expectedHelper) {
+                    errors.push(`Relation "${t.name}"."${rel.name}" joins "${fkSide.name}"."${rel.fk}" to "${keySide.name}"."${idCol.name}", but their key types do not match. The foreign key needs ${expectedHelper}() so fetched rows can be stitched to the ${idCol.uuid ? "text" : "whole-number"} key exactly.`);
+                }
+            }
         }
-      }
     }
-  }
 }
-
-// worker/src/utils/db-schema-deploy/extract-schema-links.ts
 function validateRowLinks(tables, tableByName, errors) {
-  const childOf = /* @__PURE__ */ new Map();
-  for (const t of tables) {
-    const links = t.client?.links;
-    if (!links) continue;
-    for (const name of links.children) {
-      const relation = t.relations.find((r) => r.name === name);
-      const child = relation ? tableByName.get(relation.table) : void 0;
-      if (!relation || relation.kind !== "hasMany" || !child) {
-        errors.push(`Table "${t.name}" lists "${name}" in client.links.children, which is not a hasMany relation declared on "${t.name}".`);
-        continue;
-      }
-      const scope = child.scope;
-      if (scope.kind !== "policy" || scope.policy.kind !== "parent" || scope.policy.table !== t.name || scope.policy.via !== relation.fk) {
-        errors.push(`Table "${t.name}" lists "${name}" in client.links.children, but "${child.name}" is not scoped parent({ via: '${relation.fk}' }) on "${t.name}". A link reaches only rows that belong to the linked row.`);
-        continue;
-      }
-      if (!child.client || child.client.read === false) {
-        errors.push(`Table "${t.name}" lists "${name}" in client.links.children, but "${child.name}" declares no client.read.`);
-        continue;
-      }
-      const earlier = childOf.get(child.name);
-      if (earlier && earlier !== t.name) {
-        errors.push(`Table "${child.name}" is a link child of both "${earlier}" and "${t.name}"; a table is a link child of one table only.`);
-        continue;
-      }
-      childOf.set(child.name, t.name);
+    const childOf = new Map();
+    for (const t of tables) {
+        const links = t.client?.links;
+        if (!links)
+            continue;
+        for (const name of links.children) {
+            const relation = t.relations.find((r) => r.name === name);
+            const child = relation ? tableByName.get(relation.table) : void 0;
+            if (!relation || relation.kind !== "hasMany" || !child) {
+                errors.push(`Table "${t.name}" lists "${name}" in client.links.children, which is not a hasMany relation declared on "${t.name}".`);
+                continue;
+            }
+            const scope = child.scope;
+            if (scope.kind !== "policy" || scope.policy.kind !== "parent" || scope.policy.table !== t.name || scope.policy.via !== relation.fk) {
+                errors.push(`Table "${t.name}" lists "${name}" in client.links.children, but "${child.name}" is not scoped parent({ via: '${relation.fk}' }) on "${t.name}". A link reaches only rows that belong to the linked row.`);
+                continue;
+            }
+            if (!child.client || child.client.read === false) {
+                errors.push(`Table "${t.name}" lists "${name}" in client.links.children, but "${child.name}" declares no client.read.`);
+                continue;
+            }
+            const earlier = childOf.get(child.name);
+            if (earlier && earlier !== t.name) {
+                errors.push(`Table "${child.name}" is a link child of both "${earlier}" and "${t.name}"; a table is a link child of one table only.`);
+                continue;
+            }
+            childOf.set(child.name, t.name);
+        }
     }
-  }
-  for (const [child, parent] of childOf) {
-    if (tableByName.get(child)?.client?.links) {
-      errors.push(`Table "${child}" declares client.links and is also a link child of "${parent}". Links reach one level of children.`);
+    for (const [child, parent] of childOf) {
+        if (tableByName.get(child)?.client?.links) {
+            errors.push(`Table "${child}" declares client.links and is also a link child of "${parent}". Links reach one level of children.`);
+        }
     }
-  }
 }
-
-// worker/src/utils/db-schema-deploy/extract-schema-intake.ts
 var REFERENCE_HELPERS = ["id", "text", "integer", "bigint"];
 function validateIntake(tables, tableByName, errors) {
-  for (const t of tables) {
-    const intake = t.client?.intake;
-    if (!intake) continue;
-    const at = `Table "${t.name}" client.intake`;
-    const target = tableByName.get(intake.target.table);
-    if (!target) {
-      errors.push(`${at} targets "${intake.target.table}", which is not a table declared in db/schema.ts.`);
-      continue;
+    for (const t of tables) {
+        const intake = t.client?.intake;
+        if (!intake)
+            continue;
+        const at = `Table "${t.name}" client.intake`;
+        const target = tableByName.get(intake.target.table);
+        if (!target) {
+            errors.push(`${at} targets "${intake.target.table}", which is not a table declared in db/schema.ts.`);
+            continue;
+        }
+        if (target.scope.kind !== "owner" || target.scope.visitors === true) {
+            errors.push(`${at} targets "${target.name}", which must be scoped owner() without visitors: its owner receives the submissions.`);
+            continue;
+        }
+        const client = target.client;
+        if (!client || !client.publicRead || !Array.isArray(client.read)) {
+            errors.push(`${at} targets "${target.name}", which declares no client.publicRead. Only a published table can receive public submissions.`);
+            continue;
+        }
+        const field = intake.target.field;
+        const column = target.columns.find((c) => c.name === field);
+        if (!column) {
+            errors.push(`${at} names reference "${field}", which is not a declared column of "${target.name}".`);
+            continue;
+        }
+        if (!client.read.includes(field)) {
+            errors.push(`${at} names reference "${field}", which "${target.name}" does not list in client.read. The reference must be a public field.`);
+            continue;
+        }
+        if (!REFERENCE_HELPERS.includes(column.helper)) {
+            errors.push(`${at} names reference "${field}", a ${column.helper} column. A reference is an id, text, integer or bigint column.`);
+            continue;
+        }
+        if (column.helper !== "id" && !column.unique) {
+            errors.push(`${at} names reference "${field}", which is not unique on "${target.name}". A reference must name one row, so the field needs { unique: true }.`);
+            continue;
+        }
+        if (column.nullable) {
+            errors.push(`${at} names reference "${field}", which is nullable on "${target.name}". A reference must be required.`);
+            continue;
+        }
+        if (intake.where) {
+            const typed = parseEqualityWhere(intake.where, target.columns, "client.intake.where");
+            if (typeof typed === "string")
+                errors.push(`${at} (target "${target.name}"): ${typed}`);
+        }
     }
-    if (target.scope.kind !== "owner" || target.scope.visitors === true) {
-      errors.push(`${at} targets "${target.name}", which must be scoped owner() without visitors: its owner receives the submissions.`);
-      continue;
-    }
-    const client = target.client;
-    if (!client || !client.publicRead || !Array.isArray(client.read)) {
-      errors.push(`${at} targets "${target.name}", which declares no client.publicRead. Only a published table can receive public submissions.`);
-      continue;
-    }
-    const field = intake.target.field;
-    const column = target.columns.find((c) => c.name === field);
-    if (!column) {
-      errors.push(`${at} names reference "${field}", which is not a declared column of "${target.name}".`);
-      continue;
-    }
-    if (!client.read.includes(field)) {
-      errors.push(`${at} names reference "${field}", which "${target.name}" does not list in client.read. The reference must be a public field.`);
-      continue;
-    }
-    if (!REFERENCE_HELPERS.includes(column.helper)) {
-      errors.push(`${at} names reference "${field}", a ${column.helper} column. A reference is an id, text, integer or bigint column.`);
-      continue;
-    }
-    if (column.helper !== "id" && !column.unique) {
-      errors.push(`${at} names reference "${field}", which is not unique on "${target.name}". A reference must name one row, so the field needs { unique: true }.`);
-      continue;
-    }
-    if (column.nullable) {
-      errors.push(`${at} names reference "${field}", which is nullable on "${target.name}". A reference must be required.`);
-      continue;
-    }
-    if (intake.where) {
-      const typed = parseEqualityWhere(intake.where, target.columns, "client.intake.where");
-      if (typeof typed === "string") errors.push(`${at} (target "${target.name}"): ${typed}`);
-    }
-  }
 }
-
-// worker/src/utils/db-schema-deploy/extract-schema-files.ts
 var FILE_OPERATIONS = ["read", "upload", "replace", "delete"];
 var MAX_FILE_COLLECTIONS = 20;
 var COLLECTION_NAME = /^[a-z][a-z0-9_]{0,63}$/;
@@ -6045,905 +6341,1015 @@ var LIMIT_KEYS = ["maxSize", "types"];
 var RESERVED_ROOT = /^\/(__sw|\.)/;
 var SIZE_UNITS = { b: 1, kb: 1024, mb: 1024 ** 2, gb: 1024 ** 3 };
 function fileCollectionRootError(name, path) {
-  const bad = (why) => `File collection "${name}" has an invalid path: ${why}`;
-  if (typeof path !== "string") return bad("path must be a quoted absolute folder such as '/uploads'.");
-  if (!path.startsWith("/")) return bad(`"${path}" must start with "/".`);
-  if (path === "/") return bad('a collection cannot cover the whole project ("/").');
-  if (path.endsWith("/")) return bad(`"${path}" must not end with "/".`);
-  if (/[*{}]/.test(path)) return bad(`"${path}" is a literal folder; wildcards and {placeholders} are not allowed.`);
-  const segments = path.slice(1).split("/");
-  if (segments.some((s) => s === "" || s === "." || s === "..")) return bad(`"${path}" must not contain empty, "." or ".." segments.`);
-  if (segments.some((s) => s.length > 255 || /[\x00-\x1f\\]/.test(s))) return bad(`"${path}" contains an invalid folder name.`);
-  if (RESERVED_ROOT.test(path)) return bad(`"${path}" is under a folder the platform reserves (names starting with "__sw" or ".").`);
-  return null;
+    const bad = (why) => `File collection "${name}" has an invalid path: ${why}`;
+    if (typeof path !== "string")
+        return bad("path must be a quoted absolute folder such as '/uploads'.");
+    if (!path.startsWith("/"))
+        return bad(`"${path}" must start with "/".`);
+    if (path === "/")
+        return bad('a collection cannot cover the whole project ("/").');
+    if (path.endsWith("/"))
+        return bad(`"${path}" must not end with "/".`);
+    if (/[*{}]/.test(path))
+        return bad(`"${path}" is a literal folder; wildcards and {placeholders} are not allowed.`);
+    const segments = path.slice(1).split("/");
+    if (segments.some((s) => s === "" || s === "." || s === ".."))
+        return bad(`"${path}" must not contain empty, "." or ".." segments.`);
+    if (segments.some((s) => s.length > 255 || /[\x00-\x1f\\]/.test(s)))
+        return bad(`"${path}" contains an invalid folder name.`);
+    if (RESERVED_ROOT.test(path))
+        return bad(`"${path}" is under a folder the platform reserves (names starting with "__sw" or ".").`);
+    return null;
 }
 function parseFileSize(value) {
-  if (typeof value === "number") return Number.isSafeInteger(value) && value > 0 ? value : null;
-  if (typeof value !== "string") return null;
-  const m = /^\s*(\d+(?:\.\d+)?)\s*(b|kb|mb|gb)\s*$/i.exec(value);
-  if (!m) return null;
-  const bytes = Math.floor(Number(m[1]) * SIZE_UNITS[m[2].toLowerCase()]);
-  return Number.isSafeInteger(bytes) && bytes > 0 ? bytes : null;
+    if (typeof value === "number")
+        return Number.isSafeInteger(value) && value > 0 ? value : null;
+    if (typeof value !== "string")
+        return null;
+    const m = /^\s*(\d+(?:\.\d+)?)\s*(b|kb|mb|gb)\s*$/i.exec(value);
+    if (!m)
+        return null;
+    const bytes = Math.floor(Number(m[1]) * SIZE_UNITS[m[2].toLowerCase()]);
+    return Number.isSafeInteger(bytes) && bytes > 0 ? bytes : null;
 }
 function readStringList(r, fail, ctx) {
-  r.expectPunct("[", ctx);
-  const out = [];
-  while (!r.tryPunct("]")) {
-    const t = r.next();
-    if (t.kind !== "string") fail(t.line, `${ctx} must be a list of quoted strings.`);
-    out.push(t.value);
-    if (!r.tryPunct(",")) {
-      r.expectPunct("]", `closing ${ctx}`);
-      break;
+    r.expectPunct("[", ctx);
+    const out = [];
+    while (!r.tryPunct("]")) {
+        const t = r.next();
+        if (t.kind !== "string")
+            fail(t.line, `${ctx} must be a list of quoted strings.`);
+        out.push(t.value);
+        if (!r.tryPunct(",")) {
+            r.expectPunct("]", `closing ${ctx}`);
+            break;
+        }
     }
-  }
-  return out;
+    return out;
 }
 function readFileMember(r, fail, name, line) {
-  r.expectPunct("(", 'after "member"');
-  r.expectPunct("{", `in member() for file collection "${name}" \u2014 member() needs { group, membership, member_user, member_group }`);
-  const seen = /* @__PURE__ */ new Map();
-  let operations;
-  while (!r.tryPunct("}")) {
-    const key = r.readKey(`for a member() option of file collection "${name}"`);
-    r.expectPunct(":", `after "${key.name}" in member() for file collection "${name}"`);
-    if (key.name === "operations") {
-      const verbs = readStringList(r, fail, `member({ operations }) on file collection "${name}"`);
-      const bad = verbs.filter((v) => !FILE_OPERATIONS.includes(v));
-      if (bad.length > 0) {
-        fail(key.line, `member({ operations }) on file collection "${name}" names "${bad[0]}". File collections use the file verbs 'read', 'upload', 'replace' and 'delete'.`);
-      }
-      const set = new Set(verbs);
-      if (!set.has("read") && (set.has("replace") || set.has("delete"))) {
-        fail(key.line, `member({ operations }) on file collection "${name}" must include 'read' when it includes 'replace' or 'delete'.`);
-      }
-      operations = FILE_OPERATIONS.filter((op) => set.has(op));
-    } else if (["group", "membership", "member_user", "member_group"].includes(key.name)) {
-      const t = r.next();
-      if (t.kind !== "string") {
-        fail(t.line, `member({ ${key.name} }) on file collection "${name}" must be one quoted name. A file collection's group is a single key.`);
-      }
-      if (!COLUMN_NAME.test(t.value)) fail(t.line, `member({ ${key.name} }) on file collection "${name}" names an invalid column "${t.value}".`);
-      if (seen.has(key.name)) fail(key.line, `member() on file collection "${name}" declares ${key.name} twice.`);
-      seen.set(key.name, t.value.toLowerCase());
-    } else {
-      fail(key.line, `member() on file collection "${name}" has an unknown option "${key.name}". Allowed: group, membership, member_user, member_group, operations.`);
-    }
-    if (!r.tryPunct(",")) {
-      r.expectPunct("}", `closing member() for file collection "${name}"`);
-      break;
-    }
-  }
-  r.tryPunct(",");
-  r.expectPunct(")", "closing member()");
-  const missing = ["group", "membership", "member_user", "member_group"].filter((k) => !seen.has(k));
-  if (missing.length > 0) {
-    fail(line, `member() on file collection "${name}" is missing ${missing.join(", ")}. It needs member({ group, membership, member_user, member_group }).`);
-  }
-  return {
-    group: seen.get("group"),
-    membership: seen.get("membership"),
-    memberUser: seen.get("member_user"),
-    memberGroup: seen.get("member_group"),
-    ...operations && operations.length < FILE_OPERATIONS.length ? { operations } : {}
-  };
-}
-function readFileOwner(r, fail, name) {
-  r.expectPunct("(", 'after "owner"');
-  if (r.tryPunct(")")) return;
-  r.expectPunct("{", `in owner() for file collection "${name}"`);
-  const key = r.readKey(`in owner() for file collection "${name}"`);
-  if (key.name === "visitors") {
-    fail(key.line, `owner({ visitors: true }) is not available for file collections yet: an upload needs a signed-in account, so file collections take owner().`);
-  }
-  fail(key.line, `owner() on file collection "${name}" takes no options \u2014 the owner is always the signed-in uploader.`);
-}
-function readFileParent(r, fail, name, line) {
-  r.expectPunct("(", 'after "parent"');
-  r.expectPunct("{", `in parent() for file collection "${name}" \u2014 parent() needs { table, via }`);
-  const seen = /* @__PURE__ */ new Map();
-  while (!r.tryPunct("}")) {
-    const key = r.readKey(`for a parent() option of file collection "${name}"`);
-    r.expectPunct(":", `after "${key.name}" in parent() for file collection "${name}"`);
-    if (key.name !== "table" && key.name !== "via") {
-      fail(key.line, `parent() on file collection "${name}" has an unknown option "${key.name}". Allowed: table, via.`);
-    }
-    const t = r.next();
-    if (t.kind !== "string") fail(t.line, `parent({ ${key.name} }) on file collection "${name}" must be one quoted name.`);
-    if (!COLUMN_NAME.test(t.value)) fail(t.line, `parent({ ${key.name} }) on file collection "${name}" names an invalid ${key.name === "table" ? "table" : "field"} "${t.value}".`);
-    if (seen.has(key.name)) fail(key.line, `parent() on file collection "${name}" declares ${key.name} twice.`);
-    seen.set(key.name, key.name === "table" ? t.value.toLowerCase() : t.value);
-    if (!r.tryPunct(",")) {
-      r.expectPunct("}", `closing parent() for file collection "${name}"`);
-      break;
-    }
-  }
-  r.tryPunct(",");
-  r.expectPunct(")", "closing parent()");
-  const missing = ["table", "via"].filter((k) => !seen.has(k));
-  if (missing.length > 0) {
-    fail(line, `parent() on file collection "${name}" is missing ${missing.join(" and ")}. It needs parent({ table: 'expenses', via: 'expenseId' }).`);
-  }
-  return { table: seen.get("table"), via: seen.get("via"), key: "", keyType: "integer" };
-}
-function readFileScope(r, fail, name) {
-  const tok = r.expectIdent(`for the scope of file collection "${name}"`);
-  if (tok.value === "parent") return { kind: "parent", parent: readFileParent(r, fail, name, tok.line) };
-  if (tok.value === "owner") {
-    readFileOwner(r, fail, name);
-    return { kind: "owner" };
-  }
-  if (tok.value === "member") return { kind: "member", member: readFileMember(r, fail, name, tok.line) };
-  if (tok.value === "shared" || tok.value === "serverOnly") {
-    r.expectPunct("(", `after "${tok.value}"`);
-    if (!r.tryPunct(")")) fail(tok.line, `${tok.value}() on file collection "${name}" takes no options.`);
-    return tok.value === "shared" ? { kind: "shared" } : { kind: "server_only" };
-  }
-  if (tok.value === "anyOf") {
-    r.expectPunct("(", 'after "anyOf"');
-    let member = null;
-    let owners = 0;
-    for (let i = 0; i < 2; i++) {
-      const inner = r.expectIdent(`inside anyOf() for file collection "${name}"`);
-      if (inner.value === "owner") {
-        readFileOwner(r, fail, name);
-        owners++;
-      } else if (inner.value === "member" && !member) member = readFileMember(r, fail, name, inner.line);
-      else fail(inner.line, `anyOf() on file collection "${name}" requires exactly one owner() and one member().`);
-      if (i === 0) r.expectPunct(",", `between the two policies in anyOf() on file collection "${name}"`);
+    r.expectPunct("(", 'after "member"');
+    r.expectPunct("{", `in member() for file collection "${name}" \u2014 member() needs { group, membership, member_user, member_group }`);
+    const seen = new Map();
+    let operations;
+    while (!r.tryPunct("}")) {
+        const key = r.readKey(`for a member() option of file collection "${name}"`);
+        r.expectPunct(":", `after "${key.name}" in member() for file collection "${name}"`);
+        if (key.name === "operations") {
+            const verbs = readStringList(r, fail, `member({ operations }) on file collection "${name}"`);
+            const bad = verbs.filter((v) => !FILE_OPERATIONS.includes(v));
+            if (bad.length > 0) {
+                fail(key.line, `member({ operations }) on file collection "${name}" names "${bad[0]}". File collections use the file verbs 'read', 'upload', 'replace' and 'delete'.`);
+            }
+            const set = new Set(verbs);
+            if (!set.has("read") && (set.has("replace") || set.has("delete"))) {
+                fail(key.line, `member({ operations }) on file collection "${name}" must include 'read' when it includes 'replace' or 'delete'.`);
+            }
+            operations = FILE_OPERATIONS.filter((op) => set.has(op));
+        }
+        else if (["group", "membership", "member_user", "member_group"].includes(key.name)) {
+            const t = r.next();
+            if (t.kind !== "string") {
+                fail(t.line, `member({ ${key.name} }) on file collection "${name}" must be one quoted name. A file collection's group is a single key.`);
+            }
+            if (!COLUMN_NAME.test(t.value))
+                fail(t.line, `member({ ${key.name} }) on file collection "${name}" names an invalid column "${t.value}".`);
+            if (seen.has(key.name))
+                fail(key.line, `member() on file collection "${name}" declares ${key.name} twice.`);
+            seen.set(key.name, t.value.toLowerCase());
+        }
+        else {
+            fail(key.line, `member() on file collection "${name}" has an unknown option "${key.name}". Allowed: group, membership, member_user, member_group, operations.`);
+        }
+        if (!r.tryPunct(",")) {
+            r.expectPunct("}", `closing member() for file collection "${name}"`);
+            break;
+        }
     }
     r.tryPunct(",");
-    r.expectPunct(")", "closing anyOf()");
-    if (owners !== 1 || !member) fail(tok.line, `anyOf() on file collection "${name}" requires exactly one owner() and one member().`);
-    return { kind: "owner_or_member", member };
-  }
-  return fail(tok.line, `unknown scope "${tok.value}" on file collection "${name}". File collection scopes are owner(), member(), anyOf(owner(), member()), parent({ table, via }), shared(), and serverOnly().`);
+    r.expectPunct(")", "closing member()");
+    const missing = ["group", "membership", "member_user", "member_group"].filter((k) => !seen.has(k));
+    if (missing.length > 0) {
+        fail(line, `member() on file collection "${name}" is missing ${missing.join(", ")}. It needs member({ group, membership, member_user, member_group }).`);
+    }
+    return {
+        group: seen.get("group"),
+        membership: seen.get("membership"),
+        memberUser: seen.get("member_user"),
+        memberGroup: seen.get("member_group"),
+        ...operations && operations.length < FILE_OPERATIONS.length ? { operations } : {}
+    };
+}
+function readFileOwner(r, fail, name) {
+    r.expectPunct("(", 'after "owner"');
+    if (r.tryPunct(")"))
+        return;
+    r.expectPunct("{", `in owner() for file collection "${name}"`);
+    const key = r.readKey(`in owner() for file collection "${name}"`);
+    if (key.name === "visitors") {
+        fail(key.line, `owner({ visitors: true }) is not available for file collections yet: an upload needs a signed-in account, so file collections take owner().`);
+    }
+    fail(key.line, `owner() on file collection "${name}" takes no options \u2014 the owner is always the signed-in uploader.`);
+}
+function readFileParent(r, fail, name, line) {
+    r.expectPunct("(", 'after "parent"');
+    r.expectPunct("{", `in parent() for file collection "${name}" \u2014 parent() needs { table, via }`);
+    const seen = new Map();
+    while (!r.tryPunct("}")) {
+        const key = r.readKey(`for a parent() option of file collection "${name}"`);
+        r.expectPunct(":", `after "${key.name}" in parent() for file collection "${name}"`);
+        if (key.name !== "table" && key.name !== "via") {
+            fail(key.line, `parent() on file collection "${name}" has an unknown option "${key.name}". Allowed: table, via.`);
+        }
+        const t = r.next();
+        if (t.kind !== "string")
+            fail(t.line, `parent({ ${key.name} }) on file collection "${name}" must be one quoted name.`);
+        if (!COLUMN_NAME.test(t.value))
+            fail(t.line, `parent({ ${key.name} }) on file collection "${name}" names an invalid ${key.name === "table" ? "table" : "field"} "${t.value}".`);
+        if (seen.has(key.name))
+            fail(key.line, `parent() on file collection "${name}" declares ${key.name} twice.`);
+        seen.set(key.name, key.name === "table" ? t.value.toLowerCase() : t.value);
+        if (!r.tryPunct(",")) {
+            r.expectPunct("}", `closing parent() for file collection "${name}"`);
+            break;
+        }
+    }
+    r.tryPunct(",");
+    r.expectPunct(")", "closing parent()");
+    const missing = ["table", "via"].filter((k) => !seen.has(k));
+    if (missing.length > 0) {
+        fail(line, `parent() on file collection "${name}" is missing ${missing.join(" and ")}. It needs parent({ table: 'expenses', via: 'expenseId' }).`);
+    }
+    return { table: seen.get("table"), via: seen.get("via"), key: "", keyType: "integer" };
+}
+function readFileScope(r, fail, name) {
+    const tok = r.expectIdent(`for the scope of file collection "${name}"`);
+    if (tok.value === "parent")
+        return { kind: "parent", parent: readFileParent(r, fail, name, tok.line) };
+    if (tok.value === "owner") {
+        readFileOwner(r, fail, name);
+        return { kind: "owner" };
+    }
+    if (tok.value === "member")
+        return { kind: "member", member: readFileMember(r, fail, name, tok.line) };
+    if (tok.value === "shared" || tok.value === "serverOnly") {
+        r.expectPunct("(", `after "${tok.value}"`);
+        if (!r.tryPunct(")"))
+            fail(tok.line, `${tok.value}() on file collection "${name}" takes no options.`);
+        return tok.value === "shared" ? { kind: "shared" } : { kind: "server_only" };
+    }
+    if (tok.value === "anyOf") {
+        r.expectPunct("(", 'after "anyOf"');
+        let member = null;
+        let owners = 0;
+        for (let i = 0; i < 2; i++) {
+            const inner = r.expectIdent(`inside anyOf() for file collection "${name}"`);
+            if (inner.value === "owner") {
+                readFileOwner(r, fail, name);
+                owners++;
+            }
+            else if (inner.value === "member" && !member)
+                member = readFileMember(r, fail, name, inner.line);
+            else
+                fail(inner.line, `anyOf() on file collection "${name}" requires exactly one owner() and one member().`);
+            if (i === 0)
+                r.expectPunct(",", `between the two policies in anyOf() on file collection "${name}"`);
+        }
+        r.tryPunct(",");
+        r.expectPunct(")", "closing anyOf()");
+        if (owners !== 1 || !member)
+            fail(tok.line, `anyOf() on file collection "${name}" requires exactly one owner() and one member().`);
+        return { kind: "owner_or_member", member };
+    }
+    return fail(tok.line, `unknown scope "${tok.value}" on file collection "${name}". File collection scopes are owner(), member(), anyOf(owner(), member()), parent({ table, via }), shared(), and serverOnly().`);
 }
 function readCollection(r, fail, name, errors) {
-  const callee = r.expectIdent(`for file collection "${name}"`);
-  if (callee.value !== "files") fail(callee.line, `file collection "${name}" must be declared with files({ \u2026 }).`);
-  r.expectPunct("(", 'after "files"');
-  r.expectPunct("{", `opening files() options for "${name}"`);
-  const seen = /* @__PURE__ */ new Set();
-  let path;
-  let scope = null;
-  let isPublic = false;
-  const client = { read: false, upload: false, replace: false, delete: false };
-  const limits = { maxSize: null, types: [] };
-  while (!r.tryPunct("}")) {
-    const key = r.readKey(`for a files() option of "${name}"`);
-    if (!FILES_OPTIONS.includes(key.name)) {
-      fail(key.line, `files() for "${name}" has an unknown option "${key.name}". Allowed: ${FILES_OPTIONS.join(", ")}.`);
-    }
-    if (seen.has(key.name)) fail(key.line, `files() for "${name}" declares ${key.name} twice.`);
-    seen.add(key.name);
-    r.expectPunct(":", `after "${key.name}" in files() for "${name}"`);
-    if (key.name === "path") path = r.readLiteral(`for files({ path }) of "${name}"`);
-    else if (key.name === "scope") scope = readFileScope(r, fail, name);
-    else if (key.name === "public") {
-      const value = r.readLiteral(`for files({ public }) of "${name}"`);
-      if (typeof value !== "boolean") fail(key.line, `files({ public }) for "${name}" must be true or false.`);
-      isPublic = value;
-    } else if (key.name === "client") {
-      r.expectPunct("{", `opening client for file collection "${name}"`);
-      while (!r.tryPunct("}")) {
-        const op = r.readKey(`for a client operation of file collection "${name}"`);
-        if (!FILE_OPERATIONS.includes(op.name)) {
-          fail(op.line, `client for file collection "${name}" has an unknown operation "${op.name}". Allowed: ${FILE_OPERATIONS.join(", ")}.`);
+    const callee = r.expectIdent(`for file collection "${name}"`);
+    if (callee.value !== "files")
+        fail(callee.line, `file collection "${name}" must be declared with files({ \u2026 }).`);
+    r.expectPunct("(", 'after "files"');
+    r.expectPunct("{", `opening files() options for "${name}"`);
+    const seen = new Set();
+    let path;
+    let scope = null;
+    let isPublic = false;
+    const client = { read: false, upload: false, replace: false, delete: false };
+    const limits = { maxSize: null, types: [] };
+    while (!r.tryPunct("}")) {
+        const key = r.readKey(`for a files() option of "${name}"`);
+        if (!FILES_OPTIONS.includes(key.name)) {
+            fail(key.line, `files() for "${name}" has an unknown option "${key.name}". Allowed: ${FILES_OPTIONS.join(", ")}.`);
         }
-        r.expectPunct(":", `after client.${op.name}`);
-        const value = r.readLiteral(`for client.${op.name} of "${name}"`);
-        if (typeof value !== "boolean") fail(op.line, `client.${op.name} for file collection "${name}" must be true or false.`);
-        client[op.name] = value;
+        if (seen.has(key.name))
+            fail(key.line, `files() for "${name}" declares ${key.name} twice.`);
+        seen.add(key.name);
+        r.expectPunct(":", `after "${key.name}" in files() for "${name}"`);
+        if (key.name === "path")
+            path = r.readLiteral(`for files({ path }) of "${name}"`);
+        else if (key.name === "scope")
+            scope = readFileScope(r, fail, name);
+        else if (key.name === "public") {
+            const value = r.readLiteral(`for files({ public }) of "${name}"`);
+            if (typeof value !== "boolean")
+                fail(key.line, `files({ public }) for "${name}" must be true or false.`);
+            isPublic = value;
+        }
+        else if (key.name === "client") {
+            r.expectPunct("{", `opening client for file collection "${name}"`);
+            while (!r.tryPunct("}")) {
+                const op = r.readKey(`for a client operation of file collection "${name}"`);
+                if (!FILE_OPERATIONS.includes(op.name)) {
+                    fail(op.line, `client for file collection "${name}" has an unknown operation "${op.name}". Allowed: ${FILE_OPERATIONS.join(", ")}.`);
+                }
+                r.expectPunct(":", `after client.${op.name}`);
+                const value = r.readLiteral(`for client.${op.name} of "${name}"`);
+                if (typeof value !== "boolean")
+                    fail(op.line, `client.${op.name} for file collection "${name}" must be true or false.`);
+                client[op.name] = value;
+                if (!r.tryPunct(",")) {
+                    r.expectPunct("}", `closing client for "${name}"`);
+                    break;
+                }
+            }
+        }
+        else {
+            r.expectPunct("{", `opening limits for file collection "${name}"`);
+            while (!r.tryPunct("}")) {
+                const limit = r.readKey(`for a limit of file collection "${name}"`);
+                if (!LIMIT_KEYS.includes(limit.name)) {
+                    fail(limit.line, `limits for file collection "${name}" has an unknown key "${limit.name}". Allowed: ${LIMIT_KEYS.join(", ")}.`);
+                }
+                r.expectPunct(":", `after limits.${limit.name}`);
+                if (limit.name === "maxSize") {
+                    const raw = r.readLiteral(`for limits.maxSize of "${name}"`);
+                    limits.maxSize = parseFileSize(raw);
+                    if (limits.maxSize === null)
+                        errors.push(`File collection "${name}" has an invalid limits.maxSize: it takes a whole number of bytes or a size such as '25MB'.`);
+                }
+                else {
+                    limits.types = readStringList(r, fail, `limits.types of file collection "${name}"`).map((t) => t.toLowerCase());
+                    for (const type of limits.types) {
+                        if (!MIME_PATTERN.test(type))
+                            errors.push(`File collection "${name}" has an invalid limits.types entry "${type}": it takes a content type such as 'image/png' or 'image/*'.`);
+                    }
+                }
+                if (!r.tryPunct(",")) {
+                    r.expectPunct("}", `closing limits for "${name}"`);
+                    break;
+                }
+            }
+        }
         if (!r.tryPunct(",")) {
-          r.expectPunct("}", `closing client for "${name}"`);
-          break;
+            r.expectPunct("}", `closing files() for "${name}"`);
+            break;
         }
-      }
-    } else {
-      r.expectPunct("{", `opening limits for file collection "${name}"`);
-      while (!r.tryPunct("}")) {
-        const limit = r.readKey(`for a limit of file collection "${name}"`);
-        if (!LIMIT_KEYS.includes(limit.name)) {
-          fail(limit.line, `limits for file collection "${name}" has an unknown key "${limit.name}". Allowed: ${LIMIT_KEYS.join(", ")}.`);
-        }
-        r.expectPunct(":", `after limits.${limit.name}`);
-        if (limit.name === "maxSize") {
-          const raw = r.readLiteral(`for limits.maxSize of "${name}"`);
-          limits.maxSize = parseFileSize(raw);
-          if (limits.maxSize === null) errors.push(`File collection "${name}" has an invalid limits.maxSize: it takes a whole number of bytes or a size such as '25MB'.`);
-        } else {
-          limits.types = readStringList(r, fail, `limits.types of file collection "${name}"`).map((t) => t.toLowerCase());
-          for (const type of limits.types) {
-            if (!MIME_PATTERN.test(type)) errors.push(`File collection "${name}" has an invalid limits.types entry "${type}": it takes a content type such as 'image/png' or 'image/*'.`);
-          }
-        }
-        if (!r.tryPunct(",")) {
-          r.expectPunct("}", `closing limits for "${name}"`);
-          break;
-        }
-      }
     }
-    if (!r.tryPunct(",")) {
-      r.expectPunct("}", `closing files() for "${name}"`);
-      break;
+    r.tryPunct(",");
+    r.expectPunct(")", "closing files()");
+    if (!scope)
+        return fail(callee.line, `files() for "${name}" needs a scope: owner(), member(), anyOf(owner(), member()), parent({ table, via }), shared(), or serverOnly().`);
+    const rootError = fileCollectionRootError(name, path);
+    if (rootError)
+        errors.push(rootError);
+    const declaresClient = FILE_OPERATIONS.some((op) => client[op]);
+    if (scope.kind === "server_only" && declaresClient) {
+        errors.push(`File collection "${name}" is serverOnly() and cannot declare client operations; client operations need a scope the browser may use.`);
     }
-  }
-  r.tryPunct(",");
-  r.expectPunct(")", "closing files()");
-  if (!scope) return fail(callee.line, `files() for "${name}" needs a scope: owner(), member(), anyOf(owner(), member()), parent({ table, via }), shared(), or serverOnly().`);
-  const rootError = fileCollectionRootError(name, path);
-  if (rootError) errors.push(rootError);
-  const declaresClient = FILE_OPERATIONS.some((op) => client[op]);
-  if (scope.kind === "server_only" && declaresClient) {
-    errors.push(`File collection "${name}" is serverOnly() and cannot declare client operations; client operations need a scope the browser may use.`);
-  }
-  if (isPublic && client.read) {
-    errors.push(`File collection "${name}" is public: true and also declares client.read. Public already lets anyone read, so client.read is not accepted with it.`);
-  }
-  if (isPublic && (scope.kind === "member" || scope.kind === "owner_or_member")) {
-    errors.push(`File collection "${name}" is public: true on a member() scope, which would let anyone read team files. public: true is accepted with owner() or serverOnly().`);
-  }
-  if (isPublic && scope.kind === "parent") {
-    errors.push(`File collection "${name}" is public: true on a parent() scope, which would let anyone read files that follow a private row, so public: true is not accepted there.`);
-  }
-  return { name, path: typeof path === "string" ? path : "", scope, public: isPublic, client, limits };
+    if (isPublic && client.read) {
+        errors.push(`File collection "${name}" is public: true and also declares client.read. Public already lets anyone read, so client.read is not accepted with it.`);
+    }
+    if (isPublic && (scope.kind === "member" || scope.kind === "owner_or_member")) {
+        errors.push(`File collection "${name}" is public: true on a member() scope, which would let anyone read team files. public: true is accepted with owner() or serverOnly().`);
+    }
+    if (isPublic && scope.kind === "parent") {
+        errors.push(`File collection "${name}" is public: true on a parent() scope, which would let anyone read files that follow a private row, so public: true is not accepted there.`);
+    }
+    return { name, path: typeof path === "string" ? path : "", scope, public: isPublic, client, limits };
 }
 var MAX_FILE_PARENT_EDGES = 4;
 function readFileCollections(r, fail, errors) {
-  r.expectPunct("{", "opening schema option files");
-  const out = [];
-  while (!r.tryPunct("}")) {
-    const key = r.readKey("for a file collection name");
-    if (!COLLECTION_NAME.test(key.name)) {
-      errors.push(`File collection name "${key.name}" is invalid. A name is lowercase letters, digits and underscores, starting with a letter.`);
+    r.expectPunct("{", "opening schema option files");
+    const out = [];
+    while (!r.tryPunct("}")) {
+        const key = r.readKey("for a file collection name");
+        if (!COLLECTION_NAME.test(key.name)) {
+            errors.push(`File collection name "${key.name}" is invalid. A name is lowercase letters, digits and underscores, starting with a letter.`);
+        }
+        if (out.some((c) => c.name === key.name))
+            fail(key.line, `file collection "${key.name}" is declared twice.`);
+        r.expectPunct(":", `after file collection "${key.name}"`);
+        out.push(readCollection(r, fail, key.name, errors));
+        if (!r.tryPunct(",")) {
+            r.expectPunct("}", "closing schema option files");
+            break;
+        }
     }
-    if (out.some((c) => c.name === key.name)) fail(key.line, `file collection "${key.name}" is declared twice.`);
-    r.expectPunct(":", `after file collection "${key.name}"`);
-    out.push(readCollection(r, fail, key.name, errors));
-    if (!r.tryPunct(",")) {
-      r.expectPunct("}", "closing schema option files");
-      break;
-    }
-  }
-  if (out.length > MAX_FILE_COLLECTIONS) errors.push(`db/schema.ts declares ${out.length} file collections (max ${MAX_FILE_COLLECTIONS}).`);
-  return out.sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
+    if (out.length > MAX_FILE_COLLECTIONS)
+        errors.push(`db/schema.ts declares ${out.length} file collections (max ${MAX_FILE_COLLECTIONS}).`);
+    return out.sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
 }
 function validateFileCollections(collections, table, errors) {
-  for (const a of collections) {
-    for (const b of collections) {
-      if (a === b || !a.path || !b.path) continue;
-      if (a.path === b.path && a.name < b.name) errors.push(`File collections "${a.name}" and "${b.name}" both use the path "${a.path}". Each collection needs its own folder.`);
-      else if (b.path.startsWith(a.path + "/")) errors.push(`File collection "${b.name}" (${b.path}) is nested inside "${a.name}" (${a.path}). Collection folders cannot overlap.`);
+    for (const a of collections) {
+        for (const b of collections) {
+            if (a === b || !a.path || !b.path)
+                continue;
+            if (a.path === b.path && a.name < b.name)
+                errors.push(`File collections "${a.name}" and "${b.name}" both use the path "${a.path}". Each collection needs its own folder.`);
+            else if (b.path.startsWith(a.path + "/"))
+                errors.push(`File collection "${b.name}" (${b.path}) is nested inside "${a.name}" (${a.path}). Collection folders cannot overlap.`);
+        }
+        if (a.scope.kind === "parent") {
+            const parent = a.scope.parent;
+            const target = table(parent.table);
+            const facts = target?.parentTarget;
+            if (!target || !facts) {
+                errors.push(`File collection "${a.name}" uses parent({ table: '${parent.table}' }), which is not a table declared in db/schema.ts.`);
+                continue;
+            }
+            if (!facts.privateUserPolicy) {
+                errors.push(`File collection "${a.name}" uses parent({ table: '${parent.table}' }), but that table's scope is not owner(), member(), anyOf(owner(), member()), group(), appRole() or parent(). Files can follow only rows a signed-in user holds.`);
+                continue;
+            }
+            if (!facts.key) {
+                errors.push(`File collection "${a.name}" uses parent({ table: '${parent.table}' }), but that table needs exactly one id() key for files to point at.`);
+                continue;
+            }
+            if (facts.edges + 1 > MAX_FILE_PARENT_EDGES) {
+                errors.push(`File collection "${a.name}" uses parent({ table: '${parent.table}' }), which makes a chain of ${facts.edges + 1} parent edges counting the file. At most ${MAX_FILE_PARENT_EDGES} are allowed; a table nearer the root of the chain has fewer edges.`);
+                continue;
+            }
+            parent.key = facts.key;
+            parent.keyType = facts.keyType;
+            continue;
+        }
+        if (a.scope.kind !== "member" && a.scope.kind !== "owner_or_member")
+            continue;
+        const m = a.scope.member;
+        const membership = table(m.membership);
+        if (!membership) {
+            errors.push(`File collection "${a.name}" is member-scoped through the membership table "${m.membership}", which is not declared in db/schema.ts. The membership table must be a managed table in the same schema.`);
+            continue;
+        }
+        if (membership.clientWrites) {
+            errors.push(`Table "${m.membership}" grants membership access to file collection "${a.name}" and cannot allow client writes; membership changes go through a server function.`);
+        }
+        if (!membership.columns.has(m.memberUser))
+            errors.push(`The membership table "${m.membership}" (for file collection "${a.name}") has no "${m.memberUser}" column named in member({ member_user }).`);
+        if (!membership.columns.has(m.memberGroup))
+            errors.push(`The membership table "${m.membership}" (for file collection "${a.name}") has no "${m.memberGroup}" column named in member({ member_group }).`);
     }
-    if (a.scope.kind === "parent") {
-      const parent = a.scope.parent;
-      const target = table(parent.table);
-      const facts = target?.parentTarget;
-      if (!target || !facts) {
-        errors.push(`File collection "${a.name}" uses parent({ table: '${parent.table}' }), which is not a table declared in db/schema.ts.`);
-        continue;
-      }
-      if (!facts.privateUserPolicy) {
-        errors.push(`File collection "${a.name}" uses parent({ table: '${parent.table}' }), but that table's scope is not owner(), member(), anyOf(owner(), member()), group(), appRole() or parent(). Files can follow only rows a signed-in user holds.`);
-        continue;
-      }
-      if (!facts.key) {
-        errors.push(`File collection "${a.name}" uses parent({ table: '${parent.table}' }), but that table needs exactly one id() key for files to point at.`);
-        continue;
-      }
-      if (facts.edges + 1 > MAX_FILE_PARENT_EDGES) {
-        errors.push(`File collection "${a.name}" uses parent({ table: '${parent.table}' }), which makes a chain of ${facts.edges + 1} parent edges counting the file. At most ${MAX_FILE_PARENT_EDGES} are allowed; a table nearer the root of the chain has fewer edges.`);
-        continue;
-      }
-      parent.key = facts.key;
-      parent.keyType = facts.keyType;
-      continue;
-    }
-    if (a.scope.kind !== "member" && a.scope.kind !== "owner_or_member") continue;
-    const m = a.scope.member;
-    const membership = table(m.membership);
-    if (!membership) {
-      errors.push(`File collection "${a.name}" is member-scoped through the membership table "${m.membership}", which is not declared in db/schema.ts. The membership table must be a managed table in the same schema.`);
-      continue;
-    }
-    if (membership.clientWrites) {
-      errors.push(`Table "${m.membership}" grants membership access to file collection "${a.name}" and cannot allow client writes; membership changes go through a server function.`);
-    }
-    if (!membership.columns.has(m.memberUser)) errors.push(`The membership table "${m.membership}" (for file collection "${a.name}") has no "${m.memberUser}" column named in member({ member_user }).`);
-    if (!membership.columns.has(m.memberGroup)) errors.push(`The membership table "${m.membership}" (for file collection "${a.name}") has no "${m.memberGroup}" column named in member({ member_group }).`);
-  }
 }
 function canonicalFileCollectionsJson(collections) {
-  return JSON.stringify({
-    v: 1,
-    collections: [...collections].sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0).map((c) => ({
-      name: c.name,
-      path: c.path,
-      scope: c.scope.kind === "parent" ? { kind: "parent", parent: { table: c.scope.parent.table, via: c.scope.parent.via, key: c.scope.parent.key, keyType: c.scope.parent.keyType } } : c.scope.kind === "member" || c.scope.kind === "owner_or_member" ? {
-        kind: c.scope.kind,
-        member: {
-          group: c.scope.member.group,
-          membership: c.scope.member.membership,
-          memberUser: c.scope.member.memberUser,
-          memberGroup: c.scope.member.memberGroup,
-          ...c.scope.member.operations ? { operations: c.scope.member.operations } : {}
-        }
-      } : { kind: c.scope.kind },
-      public: c.public,
-      client: { read: c.client.read, upload: c.client.upload, replace: c.client.replace, delete: c.client.delete },
-      limits: { maxSize: c.limits.maxSize, types: [...c.limits.types] }
-    }))
-  });
+    return JSON.stringify({
+        v: 1,
+        collections: [...collections].sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0).map((c) => ({
+            name: c.name,
+            path: c.path,
+            scope: c.scope.kind === "parent" ? { kind: "parent", parent: { table: c.scope.parent.table, via: c.scope.parent.via, key: c.scope.parent.key, keyType: c.scope.parent.keyType } } : c.scope.kind === "member" || c.scope.kind === "owner_or_member" ? {
+                kind: c.scope.kind,
+                member: {
+                    group: c.scope.member.group,
+                    membership: c.scope.member.membership,
+                    memberUser: c.scope.member.memberUser,
+                    memberGroup: c.scope.member.memberGroup,
+                    ...c.scope.member.operations ? { operations: c.scope.member.operations } : {}
+                }
+            } : { kind: c.scope.kind },
+            public: c.public,
+            client: { read: c.client.read, upload: c.client.upload, replace: c.client.replace, delete: c.client.delete },
+            limits: { maxSize: c.limits.maxSize, types: [...c.limits.types] }
+        }))
+    });
 }
-
-// worker/src/utils/managed-groups/policy.ts
 var BUILT_IN_GROUP_ROLES2 = ["owner", "admin", "member"];
 var ROLE_NAME = /^[a-z][a-z0-9_]{0,63}$/;
 function isPrototypeName(name) {
-  return name === "prototype" || Object.prototype.hasOwnProperty.call(Object.prototype, name);
+    return name === "prototype" || Object.prototype.hasOwnProperty.call(Object.prototype, name);
 }
 function roleVocabularyErrors(policy) {
-  const errors = [];
-  const dupes = (list, what) => {
-    const seen = /* @__PURE__ */ new Set();
-    for (const name of list) {
-      if (seen.has(name)) errors.push(`${what} lists "${name}" twice.`);
-      seen.add(name);
+    const errors = [];
+    const dupes = (list, what) => {
+        const seen = new Set();
+        for (const name of list) {
+            if (seen.has(name))
+                errors.push(`${what} lists "${name}" twice.`);
+            seen.add(name);
+        }
+    };
+    for (const [list, what] of [[policy.groupRoles, "Group role"], [policy.appRoles, "App role"]]) {
+        for (const role of list) {
+            if (!ROLE_NAME.test(role))
+                errors.push(`${what} "${role}" must be lowercase letters, digits and underscores, starting with a letter (at most 64).`);
+            else if (isPrototypeName(role))
+                errors.push(`${what} "${role}" is a reserved name.`);
+        }
     }
-  };
-  for (const [list, what] of [[policy.groupRoles, "Group role"], [policy.appRoles, "App role"]]) {
-    for (const role of list) {
-      if (!ROLE_NAME.test(role)) errors.push(`${what} "${role}" must be lowercase letters, digits and underscores, starting with a letter (at most 64).`);
-      else if (isPrototypeName(role)) errors.push(`${what} "${role}" is a reserved name.`);
+    dupes(policy.groupRoles, "groups.roles");
+    dupes(policy.adminGrantableGroupRoles, "groups.adminGrantableRoles");
+    dupes(policy.appRoles, "appRoles");
+    for (const role of policy.groupRoles) {
+        if (BUILT_IN_GROUP_ROLES2.includes(role))
+            errors.push(`"${role}" is a built-in group role; groups.roles lists only additional roles.`);
     }
-  }
-  dupes(policy.groupRoles, "groups.roles");
-  dupes(policy.adminGrantableGroupRoles, "groups.adminGrantableRoles");
-  dupes(policy.appRoles, "appRoles");
-  for (const role of policy.groupRoles) {
-    if (BUILT_IN_GROUP_ROLES2.includes(role)) errors.push(`"${role}" is a built-in group role; groups.roles lists only additional roles.`);
-  }
-  for (const role of policy.adminGrantableGroupRoles) {
-    if (!policy.groupRoles.includes(role)) errors.push(`groups.adminGrantableRoles names "${role}", which is not in groups.roles.`);
-  }
-  for (const role of Object.keys(policy.appRoleDelegation)) {
-    const grantors = policy.appRoleDelegation[role];
-    if (!policy.appRoles.includes(role)) errors.push(`App role delegation names undeclared app role "${role}".`);
-    dupes(grantors, `appRoles.${role}.grantableBy`);
-    for (const grantor of grantors) {
-      if (!policy.appRoles.includes(grantor)) errors.push(`appRoles.${role}.grantableBy names "${grantor}", which is not a declared app role.`);
+    for (const role of policy.adminGrantableGroupRoles) {
+        if (!policy.groupRoles.includes(role))
+            errors.push(`groups.adminGrantableRoles names "${role}", which is not in groups.roles.`);
     }
-  }
-  return errors;
+    for (const role of Object.keys(policy.appRoleDelegation)) {
+        const grantors = policy.appRoleDelegation[role];
+        if (!policy.appRoles.includes(role))
+            errors.push(`App role delegation names undeclared app role "${role}".`);
+        dupes(grantors, `appRoles.${role}.grantableBy`);
+        for (const grantor of grantors) {
+            if (!policy.appRoles.includes(grantor))
+                errors.push(`appRoles.${role}.grantableBy names "${grantor}", which is not a declared app role.`);
+        }
+    }
+    return errors;
 }
-
-// worker/src/utils/db-schema-deploy/extract-schema-groups.ts
 var GROUP_OPERATIONS = ["read", "create", "update", "delete"];
 var DEFAULT_GROUP_COLUMN = "group_id";
 var IDENT = /^[A-Za-z_][A-Za-z0-9_]*$/;
-var declaredGroupRoles = /* @__PURE__ */ new WeakMap();
+var declaredGroupRoles = new WeakMap();
 function readRoleList(r, fail, ctx) {
-  const open = r.next();
-  if (open.kind !== "punct" || open.value !== "[") fail(open.line, `${ctx} must be a list of quoted role names, such as ['owner', 'admin'].`);
-  const out = [];
-  while (!r.tryPunct("]")) {
-    const t = r.next();
-    if (t.kind !== "string") fail(t.line, `${ctx} must be a list of quoted role names; values must be literal strings.`);
-    if (out.includes(t.value)) fail(t.line, `${ctx} lists "${t.value}" twice.`);
-    out.push(t.value);
-    if (!r.tryPunct(",")) {
-      r.expectPunct("]", `closing ${ctx}`);
-      break;
+    const open = r.next();
+    if (open.kind !== "punct" || open.value !== "[")
+        fail(open.line, `${ctx} must be a list of quoted role names, such as ['owner', 'admin'].`);
+    const out = [];
+    while (!r.tryPunct("]")) {
+        const t = r.next();
+        if (t.kind !== "string")
+            fail(t.line, `${ctx} must be a list of quoted role names; values must be literal strings.`);
+        if (out.includes(t.value))
+            fail(t.line, `${ctx} lists "${t.value}" twice.`);
+        out.push(t.value);
+        if (!r.tryPunct(",")) {
+            r.expectPunct("]", `closing ${ctx}`);
+            break;
+        }
     }
-  }
-  return out;
+    return out;
 }
 function readGroupScope(r, tableName, line, fail) {
-  r.expectPunct("(", 'after "group"');
-  let column = DEFAULT_GROUP_COLUMN;
-  let read;
-  const explicit = {};
-  if (!r.tryPunct(")")) {
-    r.expectPunct("{", `in group() options for table "${tableName}"`);
-    const seen = /* @__PURE__ */ new Set();
-    while (!r.tryPunct("}")) {
-      const key = r.readKey(`for a group() option of table "${tableName}"`);
-      if (seen.has(key.name)) fail(key.line, `group() on table "${tableName}" declares ${key.name} twice.`);
-      seen.add(key.name);
-      r.expectPunct(":", `after "${key.name}" in group() for table "${tableName}"`);
-      if (key.name === "column") {
-        const t = r.next();
-        if (t.kind !== "string" || !IDENT.test(t.value) || t.value.length > 64) fail(t.line, `group({ column }) on table "${tableName}" must name a declared text column.`);
-        column = t.value.toLowerCase();
-      } else if (key.name === "roles") {
-        r.expectPunct("{", `opening group({ roles }) on table "${tableName}"`);
+    r.expectPunct("(", 'after "group"');
+    let column = DEFAULT_GROUP_COLUMN;
+    let read;
+    const explicit = {};
+    if (!r.tryPunct(")")) {
+        r.expectPunct("{", `in group() options for table "${tableName}"`);
+        const seen = new Set();
         while (!r.tryPunct("}")) {
-          const op = r.readKey(`for an operation in group({ roles }) on table "${tableName}"`);
-          if (!GROUP_OPERATIONS.includes(op.name)) {
-            fail(op.line, `group({ roles }) on table "${tableName}" has an unknown operation "${op.name}". Allowed: read, create, update, delete.`);
-          }
-          if (explicit[op.name]) fail(op.line, `group({ roles }) on table "${tableName}" declares ${op.name} twice.`);
-          r.expectPunct(":", `after "${op.name}" in group({ roles }) on table "${tableName}"`);
-          explicit[op.name] = readRoleList(r, fail, `group({ roles: { ${op.name} } }) on table "${tableName}"`);
-          if (!r.tryPunct(",")) {
-            r.expectPunct("}", `closing group({ roles }) on table "${tableName}"`);
-            break;
-          }
+            const key = r.readKey(`for a group() option of table "${tableName}"`);
+            if (seen.has(key.name))
+                fail(key.line, `group() on table "${tableName}" declares ${key.name} twice.`);
+            seen.add(key.name);
+            r.expectPunct(":", `after "${key.name}" in group() for table "${tableName}"`);
+            if (key.name === "column") {
+                const t = r.next();
+                if (t.kind !== "string" || !IDENT.test(t.value) || t.value.length > 64)
+                    fail(t.line, `group({ column }) on table "${tableName}" must name a declared text column.`);
+                column = t.value.toLowerCase();
+            }
+            else if (key.name === "roles") {
+                r.expectPunct("{", `opening group({ roles }) on table "${tableName}"`);
+                while (!r.tryPunct("}")) {
+                    const op = r.readKey(`for an operation in group({ roles }) on table "${tableName}"`);
+                    if (!GROUP_OPERATIONS.includes(op.name)) {
+                        fail(op.line, `group({ roles }) on table "${tableName}" has an unknown operation "${op.name}". Allowed: read, create, update, delete.`);
+                    }
+                    if (explicit[op.name])
+                        fail(op.line, `group({ roles }) on table "${tableName}" declares ${op.name} twice.`);
+                    r.expectPunct(":", `after "${op.name}" in group({ roles }) on table "${tableName}"`);
+                    explicit[op.name] = readRoleList(r, fail, `group({ roles: { ${op.name} } }) on table "${tableName}"`);
+                    if (!r.tryPunct(",")) {
+                        r.expectPunct("}", `closing group({ roles }) on table "${tableName}"`);
+                        break;
+                    }
+                }
+            }
+            else if (key.name === "read") {
+                read = readBranchReadColumns(r, `group({ read }) on table "${tableName}"`);
+            }
+            else {
+                fail(key.line, `group() on table "${tableName}" has an unknown option "${key.name}". Allowed: column, roles, read.`);
+            }
+            if (!r.tryPunct(",")) {
+                r.expectPunct("}", `closing group() options for table "${tableName}"`);
+                break;
+            }
         }
-      } else if (key.name === "read") {
-        read = readBranchReadColumns(r, `group({ read }) on table "${tableName}"`);
-      } else {
-        fail(key.line, `group() on table "${tableName}" has an unknown option "${key.name}". Allowed: column, roles, read.`);
-      }
-      if (!r.tryPunct(",")) {
-        r.expectPunct("}", `closing group() options for table "${tableName}"`);
-        break;
-      }
+        r.tryPunct(",");
+        r.expectPunct(")", "closing group()");
     }
-    r.tryPunct(",");
-    r.expectPunct(")", "closing group()");
-  }
-  const node = { kind: "group", column, roles: { read: [], create: [], update: [], delete: [] }, ...read ? { read } : {} };
-  declaredGroupRoles.set(node, { line, explicit });
-  return node;
+    const node = { kind: "group", column, roles: { read: [], create: [], update: [], delete: [] }, ...read ? { read } : {} };
+    declaredGroupRoles.set(node, { line, explicit });
+    return node;
 }
 var sorted = (list) => [...list].sort((a, b) => a < b ? -1 : a > b ? 1 : 0);
 function resolveGroupScopes(tables, vocabulary, errors) {
-  const allRoles = [...BUILT_IN_GROUP_ROLES2, ...vocabulary?.roles ?? []];
-  for (const t of tables) {
-    if (t.scope.kind !== "policy") continue;
-    const root = t.scope.policy;
-    const leaves = [];
-    if (root.kind === "group") leaves.push({ node: root, branch: false, allOf: false });
-    else if (root.kind === "any_of") {
-      const found = root.policies.find((p) => p.kind === "group");
-      if (found) leaves.push({ node: found, branch: true, allOf: false });
-    } else if (root.kind === "all_of") {
-      if (root.gate.kind === "group") leaves.push({ node: root.gate, branch: false, allOf: true });
-      const x = root.who.kind === "any_of" ? root.who.policies.find((p) => p.kind === "group") : void 0;
-      if (x) leaves.push({ node: x, branch: true, allOf: true });
-    }
-    for (const { node, branch, allOf } of leaves) {
-      const declared = declaredGroupRoles.get(node);
-      if (!declared) continue;
-      if (allOf && Object.keys(declared.explicit).length === 0) {
-        errors.push(`line ${declared.line}: allOf needs explicit operations: group() inside allOf() on table "${t.name}" must declare roles, such as group({ roles: { read: ['member'], create: ['member'] } }).`);
-      }
-      const omitted = branch || allOf ? [] : allRoles;
-      const where = `line ${declared.line}: `;
-      const column = t.columns.find((c) => c.name === node.column);
-      if (!column) {
-        errors.push(`${where}Table "${t.name}" uses group({ column: '${node.column}' }), but "${node.column}" is not one of its declared columns; it needs ${node.column}: text().`);
-      } else if (column.helper !== "text" || column.nullable) {
-        errors.push(`${where}Table "${t.name}" uses group({ column: '${node.column}' }), which must be a non-nullable text() column: every row belongs to exactly one group.`);
-      }
-      for (const op of GROUP_OPERATIONS) {
-        const list = declared.explicit[op] ?? omitted;
-        for (const role of list) {
-          if (!allRoles.includes(role)) {
-            errors.push(`${where}group({ roles: { ${op} } }) on table "${t.name}" names "${role}", which is not a group role. Group roles are owner, admin, member, and the roles declared in groups.roles.`);
-          }
+    const allRoles = [...BUILT_IN_GROUP_ROLES2, ...vocabulary?.roles ?? []];
+    for (const t of tables) {
+        if (t.scope.kind !== "policy")
+            continue;
+        const root = t.scope.policy;
+        const leaves = [];
+        if (root.kind === "group")
+            leaves.push({ node: root, branch: false, allOf: false });
+        else if (root.kind === "any_of") {
+            const found = root.policies.find((p) => p.kind === "group");
+            if (found)
+                leaves.push({ node: found, branch: true, allOf: false });
         }
-        node.roles[op] = sorted(list);
-      }
-      for (const op of ["update", "delete"]) {
-        const missing = node.roles[op].filter((role) => !node.roles.read.includes(role));
-        if (missing.length) {
-          errors.push(`${where}group() on table "${t.name}" lets ${missing.join(", ")} ${op} rows they cannot read. A role that may ${op} must also read, because the write returns the row.`);
+        else if (root.kind === "all_of") {
+            if (root.gate.kind === "group")
+                leaves.push({ node: root.gate, branch: false, allOf: true });
+            const x = root.who.kind === "any_of" ? root.who.policies.find((p) => p.kind === "group") : void 0;
+            if (x)
+                leaves.push({ node: x, branch: true, allOf: true });
         }
-      }
-      if ((branch || allOf) && GROUP_OPERATIONS.every((op) => node.roles[op].length === 0)) {
-        errors.push(`${where}group() inside ${allOf ? "allOf()" : "anyOf()"} on table "${t.name}" grants no operation; it needs the group roles that may read, update or delete every row of the group.`);
-      }
-      if (!(branch && allOf) && t.client?.create && !t.client.create.includes(node.column)) {
-        errors.push(`${where}Table "${t.name}" uses group() and client.create must include "${node.column}" so every new row names the group it belongs to.`);
-      }
+        for (const { node, branch, allOf } of leaves) {
+            const declared = declaredGroupRoles.get(node);
+            if (!declared)
+                continue;
+            if (allOf && Object.keys(declared.explicit).length === 0) {
+                errors.push(`line ${declared.line}: allOf needs explicit operations: group() inside allOf() on table "${t.name}" must declare roles, such as group({ roles: { read: ['member'], create: ['member'] } }).`);
+            }
+            const omitted = branch || allOf ? [] : allRoles;
+            const where = `line ${declared.line}: `;
+            const column = t.columns.find((c) => c.name === node.column);
+            if (!column) {
+                errors.push(`${where}Table "${t.name}" uses group({ column: '${node.column}' }), but "${node.column}" is not one of its declared columns; it needs ${node.column}: text().`);
+            }
+            else if (column.helper !== "text" || column.nullable) {
+                errors.push(`${where}Table "${t.name}" uses group({ column: '${node.column}' }), which must be a non-nullable text() column: every row belongs to exactly one group.`);
+            }
+            for (const op of GROUP_OPERATIONS) {
+                const list = declared.explicit[op] ?? omitted;
+                for (const role of list) {
+                    if (!allRoles.includes(role)) {
+                        errors.push(`${where}group({ roles: { ${op} } }) on table "${t.name}" names "${role}", which is not a group role. Group roles are owner, admin, member, and the roles declared in groups.roles.`);
+                    }
+                }
+                node.roles[op] = sorted(list);
+            }
+            for (const op of ["update", "delete"]) {
+                const missing = node.roles[op].filter((role) => !node.roles.read.includes(role));
+                if (missing.length) {
+                    errors.push(`${where}group() on table "${t.name}" lets ${missing.join(", ")} ${op} rows they cannot read. A role that may ${op} must also read, because the write returns the row.`);
+                }
+            }
+            if ((branch || allOf) && GROUP_OPERATIONS.every((op) => node.roles[op].length === 0)) {
+                errors.push(`${where}group() inside ${allOf ? "allOf()" : "anyOf()"} on table "${t.name}" grants no operation; it needs the group roles that may read, update or delete every row of the group.`);
+            }
+            if (!(branch && allOf) && t.client?.create && !t.client.create.includes(node.column)) {
+                errors.push(`${where}Table "${t.name}" uses group() and client.create must include "${node.column}" so every new row names the group it belongs to.`);
+            }
+        }
     }
-  }
 }
 function groupLeafOf(t) {
-  if (t.scope.kind !== "policy") return null;
-  let policy = t.scope.policy;
-  let inherited = false;
-  while (policy.kind === "parent") {
-    policy = policy.policy;
-    inherited = true;
-  }
-  return policy.kind === "group" ? { node: policy, inherited } : null;
+    if (t.scope.kind !== "policy")
+        return null;
+    let policy = t.scope.policy;
+    let inherited = false;
+    while (policy.kind === "parent") {
+        policy = policy.policy;
+        inherited = true;
+    }
+    return policy.kind === "group" ? { node: policy, inherited } : null;
 }
 function resolveGroupReferences(tables, errors) {
-  const byName2 = new Map(tables.map((t) => [t.name, t]));
-  for (const t of tables) {
-    const own = groupLeafOf(t);
-    const refs = [];
-    const via = t.scope.kind === "policy" && t.scope.policy.kind === "parent" ? t.scope.policy.via : null;
-    for (const column of t.columns) {
-      if (!column.references) continue;
-      const target = byName2.get(column.references);
-      if (!target) continue;
-      const theirs = groupLeafOf(target);
-      if (!own || !theirs || column.name === via) continue;
-      const keys = target.columns.filter((c) => c.helper === "id");
-      if (keys.length !== 1) {
-        errors.push(`Table "${t.name}" references the group-owned table "${target.name}" through "${column.name}", which needs exactly one id() key on "${target.name}".`);
-        continue;
-      }
-      if (own.inherited || theirs.inherited) continue;
-      refs.push({ column: column.name, group: own.node.column, table: target.name, targetGroup: theirs.node.column, targetKey: keys[0].name });
+    const byName2 = new Map(tables.map((t) => [t.name, t]));
+    for (const t of tables) {
+        const own = groupLeafOf(t);
+        const refs = [];
+        const via = t.scope.kind === "policy" && t.scope.policy.kind === "parent" ? t.scope.policy.via : null;
+        for (const column of t.columns) {
+            if (!column.references)
+                continue;
+            const target = byName2.get(column.references);
+            if (!target)
+                continue;
+            const theirs = groupLeafOf(target);
+            if (!own || !theirs || column.name === via)
+                continue;
+            const keys = target.columns.filter((c) => c.helper === "id");
+            if (keys.length !== 1) {
+                errors.push(`Table "${t.name}" references the group-owned table "${target.name}" through "${column.name}", which needs exactly one id() key on "${target.name}".`);
+                continue;
+            }
+            if (own.inherited || theirs.inherited)
+                continue;
+            refs.push({ column: column.name, group: own.node.column, table: target.name, targetGroup: theirs.node.column, targetKey: keys[0].name });
+        }
+        if (refs.length > 0)
+            t.groupRefs = refs.sort((a, b) => a.column < b.column ? -1 : a.column > b.column ? 1 : 0);
     }
-    if (refs.length > 0) t.groupRefs = refs.sort((a, b) => a.column < b.column ? -1 : a.column > b.column ? 1 : 0);
-  }
 }
 function resolveGroupsAndParents(tables, tableByName, privatePolicy, vocabulary, errors) {
-  resolveGroupScopes(tables, vocabulary, errors);
-  resolveParentChains(tables, tableByName, privatePolicy, errors);
-  resolveGroupReferences(tables, errors);
+    resolveGroupScopes(tables, vocabulary, errors);
+    resolveParentChains(tables, tableByName, privatePolicy, errors);
+    resolveGroupReferences(tables, errors);
 }
-
-// worker/src/utils/db-schema-deploy/extract-schema-app-roles.ts
 var APP_ROLE_OPERATIONS = ["read", "create", "update", "delete"];
-var declaredLines = /* @__PURE__ */ new WeakMap();
+var declaredLines = new WeakMap();
 function readAppRoleScope(r, tableName, line, fail) {
-  const where = `appRole() on table "${tableName}"`;
-  r.expectPunct("(", 'after "appRole"');
-  r.expectPunct("{", `in ${where} \u2014 it needs appRole({ roles: { read: [...], ... } })`);
-  const node = { kind: "app_role", roles: { read: [], create: [], update: [], delete: [] } };
-  const names = [];
-  let sawRoles = false;
-  while (!r.tryPunct("}")) {
-    const key = r.readKey(`for an option of ${where}`);
-    if (key.name === "read") {
-      if (node.read) fail(key.line, `${where} declares read twice.`);
-      r.expectPunct(":", `after "read" in ${where}`);
-      node.read = readBranchReadColumns(r, `appRole({ read }) on table "${tableName}"`);
-      if (!r.tryPunct(",")) {
-        r.expectPunct("}", `closing ${where}`);
-        break;
-      }
-      continue;
-    }
-    if (key.name !== "roles") fail(key.line, `${where} has an unknown option "${key.name}". Allowed: roles, read.`);
-    if (sawRoles) fail(key.line, `${where} declares roles twice.`);
-    sawRoles = true;
-    r.expectPunct(":", `after "roles" in ${where}`);
-    r.expectPunct("{", `opening appRole({ roles }) on table "${tableName}"`);
-    const seenOps = /* @__PURE__ */ new Set();
+    const where = `appRole() on table "${tableName}"`;
+    r.expectPunct("(", 'after "appRole"');
+    r.expectPunct("{", `in ${where} \u2014 it needs appRole({ roles: { read: [...], ... } })`);
+    const node = { kind: "app_role", roles: { read: [], create: [], update: [], delete: [] } };
+    const names = [];
+    let sawRoles = false;
     while (!r.tryPunct("}")) {
-      const op = r.readKey(`for an operation in appRole({ roles }) on table "${tableName}"`);
-      if (!APP_ROLE_OPERATIONS.includes(op.name)) {
-        fail(op.line, `appRole({ roles }) on table "${tableName}" has an unknown operation "${op.name}". Allowed: read, create, update, delete.`);
-      }
-      if (seenOps.has(op.name)) fail(op.line, `appRole({ roles }) on table "${tableName}" declares ${op.name} twice.`);
-      seenOps.add(op.name);
-      r.expectPunct(":", `after "${op.name}" in appRole({ roles }) on table "${tableName}"`);
-      const ctx = `appRole({ roles: { ${op.name} } }) on table "${tableName}"`;
-      const open = r.next();
-      if (open.kind !== "punct" || open.value !== "[") fail(open.line, `${ctx} must be a list of quoted app role names, such as ['staff'].`);
-      const list = [];
-      while (!r.tryPunct("]")) {
-        const t = r.next();
-        if (t.kind !== "string") fail(t.line, `${ctx} must be a list of quoted app role names; values must be literal strings.`);
-        if (list.includes(t.value)) fail(t.line, `${ctx} lists "${t.value}" twice.`);
-        list.push(t.value);
-        names.push({ op: op.name, name: t.value, line: t.line });
-        if (!r.tryPunct(",")) {
-          r.expectPunct("]", `closing ${ctx}`);
-          break;
+        const key = r.readKey(`for an option of ${where}`);
+        if (key.name === "read") {
+            if (node.read)
+                fail(key.line, `${where} declares read twice.`);
+            r.expectPunct(":", `after "read" in ${where}`);
+            node.read = readBranchReadColumns(r, `appRole({ read }) on table "${tableName}"`);
+            if (!r.tryPunct(",")) {
+                r.expectPunct("}", `closing ${where}`);
+                break;
+            }
+            continue;
         }
-      }
-      node.roles[op.name] = [...list].sort((a, b) => a < b ? -1 : a > b ? 1 : 0);
-      if (!r.tryPunct(",")) {
-        r.expectPunct("}", `closing appRole({ roles }) on table "${tableName}"`);
-        break;
-      }
+        if (key.name !== "roles")
+            fail(key.line, `${where} has an unknown option "${key.name}". Allowed: roles, read.`);
+        if (sawRoles)
+            fail(key.line, `${where} declares roles twice.`);
+        sawRoles = true;
+        r.expectPunct(":", `after "roles" in ${where}`);
+        r.expectPunct("{", `opening appRole({ roles }) on table "${tableName}"`);
+        const seenOps = new Set();
+        while (!r.tryPunct("}")) {
+            const op = r.readKey(`for an operation in appRole({ roles }) on table "${tableName}"`);
+            if (!APP_ROLE_OPERATIONS.includes(op.name)) {
+                fail(op.line, `appRole({ roles }) on table "${tableName}" has an unknown operation "${op.name}". Allowed: read, create, update, delete.`);
+            }
+            if (seenOps.has(op.name))
+                fail(op.line, `appRole({ roles }) on table "${tableName}" declares ${op.name} twice.`);
+            seenOps.add(op.name);
+            r.expectPunct(":", `after "${op.name}" in appRole({ roles }) on table "${tableName}"`);
+            const ctx = `appRole({ roles: { ${op.name} } }) on table "${tableName}"`;
+            const open = r.next();
+            if (open.kind !== "punct" || open.value !== "[")
+                fail(open.line, `${ctx} must be a list of quoted app role names, such as ['staff'].`);
+            const list = [];
+            while (!r.tryPunct("]")) {
+                const t = r.next();
+                if (t.kind !== "string")
+                    fail(t.line, `${ctx} must be a list of quoted app role names; values must be literal strings.`);
+                if (list.includes(t.value))
+                    fail(t.line, `${ctx} lists "${t.value}" twice.`);
+                list.push(t.value);
+                names.push({ op: op.name, name: t.value, line: t.line });
+                if (!r.tryPunct(",")) {
+                    r.expectPunct("]", `closing ${ctx}`);
+                    break;
+                }
+            }
+            node.roles[op.name] = [...list].sort((a, b) => a < b ? -1 : a > b ? 1 : 0);
+            if (!r.tryPunct(",")) {
+                r.expectPunct("}", `closing appRole({ roles }) on table "${tableName}"`);
+                break;
+            }
+        }
+        if (!r.tryPunct(",")) {
+            r.expectPunct("}", `closing ${where}`);
+            break;
+        }
     }
-    if (!r.tryPunct(",")) {
-      r.expectPunct("}", `closing ${where}`);
-      break;
-    }
-  }
-  r.tryPunct(",");
-  r.expectPunct(")", "closing appRole()");
-  if (!sawRoles) fail(line, `${where} needs roles: appRole({ roles: { read: [...], ... } }). An omitted operation allows nobody.`);
-  declaredLines.set(node, { line, names });
-  return node;
+    r.tryPunct(",");
+    r.expectPunct(")", "closing appRole()");
+    if (!sawRoles)
+        fail(line, `${where} needs roles: appRole({ roles: { read: [...], ... } }). An omitted operation allows nobody.`);
+    declaredLines.set(node, { line, names });
+    return node;
 }
 function resolveAppRoleScopes(tables, appRoles, errors) {
-  const vocabulary = new Set((appRoles ?? []).map((role) => role.name));
-  for (const t of tables) {
-    if (t.scope.kind !== "policy") continue;
-    const root = t.scope.policy;
-    const leaves = [];
-    if (root.kind === "app_role") leaves.push({ node: root, branch: false });
-    else if (root.kind === "any_of") {
-      const found = root.policies.find((p) => p.kind === "app_role");
-      if (found) leaves.push({ node: found, branch: true });
-    } else if (root.kind === "all_of") {
-      if (root.gate.kind === "app_role") leaves.push({ node: root.gate, branch: true });
-      const x = root.who.kind === "any_of" ? root.who.policies.find((p) => p.kind === "app_role") : void 0;
-      if (x) leaves.push({ node: x, branch: true });
-    }
-    for (const { node, branch } of leaves) {
-      const declared = declaredLines.get(node);
-      if (!declared) continue;
-      for (const { op, name, line } of declared.names) {
-        if (!vocabulary.has(name)) {
-          errors.push(`line ${line}: appRole({ roles: { ${op} } }) on table "${t.name}" names "${name}", which is not declared in the schema's appRoles option. appRole() accepts only app roles declared there; group roles and admin do not apply.`);
+    const vocabulary = new Set((appRoles ?? []).map((role) => role.name));
+    for (const t of tables) {
+        if (t.scope.kind !== "policy")
+            continue;
+        const root = t.scope.policy;
+        const leaves = [];
+        if (root.kind === "app_role")
+            leaves.push({ node: root, branch: false });
+        else if (root.kind === "any_of") {
+            const found = root.policies.find((p) => p.kind === "app_role");
+            if (found)
+                leaves.push({ node: found, branch: true });
         }
-      }
-      for (const op of ["update", "delete"]) {
-        const missing = node.roles[op].filter((role) => !node.roles.read.includes(role));
-        if (missing.length) {
-          errors.push(`line ${declared.line}: appRole() on table "${t.name}" lets ${missing.join(", ")} ${op} rows they cannot read. A role that may ${op} must also read, because the write returns the row.`);
+        else if (root.kind === "all_of") {
+            if (root.gate.kind === "app_role")
+                leaves.push({ node: root.gate, branch: true });
+            const x = root.who.kind === "any_of" ? root.who.policies.find((p) => p.kind === "app_role") : void 0;
+            if (x)
+                leaves.push({ node: x, branch: true });
         }
-      }
-      if (branch && APP_ROLE_OPERATIONS.every((op) => node.roles[op].length === 0)) {
-        errors.push(`line ${declared.line}: appRole() inside ${root.kind === "all_of" ? "allOf()" : "anyOf()"} on table "${t.name}" grants no operation; it needs the app roles that may read, update or delete every row.`);
-      }
-      declaredLines.delete(node);
+        for (const { node, branch } of leaves) {
+            const declared = declaredLines.get(node);
+            if (!declared)
+                continue;
+            for (const { op, name, line } of declared.names) {
+                if (!vocabulary.has(name)) {
+                    errors.push(`line ${line}: appRole({ roles: { ${op} } }) on table "${t.name}" names "${name}", which is not declared in the schema's appRoles option. appRole() accepts only app roles declared there; group roles and admin do not apply.`);
+                }
+            }
+            for (const op of ["update", "delete"]) {
+                const missing = node.roles[op].filter((role) => !node.roles.read.includes(role));
+                if (missing.length) {
+                    errors.push(`line ${declared.line}: appRole() on table "${t.name}" lets ${missing.join(", ")} ${op} rows they cannot read. A role that may ${op} must also read, because the write returns the row.`);
+                }
+            }
+            if (branch && APP_ROLE_OPERATIONS.every((op) => node.roles[op].length === 0)) {
+                errors.push(`line ${declared.line}: appRole() inside ${root.kind === "all_of" ? "allOf()" : "anyOf()"} on table "${t.name}" grants no operation; it needs the app roles that may read, update or delete every row.`);
+            }
+            declaredLines.delete(node);
+        }
     }
-  }
 }
-
-// worker/src/utils/db-schema-deploy/extract-schema-roles.ts
 var EMAIL_DOMAIN = EMAIL_DOMAIN_PATTERN;
 var GROUP_KEYS = ["roles", "adminGrantableRoles"];
 var APP_ROLE_KEYS = ["grantableBy", "emailDomain"];
 function readStringList2(r, fail, ctx) {
-  const open = r.peek();
-  if (open.kind !== "punct" || open.value !== "[") fail(open.line, `${ctx} must be a list of quoted role names, such as ['viewer'].`);
-  r.next();
-  const out = [];
-  while (!r.tryPunct("]")) {
-    const t = r.next();
-    if (t.kind !== "string") fail(t.line, `${ctx} must be a list of quoted role names; found ${t.kind === "eof" ? "the end of the file" : `"${t.value}"`}. Values must be literal strings.`);
-    out.push(t.value);
-    if (!r.tryPunct(",")) {
-      r.expectPunct("]", `closing ${ctx}`);
-      break;
+    const open = r.peek();
+    if (open.kind !== "punct" || open.value !== "[")
+        fail(open.line, `${ctx} must be a list of quoted role names, such as ['viewer'].`);
+    r.next();
+    const out = [];
+    while (!r.tryPunct("]")) {
+        const t = r.next();
+        if (t.kind !== "string")
+            fail(t.line, `${ctx} must be a list of quoted role names; found ${t.kind === "eof" ? "the end of the file" : `"${t.value}"`}. Values must be literal strings.`);
+        out.push(t.value);
+        if (!r.tryPunct(",")) {
+            r.expectPunct("]", `closing ${ctx}`);
+            break;
+        }
     }
-  }
-  return out;
+    return out;
 }
 function readGroupRoles(r, fail) {
-  r.expectPunct("{", "opening schema option groups");
-  const seen = /* @__PURE__ */ new Set();
-  const out = { roles: [], adminGrantableRoles: [] };
-  while (!r.tryPunct("}")) {
-    const key = r.readKey("for a groups option");
-    if (!GROUP_KEYS.includes(key.name)) {
-      fail(key.line, `groups has an unknown option "${key.name}". Allowed: ${GROUP_KEYS.join(", ")}. owner, admin and member are built in.`);
+    r.expectPunct("{", "opening schema option groups");
+    const seen = new Set();
+    const out = { roles: [], adminGrantableRoles: [] };
+    while (!r.tryPunct("}")) {
+        const key = r.readKey("for a groups option");
+        if (!GROUP_KEYS.includes(key.name)) {
+            fail(key.line, `groups has an unknown option "${key.name}". Allowed: ${GROUP_KEYS.join(", ")}. owner, admin and member are built in.`);
+        }
+        if (seen.has(key.name))
+            fail(key.line, `groups declares ${key.name} twice.`);
+        seen.add(key.name);
+        r.expectPunct(":", `after groups.${key.name}`);
+        out[key.name] = readStringList2(r, fail, `groups.${key.name}`);
+        if (!r.tryPunct(",")) {
+            r.expectPunct("}", "closing schema option groups");
+            break;
+        }
     }
-    if (seen.has(key.name)) fail(key.line, `groups declares ${key.name} twice.`);
-    seen.add(key.name);
-    r.expectPunct(":", `after groups.${key.name}`);
-    out[key.name] = readStringList2(r, fail, `groups.${key.name}`);
-    if (!r.tryPunct(",")) {
-      r.expectPunct("}", "closing schema option groups");
-      break;
-    }
-  }
-  return out;
+    return out;
 }
 function readAppRoles(r, fail) {
-  r.expectPunct("{", "opening schema option appRoles");
-  const out = [];
-  while (!r.tryPunct("}")) {
-    const key = r.readKey("for an app role name");
-    if (out.some((role2) => role2.name === key.name)) fail(key.line, `app role "${key.name}" is declared twice.`);
-    r.expectPunct(":", `after app role "${key.name}"`);
-    r.expectPunct("{", `opening app role "${key.name}", which takes { grantableBy: [...], emailDomain: '...' }`);
-    const role = { name: key.name, grantableBy: [] };
-    const seen = /* @__PURE__ */ new Set();
+    r.expectPunct("{", "opening schema option appRoles");
+    const out = [];
     while (!r.tryPunct("}")) {
-      const opt = r.readKey(`for an option of app role "${key.name}"`);
-      if (!APP_ROLE_KEYS.includes(opt.name)) {
-        fail(opt.line, `app role "${key.name}" has an unknown option "${opt.name}". Allowed: ${APP_ROLE_KEYS.join(", ")}.`);
-      }
-      if (seen.has(opt.name)) fail(opt.line, `app role "${key.name}" declares ${opt.name} twice.`);
-      seen.add(opt.name);
-      r.expectPunct(":", `after appRoles.${key.name}.${opt.name}`);
-      if (opt.name === "emailDomain") {
-        const t = r.next();
-        if (t.kind !== "string") fail(t.line, `appRoles.${key.name}.emailDomain must be one quoted domain, such as 'example.com'.`);
-        if (!EMAIL_DOMAIN.test(t.value)) {
-          fail(t.line, `appRoles.${key.name}.emailDomain "${t.value}" must be one lowercase domain such as 'example.com': no "@", no wildcard, no scheme or path. Users whose verified email is at exactly that domain hold the role; subdomains are other domains.`);
+        const key = r.readKey("for an app role name");
+        if (out.some((role2) => role2.name === key.name))
+            fail(key.line, `app role "${key.name}" is declared twice.`);
+        r.expectPunct(":", `after app role "${key.name}"`);
+        r.expectPunct("{", `opening app role "${key.name}", which takes { grantableBy: [...], emailDomain: '...' }`);
+        const role = { name: key.name, grantableBy: [] };
+        const seen = new Set();
+        while (!r.tryPunct("}")) {
+            const opt = r.readKey(`for an option of app role "${key.name}"`);
+            if (!APP_ROLE_KEYS.includes(opt.name)) {
+                fail(opt.line, `app role "${key.name}" has an unknown option "${opt.name}". Allowed: ${APP_ROLE_KEYS.join(", ")}.`);
+            }
+            if (seen.has(opt.name))
+                fail(opt.line, `app role "${key.name}" declares ${opt.name} twice.`);
+            seen.add(opt.name);
+            r.expectPunct(":", `after appRoles.${key.name}.${opt.name}`);
+            if (opt.name === "emailDomain") {
+                const t = r.next();
+                if (t.kind !== "string")
+                    fail(t.line, `appRoles.${key.name}.emailDomain must be one quoted domain, such as 'example.com'.`);
+                if (!EMAIL_DOMAIN.test(t.value)) {
+                    fail(t.line, `appRoles.${key.name}.emailDomain "${t.value}" must be one lowercase domain such as 'example.com': no "@", no wildcard, no scheme or path. Users whose verified email is at exactly that domain hold the role; subdomains are other domains.`);
+                }
+                role.emailDomain = t.value;
+            }
+            else {
+                role.grantableBy = readStringList2(r, fail, `appRoles.${key.name}.grantableBy`);
+            }
+            if (!r.tryPunct(",")) {
+                r.expectPunct("}", `closing app role "${key.name}"`);
+                break;
+            }
         }
-        role.emailDomain = t.value;
-      } else {
-        role.grantableBy = readStringList2(r, fail, `appRoles.${key.name}.grantableBy`);
-      }
-      if (!r.tryPunct(",")) {
-        r.expectPunct("}", `closing app role "${key.name}"`);
-        break;
-      }
+        out.push(role);
+        if (!r.tryPunct(",")) {
+            r.expectPunct("}", "closing schema option appRoles");
+            break;
+        }
     }
-    out.push(role);
-    if (!r.tryPunct(",")) {
-      r.expectPunct("}", "closing schema option appRoles");
-      break;
-    }
-  }
-  return out.sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
+    return out.sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
 }
 var sorted2 = (list) => [...list].sort((a, b) => a < b ? -1 : a > b ? 1 : 0);
 function canonicalRoleVocabulary(groups, appRoles) {
-  return {
-    v: 1,
-    groupRoles: sorted2(groups?.roles ?? []),
-    adminGrantableGroupRoles: sorted2(groups?.adminGrantableRoles ?? []),
-    appRoles: [...appRoles ?? []].sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0).map((role) => ({ name: role.name, grantableBy: sorted2(role.grantableBy), ...role.emailDomain ? { emailDomain: role.emailDomain } : {} }))
-  };
+    return {
+        v: 1,
+        groupRoles: sorted2(groups?.roles ?? []),
+        adminGrantableGroupRoles: sorted2(groups?.adminGrantableRoles ?? []),
+        appRoles: [...appRoles ?? []].sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0).map((role) => ({ name: role.name, grantableBy: sorted2(role.grantableBy), ...role.emailDomain ? { emailDomain: role.emailDomain } : {} }))
+    };
 }
 function validateDeclaredRoles(groups, appRoles) {
-  const delegation = /* @__PURE__ */ Object.create(null);
-  for (const role of appRoles ?? []) delegation[role.name] = role.grantableBy;
-  return [...emailDomainRoleErrors(appRoles ?? []), ...roleVocabularyErrors({
-    groupRoles: groups?.roles ?? [],
-    adminGrantableGroupRoles: groups?.adminGrantableRoles ?? [],
-    appRoles: (appRoles ?? []).map((role) => role.name),
-    appRoleDelegation: delegation
-  })];
+    const delegation = Object.create(null);
+    for (const role of appRoles ?? [])
+        delegation[role.name] = role.grantableBy;
+    return [...emailDomainRoleErrors(appRoles ?? []), ...roleVocabularyErrors({
+            groupRoles: groups?.roles ?? [],
+            adminGrantableGroupRoles: groups?.adminGrantableRoles ?? [],
+            appRoles: (appRoles ?? []).map((role) => role.name),
+            appRoleDelegation: delegation
+        })];
 }
 function emailDomainRoleErrors(appRoles) {
-  const errors = [];
-  const byDomain = new Set(appRoles.filter((role) => role.emailDomain !== void 0).map((role) => role.name));
-  for (const role of appRoles) {
-    if (role.emailDomain !== void 0 && !EMAIL_DOMAIN.test(role.emailDomain)) errors.push(`appRoles.${role.name}.emailDomain is not one lowercase domain.`);
-    for (const grantor of role.grantableBy) {
-      if (byDomain.has(grantor)) {
-        errors.push(`appRoles.${role.name}.grantableBy names "${grantor}", which is held by email domain. A role held by email domain cannot grant other roles; list a role that is granted explicitly.`);
-      }
+    const errors = [];
+    const byDomain = new Set(appRoles.filter((role) => role.emailDomain !== void 0).map((role) => role.name));
+    for (const role of appRoles) {
+        if (role.emailDomain !== void 0 && !EMAIL_DOMAIN.test(role.emailDomain))
+            errors.push(`appRoles.${role.name}.emailDomain is not one lowercase domain.`);
+        for (const grantor of role.grantableBy) {
+            if (byDomain.has(grantor)) {
+                errors.push(`appRoles.${role.name}.grantableBy names "${grantor}", which is held by email domain. A role held by email domain cannot grant other roles; list a role that is granted explicitly.`);
+            }
+        }
     }
-  }
-  return errors;
+    return errors;
 }
-
-// worker/src/utils/db-schema-deploy/extract-schema-options.ts
 function readSchemaOptions(reader, fail, fileErrors) {
-  const o = {};
-  if (!reader.tryPunct(",") || reader.peek().kind === "punct" && reader.peek().value === ")") return o;
-  reader.expectPunct("{", "opening schema options");
-  while (!reader.tryPunct("}")) {
-    const option = reader.readKey("for a schema option");
-    const after = () => reader.expectPunct(":", `after schema option "${option.name}"`);
-    if (option.name === "files" && !o.fileCollections) {
-      after();
-      o.fileCollections = readFileCollections(reader, fail, fileErrors);
-    } else if (option.name === "groups" && !o.groupRoles) {
-      after();
-      o.groupRoles = readGroupRoles(reader, fail);
-    } else if (option.name === "appRoles" && !o.appRoles) {
-      after();
-      o.appRoles = readAppRoles(reader, fail);
-    } else if (option.name === "payments" && !o.payments) {
-      after();
-      o.payments = readPaymentBindings(reader, fail);
-    } else if (option.name === "jobs" && !o.jobs) {
-      after();
-      o.jobs = readJobBindings(reader, fail);
-    } else if (option.name === "serviceRoles" && !o.serviceRoles) {
-      after();
-      o.serviceRoles = readServiceRoles(reader, fail);
-    } else if (option.name === "search" && !o.managedSearch) {
-      after();
-      const helper = reader.expectIdent('for schema option "search"');
-      if (helper.value !== "owner") fail(helper.line, "search ownership must be declared with owner().");
-      reader.expectPunct("(", "after search: owner");
-      reader.expectPunct(")", "closing search: owner()");
-      o.managedSearch = { kind: "owner" };
-    } else {
-      fail(option.line, `unknown schema option "${option.name}". The schema-level options are search: owner(), files: { \u2026 }, groups: { \u2026 }, appRoles: { \u2026 }, payments: { \u2026 }, jobs: { \u2026 } and serviceRoles: { \u2026 }, each at most once.`);
+    const o = {};
+    if (!reader.tryPunct(",") || reader.peek().kind === "punct" && reader.peek().value === ")")
+        return o;
+    reader.expectPunct("{", "opening schema options");
+    while (!reader.tryPunct("}")) {
+        const option = reader.readKey("for a schema option");
+        const after = () => reader.expectPunct(":", `after schema option "${option.name}"`);
+        if (option.name === "files" && !o.fileCollections) {
+            after();
+            o.fileCollections = readFileCollections(reader, fail, fileErrors);
+        }
+        else if (option.name === "groups" && !o.groupRoles) {
+            after();
+            o.groupRoles = readGroupRoles(reader, fail);
+        }
+        else if (option.name === "appRoles" && !o.appRoles) {
+            after();
+            o.appRoles = readAppRoles(reader, fail);
+        }
+        else if (option.name === "payments" && !o.payments) {
+            after();
+            o.payments = readPaymentBindings(reader, fail);
+        }
+        else if (option.name === "jobs" && !o.jobs) {
+            after();
+            o.jobs = readJobBindings(reader, fail);
+        }
+        else if (option.name === "serviceRoles" && !o.serviceRoles) {
+            after();
+            o.serviceRoles = readServiceRoles(reader, fail);
+        }
+        else if (option.name === "search" && !o.managedSearch) {
+            after();
+            const helper = reader.expectIdent('for schema option "search"');
+            if (helper.value !== "owner")
+                fail(helper.line, "search ownership must be declared with owner().");
+            reader.expectPunct("(", "after search: owner");
+            reader.expectPunct(")", "closing search: owner()");
+            o.managedSearch = { kind: "owner" };
+        }
+        else {
+            fail(option.line, `unknown schema option "${option.name}". The schema-level options are search: owner(), files: { \u2026 }, groups: { \u2026 }, appRoles: { \u2026 }, payments: { \u2026 }, jobs: { \u2026 } and serviceRoles: { \u2026 }, each at most once.`);
+        }
+        if (!reader.tryPunct(",")) {
+            reader.expectPunct("}", "closing schema options");
+            break;
+        }
     }
-    if (!reader.tryPunct(",")) {
-      reader.expectPunct("}", "closing schema options");
-      break;
-    }
-  }
-  reader.tryPunct(",");
-  return o;
+    reader.tryPunct(",");
+    return o;
 }
-
-// worker/src/utils/db-schema-deploy/extract-schema-ts.ts
 function policyOwner(policy) {
-  if (policy.kind === "owner") return policy;
-  if (policy.kind === "any_of") return policy.policies.map(policyOwner).find((value) => value !== null) ?? null;
-  if (policy.kind === "all_of") return policyOwner(policy.who);
-  return null;
+    if (policy.kind === "owner")
+        return policy;
+    if (policy.kind === "any_of")
+        return policy.policies.map(policyOwner).find((value) => value !== null) ?? null;
+    if (policy.kind === "all_of")
+        return policyOwner(policy.who);
+    return null;
 }
 function scopeOwner(scope) {
-  return scope.kind === "owner" ? scope : scope.kind === "policy" ? policyOwner(scope.policy) : null;
+    return scope.kind === "owner" ? scope : scope.kind === "policy" ? policyOwner(scope.policy) : null;
 }
 function declaredOwnerColumn(scope) {
-  return scopeOwner(scope)?.column ?? null;
+    return scopeOwner(scope)?.column ?? null;
 }
 function declaredScopeIntent(scope) {
-  return scope.kind === "owner" ? "scoped" : scope.kind;
+    return scope.kind === "owner" ? "scoped" : scope.kind;
 }
 function declaredScopeIdentityColumns(scope) {
-  if (scope.kind === "owner") return [scope.column];
-  if (scope.kind === "member") return [...scope.group];
-  if (scope.kind !== "policy") return [];
-  const collect = (policy) => policy.kind === "owner" ? [policy.column] : policy.kind === "member" ? [...policy.group] : policy.kind === "any_of" ? policy.policies.flatMap(collect) : policy.kind === "all_of" ? [...collect(policy.gate), ...collect(policy.who)] : policy.kind === "group" ? [policy.column] : policy.kind === "app_role" ? [] : [policy.via];
-  return [...new Set(collect(scope.policy))];
+    if (scope.kind === "owner")
+        return [scope.column];
+    if (scope.kind === "member")
+        return [...scope.group];
+    if (scope.kind !== "policy")
+        return [];
+    const collect = (policy) => policy.kind === "owner" ? [policy.column] : policy.kind === "member" ? [...policy.group] : policy.kind === "any_of" ? policy.policies.flatMap(collect) : policy.kind === "all_of" ? [...collect(policy.gate), ...collect(policy.who)] : policy.kind === "group" ? [policy.column] : policy.kind === "app_role" ? [] : [policy.via];
+    return [...new Set(collect(scope.policy))];
 }
 var ROOM_REFEREE_PATH = /^\/api\/[A-Za-z0-9_\-]+(?:\/[A-Za-z0-9_\-.]+)*$/;
 function readRoomsOption(r, rawName, line) {
-  r.expectPunct("{", `opening the rooms option of table "${rawName}", which takes { save?: 'column', referee?: '/api/path' }`);
-  const out = { line };
-  while (!r.tryPunct("}")) {
-    const opt = r.readKey(`for an option of rooms on table "${rawName}"`);
-    if (opt.name !== "save" && opt.name !== "referee") {
-      throw new SchemaTsError(`line ${opt.line}: rooms on table "${rawName}" has an unknown option "${opt.name}". Allowed: save, referee.`);
+    r.expectPunct("{", `opening the rooms option of table "${rawName}", which takes { save?: 'column', referee?: '/api/path' }`);
+    const out = { line };
+    while (!r.tryPunct("}")) {
+        const opt = r.readKey(`for an option of rooms on table "${rawName}"`);
+        if (opt.name !== "save" && opt.name !== "referee") {
+            throw new SchemaTsError(`line ${opt.line}: rooms on table "${rawName}" has an unknown option "${opt.name}". Allowed: save, referee.`);
+        }
+        if (out[opt.name])
+            throw new SchemaTsError(`line ${opt.line}: rooms on table "${rawName}" declares ${opt.name} twice.`);
+        r.expectPunct(":", `after rooms.${opt.name}`);
+        const t = r.next();
+        if (t.kind !== "string")
+            throw new SchemaTsError(`line ${t.line}: rooms.${opt.name} on table "${rawName}" must be a quoted literal string.`);
+        out[opt.name] = { value: t.value, line: t.line };
+        if (!r.tryPunct(",")) {
+            r.expectPunct("}", `closing the rooms option of table "${rawName}"`);
+            break;
+        }
     }
-    if (out[opt.name]) throw new SchemaTsError(`line ${opt.line}: rooms on table "${rawName}" declares ${opt.name} twice.`);
-    r.expectPunct(":", `after rooms.${opt.name}`);
-    const t = r.next();
-    if (t.kind !== "string") throw new SchemaTsError(`line ${t.line}: rooms.${opt.name} on table "${rawName}" must be a quoted literal string.`);
-    out[opt.name] = { value: t.value, line: t.line };
-    if (!r.tryPunct(",")) {
-      r.expectPunct("}", `closing the rooms option of table "${rawName}"`);
-      break;
-    }
-  }
-  return out;
+    return out;
 }
 function validateRoomsOption(input, rawName, nameLine, columns, scope, client, relations) {
-  if (columns.filter((c) => c.helper === "id").length !== 1) {
-    throw new SchemaTsError(`line ${input.line}: table "${rawName}" declares rooms, which need exactly one id() column: a room is attached to one row by its id.`);
-  }
-  const out = {};
-  if (input.save) {
-    const name = input.save.value.toLowerCase();
-    const column = columns.find((c) => c.name === name);
-    if (!column) throw new SchemaTsError(`line ${input.save.line}: rooms.save on table "${rawName}" names "${input.save.value}", which is not one of its declared columns.`);
-    if (column.helper !== "json") throw new SchemaTsError(`line ${input.save.line}: rooms.save on table "${rawName}" names "${name}", which must be a json() column: the room saves its whole state there.`);
-    if (declaredScopeIdentityColumns(scope).includes(name) || declaredOwnerColumn(scope) === name) {
-      throw new SchemaTsError(`line ${input.save.line}: rooms.save on table "${rawName}" names "${name}", which the table's access rule reads; the room's state can never decide who may see the row.`);
+    if (columns.filter((c) => c.helper === "id").length !== 1) {
+        throw new SchemaTsError(`line ${input.line}: table "${rawName}" declares rooms, which need exactly one id() column: a room is attached to one row by its id.`);
     }
-    if (relations.some((rel) => rel.kind === "belongsTo" && rel.fk === name)) {
-      throw new SchemaTsError(`line ${input.save.line}: rooms.save on table "${rawName}" names "${name}", which is a relation key.`);
+    const out = {};
+    if (input.save) {
+        const name = input.save.value.toLowerCase();
+        const column = columns.find((c) => c.name === name);
+        if (!column)
+            throw new SchemaTsError(`line ${input.save.line}: rooms.save on table "${rawName}" names "${input.save.value}", which is not one of its declared columns.`);
+        if (column.helper !== "json")
+            throw new SchemaTsError(`line ${input.save.line}: rooms.save on table "${rawName}" names "${name}", which must be a json() column: the room saves its whole state there.`);
+        if (declaredScopeIdentityColumns(scope).includes(name) || declaredOwnerColumn(scope) === name) {
+            throw new SchemaTsError(`line ${input.save.line}: rooms.save on table "${rawName}" names "${name}", which the table's access rule reads; the room's state can never decide who may see the row.`);
+        }
+        if (relations.some((rel) => rel.kind === "belongsTo" && rel.fk === name)) {
+            throw new SchemaTsError(`line ${input.save.line}: rooms.save on table "${rawName}" names "${name}", which is a relation key.`);
+        }
+        const writable = [...client?.create ?? [], ...client?.update ?? [], ...client?.intake?.fields ?? []];
+        if (writable.includes(name)) {
+            throw new SchemaTsError(`line ${input.save.line}: rooms.save on table "${rawName}" names "${name}", which is browser-writable through client.create, client.update or client.intake. The room is the only writer of its save column; remove it from those lists.`);
+        }
+        out.save = name;
     }
-    const writable = [...client?.create ?? [], ...client?.update ?? [], ...client?.intake?.fields ?? []];
-    if (writable.includes(name)) {
-      throw new SchemaTsError(`line ${input.save.line}: rooms.save on table "${rawName}" names "${name}", which is browser-writable through client.create, client.update or client.intake. The room is the only writer of its save column; remove it from those lists.`);
+    if (input.referee) {
+        const path = input.referee.value;
+        if (!ROOM_REFEREE_PATH.test(path) || path.length > 200 || path.split("/").some((part) => part === "." || part === "..")) {
+            throw new SchemaTsError(`line ${input.referee.line}: rooms.referee on table "${rawName}" must be the path of one of the app's own functions, such as '/api/game-room'.`);
+        }
+        out.referee = path;
     }
-    out.save = name;
-  }
-  if (input.referee) {
-    const path = input.referee.value;
-    if (!ROOM_REFEREE_PATH.test(path) || path.length > 200 || path.split("/").some((part) => part === "." || part === "..")) {
-      throw new SchemaTsError(`line ${input.referee.line}: rooms.referee on table "${rawName}" must be the path of one of the app's own functions, such as '/api/game-room'.`);
-    }
-    out.referee = path;
-  }
-  return out;
+    return out;
 }
-var COLUMN_HELPERS = /* @__PURE__ */ new Set([
-  "id",
-  "text",
-  "number",
-  "integer",
-  "bigint",
-  "boolean",
-  "timestamp",
-  "json",
-  "blob"
+var COLUMN_HELPERS = new Set([
+    "id",
+    "text",
+    "number",
+    "integer",
+    "bigint",
+    "boolean",
+    "timestamp",
+    "json",
+    "blob"
 ]);
-var SCOPE_HELPERS = /* @__PURE__ */ new Set(["owner", "shared", "serverOnly", "member", "anyOf", "allOf", "parent", "group", "appRole"]);
-var TABLE_MARKER_HELPERS = /* @__PURE__ */ new Set(["removedTable", "exported"]);
-var SCHEMA_CALLABLE = /* @__PURE__ */ new Set([
-  ...COLUMN_HELPERS,
-  ...SCOPE_HELPERS,
-  ...TABLE_MARKER_HELPERS,
-  "schema",
-  "table",
-  "grant",
-  "removed",
-  "hasMany",
-  "belongsTo",
-  "files"
+var SCOPE_HELPERS = new Set(["owner", "shared", "serverOnly", "member", "anyOf", "allOf", "parent", "group", "appRole"]);
+var TABLE_MARKER_HELPERS = new Set(["removedTable", "exported"]);
+var SCHEMA_CALLABLE = new Set([
+    ...COLUMN_HELPERS,
+    ...SCOPE_HELPERS,
+    ...TABLE_MARKER_HELPERS,
+    "schema",
+    "table",
+    "grant",
+    "removed",
+    "hasMany",
+    "belongsTo",
+    "files"
 ]);
 var SAFE_IDENT = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
 var RESERVED_PREFIXES = ["app_", "sqlite_", "d1_", "__sw_"];
@@ -6959,1234 +7365,1281 @@ var MEMBER_OPERATIONS = ["read", "create", "update", "delete"];
 var SchemaTsError = class extends Error {
 };
 function tokenize(source) {
-  const tokens = [];
-  let i = 0;
-  let line = 1;
-  const n = source.length;
-  while (i < n) {
-    const ch = source[i];
-    if (ch === "\n") {
-      line++;
-      i++;
-      continue;
-    }
-    if (ch === " " || ch === "	" || ch === "\r") {
-      i++;
-      continue;
-    }
-    if (ch === "/" && source[i + 1] === "/") {
-      while (i < n && source[i] !== "\n") i++;
-      continue;
-    }
-    if (ch === "/" && source[i + 1] === "*") {
-      i += 2;
-      while (i < n && !(source[i] === "*" && source[i + 1] === "/")) {
-        if (source[i] === "\n") line++;
-        i++;
-      }
-      i += 2;
-      continue;
-    }
-    if (ch === "`") {
-      throw new SchemaTsError(`line ${line}: template literals are not allowed in db/schema.ts; strings are plain 'single-quoted' strings.`);
-    }
-    if (ch === "'" || ch === '"') {
-      const startLine = line;
-      let value = "";
-      i++;
-      let closed = false;
-      while (i < n) {
-        const c = source[i];
-        if (c === "\\") {
-          const next = source[i + 1];
-          if (next === "'" || next === '"' || next === "\\") {
-            value += next;
+    const tokens = [];
+    let i = 0;
+    let line = 1;
+    const n = source.length;
+    while (i < n) {
+        const ch = source[i];
+        if (ch === "\n") {
+            line++;
+            i++;
+            continue;
+        }
+        if (ch === " " || ch === "	" || ch === "\r") {
+            i++;
+            continue;
+        }
+        if (ch === "/" && source[i + 1] === "/") {
+            while (i < n && source[i] !== "\n")
+                i++;
+            continue;
+        }
+        if (ch === "/" && source[i + 1] === "*") {
+            i += 2;
+            while (i < n && !(source[i] === "*" && source[i + 1] === "/")) {
+                if (source[i] === "\n")
+                    line++;
+                i++;
+            }
             i += 2;
             continue;
-          }
-          throw new SchemaTsError(`line ${line}: unsupported escape "\\${next ?? ""}" in a string \u2014 db/schema.ts strings allow only \\', \\" and \\\\.`);
         }
-        if (c === "\n") {
-          throw new SchemaTsError(`line ${startLine}: unterminated string.`);
+        if (ch === "`") {
+            throw new SchemaTsError(`line ${line}: template literals are not allowed in db/schema.ts; strings are plain 'single-quoted' strings.`);
         }
-        if (c === ch) {
-          closed = true;
-          i++;
-          break;
+        if (ch === "'" || ch === '"') {
+            const startLine = line;
+            let value = "";
+            i++;
+            let closed = false;
+            while (i < n) {
+                const c = source[i];
+                if (c === "\\") {
+                    const next = source[i + 1];
+                    if (next === "'" || next === '"' || next === "\\") {
+                        value += next;
+                        i += 2;
+                        continue;
+                    }
+                    throw new SchemaTsError(`line ${line}: unsupported escape "\\${next ?? ""}" in a string \u2014 db/schema.ts strings allow only \\', \\" and \\\\.`);
+                }
+                if (c === "\n") {
+                    throw new SchemaTsError(`line ${startLine}: unterminated string.`);
+                }
+                if (c === ch) {
+                    closed = true;
+                    i++;
+                    break;
+                }
+                value += c;
+                i++;
+            }
+            if (!closed)
+                throw new SchemaTsError(`line ${startLine}: unterminated string.`);
+            tokens.push({ kind: "string", value, line: startLine });
+            continue;
         }
-        value += c;
-        i++;
-      }
-      if (!closed) throw new SchemaTsError(`line ${startLine}: unterminated string.`);
-      tokens.push({ kind: "string", value, line: startLine });
-      continue;
+        if (/[0-9]/.test(ch) || ch === "-" && /[0-9]/.test(source[i + 1] ?? "")) {
+            let j = i + (ch === "-" ? 1 : 0);
+            while (j < n && /[0-9]/.test(source[j]))
+                j++;
+            if (source[j] === ".") {
+                j++;
+                while (j < n && /[0-9]/.test(source[j]))
+                    j++;
+            }
+            const text = source.slice(i, j);
+            const num = Number(text);
+            if (!Number.isFinite(num))
+                throw new SchemaTsError(`line ${line}: invalid number "${text}".`);
+            tokens.push({ kind: "number", value: text, line });
+            i = j;
+            continue;
+        }
+        if (/[A-Za-z_$]/.test(ch)) {
+            let j = i;
+            while (j < n && /[A-Za-z0-9_$]/.test(source[j]))
+                j++;
+            tokens.push({ kind: "ident", value: source.slice(i, j), line });
+            i = j;
+            continue;
+        }
+        if ("(){}[]:,;.=".includes(ch)) {
+            tokens.push({ kind: "punct", value: ch, line });
+            i++;
+            continue;
+        }
+        throw new SchemaTsError(`line ${line}: unexpected character "${ch}". db/schema.ts holds only the schema declaration \u2014 no expressions, operators, or type annotations.`);
     }
-    if (/[0-9]/.test(ch) || ch === "-" && /[0-9]/.test(source[i + 1] ?? "")) {
-      let j = i + (ch === "-" ? 1 : 0);
-      while (j < n && /[0-9]/.test(source[j])) j++;
-      if (source[j] === ".") {
-        j++;
-        while (j < n && /[0-9]/.test(source[j])) j++;
-      }
-      const text = source.slice(i, j);
-      const num = Number(text);
-      if (!Number.isFinite(num)) throw new SchemaTsError(`line ${line}: invalid number "${text}".`);
-      tokens.push({ kind: "number", value: text, line });
-      i = j;
-      continue;
-    }
-    if (/[A-Za-z_$]/.test(ch)) {
-      let j = i;
-      while (j < n && /[A-Za-z0-9_$]/.test(source[j])) j++;
-      tokens.push({ kind: "ident", value: source.slice(i, j), line });
-      i = j;
-      continue;
-    }
-    if ("(){}[]:,;.=".includes(ch)) {
-      tokens.push({ kind: "punct", value: ch, line });
-      i++;
-      continue;
-    }
-    throw new SchemaTsError(`line ${line}: unexpected character "${ch}". db/schema.ts holds only the schema declaration \u2014 no expressions, operators, or type annotations.`);
-  }
-  tokens.push({ kind: "eof", value: "", line });
-  return tokens;
+    tokens.push({ kind: "eof", value: "", line });
+    return tokens;
 }
 var Reader = class {
-  constructor(tokens, options = {}) {
-    this.tokens = tokens;
-    this.bareIdIsText = (table) => !options.legacyIntegerIdDefault && !options.integerKeyTables?.has(table.toLowerCase());
-  }
-  pos = 0;
-  /** What a bare id() on this table declares: a random text key, or an integer (ExtractSchemaOptions). */
-  bareIdIsText;
-  peek() {
-    return this.tokens[this.pos];
-  }
-  next() {
-    return this.tokens[this.pos++];
-  }
-  fail(msg) {
-    throw new SchemaTsError(`line ${this.peek().line}: ${msg}`);
-  }
-  expectPunct(p, context) {
-    const t = this.next();
-    if (t.kind !== "punct" || t.value !== p) {
-      throw new SchemaTsError(`line ${t.line}: expected "${p}" ${context}, found ${describeToken(t)}.`);
+    constructor(tokens, options = {}) {
+        this.tokens = tokens;
+        this.bareIdIsText = (table) => !options.legacyIntegerIdDefault && !options.integerKeyTables?.has(table.toLowerCase());
     }
-  }
-  tryPunct(p) {
-    const t = this.peek();
-    if (t.kind === "punct" && t.value === p) {
-      this.pos++;
-      return true;
+    pos = 0;
+    bareIdIsText;
+    peek() {
+        return this.tokens[this.pos];
     }
-    return false;
-  }
-  expectIdent(context) {
-    const t = this.next();
-    if (t.kind !== "ident") {
-      throw new SchemaTsError(`line ${t.line}: expected a name ${context}, found ${describeToken(t)}.`);
+    next() {
+        return this.tokens[this.pos++];
     }
-    return t;
-  }
-  /** An object key: identifier or quoted string. */
-  readKey(context) {
-    const t = this.next();
-    if (t.kind === "ident" || t.kind === "string") return { name: t.value, line: t.line };
-    throw new SchemaTsError(`line ${t.line}: expected a name ${context}, found ${describeToken(t)}.`);
-  }
-  readLiteral(context) {
-    const t = this.next();
-    if (t.kind === "string") return t.value;
-    if (t.kind === "number") return Number(t.value);
-    if (t.kind === "ident" && t.value === "true") return true;
-    if (t.kind === "ident" && t.value === "false") return false;
-    if (t.kind === "ident" && t.value === "null") return null;
-    throw new SchemaTsError(
-      `line ${t.line}: expected a literal value (string, number, true/false, or null) ${context}, found ${describeToken(t)}. Computed values are not allowed \u2014 the declaration must be readable without running it.`
-    );
-  }
-  /** { key: literal, … } with trailing commas allowed. */
-  readLiteralObject(context) {
-    this.expectPunct("{", context);
-    const out = /* @__PURE__ */ new Map();
-    while (!this.tryPunct("}")) {
-      const key = this.readKey(`for an option key ${context}`);
-      this.expectPunct(":", `after "${key.name}" ${context}`);
-      const value = this.readLiteral(`for "${key.name}" ${context}`);
-      if (out.has(key.name)) throw new SchemaTsError(`line ${key.line}: option "${key.name}" appears twice ${context}.`);
-      out.set(key.name, { value, line: key.line });
-      if (!this.tryPunct(",")) {
-        this.expectPunct("}", context);
-        break;
-      }
+    fail(msg) {
+        throw new SchemaTsError(`line ${this.peek().line}: ${msg}`);
     }
-    return out;
-  }
-  atEof() {
-    return this.peek().kind === "eof";
-  }
+    expectPunct(p, context) {
+        const t = this.next();
+        if (t.kind !== "punct" || t.value !== p) {
+            throw new SchemaTsError(`line ${t.line}: expected "${p}" ${context}, found ${describeToken(t)}.`);
+        }
+    }
+    tryPunct(p) {
+        const t = this.peek();
+        if (t.kind === "punct" && t.value === p) {
+            this.pos++;
+            return true;
+        }
+        return false;
+    }
+    expectIdent(context) {
+        const t = this.next();
+        if (t.kind !== "ident") {
+            throw new SchemaTsError(`line ${t.line}: expected a name ${context}, found ${describeToken(t)}.`);
+        }
+        return t;
+    }
+    readKey(context) {
+        const t = this.next();
+        if (t.kind === "ident" || t.kind === "string")
+            return { name: t.value, line: t.line };
+        throw new SchemaTsError(`line ${t.line}: expected a name ${context}, found ${describeToken(t)}.`);
+    }
+    readLiteral(context) {
+        const t = this.next();
+        if (t.kind === "string")
+            return t.value;
+        if (t.kind === "number")
+            return Number(t.value);
+        if (t.kind === "ident" && t.value === "true")
+            return true;
+        if (t.kind === "ident" && t.value === "false")
+            return false;
+        if (t.kind === "ident" && t.value === "null")
+            return null;
+        throw new SchemaTsError(`line ${t.line}: expected a literal value (string, number, true/false, or null) ${context}, found ${describeToken(t)}. Computed values are not allowed \u2014 the declaration must be readable without running it.`);
+    }
+    readLiteralObject(context) {
+        this.expectPunct("{", context);
+        const out = new Map();
+        while (!this.tryPunct("}")) {
+            const key = this.readKey(`for an option key ${context}`);
+            this.expectPunct(":", `after "${key.name}" ${context}`);
+            const value = this.readLiteral(`for "${key.name}" ${context}`);
+            if (out.has(key.name))
+                throw new SchemaTsError(`line ${key.line}: option "${key.name}" appears twice ${context}.`);
+            out.set(key.name, { value, line: key.line });
+            if (!this.tryPunct(",")) {
+                this.expectPunct("}", context);
+                break;
+            }
+        }
+        return out;
+    }
+    atEof() {
+        return this.peek().kind === "eof";
+    }
 };
 function describeToken(t) {
-  if (t.kind === "eof") return "the end of the file";
-  if (t.kind === "string") return `the string '${t.value.slice(0, 40)}'`;
-  return `"${t.value}"`;
+    if (t.kind === "eof")
+        return "the end of the file";
+    if (t.kind === "string")
+        return `the string '${t.value.slice(0, 40)}'`;
+    return `"${t.value}"`;
 }
 function readClientPermissions(r) {
-  r.expectPunct("{", "opening client permissions");
-  const out = /* @__PURE__ */ Object.create(null);
-  while (!r.tryPunct("}")) {
-    const key = r.readKey("for a client permission");
-    if (Object.prototype.hasOwnProperty.call(out, key.name)) r.fail(`client declares "${key.name}" twice.`);
-    r.expectPunct(":", `after client permission "${key.name}"`);
-    if (key.name === "publicRead" && r.peek().kind === "punct" && r.peek().value === "{") {
-      r.expectPunct("{", "opening client.publicRead");
-      const whereKey = r.readKey("in client.publicRead");
-      if (whereKey.name !== "where") r.fail("client.publicRead only accepts a where object.");
-      r.expectPunct(":", "after client.publicRead.where");
-      out[key.name] = { where: Object.fromEntries([...r.readLiteralObject("for client.publicRead.where")].map(([name, item]) => [name, item.value])) };
-      r.tryPunct(",");
-      r.expectPunct("}", "closing client.publicRead");
-    } else if (r.tryPunct("[")) {
-      const fields = [];
-      while (!r.tryPunct("]")) {
-        fields.push(r.readLiteral(`in client.${key.name}`));
+    r.expectPunct("{", "opening client permissions");
+    const out = Object.create(null);
+    while (!r.tryPunct("}")) {
+        const key = r.readKey("for a client permission");
+        if (Object.prototype.hasOwnProperty.call(out, key.name))
+            r.fail(`client declares "${key.name}" twice.`);
+        r.expectPunct(":", `after client permission "${key.name}"`);
+        if (key.name === "publicRead" && r.peek().kind === "punct" && r.peek().value === "{") {
+            r.expectPunct("{", "opening client.publicRead");
+            const whereKey = r.readKey("in client.publicRead");
+            if (whereKey.name !== "where")
+                r.fail("client.publicRead only accepts a where object.");
+            r.expectPunct(":", "after client.publicRead.where");
+            out[key.name] = { where: Object.fromEntries([...r.readLiteralObject("for client.publicRead.where")].map(([name, item]) => [name, item.value])) };
+            r.tryPunct(",");
+            r.expectPunct("}", "closing client.publicRead");
+        }
+        else if (r.tryPunct("[")) {
+            const fields = [];
+            while (!r.tryPunct("]")) {
+                fields.push(r.readLiteral(`in client.${key.name}`));
+                if (!r.tryPunct(",")) {
+                    r.expectPunct("]", `closing client.${key.name}`);
+                    break;
+                }
+            }
+            out[key.name] = fields;
+        }
+        else {
+            out[key.name] = ["links", "intake", "target", "where"].includes(key.name) && r.peek().kind === "punct" && r.peek().value === "{" ? readClientPermissions(r) : r.readLiteral(`for client.${key.name}`);
+        }
         if (!r.tryPunct(",")) {
-          r.expectPunct("]", `closing client.${key.name}`);
-          break;
+            r.expectPunct("}", "closing client permissions");
+            break;
         }
-      }
-      out[key.name] = fields;
-    } else {
-      out[key.name] = ["links", "intake", "target", "where"].includes(key.name) && r.peek().kind === "punct" && r.peek().value === "{" ? readClientPermissions(r) : r.readLiteral(`for client.${key.name}`);
-    }
-    if (!r.tryPunct(",")) {
-      r.expectPunct("}", "closing client permissions");
-      break;
-    }
-  }
-  return out;
-}
-function skipImport(r) {
-  r.next();
-  r.expectPunct("{", 'after "import"');
-  while (!r.tryPunct("}")) {
-    r.expectIdent("inside the import list");
-    if (!r.tryPunct(",")) {
-      r.expectPunct("}", "closing the import list");
-      break;
-    }
-  }
-  const from = r.expectIdent("after the import list");
-  if (from.value !== "from") throw new SchemaTsError(`line ${from.line}: expected "from" after the import list.`);
-  const src = r.next();
-  if (src.kind !== "string") throw new SchemaTsError(`line ${src.line}: expected a module name string after "from".`);
-  r.tryPunct(";");
-}
-function checkDeclaredName(kind, raw, line) {
-  if (raw.length > MAX_NAME_LENGTH) {
-    throw new SchemaTsError(`line ${line}: ${kind} name "${raw.slice(0, 40)}\u2026" is longer than ${MAX_NAME_LENGTH} characters.`);
-  }
-  if (!SAFE_IDENT.test(raw)) {
-    throw new SchemaTsError(`line ${line}: ${kind} name "${raw}" is invalid. A name is letters, digits, and underscores, starting with a letter or underscore.`);
-  }
-  const name = raw.toLowerCase();
-  if (name.startsWith("_") || RESERVED_PREFIXES.some((p) => name.startsWith(p))) {
-    throw new SchemaTsError(`line ${line}: ${kind} name "${raw}" uses a reserved platform prefix and cannot be declared: names starting with "app_" or "_" belong to the platform.`);
-  }
-  if (kind === "Column" && ROW_HINT_FIELDS.includes(name)) {
-    throw new SchemaTsError(`line ${line}: column name "${raw}" is reserved for row hints: a read with { can: true } returns can and mine on every row, so a column cannot take either name.`);
-  }
-  return name;
-}
-function readColumn(r, tableName, rawName, line) {
-  const helperTok = r.expectIdent(`for column "${tableName}"."${rawName}"`);
-  const helper = helperTok.value;
-  if (helper === "removed") {
-    r.expectPunct("(", 'after "removed"');
-    r.expectPunct(")", `closing removed() on "${tableName}"."${rawName}" \u2014 the removal marker takes no options`);
-    return { kind: "removed", name: checkDeclaredName("Column", rawName, line) };
-  }
-  if (TABLE_MARKER_HELPERS.has(helper)) {
-    throw new SchemaTsError(
-      `line ${helperTok.line}: "${tableName}"."${rawName}" uses ${helper}(), which marks a whole table, not a column. Removing columns from the live database is not supported yet, so "${rawName}" stays declared with its column type.`
-    );
-  }
-  if (!COLUMN_HELPERS.has(helper)) {
-    throw new SchemaTsError(
-      `line ${helperTok.line}: unknown column type "${helper}" on "${tableName}"."${rawName}". Column types are id, text, number, integer, bigint, boolean, timestamp, json, and blob.`
-    );
-  }
-  r.expectPunct("(", `after "${helper}"`);
-  let opts = /* @__PURE__ */ new Map();
-  if (!r.tryPunct(")")) {
-    opts = r.readLiteralObject(`in ${helper}() options for "${tableName}"."${rawName}"`);
-    r.tryPunct(",");
-    r.expectPunct(")", `closing ${helper}()`);
-  }
-  const name = checkDeclaredName("Column", rawName, line);
-  const col = {
-    name,
-    helper,
-    uuid: helper === "id" && r.bareIdIsText(tableName),
-    nullable: false,
-    hasDefault: false,
-    default: null,
-    autoNow: false,
-    unique: false,
-    references: null,
-    onDelete: "restrict",
-    renamedFrom: null
-  };
-  const allowed = helper === "id" ? /* @__PURE__ */ new Set(["uuid"]) : /* @__PURE__ */ new Set(["nullable", "default", "unique", "references", "onDelete", "renamedFrom"]);
-  for (const [key, { value, line: optLine }] of opts) {
-    if (!allowed.has(key)) {
-      throw new SchemaTsError(
-        `line ${optLine}: ${helper}() on "${tableName}"."${rawName}" has an unknown option "${key}". Allowed: ${[...allowed].join(", ")}.`
-      );
-    }
-    switch (key) {
-      case "uuid":
-        if (typeof value !== "boolean") throw new SchemaTsError(`line ${optLine}: "uuid" must be true or false.`);
-        col.uuid = value;
-        break;
-      case "nullable":
-        if (typeof value !== "boolean") throw new SchemaTsError(`line ${optLine}: "nullable" must be true or false.`);
-        col.nullable = value;
-        break;
-      case "unique":
-        if (typeof value !== "boolean") throw new SchemaTsError(`line ${optLine}: "unique" must be true or false.`);
-        col.unique = value;
-        break;
-      case "default": {
-        const t = col.helper;
-        if (t === "timestamp" && value === "now") {
-          col.autoNow = true;
-          break;
-        }
-        const okType = value === null || t === "boolean" && typeof value === "boolean" || (t === "number" || t === "integer") && typeof value === "number" || (t === "text" || t === "timestamp" || t === "json" || t === "bigint") && typeof value === "string";
-        if (!okType) {
-          throw new SchemaTsError(
-            `line ${optLine}: the default for "${tableName}"."${rawName}" (${t}) must be ${t === "boolean" ? "true or false" : t === "number" || t === "integer" ? "a number" : t === "bigint" ? "a whole number written as a string, like '9007199254740993'" : t === "blob" ? "omitted \u2014 blob columns cannot declare a default" : "a string"} or null.`
-          );
-        }
-        if (t === "integer" && typeof value === "number" && !Number.isSafeInteger(value)) {
-          throw new SchemaTsError(Number.isInteger(value) ? `line ${optLine}: the default for integer column "${tableName}"."${rawName}" is outside JavaScript's exact whole-number range (\xB19007199254740991); a bigint() column takes such a default written as a string.` : `line ${optLine}: the default for integer column "${tableName}"."${rawName}" must be a whole number.`);
-        }
-        if (t === "bigint" && typeof value === "string" && !isCanonicalBigintText(value)) {
-          throw new SchemaTsError(`line ${optLine}: the default for bigint column "${tableName}"."${rawName}" must be a whole number between -9223372036854775808 and 9223372036854775807, written as a string with no sign other than a leading minus and no leading zeros.`);
-        }
-        col.hasDefault = true;
-        col.default = value;
-        break;
-      }
-      case "references":
-        if (typeof value !== "string" || !SAFE_IDENT.test(value)) {
-          throw new SchemaTsError(`line ${optLine}: "references" must be the name of a table declared in this file.`);
-        }
-        col.references = value.toLowerCase();
-        break;
-      case "onDelete":
-        if (value !== "cascade" && value !== "restrict") {
-          throw new SchemaTsError(`line ${optLine}: "onDelete" must be 'cascade' or 'restrict'.`);
-        }
-        col.onDelete = value;
-        break;
-      case "renamedFrom":
-        if (typeof value !== "string" || !SAFE_IDENT.test(value) || value.length > MAX_NAME_LENGTH) {
-          throw new SchemaTsError(`line ${optLine}: "renamedFrom" on "${tableName}"."${rawName}" must be the previous column name.`);
-        }
-        col.renamedFrom = value.toLowerCase();
-        break;
-    }
-  }
-  if (col.renamedFrom === col.name) {
-    throw new SchemaTsError(
-      `line ${line}: "${tableName}"."${rawName}" declares renamedFrom: '${col.renamedFrom}' \u2014 that is its own name. A rename needs the OLD name there.`
-    );
-  }
-  if (col.onDelete === "cascade" && !col.references) {
-    throw new SchemaTsError(`line ${line}: "onDelete" on "${tableName}"."${rawName}" needs "references" on the same column.`);
-  }
-  if (col.hasDefault && col.default === null) {
-    if (!col.nullable) {
-      throw new SchemaTsError(
-        `line ${line}: "${tableName}"."${rawName}" is required but declares { default: null } \u2014 a required column can never hold null. It is accepted with a non-null default or { nullable: true }.`
-      );
-    }
-    col.hasDefault = false;
-  }
-  return { kind: "column", column: col };
-}
-function readColumnOrColumnList(r, ctx) {
-  if (r.tryPunct("[")) {
-    const out = [];
-    while (!r.tryPunct("]")) {
-      const t2 = r.next();
-      if (t2.kind !== "string") {
-        throw new SchemaTsError(`line ${t2.line}: ${ctx} must be quoted column names.`);
-      }
-      out.push(t2.value.toLowerCase());
-      if (!r.tryPunct(",")) {
-        r.expectPunct("]", `closing ${ctx}`);
-        break;
-      }
     }
     return out;
-  }
-  const t = r.next();
-  if (t.kind !== "string") {
-    throw new SchemaTsError(`line ${t.line}: ${ctx} must be a quoted column name, or a list of them for a composite key.`);
-  }
-  return [t.value.toLowerCase()];
+}
+function skipImport(r) {
+    r.next();
+    r.expectPunct("{", 'after "import"');
+    while (!r.tryPunct("}")) {
+        r.expectIdent("inside the import list");
+        if (!r.tryPunct(",")) {
+            r.expectPunct("}", "closing the import list");
+            break;
+        }
+    }
+    const from = r.expectIdent("after the import list");
+    if (from.value !== "from")
+        throw new SchemaTsError(`line ${from.line}: expected "from" after the import list.`);
+    const src = r.next();
+    if (src.kind !== "string")
+        throw new SchemaTsError(`line ${src.line}: expected a module name string after "from".`);
+    r.tryPunct(";");
+}
+function checkDeclaredName(kind, raw, line) {
+    if (raw.length > MAX_NAME_LENGTH) {
+        throw new SchemaTsError(`line ${line}: ${kind} name "${raw.slice(0, 40)}\u2026" is longer than ${MAX_NAME_LENGTH} characters.`);
+    }
+    if (!SAFE_IDENT.test(raw)) {
+        throw new SchemaTsError(`line ${line}: ${kind} name "${raw}" is invalid. A name is letters, digits, and underscores, starting with a letter or underscore.`);
+    }
+    const name = raw.toLowerCase();
+    if (name.startsWith("_") || RESERVED_PREFIXES.some((p) => name.startsWith(p))) {
+        throw new SchemaTsError(`line ${line}: ${kind} name "${raw}" uses a reserved platform prefix and cannot be declared: names starting with "app_" or "_" belong to the platform.`);
+    }
+    if (kind === "Column" && ROW_HINT_FIELDS.includes(name)) {
+        throw new SchemaTsError(`line ${line}: column name "${raw}" is reserved for row hints: a read with { can: true } returns can and mine on every row, so a column cannot take either name.`);
+    }
+    return name;
+}
+function readColumn(r, tableName, rawName, line) {
+    const helperTok = r.expectIdent(`for column "${tableName}"."${rawName}"`);
+    const helper = helperTok.value;
+    if (helper === "removed") {
+        r.expectPunct("(", 'after "removed"');
+        r.expectPunct(")", `closing removed() on "${tableName}"."${rawName}" \u2014 the removal marker takes no options`);
+        return { kind: "removed", name: checkDeclaredName("Column", rawName, line) };
+    }
+    if (TABLE_MARKER_HELPERS.has(helper)) {
+        throw new SchemaTsError(`line ${helperTok.line}: "${tableName}"."${rawName}" uses ${helper}(), which marks a whole table, not a column. Removing columns from the live database is not supported yet, so "${rawName}" stays declared with its column type.`);
+    }
+    if (!COLUMN_HELPERS.has(helper)) {
+        throw new SchemaTsError(`line ${helperTok.line}: unknown column type "${helper}" on "${tableName}"."${rawName}". Column types are id, text, number, integer, bigint, boolean, timestamp, json, and blob.`);
+    }
+    r.expectPunct("(", `after "${helper}"`);
+    let opts = new Map();
+    if (!r.tryPunct(")")) {
+        opts = r.readLiteralObject(`in ${helper}() options for "${tableName}"."${rawName}"`);
+        r.tryPunct(",");
+        r.expectPunct(")", `closing ${helper}()`);
+    }
+    const name = checkDeclaredName("Column", rawName, line);
+    const col = {
+        name,
+        helper,
+        uuid: helper === "id" && r.bareIdIsText(tableName),
+        nullable: false,
+        hasDefault: false,
+        default: null,
+        autoNow: false,
+        unique: false,
+        references: null,
+        onDelete: "restrict",
+        renamedFrom: null
+    };
+    const allowed = helper === "id" ? new Set(["uuid"]) : new Set(["nullable", "default", "unique", "references", "onDelete", "renamedFrom"]);
+    for (const [key, { value, line: optLine }] of opts) {
+        if (!allowed.has(key)) {
+            throw new SchemaTsError(`line ${optLine}: ${helper}() on "${tableName}"."${rawName}" has an unknown option "${key}". Allowed: ${[...allowed].join(", ")}.`);
+        }
+        switch (key) {
+            case "uuid":
+                if (typeof value !== "boolean")
+                    throw new SchemaTsError(`line ${optLine}: "uuid" must be true or false.`);
+                col.uuid = value;
+                break;
+            case "nullable":
+                if (typeof value !== "boolean")
+                    throw new SchemaTsError(`line ${optLine}: "nullable" must be true or false.`);
+                col.nullable = value;
+                break;
+            case "unique":
+                if (typeof value !== "boolean")
+                    throw new SchemaTsError(`line ${optLine}: "unique" must be true or false.`);
+                col.unique = value;
+                break;
+            case "default": {
+                const t = col.helper;
+                if (t === "timestamp" && value === "now") {
+                    col.autoNow = true;
+                    break;
+                }
+                const okType = value === null || t === "boolean" && typeof value === "boolean" || (t === "number" || t === "integer") && typeof value === "number" || (t === "text" || t === "timestamp" || t === "json" || t === "bigint") && typeof value === "string";
+                if (!okType) {
+                    throw new SchemaTsError(`line ${optLine}: the default for "${tableName}"."${rawName}" (${t}) must be ${t === "boolean" ? "true or false" : t === "number" || t === "integer" ? "a number" : t === "bigint" ? "a whole number written as a string, like '9007199254740993'" : t === "blob" ? "omitted \u2014 blob columns cannot declare a default" : "a string"} or null.`);
+                }
+                if (t === "integer" && typeof value === "number" && !Number.isSafeInteger(value)) {
+                    throw new SchemaTsError(Number.isInteger(value) ? `line ${optLine}: the default for integer column "${tableName}"."${rawName}" is outside JavaScript's exact whole-number range (\xB19007199254740991); a bigint() column takes such a default written as a string.` : `line ${optLine}: the default for integer column "${tableName}"."${rawName}" must be a whole number.`);
+                }
+                if (t === "bigint" && typeof value === "string" && !isCanonicalBigintText(value)) {
+                    throw new SchemaTsError(`line ${optLine}: the default for bigint column "${tableName}"."${rawName}" must be a whole number between -9223372036854775808 and 9223372036854775807, written as a string with no sign other than a leading minus and no leading zeros.`);
+                }
+                col.hasDefault = true;
+                col.default = value;
+                break;
+            }
+            case "references":
+                if (typeof value !== "string" || !SAFE_IDENT.test(value)) {
+                    throw new SchemaTsError(`line ${optLine}: "references" must be the name of a table declared in this file.`);
+                }
+                col.references = value.toLowerCase();
+                break;
+            case "onDelete":
+                if (value !== "cascade" && value !== "restrict") {
+                    throw new SchemaTsError(`line ${optLine}: "onDelete" must be 'cascade' or 'restrict'.`);
+                }
+                col.onDelete = value;
+                break;
+            case "renamedFrom":
+                if (typeof value !== "string" || !SAFE_IDENT.test(value) || value.length > MAX_NAME_LENGTH) {
+                    throw new SchemaTsError(`line ${optLine}: "renamedFrom" on "${tableName}"."${rawName}" must be the previous column name.`);
+                }
+                col.renamedFrom = value.toLowerCase();
+                break;
+        }
+    }
+    if (col.renamedFrom === col.name) {
+        throw new SchemaTsError(`line ${line}: "${tableName}"."${rawName}" declares renamedFrom: '${col.renamedFrom}' \u2014 that is its own name. A rename needs the OLD name there.`);
+    }
+    if (col.onDelete === "cascade" && !col.references) {
+        throw new SchemaTsError(`line ${line}: "onDelete" on "${tableName}"."${rawName}" needs "references" on the same column.`);
+    }
+    if (col.hasDefault && col.default === null) {
+        if (!col.nullable) {
+            throw new SchemaTsError(`line ${line}: "${tableName}"."${rawName}" is required but declares { default: null } \u2014 a required column can never hold null. It is accepted with a non-null default or { nullable: true }.`);
+        }
+        col.hasDefault = false;
+    }
+    return { kind: "column", column: col };
+}
+function readColumnOrColumnList(r, ctx) {
+    if (r.tryPunct("[")) {
+        const out = [];
+        while (!r.tryPunct("]")) {
+            const t2 = r.next();
+            if (t2.kind !== "string") {
+                throw new SchemaTsError(`line ${t2.line}: ${ctx} must be quoted column names.`);
+            }
+            out.push(t2.value.toLowerCase());
+            if (!r.tryPunct(",")) {
+                r.expectPunct("]", `closing ${ctx}`);
+                break;
+            }
+        }
+        return out;
+    }
+    const t = r.next();
+    if (t.kind !== "string") {
+        throw new SchemaTsError(`line ${t.line}: ${ctx} must be a quoted column name, or a list of them for a composite key.`);
+    }
+    return [t.value.toLowerCase()];
 }
 function readSingleColumn(r, ctx) {
-  const t = r.next();
-  if (t.kind !== "string") {
-    throw new SchemaTsError(`line ${t.line}: ${ctx} must be a single quoted column name.`);
-  }
-  return t.value.toLowerCase();
+    const t = r.next();
+    if (t.kind !== "string") {
+        throw new SchemaTsError(`line ${t.line}: ${ctx} must be a single quoted column name.`);
+    }
+    return t.value.toLowerCase();
 }
 function validateMemberColumns(names, optionLabel, tableName, line) {
-  const seen = /* @__PURE__ */ new Set();
-  for (const name of names) {
-    if (!SAFE_IDENT.test(name) || name.length > MAX_NAME_LENGTH) {
-      throw new SchemaTsError(`line ${line}: member(${optionLabel}) on table "${tableName}" names an invalid column "${name}".`);
+    const seen = new Set();
+    for (const name of names) {
+        if (!SAFE_IDENT.test(name) || name.length > MAX_NAME_LENGTH) {
+            throw new SchemaTsError(`line ${line}: member(${optionLabel}) on table "${tableName}" names an invalid column "${name}".`);
+        }
+        if (seen.has(name)) {
+            throw new SchemaTsError(`line ${line}: member(${optionLabel}) on table "${tableName}" lists "${name}" twice.`);
+        }
+        seen.add(name);
     }
-    if (seen.has(name)) {
-      throw new SchemaTsError(`line ${line}: member(${optionLabel}) on table "${tableName}" lists "${name}" twice.`);
-    }
-    seen.add(name);
-  }
 }
 function readMemberOperations(r, tableName) {
-  r.expectPunct("[", `for member({ operations }) on table "${tableName}"`);
-  const seen = /* @__PURE__ */ new Set();
-  while (!r.tryPunct("]")) {
-    const token = r.next();
-    if (token.kind !== "string" || !MEMBER_OPERATIONS.includes(token.value)) {
-      throw new SchemaTsError(`line ${token.line}: member({ operations }) on table "${tableName}" only accepts 'read', 'create', 'update', and 'delete'.`);
+    r.expectPunct("[", `for member({ operations }) on table "${tableName}"`);
+    const seen = new Set();
+    while (!r.tryPunct("]")) {
+        const token = r.next();
+        if (token.kind !== "string" || !MEMBER_OPERATIONS.includes(token.value)) {
+            throw new SchemaTsError(`line ${token.line}: member({ operations }) on table "${tableName}" only accepts 'read', 'create', 'update', and 'delete'.`);
+        }
+        seen.add(token.value);
+        if (!r.tryPunct(",")) {
+            r.expectPunct("]", `closing member({ operations }) on table "${tableName}"`);
+            break;
+        }
     }
-    seen.add(token.value);
-    if (!r.tryPunct(",")) {
-      r.expectPunct("]", `closing member({ operations }) on table "${tableName}"`);
-      break;
+    const normalized = MEMBER_OPERATIONS.filter((operation) => seen.has(operation));
+    if (!seen.has("read") && (seen.has("update") || seen.has("delete"))) {
+        throw new SchemaTsError(`member({ operations }) on table "${tableName}" must include 'read' when it includes 'update' or 'delete', because mutations return the affected row.`);
     }
-  }
-  const normalized = MEMBER_OPERATIONS.filter((operation) => seen.has(operation));
-  if (!seen.has("read") && (seen.has("update") || seen.has("delete"))) {
-    throw new SchemaTsError(`member({ operations }) on table "${tableName}" must include 'read' when it includes 'update' or 'delete', because mutations return the affected row.`);
-  }
-  return normalized.length === MEMBER_OPERATIONS.length ? void 0 : normalized;
+    return normalized.length === MEMBER_OPERATIONS.length ? void 0 : normalized;
 }
 function readMemberScope(r, tableName, scopeLine) {
-  r.expectPunct("{", `in member() options for table "${tableName}" \u2014 member() needs { group, membership, member_user, member_group }`);
-  let group = null;
-  let membership = null;
-  let memberUser = null;
-  let memberGroup = null;
-  let operations, operationsSeen = false;
-  let read;
-  while (!r.tryPunct("}")) {
-    const key = r.readKey(`for a member() option of table "${tableName}"`);
-    r.expectPunct(":", `after "${key.name}" in member() for table "${tableName}"`);
-    if (key.name === "group") {
-      group = readColumnOrColumnList(r, `member({ group }) on table "${tableName}"`);
-    } else if (key.name === "membership") {
-      membership = readSingleColumn(r, `member({ membership }) on table "${tableName}"`);
-    } else if (key.name === "member_user") {
-      memberUser = readSingleColumn(r, `member({ member_user }) on table "${tableName}"`);
-    } else if (key.name === "member_group") {
-      memberGroup = readColumnOrColumnList(r, `member({ member_group }) on table "${tableName}"`);
-    } else if (key.name === "operations") {
-      if (operationsSeen) throw new SchemaTsError(`line ${key.line}: member() on table "${tableName}" declares operations more than once.`);
-      operationsSeen = true;
-      operations = readMemberOperations(r, tableName);
-    } else if (key.name === "read") {
-      if (read) throw new SchemaTsError(`line ${key.line}: member() on table "${tableName}" declares read more than once.`);
-      read = readBranchReadColumns(r, `member({ read }) on table "${tableName}"`);
-    } else {
-      throw new SchemaTsError(
-        `line ${key.line}: member() on table "${tableName}" has an unknown option "${key.name}". Allowed: group, membership, member_user, member_group, operations, read.`
-      );
-    }
-    if (!r.tryPunct(",")) {
-      r.expectPunct("}", `closing member() options for table "${tableName}"`);
-      break;
-    }
-  }
-  const missing = [];
-  if (!group) missing.push("group");
-  if (!membership) missing.push("membership");
-  if (!memberUser) missing.push("member_user");
-  if (!memberGroup) missing.push("member_group");
-  if (missing.length > 0 || !group || !membership || !memberUser || !memberGroup) {
-    throw new SchemaTsError(
-      `line ${scopeLine}: member() on table "${tableName}" is missing ${missing.join(", ")}. It needs member({ group, membership, member_user, member_group }) \u2014 group and member_group name the group-key columns on this table and on the membership table.`
-    );
-  }
-  validateMemberColumns(group, "group", tableName, scopeLine);
-  validateMemberColumns([membership], "membership", tableName, scopeLine);
-  validateMemberColumns([memberUser], "member_user", tableName, scopeLine);
-  validateMemberColumns(memberGroup, "member_group", tableName, scopeLine);
-  if (group.length > MAX_INDEX_COLUMNS) {
-    throw new SchemaTsError(`line ${scopeLine}: member({ group }) on table "${tableName}" lists ${group.length} columns (max ${MAX_INDEX_COLUMNS}).`);
-  }
-  if (group.length !== memberGroup.length) {
-    throw new SchemaTsError(
-      `line ${scopeLine}: member() on table "${tableName}" has a ${group.length}-column group but a ${memberGroup.length}-column member_group. The group key must have the same number of columns on both sides.`
-    );
-  }
-  const node = { kind: "member", group, membership, memberUser, memberGroup, ...operations !== void 0 ? { operations } : {}, ...read ? { read } : {} };
-  if (operationsSeen) explicitMemberOperations.add(node);
-  return node;
-}
-var explicitMemberOperations = /* @__PURE__ */ new WeakSet();
-function readPolicyOwner(r, tableName, line) {
-  r.expectPunct("(", 'after "owner"');
-  let column = DEFAULT_OWNER_COLUMN;
-  let read;
-  if (!r.tryPunct(")")) {
-    r.expectPunct("{", `in owner() inside anyOf() for table "${tableName}"`);
-    const seen = /* @__PURE__ */ new Set();
+    r.expectPunct("{", `in member() options for table "${tableName}" \u2014 member() needs { group, membership, member_user, member_group }`);
+    let group = null;
+    let membership = null;
+    let memberUser = null;
+    let memberGroup = null;
+    let operations, operationsSeen = false;
+    let read;
     while (!r.tryPunct("}")) {
-      const key = r.readKey(`for an owner() option inside anyOf() for table "${tableName}"`);
-      if (seen.has(key.name)) throw new SchemaTsError(`line ${key.line}: option "${key.name}" appears twice in owner() inside anyOf() for table "${tableName}".`);
-      seen.add(key.name);
-      r.expectPunct(":", `after "${key.name}" in owner() inside anyOf() for table "${tableName}"`);
-      if (key.name === "column") {
-        const value = r.readLiteral(`for "column" in owner() inside anyOf() for table "${tableName}"`);
-        if (typeof value !== "string" || !SAFE_IDENT.test(value) || value.length > MAX_NAME_LENGTH) {
-          throw new SchemaTsError(`line ${key.line}: owner({ column }) on table "${tableName}" must be a valid column name.`);
+        const key = r.readKey(`for a member() option of table "${tableName}"`);
+        r.expectPunct(":", `after "${key.name}" in member() for table "${tableName}"`);
+        if (key.name === "group") {
+            group = readColumnOrColumnList(r, `member({ group }) on table "${tableName}"`);
         }
-        column = value.toLowerCase();
-      } else if (key.name === "read") {
-        read = readBranchReadColumns(r, `owner({ read }) on table "${tableName}"`);
-      } else {
-        throw new SchemaTsError(`line ${key.line}: owner() inside anyOf() only allows column and read. Visitor ownership is not part of policy scope.`);
-      }
-      if (!r.tryPunct(",")) {
-        r.expectPunct("}", `closing owner() options inside anyOf() for table "${tableName}"`);
-        break;
-      }
+        else if (key.name === "membership") {
+            membership = readSingleColumn(r, `member({ membership }) on table "${tableName}"`);
+        }
+        else if (key.name === "member_user") {
+            memberUser = readSingleColumn(r, `member({ member_user }) on table "${tableName}"`);
+        }
+        else if (key.name === "member_group") {
+            memberGroup = readColumnOrColumnList(r, `member({ member_group }) on table "${tableName}"`);
+        }
+        else if (key.name === "operations") {
+            if (operationsSeen)
+                throw new SchemaTsError(`line ${key.line}: member() on table "${tableName}" declares operations more than once.`);
+            operationsSeen = true;
+            operations = readMemberOperations(r, tableName);
+        }
+        else if (key.name === "read") {
+            if (read)
+                throw new SchemaTsError(`line ${key.line}: member() on table "${tableName}" declares read more than once.`);
+            read = readBranchReadColumns(r, `member({ read }) on table "${tableName}"`);
+        }
+        else {
+            throw new SchemaTsError(`line ${key.line}: member() on table "${tableName}" has an unknown option "${key.name}". Allowed: group, membership, member_user, member_group, operations, read.`);
+        }
+        if (!r.tryPunct(",")) {
+            r.expectPunct("}", `closing member() options for table "${tableName}"`);
+            break;
+        }
     }
-    r.tryPunct(",");
-    r.expectPunct(")", "closing owner()");
-  }
-  return { kind: "owner", column, ...read ? { read } : {} };
+    const missing = [];
+    if (!group)
+        missing.push("group");
+    if (!membership)
+        missing.push("membership");
+    if (!memberUser)
+        missing.push("member_user");
+    if (!memberGroup)
+        missing.push("member_group");
+    if (missing.length > 0 || !group || !membership || !memberUser || !memberGroup) {
+        throw new SchemaTsError(`line ${scopeLine}: member() on table "${tableName}" is missing ${missing.join(", ")}. It needs member({ group, membership, member_user, member_group }) \u2014 group and member_group name the group-key columns on this table and on the membership table.`);
+    }
+    validateMemberColumns(group, "group", tableName, scopeLine);
+    validateMemberColumns([membership], "membership", tableName, scopeLine);
+    validateMemberColumns([memberUser], "member_user", tableName, scopeLine);
+    validateMemberColumns(memberGroup, "member_group", tableName, scopeLine);
+    if (group.length > MAX_INDEX_COLUMNS) {
+        throw new SchemaTsError(`line ${scopeLine}: member({ group }) on table "${tableName}" lists ${group.length} columns (max ${MAX_INDEX_COLUMNS}).`);
+    }
+    if (group.length !== memberGroup.length) {
+        throw new SchemaTsError(`line ${scopeLine}: member() on table "${tableName}" has a ${group.length}-column group but a ${memberGroup.length}-column member_group. The group key must have the same number of columns on both sides.`);
+    }
+    const node = { kind: "member", group, membership, memberUser, memberGroup, ...operations !== void 0 ? { operations } : {}, ...read ? { read } : {} };
+    if (operationsSeen)
+        explicitMemberOperations.add(node);
+    return node;
+}
+var explicitMemberOperations = new WeakSet();
+function readPolicyOwner(r, tableName, line) {
+    r.expectPunct("(", 'after "owner"');
+    let column = DEFAULT_OWNER_COLUMN;
+    let read;
+    if (!r.tryPunct(")")) {
+        r.expectPunct("{", `in owner() inside anyOf() for table "${tableName}"`);
+        const seen = new Set();
+        while (!r.tryPunct("}")) {
+            const key = r.readKey(`for an owner() option inside anyOf() for table "${tableName}"`);
+            if (seen.has(key.name))
+                throw new SchemaTsError(`line ${key.line}: option "${key.name}" appears twice in owner() inside anyOf() for table "${tableName}".`);
+            seen.add(key.name);
+            r.expectPunct(":", `after "${key.name}" in owner() inside anyOf() for table "${tableName}"`);
+            if (key.name === "column") {
+                const value = r.readLiteral(`for "column" in owner() inside anyOf() for table "${tableName}"`);
+                if (typeof value !== "string" || !SAFE_IDENT.test(value) || value.length > MAX_NAME_LENGTH) {
+                    throw new SchemaTsError(`line ${key.line}: owner({ column }) on table "${tableName}" must be a valid column name.`);
+                }
+                column = value.toLowerCase();
+            }
+            else if (key.name === "read") {
+                read = readBranchReadColumns(r, `owner({ read }) on table "${tableName}"`);
+            }
+            else {
+                throw new SchemaTsError(`line ${key.line}: owner() inside anyOf() only allows column and read. Visitor ownership is not part of policy scope.`);
+            }
+            if (!r.tryPunct(",")) {
+                r.expectPunct("}", `closing owner() options inside anyOf() for table "${tableName}"`);
+                break;
+            }
+        }
+        r.tryPunct(",");
+        r.expectPunct(")", "closing owner()");
+    }
+    return { kind: "owner", column, ...read ? { read } : {} };
 }
 function readBranchReadColumns(r, ctx) {
-  const open = r.next();
-  if (open.kind !== "punct" || open.value !== "[") throw new SchemaTsError(`line ${open.line}: ${ctx} must be a list of quoted column names, such as ['id', 'subject'].`);
-  const out = [];
-  while (!r.tryPunct("]")) {
-    const t = r.next();
-    if (t.kind !== "string" || !SAFE_IDENT.test(t.value) || t.value.length > MAX_NAME_LENGTH) throw new SchemaTsError(`line ${t.line}: ${ctx} must be a list of quoted column names; values must be literal strings.`);
-    const name = t.value.toLowerCase();
-    if (out.includes(name)) throw new SchemaTsError(`line ${t.line}: ${ctx} lists "${t.value}" twice.`);
-    out.push(name);
-    if (!r.tryPunct(",")) {
-      r.expectPunct("]", `closing ${ctx}`);
-      break;
+    const open = r.next();
+    if (open.kind !== "punct" || open.value !== "[")
+        throw new SchemaTsError(`line ${open.line}: ${ctx} must be a list of quoted column names, such as ['id', 'subject'].`);
+    const out = [];
+    while (!r.tryPunct("]")) {
+        const t = r.next();
+        if (t.kind !== "string" || !SAFE_IDENT.test(t.value) || t.value.length > MAX_NAME_LENGTH)
+            throw new SchemaTsError(`line ${t.line}: ${ctx} must be a list of quoted column names; values must be literal strings.`);
+        const name = t.value.toLowerCase();
+        if (out.includes(name))
+            throw new SchemaTsError(`line ${t.line}: ${ctx} lists "${t.value}" twice.`);
+        out.push(name);
+        if (!r.tryPunct(",")) {
+            r.expectPunct("]", `closing ${ctx}`);
+            break;
+        }
     }
-  }
-  if (out.length === 0) throw new SchemaTsError(`line ${open.line}: ${ctx} must name at least one column; leave read out for every column.`);
-  return out;
+    if (out.length === 0)
+        throw new SchemaTsError(`line ${open.line}: ${ctx} must name at least one column; leave read out for every column.`);
+    return out;
 }
 function refuseBranchRead(node, line, tableName, where) {
-  if (node.read) throw new SchemaTsError(`line ${line}: read on ${where} of table "${tableName}" is accepted only on the branches of the table's own anyOf(); it names the columns that branch may read.`);
+    if (node.read)
+        throw new SchemaTsError(`line ${line}: read on ${where} of table "${tableName}" is accepted only on the branches of the table's own anyOf(); it names the columns that branch may read.`);
 }
 function readPolicyMember(r, tableName, line) {
-  r.expectPunct("(", 'after "member"');
-  const scope = readMemberScope(r, tableName, line);
-  r.tryPunct(",");
-  r.expectPunct(")", "closing member()");
-  if (scope.kind !== "member") throw new SchemaTsError(`line ${line}: invalid member() policy.`);
-  return scope;
+    r.expectPunct("(", 'after "member"');
+    const scope = readMemberScope(r, tableName, line);
+    r.tryPunct(",");
+    r.expectPunct(")", "closing member()");
+    if (scope.kind !== "member")
+        throw new SchemaTsError(`line ${line}: invalid member() policy.`);
+    return scope;
 }
 var ANY_OF_FORMS = "anyOf() accepts exactly one owner() and one member(), grant(), group() or appRole().";
 function readAnyOfBranch(r, tableName, which) {
-  const tok = r.expectIdent(`for the ${which} policy in anyOf() on table "${tableName}"`);
-  const failAt = (at, message) => {
-    throw new SchemaTsError(`line ${at}: ${message}`);
-  };
-  if (tok.value === "owner") return readPolicyOwner(r, tableName, tok.line);
-  if (tok.value === "member") return readPolicyMember(r, tableName, tok.line);
-  if (tok.value === "grant") return readGrantScope(r, tableName, tok.line, failAt);
-  if (tok.value === "group") return readGroupScope(r, tableName, tok.line, failAt);
-  if (tok.value === "appRole") return readAppRoleScope(r, tableName, tok.line, failAt);
-  throw new SchemaTsError(`line ${tok.line}: ${ANY_OF_FORMS}`);
+    const tok = r.expectIdent(`for the ${which} policy in anyOf() on table "${tableName}"`);
+    const failAt = (at, message) => {
+        throw new SchemaTsError(`line ${at}: ${message}`);
+    };
+    if (tok.value === "owner")
+        return readPolicyOwner(r, tableName, tok.line);
+    if (tok.value === "member")
+        return readPolicyMember(r, tableName, tok.line);
+    if (tok.value === "grant")
+        return readGrantScope(r, tableName, tok.line, failAt);
+    if (tok.value === "group")
+        return readGroupScope(r, tableName, tok.line, failAt);
+    if (tok.value === "appRole")
+        return readAppRoleScope(r, tableName, tok.line, failAt);
+    throw new SchemaTsError(`line ${tok.line}: ${ANY_OF_FORMS}`);
 }
 function readAnyOfScope(r, tableName, line) {
-  r.expectPunct("(", 'after "anyOf"');
-  const firstPolicy = readAnyOfBranch(r, tableName, "first");
-  r.expectPunct(",", `between the two policies in anyOf() on table "${tableName}"`);
-  const secondPolicy = readAnyOfBranch(r, tableName, "second");
-  r.tryPunct(",");
-  r.expectPunct(")", "closing anyOf()");
-  const owners = [firstPolicy, secondPolicy].filter((p) => p.kind === "owner");
-  if (owners.length !== 1) throw new SchemaTsError(`line ${line}: ${ANY_OF_FORMS}`);
-  const owner = owners[0];
-  const other = firstPolicy.kind === "owner" ? secondPolicy : firstPolicy;
-  if (other.kind === "member" && other.ownerGrant && owner.column !== DEFAULT_OWNER_COLUMN) throw new SchemaTsError(`line ${line}: grant() requires owner() with managed user_id.`);
-  const otherRead = other;
-  const reads = [owner.read ?? null, otherRead.read ?? null];
-  delete owner.read;
-  delete otherRead.read;
-  return { kind: "policy", policy: { kind: "any_of", policies: [owner, other], ...reads[0] || reads[1] ? { reads } : {} } };
+    r.expectPunct("(", 'after "anyOf"');
+    const firstPolicy = readAnyOfBranch(r, tableName, "first");
+    r.expectPunct(",", `between the two policies in anyOf() on table "${tableName}"`);
+    const secondPolicy = readAnyOfBranch(r, tableName, "second");
+    r.tryPunct(",");
+    r.expectPunct(")", "closing anyOf()");
+    const owners = [firstPolicy, secondPolicy].filter((p) => p.kind === "owner");
+    if (owners.length !== 1)
+        throw new SchemaTsError(`line ${line}: ${ANY_OF_FORMS}`);
+    const owner = owners[0];
+    const other = firstPolicy.kind === "owner" ? secondPolicy : firstPolicy;
+    if (other.kind === "member" && other.ownerGrant && owner.column !== DEFAULT_OWNER_COLUMN)
+        throw new SchemaTsError(`line ${line}: grant() requires owner() with managed user_id.`);
+    const otherRead = other;
+    const reads = [owner.read ?? null, otherRead.read ?? null];
+    delete owner.read;
+    delete otherRead.read;
+    return { kind: "policy", policy: { kind: "any_of", policies: [owner, other], ...reads[0] || reads[1] ? { reads } : {} } };
 }
 var ALL_OF_FORMS = "allOf() takes a gate \u2014 member(), group() or appRole() \u2014 and then owner() or anyOf(owner(), ...).";
 var ALL_OF_EXPLICIT = "allOf needs explicit operations";
 function readAllOfScope(r, tableName, line) {
-  r.expectPunct("(", 'after "allOf"');
-  const failAt = (at, message) => {
-    throw new SchemaTsError(`line ${at}: ${message}`);
-  };
-  const gateTok = r.expectIdent(`for the gate in allOf() on table "${tableName}"`);
-  let gate;
-  if (gateTok.value === "member") gate = readPolicyMember(r, tableName, gateTok.line);
-  else if (gateTok.value === "group") gate = readGroupScope(r, tableName, gateTok.line, failAt);
-  else if (gateTok.value === "appRole") gate = readAppRoleScope(r, tableName, gateTok.line, failAt);
-  else throw new SchemaTsError(`line ${gateTok.line}: ${ALL_OF_FORMS}`);
-  r.expectPunct(",", `between the gate and who in allOf() on table "${tableName}"`);
-  const whoTok = r.expectIdent(`for who in allOf() on table "${tableName}"`);
-  let who;
-  if (whoTok.value === "owner") who = readPolicyOwner(r, tableName, whoTok.line);
-  else if (whoTok.value === "anyOf") {
-    const scope = readAnyOfScope(r, tableName, whoTok.line);
-    if (scope.kind !== "policy") throw new SchemaTsError(`line ${whoTok.line}: ${ALL_OF_FORMS}`);
-    who = scope.policy;
-  } else throw new SchemaTsError(`line ${whoTok.line}: ${ALL_OF_FORMS}`);
-  r.tryPunct(",");
-  r.expectPunct(")", "closing allOf()");
-  refuseBranchRead(gate, line, tableName, "the gate of allOf()");
-  refuseBranchRead(who, line, tableName, "who in allOf()");
-  if (who.kind === "any_of" && who.reads) throw new SchemaTsError(`line ${line}: read on a branch of anyOf() inside allOf() on table "${tableName}" is not accepted; per-branch columns belong on the table's own anyOf().`);
-  const x = who.kind === "any_of" ? who.policies[1] : null;
-  if (x?.kind === "member" && x.ownerGrant) throw new SchemaTsError(`line ${line}: grant() belongs in anyOf(owner(), grant()), not allOf().`);
-  for (const node of [gate, ...x ? [x] : []]) {
-    if (node.kind !== "member") continue;
-    if (!explicitMemberOperations.has(node)) {
-      throw new SchemaTsError(`line ${line}: ${ALL_OF_EXPLICIT}: member() inside allOf() on table "${tableName}" must list its operations, such as operations: ['read', 'create', 'update', 'delete'].`);
+    r.expectPunct("(", 'after "allOf"');
+    const failAt = (at, message) => {
+        throw new SchemaTsError(`line ${at}: ${message}`);
+    };
+    const gateTok = r.expectIdent(`for the gate in allOf() on table "${tableName}"`);
+    let gate;
+    if (gateTok.value === "member")
+        gate = readPolicyMember(r, tableName, gateTok.line);
+    else if (gateTok.value === "group")
+        gate = readGroupScope(r, tableName, gateTok.line, failAt);
+    else if (gateTok.value === "appRole")
+        gate = readAppRoleScope(r, tableName, gateTok.line, failAt);
+    else
+        throw new SchemaTsError(`line ${gateTok.line}: ${ALL_OF_FORMS}`);
+    r.expectPunct(",", `between the gate and who in allOf() on table "${tableName}"`);
+    const whoTok = r.expectIdent(`for who in allOf() on table "${tableName}"`);
+    let who;
+    if (whoTok.value === "owner")
+        who = readPolicyOwner(r, tableName, whoTok.line);
+    else if (whoTok.value === "anyOf") {
+        const scope = readAnyOfScope(r, tableName, whoTok.line);
+        if (scope.kind !== "policy")
+            throw new SchemaTsError(`line ${whoTok.line}: ${ALL_OF_FORMS}`);
+        who = scope.policy;
     }
-    if (node.operations === void 0) node.operations = [...MEMBER_OPERATIONS];
-  }
-  if (x) {
-    const sameMember = x.kind === "member" && gate.kind === "member" && x.membership === gate.membership && x.memberUser === gate.memberUser && x.group.length === gate.group.length && x.group.every((column, i) => column === gate.group[i]) && x.memberGroup.length === gate.memberGroup.length && x.memberGroup.every((column, i) => column === gate.memberGroup[i]);
-    const sameGroup = x.kind === "group" && gate.kind === "group" && x.column === gate.column;
-    if (x.kind !== "app_role" && !sameMember && !sameGroup) {
-      throw new SchemaTsError(`line ${line}: allOf() on table "${tableName}": the second branch of who must be appRole() or the gate's own membership \u2014 the same group() column, or the same member() relation, keys and member user.`);
+    else
+        throw new SchemaTsError(`line ${whoTok.line}: ${ALL_OF_FORMS}`);
+    r.tryPunct(",");
+    r.expectPunct(")", "closing allOf()");
+    refuseBranchRead(gate, line, tableName, "the gate of allOf()");
+    refuseBranchRead(who, line, tableName, "who in allOf()");
+    if (who.kind === "any_of" && who.reads)
+        throw new SchemaTsError(`line ${line}: read on a branch of anyOf() inside allOf() on table "${tableName}" is not accepted; per-branch columns belong on the table's own anyOf().`);
+    const x = who.kind === "any_of" ? who.policies[1] : null;
+    if (x?.kind === "member" && x.ownerGrant)
+        throw new SchemaTsError(`line ${line}: grant() belongs in anyOf(owner(), grant()), not allOf().`);
+    for (const node of [gate, ...x ? [x] : []]) {
+        if (node.kind !== "member")
+            continue;
+        if (!explicitMemberOperations.has(node)) {
+            throw new SchemaTsError(`line ${line}: ${ALL_OF_EXPLICIT}: member() inside allOf() on table "${tableName}" must list its operations, such as operations: ['read', 'create', 'update', 'delete'].`);
+        }
+        if (node.operations === void 0)
+            node.operations = [...MEMBER_OPERATIONS];
     }
-  }
-  return { kind: "policy", policy: { kind: "all_of", gate, who } };
+    if (x) {
+        const sameMember = x.kind === "member" && gate.kind === "member" && x.membership === gate.membership && x.memberUser === gate.memberUser && x.group.length === gate.group.length && x.group.every((column, i) => column === gate.group[i]) && x.memberGroup.length === gate.memberGroup.length && x.memberGroup.every((column, i) => column === gate.memberGroup[i]);
+        const sameGroup = x.kind === "group" && gate.kind === "group" && x.column === gate.column;
+        if (x.kind !== "app_role" && !sameMember && !sameGroup) {
+            throw new SchemaTsError(`line ${line}: allOf() on table "${tableName}": the second branch of who must be appRole() or the gate's own membership \u2014 the same group() column, or the same member() relation, keys and member user.`);
+        }
+    }
+    return { kind: "policy", policy: { kind: "all_of", gate, who } };
 }
 function readParentScope(r, tableName, line) {
-  r.expectPunct("(", 'after "parent"');
-  const opts = r.readLiteralObject(`in parent() options for table "${tableName}"`);
-  r.tryPunct(",");
-  r.expectPunct(")", "closing parent()");
-  if (opts.size !== 1 || !opts.has("via")) {
-    throw new SchemaTsError(`line ${line}: parent() on table "${tableName}" needs exactly { via: 'foreign_key' }.`);
-  }
-  const value = opts.get("via").value;
-  if (typeof value !== "string" || !SAFE_IDENT.test(value) || value.length > MAX_NAME_LENGTH) {
-    throw new SchemaTsError(`line ${opts.get("via").line}: parent({ via }) on table "${tableName}" must name a valid declared foreign-key column.`);
-  }
-  const sentinel = { kind: "parent", via: value.toLowerCase(), table: "", parentKey: "", policy: { kind: "owner", column: "" } };
-  rememberParentLine(sentinel, line);
-  return { kind: "policy", policy: sentinel };
+    r.expectPunct("(", 'after "parent"');
+    const opts = r.readLiteralObject(`in parent() options for table "${tableName}"`);
+    r.tryPunct(",");
+    r.expectPunct(")", "closing parent()");
+    if (opts.size !== 1 || !opts.has("via")) {
+        throw new SchemaTsError(`line ${line}: parent() on table "${tableName}" needs exactly { via: 'foreign_key' }.`);
+    }
+    const value = opts.get("via").value;
+    if (typeof value !== "string" || !SAFE_IDENT.test(value) || value.length > MAX_NAME_LENGTH) {
+        throw new SchemaTsError(`line ${opts.get("via").line}: parent({ via }) on table "${tableName}" must name a valid declared foreign-key column.`);
+    }
+    const sentinel = { kind: "parent", via: value.toLowerCase(), table: "", parentKey: "", policy: { kind: "owner", column: "" } };
+    rememberParentLine(sentinel, line);
+    return { kind: "policy", policy: sentinel };
 }
 function readRelations(r, tableName) {
-  r.expectPunct("{", `for "relations" of table "${tableName}"`);
-  const out = [];
-  const seen = /* @__PURE__ */ new Set();
-  while (!r.tryPunct("}")) {
-    const key = r.readKey(`for a relation name of table "${tableName}"`);
-    if (!SAFE_IDENT.test(key.name) || key.name.length > MAX_NAME_LENGTH) {
-      throw new SchemaTsError(`line ${key.line}: relation name "${key.name}" on table "${tableName}" is invalid. A name is letters, digits, and underscores, starting with a letter or underscore.`);
+    r.expectPunct("{", `for "relations" of table "${tableName}"`);
+    const out = [];
+    const seen = new Set();
+    while (!r.tryPunct("}")) {
+        const key = r.readKey(`for a relation name of table "${tableName}"`);
+        if (!SAFE_IDENT.test(key.name) || key.name.length > MAX_NAME_LENGTH) {
+            throw new SchemaTsError(`line ${key.line}: relation name "${key.name}" on table "${tableName}" is invalid. A name is letters, digits, and underscores, starting with a letter or underscore.`);
+        }
+        const name = key.name.toLowerCase();
+        if (seen.has(name))
+            throw new SchemaTsError(`line ${key.line}: relation "${key.name}" on table "${tableName}" is declared twice.`);
+        seen.add(name);
+        r.expectPunct(":", `after relation "${key.name}" on table "${tableName}"`);
+        const callee = r.expectIdent(`for relation "${key.name}" on table "${tableName}"`);
+        if (callee.value !== "hasMany" && callee.value !== "belongsTo") {
+            throw new SchemaTsError(`line ${callee.line}: relation "${key.name}" on table "${tableName}" uses "${callee.value}()", which is not supported. Relations are hasMany('child_table', 'foreign_key') and belongsTo('parent_table', 'foreign_key').`);
+        }
+        const kind = callee.value;
+        const side = kind === "hasMany" ? "child" : "parent";
+        r.expectPunct("(", `after "${kind}"`);
+        const relatedTok = r.next();
+        if (relatedTok.kind !== "string")
+            throw new SchemaTsError(`line ${relatedTok.line}: ${kind}() for relation "${key.name}" on table "${tableName}" needs the ${side} table name as a quoted string first.`);
+        r.expectPunct(",", `after the ${side} table in ${kind}() for relation "${key.name}" on table "${tableName}" \u2014 ${kind}('${side}_table', 'foreign_key')`);
+        const fkTok = r.next();
+        if (fkTok.kind !== "string")
+            throw new SchemaTsError(`line ${fkTok.line}: ${kind}() for relation "${key.name}" on table "${tableName}" needs the foreign-key column as a quoted string second.`);
+        r.tryPunct(",");
+        r.expectPunct(")", `closing ${kind}() for relation "${key.name}" on table "${tableName}"`);
+        const relatedTable = relatedTok.value.toLowerCase();
+        const fk = fkTok.value.toLowerCase();
+        if (!SAFE_IDENT.test(relatedTable) || relatedTable.length > MAX_NAME_LENGTH) {
+            throw new SchemaTsError(`line ${relatedTok.line}: ${kind}() ${side} table "${relatedTok.value}" for relation "${key.name}" on table "${tableName}" is not a valid table name.`);
+        }
+        if (!SAFE_IDENT.test(fk) || fk.length > MAX_NAME_LENGTH) {
+            throw new SchemaTsError(`line ${fkTok.line}: ${kind}() foreign key "${fkTok.value}" for relation "${key.name}" on table "${tableName}" is not a valid column name.`);
+        }
+        out.push({ name, kind, table: relatedTable, fk, parentKey: "" });
+        if (!r.tryPunct(",")) {
+            r.expectPunct("}", `closing "relations" of table "${tableName}"`);
+            break;
+        }
     }
-    const name = key.name.toLowerCase();
-    if (seen.has(name)) throw new SchemaTsError(`line ${key.line}: relation "${key.name}" on table "${tableName}" is declared twice.`);
-    seen.add(name);
-    r.expectPunct(":", `after relation "${key.name}" on table "${tableName}"`);
-    const callee = r.expectIdent(`for relation "${key.name}" on table "${tableName}"`);
-    if (callee.value !== "hasMany" && callee.value !== "belongsTo") {
-      throw new SchemaTsError(`line ${callee.line}: relation "${key.name}" on table "${tableName}" uses "${callee.value}()", which is not supported. Relations are hasMany('child_table', 'foreign_key') and belongsTo('parent_table', 'foreign_key').`);
-    }
-    const kind = callee.value;
-    const side = kind === "hasMany" ? "child" : "parent";
-    r.expectPunct("(", `after "${kind}"`);
-    const relatedTok = r.next();
-    if (relatedTok.kind !== "string") throw new SchemaTsError(`line ${relatedTok.line}: ${kind}() for relation "${key.name}" on table "${tableName}" needs the ${side} table name as a quoted string first.`);
-    r.expectPunct(",", `after the ${side} table in ${kind}() for relation "${key.name}" on table "${tableName}" \u2014 ${kind}('${side}_table', 'foreign_key')`);
-    const fkTok = r.next();
-    if (fkTok.kind !== "string") throw new SchemaTsError(`line ${fkTok.line}: ${kind}() for relation "${key.name}" on table "${tableName}" needs the foreign-key column as a quoted string second.`);
-    r.tryPunct(",");
-    r.expectPunct(")", `closing ${kind}() for relation "${key.name}" on table "${tableName}"`);
-    const relatedTable = relatedTok.value.toLowerCase();
-    const fk = fkTok.value.toLowerCase();
-    if (!SAFE_IDENT.test(relatedTable) || relatedTable.length > MAX_NAME_LENGTH) {
-      throw new SchemaTsError(`line ${relatedTok.line}: ${kind}() ${side} table "${relatedTok.value}" for relation "${key.name}" on table "${tableName}" is not a valid table name.`);
-    }
-    if (!SAFE_IDENT.test(fk) || fk.length > MAX_NAME_LENGTH) {
-      throw new SchemaTsError(`line ${fkTok.line}: ${kind}() foreign key "${fkTok.value}" for relation "${key.name}" on table "${tableName}" is not a valid column name.`);
-    }
-    out.push({ name, kind, table: relatedTable, fk, parentKey: "" });
-    if (!r.tryPunct(",")) {
-      r.expectPunct("}", `closing "relations" of table "${tableName}"`);
-      break;
-    }
-  }
-  out.sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
-  return out;
+    out.sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
+    return out;
 }
 function readScope(r, tableName) {
-  const tok = r.expectIdent(`for the scope of table "${tableName}"`);
-  if (!SCOPE_HELPERS.has(tok.value)) {
-    throw new SchemaTsError(
-      `line ${tok.line}: unknown scope "${tok.value}" on table "${tableName}". Table scopes are owner(), group(), appRole(), member(), anyOf(), allOf(), parent(), shared(), and serverOnly().`
-    );
-  }
-  if (tok.value === "anyOf") return readAnyOfScope(r, tableName, tok.line);
-  if (tok.value === "allOf") return readAllOfScope(r, tableName, tok.line);
-  if (tok.value === "parent") return readParentScope(r, tableName, tok.line);
-  const failAt = (line, message) => {
-    throw new SchemaTsError(`line ${line}: ${message}`);
-  };
-  if (tok.value === "group" || tok.value === "appRole") {
-    const policy = tok.value === "group" ? readGroupScope(r, tableName, tok.line, failAt) : readAppRoleScope(r, tableName, tok.line, failAt);
-    refuseBranchRead(policy, tok.line, tableName, `the ${tok.value}() scope`);
-    return { kind: "policy", policy };
-  }
-  if (tok.value === "member") {
-    r.expectPunct("(", 'after "member"');
-    const scope = readMemberScope(r, tableName, tok.line);
-    r.tryPunct(",");
-    r.expectPunct(")", "closing member()");
-    if (scope.kind === "member") refuseBranchRead(scope, tok.line, tableName, "the member() scope");
-    return scope;
-  }
-  r.expectPunct("(", `after "${tok.value}"`);
-  let opts = /* @__PURE__ */ new Map();
-  if (!r.tryPunct(")")) {
-    opts = r.readLiteralObject(`in ${tok.value}() options for table "${tableName}"`);
-    r.tryPunct(",");
-    r.expectPunct(")", `closing ${tok.value}()`);
-  }
-  if (tok.value === "owner") {
-    let column = DEFAULT_OWNER_COLUMN;
-    let visitors = false;
-    for (const [key, { value, line }] of opts) {
-      if (key === "visitors") {
-        if (typeof value !== "boolean") {
-          throw new SchemaTsError(`line ${line}: owner({ visitors }) on table "${tableName}" must be true or false.`);
-        }
-        visitors = value;
-        continue;
-      }
-      if (key !== "column") {
-        throw new SchemaTsError(`line ${line}: owner() on table "${tableName}" has an unknown option "${key}". Allowed: column, visitors.`);
-      }
-      if (typeof value !== "string" || !SAFE_IDENT.test(value) || value.length > MAX_NAME_LENGTH) {
-        throw new SchemaTsError(`line ${line}: owner({ column }) on table "${tableName}" must be a valid column name.`);
-      }
-      column = value.toLowerCase();
+    const tok = r.expectIdent(`for the scope of table "${tableName}"`);
+    if (!SCOPE_HELPERS.has(tok.value)) {
+        throw new SchemaTsError(`line ${tok.line}: unknown scope "${tok.value}" on table "${tableName}". Table scopes are owner(), group(), appRole(), member(), anyOf(), allOf(), parent(), shared(), and serverOnly().`);
     }
-    return { kind: "owner", column, ...visitors ? { visitors: true } : {} };
-  }
-  if (opts.size > 0) {
-    throw new SchemaTsError(`line ${tok.line}: ${tok.value}() on table "${tableName}" takes no options.`);
-  }
-  return tok.value === "shared" ? { kind: "shared" } : { kind: "server_only" };
+    if (tok.value === "anyOf")
+        return readAnyOfScope(r, tableName, tok.line);
+    if (tok.value === "allOf")
+        return readAllOfScope(r, tableName, tok.line);
+    if (tok.value === "parent")
+        return readParentScope(r, tableName, tok.line);
+    const failAt = (line, message) => {
+        throw new SchemaTsError(`line ${line}: ${message}`);
+    };
+    if (tok.value === "group" || tok.value === "appRole") {
+        const policy = tok.value === "group" ? readGroupScope(r, tableName, tok.line, failAt) : readAppRoleScope(r, tableName, tok.line, failAt);
+        refuseBranchRead(policy, tok.line, tableName, `the ${tok.value}() scope`);
+        return { kind: "policy", policy };
+    }
+    if (tok.value === "member") {
+        r.expectPunct("(", 'after "member"');
+        const scope = readMemberScope(r, tableName, tok.line);
+        r.tryPunct(",");
+        r.expectPunct(")", "closing member()");
+        if (scope.kind === "member")
+            refuseBranchRead(scope, tok.line, tableName, "the member() scope");
+        return scope;
+    }
+    r.expectPunct("(", `after "${tok.value}"`);
+    let opts = new Map();
+    if (!r.tryPunct(")")) {
+        opts = r.readLiteralObject(`in ${tok.value}() options for table "${tableName}"`);
+        r.tryPunct(",");
+        r.expectPunct(")", `closing ${tok.value}()`);
+    }
+    if (tok.value === "owner") {
+        let column = DEFAULT_OWNER_COLUMN;
+        let visitors = false;
+        for (const [key, { value, line }] of opts) {
+            if (key === "visitors") {
+                if (typeof value !== "boolean") {
+                    throw new SchemaTsError(`line ${line}: owner({ visitors }) on table "${tableName}" must be true or false.`);
+                }
+                visitors = value;
+                continue;
+            }
+            if (key !== "column") {
+                throw new SchemaTsError(`line ${line}: owner() on table "${tableName}" has an unknown option "${key}". Allowed: column, visitors.`);
+            }
+            if (typeof value !== "string" || !SAFE_IDENT.test(value) || value.length > MAX_NAME_LENGTH) {
+                throw new SchemaTsError(`line ${line}: owner({ column }) on table "${tableName}" must be a valid column name.`);
+            }
+            column = value.toLowerCase();
+        }
+        return { kind: "owner", column, ...visitors ? { visitors: true } : {} };
+    }
+    if (opts.size > 0) {
+        throw new SchemaTsError(`line ${tok.line}: ${tok.value}() on table "${tableName}" takes no options.`);
+    }
+    return tok.value === "shared" ? { kind: "shared" } : { kind: "server_only" };
 }
 function readColumnLists(r, tableName, optionName) {
-  const startLine = r.peek().line;
-  r.expectPunct("[", `for "${optionName}" of table "${tableName}"`);
-  const entries = [];
-  while (!r.tryPunct("]")) {
-    const entryLine = r.peek().line;
-    r.expectPunct("[", `for a "${optionName}" entry of table "${tableName}" (it is a list of column lists, e.g. [['a'], ['b', 'c']])`);
-    const entry = [];
+    const startLine = r.peek().line;
+    r.expectPunct("[", `for "${optionName}" of table "${tableName}"`);
+    const entries = [];
     while (!r.tryPunct("]")) {
-      const t = r.next();
-      if (t.kind !== "string") {
-        throw new SchemaTsError(`line ${t.line}: "${optionName}" columns for table "${tableName}" must be quoted column names.`);
-      }
-      const colName = t.value.toLowerCase();
-      if (entry.includes(colName)) {
-        throw new SchemaTsError(`line ${t.line}: a "${optionName}" entry on table "${tableName}" lists "${t.value}" twice.`);
-      }
-      entry.push(colName);
-      if (!r.tryPunct(",")) {
-        r.expectPunct("]", `closing a "${optionName}" entry of table "${tableName}"`);
-        break;
-      }
+        const entryLine = r.peek().line;
+        r.expectPunct("[", `for a "${optionName}" entry of table "${tableName}" (it is a list of column lists, e.g. [['a'], ['b', 'c']])`);
+        const entry = [];
+        while (!r.tryPunct("]")) {
+            const t = r.next();
+            if (t.kind !== "string") {
+                throw new SchemaTsError(`line ${t.line}: "${optionName}" columns for table "${tableName}" must be quoted column names.`);
+            }
+            const colName = t.value.toLowerCase();
+            if (entry.includes(colName)) {
+                throw new SchemaTsError(`line ${t.line}: a "${optionName}" entry on table "${tableName}" lists "${t.value}" twice.`);
+            }
+            entry.push(colName);
+            if (!r.tryPunct(",")) {
+                r.expectPunct("]", `closing a "${optionName}" entry of table "${tableName}"`);
+                break;
+            }
+        }
+        if (entry.length === 0) {
+            throw new SchemaTsError(`line ${entryLine}: a "${optionName}" entry on table "${tableName}" is empty.`);
+        }
+        if (entry.length > MAX_INDEX_COLUMNS) {
+            throw new SchemaTsError(`line ${entryLine}: a "${optionName}" entry on table "${tableName}" lists ${entry.length} columns (max ${MAX_INDEX_COLUMNS}).`);
+        }
+        entries.push({ columns: entry, line: entryLine });
+        if (!r.tryPunct(",")) {
+            r.expectPunct("]", `closing "${optionName}" of table "${tableName}"`);
+            break;
+        }
     }
-    if (entry.length === 0) {
-      throw new SchemaTsError(`line ${entryLine}: a "${optionName}" entry on table "${tableName}" is empty.`);
+    if (entries.length > MAX_INDEXES) {
+        throw new SchemaTsError(`line ${startLine}: table "${tableName}" declares ${entries.length} "${optionName}" entries (max ${MAX_INDEXES}).`);
     }
-    if (entry.length > MAX_INDEX_COLUMNS) {
-      throw new SchemaTsError(`line ${entryLine}: a "${optionName}" entry on table "${tableName}" lists ${entry.length} columns (max ${MAX_INDEX_COLUMNS}).`);
-    }
-    entries.push({ columns: entry, line: entryLine });
-    if (!r.tryPunct(",")) {
-      r.expectPunct("]", `closing "${optionName}" of table "${tableName}"`);
-      break;
-    }
-  }
-  if (entries.length > MAX_INDEXES) {
-    throw new SchemaTsError(`line ${startLine}: table "${tableName}" declares ${entries.length} "${optionName}" entries (max ${MAX_INDEXES}).`);
-  }
-  return entries;
+    return entries;
 }
 function readTable(r, rawName, nameLine) {
-  const callee = r.expectIdent(`for table "${rawName}"`);
-  if (callee.value === "removed") {
-    throw new SchemaTsError(
-      `line ${callee.line}: table "${rawName}" uses removed(), which marks a single column; a whole table is removed with ${rawName}: removedTable().`
-    );
-  }
-  if (TABLE_MARKER_HELPERS.has(callee.value)) {
-    r.expectPunct("(", `after "${callee.value}"`);
-    r.expectPunct(")", `closing ${callee.value}() on table "${rawName}" \u2014 the marker takes no options`);
-    return {
-      kind: callee.value,
-      name: checkDeclaredName("Table", rawName, nameLine)
-    };
-  }
-  if (callee.value !== "table") {
-    throw new SchemaTsError(`line ${callee.line}: expected table(\u2026) for "${rawName}", found "${callee.value}(".`);
-  }
-  const name = checkDeclaredName("Table", rawName, nameLine);
-  r.expectPunct("(", 'after "table"');
-  r.expectPunct("{", `opening the columns of table "${rawName}"`);
-  const columns = [];
-  const removedColumns = [];
-  const seen = /* @__PURE__ */ new Set();
-  while (!r.tryPunct("}")) {
-    const key = r.readKey(`for a column of table "${rawName}"`);
-    r.expectPunct(":", `after column "${key.name}"`);
-    const entry = readColumn(r, rawName, key.name, key.line);
-    const entryName = entry.kind === "column" ? entry.column.name : entry.name;
-    if (seen.has(entryName)) {
-      throw new SchemaTsError(`line ${key.line}: column "${rawName}"."${key.name}" is declared twice (names are case-insensitive).`);
+    const callee = r.expectIdent(`for table "${rawName}"`);
+    if (callee.value === "removed") {
+        throw new SchemaTsError(`line ${callee.line}: table "${rawName}" uses removed(), which marks a single column; a whole table is removed with ${rawName}: removedTable().`);
     }
-    seen.add(entryName);
-    if (entry.kind === "column") columns.push(entry.column);
-    else removedColumns.push(entry.name);
-    if (!r.tryPunct(",")) {
-      r.expectPunct("}", `closing the columns of table "${rawName}"`);
-      break;
+    if (TABLE_MARKER_HELPERS.has(callee.value)) {
+        r.expectPunct("(", `after "${callee.value}"`);
+        r.expectPunct(")", `closing ${callee.value}() on table "${rawName}" \u2014 the marker takes no options`);
+        return {
+            kind: callee.value,
+            name: checkDeclaredName("Table", rawName, nameLine)
+        };
     }
-  }
-  if (columns.length === 0) {
-    throw new SchemaTsError(`line ${nameLine}: table "${rawName}" declares no columns${removedColumns.length > 0 ? " (removal markers do not count \u2014 a table needs at least one kept column, or the whole table marked removedTable())" : ""}.`);
-  }
-  if (columns.length > MAX_COLUMNS) {
-    throw new SchemaTsError(`line ${nameLine}: table "${rawName}" declares ${columns.length} columns (max ${MAX_COLUMNS}).`);
-  }
-  const idCols = columns.filter((c) => c.helper === "id");
-  if (idCols.length > 1) {
-    throw new SchemaTsError(`line ${nameLine}: table "${rawName}" declares ${idCols.length} id() columns \u2014 a table has at most one.`);
-  }
-  let scope = null;
-  let indexEntries = null;
-  let uniqueEntries = null;
-  let relations = [];
-  let relationsDeclared = false;
-  let clientInput;
-  let roomsInput;
-  if (r.tryPunct(",")) {
-    r.expectPunct("{", `opening the options of table "${rawName}"`);
+    if (callee.value !== "table") {
+        throw new SchemaTsError(`line ${callee.line}: expected table(\u2026) for "${rawName}", found "${callee.value}(".`);
+    }
+    const name = checkDeclaredName("Table", rawName, nameLine);
+    r.expectPunct("(", 'after "table"');
+    r.expectPunct("{", `opening the columns of table "${rawName}"`);
+    const columns = [];
+    const removedColumns = [];
+    const seen = new Set();
     while (!r.tryPunct("}")) {
-      const key = r.readKey(`for an option of table "${rawName}"`);
-      r.expectPunct(":", `after "${key.name}"`);
-      if (key.name === "scope") {
-        if (scope) throw new SchemaTsError(`line ${key.line}: table "${rawName}" declares "scope" twice.`);
-        scope = readScope(r, rawName);
-        resolveGrantRowKeys(scope, idCols[0]?.name, rawName, key.line, (at, message) => {
-          throw new SchemaTsError(`line ${at}: ${message}`);
+        const key = r.readKey(`for a column of table "${rawName}"`);
+        r.expectPunct(":", `after column "${key.name}"`);
+        const entry = readColumn(r, rawName, key.name, key.line);
+        const entryName = entry.kind === "column" ? entry.column.name : entry.name;
+        if (seen.has(entryName)) {
+            throw new SchemaTsError(`line ${key.line}: column "${rawName}"."${key.name}" is declared twice (names are case-insensitive).`);
+        }
+        seen.add(entryName);
+        if (entry.kind === "column")
+            columns.push(entry.column);
+        else
+            removedColumns.push(entry.name);
+        if (!r.tryPunct(",")) {
+            r.expectPunct("}", `closing the columns of table "${rawName}"`);
+            break;
+        }
+    }
+    if (columns.length === 0) {
+        throw new SchemaTsError(`line ${nameLine}: table "${rawName}" declares no columns${removedColumns.length > 0 ? " (removal markers do not count \u2014 a table needs at least one kept column, or the whole table marked removedTable())" : ""}.`);
+    }
+    if (columns.length > MAX_COLUMNS) {
+        throw new SchemaTsError(`line ${nameLine}: table "${rawName}" declares ${columns.length} columns (max ${MAX_COLUMNS}).`);
+    }
+    const idCols = columns.filter((c) => c.helper === "id");
+    if (idCols.length > 1) {
+        throw new SchemaTsError(`line ${nameLine}: table "${rawName}" declares ${idCols.length} id() columns \u2014 a table has at most one.`);
+    }
+    let scope = null;
+    let indexEntries = null;
+    let uniqueEntries = null;
+    let relations = [];
+    let relationsDeclared = false;
+    let clientInput;
+    let roomsInput;
+    if (r.tryPunct(",")) {
+        r.expectPunct("{", `opening the options of table "${rawName}"`);
+        while (!r.tryPunct("}")) {
+            const key = r.readKey(`for an option of table "${rawName}"`);
+            r.expectPunct(":", `after "${key.name}"`);
+            if (key.name === "scope") {
+                if (scope)
+                    throw new SchemaTsError(`line ${key.line}: table "${rawName}" declares "scope" twice.`);
+                scope = readScope(r, rawName);
+                resolveGrantRowKeys(scope, idCols[0]?.name, rawName, key.line, (at, message) => {
+                    throw new SchemaTsError(`line ${at}: ${message}`);
+                });
+            }
+            else if (key.name === "indexes") {
+                if (indexEntries)
+                    throw new SchemaTsError(`line ${key.line}: table "${rawName}" declares "indexes" twice.`);
+                indexEntries = readColumnLists(r, rawName, "indexes");
+            }
+            else if (key.name === "unique") {
+                if (uniqueEntries)
+                    throw new SchemaTsError(`line ${key.line}: table "${rawName}" declares "unique" twice.`);
+                uniqueEntries = readColumnLists(r, rawName, "unique");
+            }
+            else if (key.name === "relations") {
+                if (relationsDeclared)
+                    throw new SchemaTsError(`line ${key.line}: table "${rawName}" declares "relations" twice.`);
+                relationsDeclared = true;
+                relations = readRelations(r, rawName);
+            }
+            else if (key.name === "client") {
+                if (clientInput)
+                    throw new SchemaTsError(`line ${key.line}: table "${rawName}" declares "client" twice.`);
+                clientInput = readClientPermissions(r);
+            }
+            else if (key.name === "rooms") {
+                if (roomsInput)
+                    throw new SchemaTsError(`line ${key.line}: table "${rawName}" declares "rooms" twice.`);
+                roomsInput = readRoomsOption(r, rawName, key.line);
+            }
+            else {
+                throw new SchemaTsError(`line ${key.line}: table "${rawName}" has an unknown option "${key.name}". Allowed: scope, indexes, unique, relations, client, rooms.`);
+            }
+            if (!r.tryPunct(",")) {
+                r.expectPunct("}", `closing the options of table "${rawName}"`);
+                break;
+            }
+        }
+    }
+    r.tryPunct(",");
+    r.expectPunct(")", `closing table("${rawName}")`);
+    scope ??= { kind: "owner", column: DEFAULT_OWNER_COLUMN };
+    const managedOwner = scopeOwner(scope);
+    if (columns.some((column) => column.name === SHARED_AUTHOR_COLUMN || column.renamedFrom === SHARED_AUTHOR_COLUMN) || removedColumns.includes(SHARED_AUTHOR_COLUMN) || managedOwner?.column === SHARED_AUTHOR_COLUMN) {
+        throw new SchemaTsError(`line ${nameLine}: "${SHARED_AUTHOR_COLUMN}" is platform-maintained row authorship and cannot be declared, removed, renamed, or used as a custom owner column.`);
+    }
+    if (managedOwner) {
+        const clash = columns.find((c) => c.name === managedOwner.column);
+        if (clash) {
+            throw new SchemaTsError(`line ${nameLine}: table "${rawName}" declares the column "${managedOwner.column}", but that is its owner column, which the platform creates and manages, so it is not declared among the columns; owner({ column: '\u2026' }) names a different owner column.`);
+        }
+        if (removedColumns.includes(managedOwner.column)) {
+            throw new SchemaTsError(`line ${nameLine}: table "${rawName}" marks its owner column "${managedOwner.column}" as removed(). The owner column carries the table's private scope and cannot be removed while owner() is part of that scope.`);
+        }
+    }
+    const declaredNow = new Set(columns.map((c) => c.name));
+    const renameSources = new Set();
+    for (const c of columns) {
+        if (!c.renamedFrom)
+            continue;
+        if (declaredNow.has(c.renamedFrom)) {
+            throw new SchemaTsError(`line ${nameLine}: "${rawName}"."${c.name}" declares renamedFrom: '${c.renamedFrom}', but "${c.renamedFrom}" is still declared as a column. A rename replaces the old column, so the old declaration is not accepted alongside it.`);
+        }
+        if (managedOwner && c.renamedFrom === managedOwner.column) {
+            throw new SchemaTsError(`line ${nameLine}: "${rawName}"."${c.name}" declares renamedFrom: '${c.renamedFrom}', but that is the table's owner column, which the platform creates and manages \u2014 it cannot be renamed into an ordinary column.`);
+        }
+        if (removedColumns.includes(c.renamedFrom)) {
+            throw new SchemaTsError(`line ${nameLine}: "${rawName}"."${c.renamedFrom}" is marked removed() AND named by renamedFrom on "${c.name}" \u2014 it cannot be both removed and renamed.`);
+        }
+        if (renameSources.has(c.renamedFrom)) {
+            throw new SchemaTsError(`line ${nameLine}: two columns of "${rawName}" declare renamedFrom: '${c.renamedFrom}' \u2014 a column can only be renamed to one new name.`);
+        }
+        renameSources.add(c.renamedFrom);
+    }
+    const known = new Set(columns.map((c) => c.name));
+    if (managedOwner)
+        known.add(managedOwner.column);
+    const indexes = [];
+    for (const entry of indexEntries ?? []) {
+        for (const colName of entry.columns) {
+            if (!known.has(colName)) {
+                throw new SchemaTsError(`line ${entry.line}: index on table "${rawName}" names "${colName}", which is not one of its declared columns.`);
+            }
+        }
+        indexes.push(entry.columns);
+    }
+    const uniques = [];
+    for (const entry of uniqueEntries ?? []) {
+        for (const colName of entry.columns) {
+            if (!known.has(colName)) {
+                throw new SchemaTsError(`line ${entry.line}: a "unique" entry on table "${rawName}" names "${colName}", which is not one of its declared columns.`);
+            }
+        }
+        const single = entry.columns.length === 1 ? columns.find((c) => c.name === entry.columns[0]) : void 0;
+        if (single) {
+            if (single.helper === "id") {
+                throw new SchemaTsError(`line ${entry.line}: the primary key "${single.name}" on table "${rawName}" is already unique, so a one-column "unique" group on it is not accepted.`);
+            }
+            single.unique = true;
+            continue;
+        }
+        if (entry.columns.length < 2) {
+            throw new SchemaTsError(`line ${entry.line}: the "unique" option on table "${rawName}" lists only "${entry.columns[0]}", the owner column the platform manages, and an owner column cannot be unique on its own. Pair it with another column (for example [['${entry.columns[0]}', 'kind']]) for per-owner uniqueness.`);
+        }
+        uniques.push(entry.columns);
+    }
+    if (scope.kind === "policy" && scope.policy.kind === "any_of" && scope.policy.reads) {
+        const key = columns.filter((column) => column.helper === "id").length === 1 ? columns.find((column) => column.helper === "id").name : null;
+        const declared = new Set(columns.map((column) => column.name));
+        scope.policy.reads.forEach((list, i) => {
+            if (!list)
+                return;
+            const branch = scope.policy.kind === "any_of" ? scope.policy.policies[i] : null;
+            const label = branch?.kind === "owner" ? "owner()" : branch?.kind === "member" ? branch.ownerGrant ? "grant()" : "member()" : branch?.kind === "group" ? "group()" : "appRole()";
+            for (const column of list) {
+                if (!declared.has(column))
+                    throw new SchemaTsError(`line ${nameLine}: table "${rawName}": ${label} read lists "${column}", which is not one of its declared columns.`);
+            }
+            if (key && !list.includes(key))
+                throw new SchemaTsError(`line ${nameLine}: table "${rawName}": ${label} read must include the id column "${key}", which every reader needs to page and address rows.`);
+            for (const relation of relations) {
+                if (relation.kind === "belongsTo" && !list.includes(relation.fk))
+                    throw new SchemaTsError(`line ${nameLine}: table "${rawName}": ${label} read must include "${relation.fk}", the key relation "${relation.name}" joins by; a reader without it would get an empty relation.`);
+            }
         });
-      } else if (key.name === "indexes") {
-        if (indexEntries) throw new SchemaTsError(`line ${key.line}: table "${rawName}" declares "indexes" twice.`);
-        indexEntries = readColumnLists(r, rawName, "indexes");
-      } else if (key.name === "unique") {
-        if (uniqueEntries) throw new SchemaTsError(`line ${key.line}: table "${rawName}" declares "unique" twice.`);
-        uniqueEntries = readColumnLists(r, rawName, "unique");
-      } else if (key.name === "relations") {
-        if (relationsDeclared) throw new SchemaTsError(`line ${key.line}: table "${rawName}" declares "relations" twice.`);
-        relationsDeclared = true;
-        relations = readRelations(r, rawName);
-      } else if (key.name === "client") {
-        if (clientInput) throw new SchemaTsError(`line ${key.line}: table "${rawName}" declares "client" twice.`);
-        clientInput = readClientPermissions(r);
-      } else if (key.name === "rooms") {
-        if (roomsInput) throw new SchemaTsError(`line ${key.line}: table "${rawName}" declares "rooms" twice.`);
-        roomsInput = readRoomsOption(r, rawName, key.line);
-      } else {
-        throw new SchemaTsError(
-          `line ${key.line}: table "${rawName}" has an unknown option "${key.name}". Allowed: scope, indexes, unique, relations, client, rooms.`
-        );
-      }
-      if (!r.tryPunct(",")) {
-        r.expectPunct("}", `closing the options of table "${rawName}"`);
-        break;
-      }
     }
-  }
-  r.tryPunct(",");
-  r.expectPunct(")", `closing table("${rawName}")`);
-  scope ??= { kind: "owner", column: DEFAULT_OWNER_COLUMN };
-  const managedOwner = scopeOwner(scope);
-  if (columns.some((column) => column.name === SHARED_AUTHOR_COLUMN || column.renamedFrom === SHARED_AUTHOR_COLUMN) || removedColumns.includes(SHARED_AUTHOR_COLUMN) || managedOwner?.column === SHARED_AUTHOR_COLUMN) {
-    throw new SchemaTsError(`line ${nameLine}: "${SHARED_AUTHOR_COLUMN}" is platform-maintained row authorship and cannot be declared, removed, renamed, or used as a custom owner column.`);
-  }
-  if (managedOwner) {
-    const clash = columns.find((c) => c.name === managedOwner.column);
-    if (clash) {
-      throw new SchemaTsError(
-        `line ${nameLine}: table "${rawName}" declares the column "${managedOwner.column}", but that is its owner column, which the platform creates and manages, so it is not declared among the columns; owner({ column: '\u2026' }) names a different owner column.`
-      );
+    let client;
+    if (clientInput) {
+        if (columns.filter((column) => column.helper === "id").length !== 1) {
+            throw new SchemaTsError(`line ${nameLine}: table "${rawName}": client operations require exactly one id() column.`);
+        }
+        const branch = scope.kind === "policy" && scope.policy.kind === "any_of" ? scope.policy.policies.find((node) => node.kind === "member" || node.kind === "group") : scope.kind === "policy" && scope.policy.kind === "all_of" && (scope.policy.gate.kind === "member" || scope.policy.gate.kind === "group") ? scope.policy.gate : void 0;
+        const branchGroup = branch?.kind === "member" ? branch.group : branch?.kind === "group" ? [branch.column] : void 0;
+        const parsed = parseClientPermissions(clientInput, columns, {
+            ...scope,
+            ...managedOwner ? { column: managedOwner.column } : {},
+            ...branchGroup ? { group: branchGroup } : {}
+        });
+        if (!parsed.ok)
+            throw new SchemaTsError(`line ${nameLine}: table "${rawName}": ${parsed.message}`);
+        const key = columns.find((column) => column.helper === "id").name;
+        if (Array.isArray(parsed.permissions.read) && !parsed.permissions.read.includes(key)) {
+            throw new SchemaTsError(`line ${nameLine}: table "${rawName}": client.read must include primary key "${key}" for stable pagination.`);
+        }
+        client = parsed.permissions;
     }
-    if (removedColumns.includes(managedOwner.column)) {
-      throw new SchemaTsError(
-        `line ${nameLine}: table "${rawName}" marks its owner column "${managedOwner.column}" as removed(). The owner column carries the table's private scope and cannot be removed while owner() is part of that scope.`
-      );
-    }
-  }
-  const declaredNow = new Set(columns.map((c) => c.name));
-  const renameSources = /* @__PURE__ */ new Set();
-  for (const c of columns) {
-    if (!c.renamedFrom) continue;
-    if (declaredNow.has(c.renamedFrom)) {
-      throw new SchemaTsError(
-        `line ${nameLine}: "${rawName}"."${c.name}" declares renamedFrom: '${c.renamedFrom}', but "${c.renamedFrom}" is still declared as a column. A rename replaces the old column, so the old declaration is not accepted alongside it.`
-      );
-    }
-    if (managedOwner && c.renamedFrom === managedOwner.column) {
-      throw new SchemaTsError(
-        `line ${nameLine}: "${rawName}"."${c.name}" declares renamedFrom: '${c.renamedFrom}', but that is the table's owner column, which the platform creates and manages \u2014 it cannot be renamed into an ordinary column.`
-      );
-    }
-    if (removedColumns.includes(c.renamedFrom)) {
-      throw new SchemaTsError(
-        `line ${nameLine}: "${rawName}"."${c.renamedFrom}" is marked removed() AND named by renamedFrom on "${c.name}" \u2014 it cannot be both removed and renamed.`
-      );
-    }
-    if (renameSources.has(c.renamedFrom)) {
-      throw new SchemaTsError(
-        `line ${nameLine}: two columns of "${rawName}" declare renamedFrom: '${c.renamedFrom}' \u2014 a column can only be renamed to one new name.`
-      );
-    }
-    renameSources.add(c.renamedFrom);
-  }
-  const known = new Set(columns.map((c) => c.name));
-  if (managedOwner) known.add(managedOwner.column);
-  const indexes = [];
-  for (const entry of indexEntries ?? []) {
-    for (const colName of entry.columns) {
-      if (!known.has(colName)) {
-        throw new SchemaTsError(
-          `line ${entry.line}: index on table "${rawName}" names "${colName}", which is not one of its declared columns.`
-        );
-      }
-    }
-    indexes.push(entry.columns);
-  }
-  const uniques = [];
-  for (const entry of uniqueEntries ?? []) {
-    for (const colName of entry.columns) {
-      if (!known.has(colName)) {
-        throw new SchemaTsError(
-          `line ${entry.line}: a "unique" entry on table "${rawName}" names "${colName}", which is not one of its declared columns.`
-        );
-      }
-    }
-    const single = entry.columns.length === 1 ? columns.find((c) => c.name === entry.columns[0]) : void 0;
-    if (single) {
-      if (single.helper === "id") {
-        throw new SchemaTsError(`line ${entry.line}: the primary key "${single.name}" on table "${rawName}" is already unique, so a one-column "unique" group on it is not accepted.`);
-      }
-      single.unique = true;
-      continue;
-    }
-    if (entry.columns.length < 2) {
-      throw new SchemaTsError(
-        `line ${entry.line}: the "unique" option on table "${rawName}" lists only "${entry.columns[0]}", the owner column the platform manages, and an owner column cannot be unique on its own. Pair it with another column (for example [['${entry.columns[0]}', 'kind']]) for per-owner uniqueness.`
-      );
-    }
-    uniques.push(entry.columns);
-  }
-  if (scope.kind === "policy" && scope.policy.kind === "any_of" && scope.policy.reads) {
-    const key = columns.filter((column) => column.helper === "id").length === 1 ? columns.find((column) => column.helper === "id").name : null;
-    const declared = new Set(columns.map((column) => column.name));
-    scope.policy.reads.forEach((list, i) => {
-      if (!list) return;
-      const branch = scope.policy.kind === "any_of" ? scope.policy.policies[i] : null;
-      const label = branch?.kind === "owner" ? "owner()" : branch?.kind === "member" ? branch.ownerGrant ? "grant()" : "member()" : branch?.kind === "group" ? "group()" : "appRole()";
-      for (const column of list) {
-        if (!declared.has(column)) throw new SchemaTsError(`line ${nameLine}: table "${rawName}": ${label} read lists "${column}", which is not one of its declared columns.`);
-      }
-      if (key && !list.includes(key)) throw new SchemaTsError(`line ${nameLine}: table "${rawName}": ${label} read must include the id column "${key}", which every reader needs to page and address rows.`);
-      for (const relation of relations) {
-        if (relation.kind === "belongsTo" && !list.includes(relation.fk)) throw new SchemaTsError(`line ${nameLine}: table "${rawName}": ${label} read must include "${relation.fk}", the key relation "${relation.name}" joins by; a reader without it would get an empty relation.`);
-      }
-    });
-  }
-  let client;
-  if (clientInput) {
-    if (columns.filter((column) => column.helper === "id").length !== 1) {
-      throw new SchemaTsError(`line ${nameLine}: table "${rawName}": client operations require exactly one id() column.`);
-    }
-    const branch = scope.kind === "policy" && scope.policy.kind === "any_of" ? scope.policy.policies.find((node) => node.kind === "member" || node.kind === "group") : scope.kind === "policy" && scope.policy.kind === "all_of" && (scope.policy.gate.kind === "member" || scope.policy.gate.kind === "group") ? scope.policy.gate : void 0;
-    const branchGroup = branch?.kind === "member" ? branch.group : branch?.kind === "group" ? [branch.column] : void 0;
-    const parsed = parseClientPermissions(clientInput, columns, {
-      ...scope,
-      ...managedOwner ? { column: managedOwner.column } : {},
-      ...branchGroup ? { group: branchGroup } : {}
-    });
-    if (!parsed.ok) throw new SchemaTsError(`line ${nameLine}: table "${rawName}": ${parsed.message}`);
-    const key = columns.find((column) => column.helper === "id").name;
-    if (Array.isArray(parsed.permissions.read) && !parsed.permissions.read.includes(key)) {
-      throw new SchemaTsError(`line ${nameLine}: table "${rawName}": client.read must include primary key "${key}" for stable pagination.`);
-    }
-    client = parsed.permissions;
-  }
-  const rooms = roomsInput ? validateRoomsOption(roomsInput, rawName, nameLine, columns, scope, client, relations) : void 0;
-  return { kind: "table", table: { name, scope, relations, columns, indexes, uniques, removedColumns: [...removedColumns].sort(), ...client ? { client } : {}, ...rooms ? { rooms } : {} } };
+    const rooms = roomsInput ? validateRoomsOption(roomsInput, rawName, nameLine, columns, scope, client, relations) : void 0;
+    return { kind: "table", table: { name, scope, relations, columns, indexes, uniques, removedColumns: [...removedColumns].sort(), ...client ? { client } : {}, ...rooms ? { rooms } : {} } };
 }
 function extractSchemaTs(source, options = {}) {
-  if (typeof source !== "string" || source.trim().length === 0) {
-    return { ok: false, errors: ["db/schema.ts is empty. It needs at least one table; without the file, the database is unmanaged."] };
-  }
-  if (source.length > MAX_SOURCE_BYTES) {
-    return { ok: false, errors: [`db/schema.ts is larger than ${Math.floor(MAX_SOURCE_BYTES / 1024)}KB \u2014 that is not a schema declaration.`] };
-  }
-  try {
-    const r = new Reader(resolveSchemaConstants(tokenize(source), SCHEMA_CALLABLE, MAX_SOURCE_BYTES, (line, message) => {
-      throw new SchemaTsError(`line ${line}: ${message}`);
-    }), options);
-    while (r.peek().kind === "ident" && r.peek().value === "import") skipImport(r);
-    const exp = r.expectIdent("to start the declaration");
-    if (exp.value !== "export") {
-      throw new SchemaTsError(
-        `line ${exp.line}: db/schema.ts must contain only the schema declaration: optional imports, optional const declarations, then "export default schema({ \u2026 })". Found "${exp.value}".`
-      );
+    if (typeof source !== "string" || source.trim().length === 0) {
+        return { ok: false, errors: ["db/schema.ts is empty. It needs at least one table; without the file, the database is unmanaged."] };
     }
-    const def = r.expectIdent('after "export"');
-    if (def.value !== "default") throw new SchemaTsError(`line ${def.line}: expected "default" after "export".`);
-    const schemaTok = r.expectIdent('after "export default"');
-    if (schemaTok.value !== "schema") {
-      throw new SchemaTsError(`line ${schemaTok.line}: expected schema({ \u2026 }) after "export default", found "${schemaTok.value}".`);
+    if (source.length > MAX_SOURCE_BYTES) {
+        return { ok: false, errors: [`db/schema.ts is larger than ${Math.floor(MAX_SOURCE_BYTES / 1024)}KB \u2014 that is not a schema declaration.`] };
     }
-    r.expectPunct("(", 'after "schema"');
-    r.expectPunct("{", "opening the schema tables");
-    const tables = [];
-    const removedTables = [];
-    const exportedTables = [];
-    const seen = /* @__PURE__ */ new Set();
-    const reader = r;
-    while (!reader.tryPunct("}")) {
-      const key = reader.readKey("for a table name");
-      reader.expectPunct(":", `after table "${key.name}"`);
-      const entry = readTable(reader, key.name, key.line);
-      const entryName = entry.kind === "table" ? entry.table.name : entry.name;
-      if (seen.has(entryName)) {
-        throw new SchemaTsError(`line ${key.line}: table "${key.name}" is declared twice (names are case-insensitive).`);
-      }
-      seen.add(entryName);
-      if (entry.kind === "table") tables.push(entry.table);
-      else if (entry.kind === "removedTable") removedTables.push(entryName);
-      else exportedTables.push(entryName);
-      if (!reader.tryPunct(",")) {
-        reader.expectPunct("}", "closing the schema tables");
-        break;
-      }
-    }
-    const fileErrors = [];
-    const fail = (line, message) => {
-      throw new SchemaTsError(`line ${line}: ${message}`);
-    };
-    const { managedSearch, fileCollections, groupRoles, appRoles, payments, jobs, serviceRoles } = readSchemaOptions(reader, fail, fileErrors);
-    reader.expectPunct(")", "closing schema(\u2026)");
-    reader.tryPunct(";");
-    if (!reader.atEof()) {
-      reader.fail(
-        `db/schema.ts must end after "export default schema({ \u2026 })" \u2014 found ${describeToken(reader.peek())}. The file holds only the schema declaration.`
-      );
-    }
-    if (tables.length === 0 && removedTables.length === 0 && exportedTables.length === 0 && !managedSearch && !fileCollections?.length) {
-      return { ok: false, errors: ["db/schema.ts declares no tables. It needs at least one table; without the file, the database is unmanaged."] };
-    }
-    if (tables.length > MAX_TABLES) {
-      return { ok: false, errors: [`db/schema.ts declares ${tables.length} tables (max ${MAX_TABLES}).`] };
-    }
-    const errors = [];
-    const names = new Set(tables.map((t) => t.name));
-    for (const t of tables) {
-      for (const c of t.columns) {
-        if (c.references && !names.has(c.references)) {
-          const marked = removedTables.includes(c.references) || exportedTables.includes(c.references);
-          errors.push(
-            marked ? `Column "${t.name}"."${c.name}" references "${c.references}", which this file marks ${removedTables.includes(c.references) ? "removedTable()" : "exported()"}. The table can go only once no column references it (the column marked removed(), or without "references").` : `Column "${t.name}"."${c.name}" references "${c.references}", which is not declared in db/schema.ts. Foreign keys can only target tables in the same declaration.`
-          );
+    try {
+        const r = new Reader(resolveSchemaConstants(tokenize(source), SCHEMA_CALLABLE, MAX_SOURCE_BYTES, (line, message) => {
+            throw new SchemaTsError(`line ${line}: ${message}`);
+        }), options);
+        while (r.peek().kind === "ident" && r.peek().value === "import")
+            skipImport(r);
+        const exp = r.expectIdent("to start the declaration");
+        if (exp.value !== "export") {
+            throw new SchemaTsError(`line ${exp.line}: db/schema.ts must contain only the schema declaration: optional imports, optional const declarations, then "export default schema({ \u2026 })". Found "${exp.value}".`);
         }
-      }
+        const def = r.expectIdent('after "export"');
+        if (def.value !== "default")
+            throw new SchemaTsError(`line ${def.line}: expected "default" after "export".`);
+        const schemaTok = r.expectIdent('after "export default"');
+        if (schemaTok.value !== "schema") {
+            throw new SchemaTsError(`line ${schemaTok.line}: expected schema({ \u2026 }) after "export default", found "${schemaTok.value}".`);
+        }
+        r.expectPunct("(", 'after "schema"');
+        r.expectPunct("{", "opening the schema tables");
+        const tables = [];
+        const removedTables = [];
+        const exportedTables = [];
+        const seen = new Set();
+        const reader = r;
+        while (!reader.tryPunct("}")) {
+            const key = reader.readKey("for a table name");
+            reader.expectPunct(":", `after table "${key.name}"`);
+            const entry = readTable(reader, key.name, key.line);
+            const entryName = entry.kind === "table" ? entry.table.name : entry.name;
+            if (seen.has(entryName)) {
+                throw new SchemaTsError(`line ${key.line}: table "${key.name}" is declared twice (names are case-insensitive).`);
+            }
+            seen.add(entryName);
+            if (entry.kind === "table")
+                tables.push(entry.table);
+            else if (entry.kind === "removedTable")
+                removedTables.push(entryName);
+            else
+                exportedTables.push(entryName);
+            if (!reader.tryPunct(",")) {
+                reader.expectPunct("}", "closing the schema tables");
+                break;
+            }
+        }
+        const fileErrors = [];
+        const fail = (line, message) => {
+            throw new SchemaTsError(`line ${line}: ${message}`);
+        };
+        const { managedSearch, fileCollections, groupRoles, appRoles, payments, jobs, serviceRoles } = readSchemaOptions(reader, fail, fileErrors);
+        reader.expectPunct(")", "closing schema(\u2026)");
+        reader.tryPunct(";");
+        if (!reader.atEof()) {
+            reader.fail(`db/schema.ts must end after "export default schema({ \u2026 })" \u2014 found ${describeToken(reader.peek())}. The file holds only the schema declaration.`);
+        }
+        if (tables.length === 0 && removedTables.length === 0 && exportedTables.length === 0 && !managedSearch && !fileCollections?.length) {
+            return { ok: false, errors: ["db/schema.ts declares no tables. It needs at least one table; without the file, the database is unmanaged."] };
+        }
+        if (tables.length > MAX_TABLES) {
+            return { ok: false, errors: [`db/schema.ts declares ${tables.length} tables (max ${MAX_TABLES}).`] };
+        }
+        const errors = [];
+        const names = new Set(tables.map((t) => t.name));
+        for (const t of tables) {
+            for (const c of t.columns) {
+                if (c.references && !names.has(c.references)) {
+                    const marked = removedTables.includes(c.references) || exportedTables.includes(c.references);
+                    errors.push(marked ? `Column "${t.name}"."${c.name}" references "${c.references}", which this file marks ${removedTables.includes(c.references) ? "removedTable()" : "exported()"}. The table can go only once no column references it (the column marked removed(), or without "references").` : `Column "${t.name}"."${c.name}" references "${c.references}", which is not declared in db/schema.ts. Foreign keys can only target tables in the same declaration.`);
+                }
+            }
+        }
+        const keyOf = new Map(tables.map((t) => [t.name, t.columns.find((c) => c.helper === "id")]));
+        for (const t of tables) {
+            for (const c of t.columns) {
+                const key = c.references ? keyOf.get(c.references) : void 0;
+                if (!key)
+                    continue;
+                const fits = key.uuid ? c.helper === "text" : c.helper === "integer" || c.helper === "number";
+                if (fits)
+                    continue;
+                errors.push(key.uuid ? `Column "${t.name}"."${c.name}" references "${c.references}", whose id() is a random text key, but is declared ${c.helper}(). The column type must match the key: text({ references: '${c.references}' }), or an integer key on "${c.references}" with id({ uuid: false }).` : `Column "${t.name}"."${c.name}" references "${c.references}", whose key is an integer (id({ uuid: false })), but is declared ${c.helper}(). The column type must match the key: integer({ references: '${c.references}' }), or a random text key on "${c.references}" with id().`);
+            }
+        }
+        const tableByName = new Map(tables.map((t) => [t.name, t]));
+        const knownColumns = (t) => {
+            const s = new Set(t.columns.map((c) => c.name));
+            const owner = scopeOwner(t.scope);
+            if (owner)
+                s.add(owner.column);
+            return s;
+        };
+        const privatePolicy = (scope) => {
+            if (scope.kind === "owner" && !scope.visitors)
+                return { kind: "owner", column: scope.column };
+            if (scope.kind === "member")
+                return scope;
+            if (scope.kind === "policy" && scope.policy.kind !== "parent")
+                return scope.policy;
+            return null;
+        };
+        resolveAppRoleScopes(tables, appRoles, errors);
+        resolveGroupsAndParents(tables, tableByName, privatePolicy, groupRoles, errors);
+        validateDeclaredMemberships(tables, tableByName, knownColumns, errors);
+        validateDeclaredRelations(tables, tableByName, knownColumns, (table) => removedTables.includes(table) ? "removedTable()" : exportedTables.includes(table) ? "exported()" : null, errors);
+        validateRowLinks(tables, tableByName, errors);
+        validateIntake(tables, tableByName, errors);
+        if (fileCollections) {
+            errors.push(...fileErrors);
+            validateFileCollections(fileCollections, (name) => {
+                const t = tableByName.get(name);
+                return t ? { columns: knownColumns(t), clientWrites: tableAllowsClientWrites(t), parentTarget: fileParentTarget(t) } : null;
+            }, errors);
+        }
+        if (groupRoles || appRoles)
+            errors.push(...validateDeclaredRoles(groupRoles, appRoles));
+        validateBindings({ payments, jobs, serviceRoles, groups: groupRoles, appRoles }, (name) => {
+            const t = tableByName.get(name);
+            return t ? { table: t, key: fileParentTarget(t).key, privateUser: fileParentTarget(t).privateUserPolicy, identity: declaredScopeIdentityColumns(t.scope) } : null;
+        }, errors);
+        if (errors.length > 0)
+            return { ok: false, errors };
+        return {
+            ok: true,
+            declaration: {
+                tables,
+                removedTables: removedTables.sort(),
+                exportedTables: exportedTables.sort(),
+                ...managedSearch ? { search: managedSearch } : {},
+                ...fileCollections ? { files: fileCollections } : {},
+                ...groupRoles ? { groups: groupRoles } : {},
+                ...appRoles ? { appRoles } : {},
+                ...payments ? { payments } : {},
+                ...jobs ? { jobs } : {},
+                ...serviceRoles ? { serviceRoles } : {}
+            }
+        };
     }
-    const keyOf = new Map(tables.map((t) => [t.name, t.columns.find((c) => c.helper === "id")]));
-    for (const t of tables) {
-      for (const c of t.columns) {
-        const key = c.references ? keyOf.get(c.references) : void 0;
-        if (!key) continue;
-        const fits = key.uuid ? c.helper === "text" : c.helper === "integer" || c.helper === "number";
-        if (fits) continue;
-        errors.push(key.uuid ? `Column "${t.name}"."${c.name}" references "${c.references}", whose id() is a random text key, but is declared ${c.helper}(). The column type must match the key: text({ references: '${c.references}' }), or an integer key on "${c.references}" with id({ uuid: false }).` : `Column "${t.name}"."${c.name}" references "${c.references}", whose key is an integer (id({ uuid: false })), but is declared ${c.helper}(). The column type must match the key: integer({ references: '${c.references}' }), or a random text key on "${c.references}" with id().`);
-      }
+    catch (err) {
+        if (err instanceof SchemaTsError) {
+            return { ok: false, errors: [`db/schema.ts could not be read: ${err.message}`] };
+        }
+        throw err;
     }
-    const tableByName = new Map(tables.map((t) => [t.name, t]));
-    const knownColumns = (t) => {
-      const s = new Set(t.columns.map((c) => c.name));
-      const owner = scopeOwner(t.scope);
-      if (owner) s.add(owner.column);
-      return s;
-    };
-    const privatePolicy = (scope) => {
-      if (scope.kind === "owner" && !scope.visitors) return { kind: "owner", column: scope.column };
-      if (scope.kind === "member") return scope;
-      if (scope.kind === "policy" && scope.policy.kind !== "parent") return scope.policy;
-      return null;
-    };
-    resolveAppRoleScopes(tables, appRoles, errors);
-    resolveGroupsAndParents(tables, tableByName, privatePolicy, groupRoles, errors);
-    validateDeclaredMemberships(tables, tableByName, knownColumns, errors);
-    validateDeclaredRelations(tables, tableByName, knownColumns, (table) => removedTables.includes(table) ? "removedTable()" : exportedTables.includes(table) ? "exported()" : null, errors);
-    validateRowLinks(tables, tableByName, errors);
-    validateIntake(tables, tableByName, errors);
-    if (fileCollections) {
-      errors.push(...fileErrors);
-      validateFileCollections(fileCollections, (name) => {
-        const t = tableByName.get(name);
-        return t ? { columns: knownColumns(t), clientWrites: tableAllowsClientWrites(t), parentTarget: fileParentTarget(t) } : null;
-      }, errors);
-    }
-    if (groupRoles || appRoles) errors.push(...validateDeclaredRoles(groupRoles, appRoles));
-    validateBindings({ payments, jobs, serviceRoles, groups: groupRoles, appRoles }, (name) => {
-      const t = tableByName.get(name);
-      return t ? { table: t, key: fileParentTarget(t).key, privateUser: fileParentTarget(t).privateUserPolicy, identity: declaredScopeIdentityColumns(t.scope) } : null;
-    }, errors);
-    if (errors.length > 0) return { ok: false, errors };
-    return {
-      ok: true,
-      declaration: {
-        tables,
-        removedTables: removedTables.sort(),
-        exportedTables: exportedTables.sort(),
-        ...managedSearch ? { search: managedSearch } : {},
-        ...fileCollections ? { files: fileCollections } : {},
-        ...groupRoles ? { groups: groupRoles } : {},
-        ...appRoles ? { appRoles } : {},
-        ...payments ? { payments } : {},
-        ...jobs ? { jobs } : {},
-        ...serviceRoles ? { serviceRoles } : {}
-      }
-    };
-  } catch (err) {
-    if (err instanceof SchemaTsError) {
-      return { ok: false, errors: [`db/schema.ts could not be read: ${err.message}`] };
-    }
-    throw err;
-  }
 }
 function canonicalTableShape(t) {
-  return {
-    name: t.name,
-    scope: t.scope,
-    ...t.client ? { client: t.client } : {},
-    columns: t.columns.map((c) => ({
-      name: c.name,
-      helper: c.helper,
-      uuid: c.uuid,
-      nullable: c.nullable,
-      hasDefault: c.hasDefault,
-      default: c.default,
-      autoNow: c.autoNow,
-      unique: c.unique,
-      references: c.references,
-      onDelete: c.onDelete,
-      // conditional: a marker-free declaration keeps its slice-1 generation id
-      ...c.renamedFrom ? { renamedFrom: c.renamedFrom } : {}
-    })),
-    indexes: t.indexes,
-    uniques: t.uniques,
-    ...t.removedColumns.length > 0 ? { removedColumns: t.removedColumns } : {},
-    // conditional: a table without rooms keeps its generation id.
-    ...t.rooms ? { rooms: t.rooms } : {},
-    // conditional: only a group() table with direct group references gains
-    // it, so every other table keeps its generation id.
-    ...t.groupRefs && t.groupRefs.length > 0 ? { groupRefs: t.groupRefs } : {},
-    // conditional: a relation-free table keeps its slice-1 generation id. Ordered
-    // by name (readRelations sorts) so the shape is deterministic. `kind` is
-    // likewise conditional — absent means hasMany, so a declaration that uses
-    // only hasMany keeps the generation id the composed-joins slice minted.
-    ...t.relations.length > 0 ? {
-      relations: t.relations.map((rel) => ({
-        name: rel.name,
-        table: rel.table,
-        fk: rel.fk,
-        parentKey: rel.parentKey,
-        ...rel.kind === "belongsTo" ? { kind: "belongsTo" } : {}
-      }))
-    } : {}
-  };
+    return {
+        name: t.name,
+        scope: t.scope,
+        ...t.client ? { client: t.client } : {},
+        columns: t.columns.map((c) => ({
+            name: c.name,
+            helper: c.helper,
+            uuid: c.uuid,
+            nullable: c.nullable,
+            hasDefault: c.hasDefault,
+            default: c.default,
+            autoNow: c.autoNow,
+            unique: c.unique,
+            references: c.references,
+            onDelete: c.onDelete,
+            ...c.renamedFrom ? { renamedFrom: c.renamedFrom } : {}
+        })),
+        indexes: t.indexes,
+        uniques: t.uniques,
+        ...t.removedColumns.length > 0 ? { removedColumns: t.removedColumns } : {},
+        ...t.rooms ? { rooms: t.rooms } : {},
+        ...t.groupRefs && t.groupRefs.length > 0 ? { groupRefs: t.groupRefs } : {},
+        ...t.relations.length > 0 ? {
+            relations: t.relations.map((rel) => ({
+                name: rel.name,
+                table: rel.table,
+                fk: rel.fk,
+                parentKey: rel.parentKey,
+                ...rel.kind === "belongsTo" ? { kind: "belongsTo" } : {}
+            }))
+        } : {}
+    };
 }
-
-// worker/src/utils/db-schema-deploy/client-contract-source.ts
 var import_declared_data_contract = __toESM(require_declared_data_contract());
 function declareEntry(dictionary, name, value) {
-  Object.defineProperty(dictionary, name, { value, writable: true, enumerable: true, configurable: true });
+    Object.defineProperty(dictionary, name, { value, writable: true, enumerable: true, configurable: true });
 }
 function clientAuthorityFromSource(files) {
-  const authority = schemaAuthorityFromSource(files);
-  return Object.values(authority?.schema ?? {}).some((table) => table.client !== void 0) ? authority : void 0;
+    const authority = schemaAuthorityFromSource(files);
+    return Object.values(authority?.schema ?? {}).some((table) => table.client !== void 0) ? authority : void 0;
 }
 function schemaAuthorityFromSource(files, options = {}) {
-  const source = files["db/schema.ts"];
-  if (source === void 0) return void 0;
-  const parsed = extractSchemaTs(source, options);
-  if (!parsed.ok) throw new Error(`Invalid db/schema.ts: ${parsed.errors.join(" ")}`);
-  const schema = {};
-  const intents = {};
-  const scopes = {};
-  for (const table of parsed.declaration.tables) {
-    const baked = bakedTableSchemaFromDeclared(JSON.stringify(canonicalTableShape(table)));
-    if (!baked) throw new Error(`Could not derive the client contract for declared table "${table.name}".`);
-    declareEntry(schema, table.name, baked);
-    declareEntry(intents, table.name, declaredScopeIntent(table.scope));
-    const ownerColumn = declaredOwnerColumn(table.scope);
-    if (declaredScopeIntent(table.scope) === "scoped" && ownerColumn) declareEntry(scopes, table.name, ownerColumn);
-  }
-  bakeIntakePermissions(schema, Object.fromEntries(parsed.declaration.tables.map((table) => [table.name, JSON.stringify(canonicalTableShape(table))])), intents, scopes);
-  return { schema, intents, scopes };
+    const source = files["db/schema.ts"];
+    if (source === void 0)
+        return void 0;
+    const parsed = extractSchemaTs(source, options);
+    if (!parsed.ok)
+        throw new Error(`Invalid db/schema.ts: ${parsed.errors.join(" ")}`);
+    const schema = {};
+    const intents = {};
+    const scopes = {};
+    for (const table of parsed.declaration.tables) {
+        const baked = bakedTableSchemaFromDeclared(JSON.stringify(canonicalTableShape(table)));
+        if (!baked)
+            throw new Error(`Could not derive the client contract for declared table "${table.name}".`);
+        declareEntry(schema, table.name, baked);
+        declareEntry(intents, table.name, declaredScopeIntent(table.scope));
+        const ownerColumn = declaredOwnerColumn(table.scope);
+        if (declaredScopeIntent(table.scope) === "scoped" && ownerColumn)
+            declareEntry(scopes, table.name, ownerColumn);
+    }
+    bakeIntakePermissions(schema, Object.fromEntries(parsed.declaration.tables.map((table) => [table.name, JSON.stringify(canonicalTableShape(table))])), intents, scopes);
+    return { schema, intents, scopes };
 }
 function declaredFilesFromSource(files) {
-  const source = files["db/schema.ts"];
-  if (source === void 0) return void 0;
-  const parsed = extractSchemaTs(source);
-  return parsed.ok && parsed.declaration.files?.length ? canonicalFileCollectionsJson(parsed.declaration.files) : void 0;
+    const source = files["db/schema.ts"];
+    if (source === void 0)
+        return void 0;
+    const parsed = extractSchemaTs(source);
+    return parsed.ok && parsed.declaration.files?.length ? canonicalFileCollectionsJson(parsed.declaration.files) : void 0;
 }
 function declaredRolesFromSource(files) {
-  const source = files["db/schema.ts"];
-  if (source === void 0) return void 0;
-  const parsed = extractSchemaTs(source);
-  if (!parsed.ok || !parsed.declaration.groups && !parsed.declaration.appRoles) return void 0;
-  return JSON.stringify(canonicalRoleVocabulary(
-    parsed.declaration.groups,
-    parsed.declaration.appRoles?.map((role) => ({ name: role.name, grantableBy: role.grantableBy }))
-  ));
+    const source = files["db/schema.ts"];
+    if (source === void 0)
+        return void 0;
+    const parsed = extractSchemaTs(source);
+    if (!parsed.ok || !parsed.declaration.groups && !parsed.declaration.appRoles)
+        return void 0;
+    return JSON.stringify(canonicalRoleVocabulary(parsed.declaration.groups, parsed.declaration.appRoles?.map((role) => ({ name: role.name, grantableBy: role.grantableBy }))));
 }
-
-// declared-data-vendor-entry.js
 var import_declared_data_contract2 = __toESM(require_declared_data_contract());
 var import_typed_data = __toESM(require_typed_data());
 var import_runtime_types2 = __toESM(require_runtime_types());
@@ -8196,69 +8649,67 @@ var import_schema_types = __toESM(require_schema_types());
 var import_runtime_types3 = __toESM(require_runtime_types());
 var import_typed_files2 = __toESM(require_typed_files());
 var checkerContract = __toESM(require_checker_contract());
-
-// worker/src/utils/reference-check-inputs.ts
 var import_runtime_types = __toESM(require_runtime_types());
 var import_generated_declarations = __toESM(require_generated_declarations());
 var import_generated_declarations_render = __toESM(require_generated_declarations_render());
 function referenceCheckDeclaredTables(graphFiles, schemaOptions = {}) {
-  const authority = schemaAuthorityFromSource(graphFiles, schemaOptions);
-  return authority ? (0, import_runtime_types.declaredTablesDeclaration)(authority) : void 0;
+    const authority = schemaAuthorityFromSource(graphFiles, schemaOptions);
+    return authority ? (0, import_runtime_types.declaredTablesDeclaration)(authority) : void 0;
 }
 function referenceCheckDeclarations(graphFiles) {
-  return (0, import_generated_declarations_render.renderGeneratedDeclarationFiles)({
-    declaredRoles: void 0,
-    declaredTables: referenceCheckDeclaredTables(graphFiles),
-    hasSchema: graphFiles["db/schema.ts"] !== void 0
-  });
+    return (0, import_generated_declarations_render.renderGeneratedDeclarationFiles)({
+        declaredRoles: void 0,
+        declaredTables: referenceCheckDeclaredTables(graphFiles),
+        hasSchema: graphFiles["db/schema.ts"] !== void 0
+    });
 }
 var RUNTIME_ENDPOINT_ACCESS = /^sw(?:\s|\/\*[\s\S]*?\*\/|\/\/[^\n]*\n)*\??\.(?:\s|\/\*[\s\S]*?\*\/|\/\/[^\n]*\n)*endpoint(?![\w$])/;
 function isRuntimeEndpointGlobal(diag, functions) {
-  if (!/^Cannot find name 'sw'\./.test(diag.message)) return false;
-  const source = diag.file ? functions?.[diag.file] : void 0;
-  if (typeof source !== "string" || diag.line === void 0 || diag.column === void 0) return false;
-  const lines2 = source.split("\n");
-  if (lines2[diag.line - 1] === void 0) return false;
-  return RUNTIME_ENDPOINT_ACCESS.test(lines2.slice(diag.line - 1).join("\n").slice(diag.column - 1));
+    if (!/^Cannot find name 'sw'\./.test(diag.message))
+        return false;
+    const source = diag.file ? functions?.[diag.file] : void 0;
+    if (typeof source !== "string" || diag.line === void 0 || diag.column === void 0)
+        return false;
+    const lines2 = source.split("\n");
+    if (lines2[diag.line - 1] === void 0)
+        return false;
+    return RUNTIME_ENDPOINT_ACCESS.test(lines2.slice(diag.line - 1).join("\n").slice(diag.column - 1));
 }
-
-// declared-data-vendor-entry.js
 var import_consumer_contract = __toESM(require_consumer_contract());
 function generateFromFiles(files) {
-  const authority = clientAuthorityFromSource(files);
-  return authority ? (0, import_typed_data.generateDataClient)(authority) : void 0;
+    const authority = clientAuthorityFromSource(files);
+    return authority ? (0, import_typed_data.generateDataClient)(authority) : void 0;
 }
 function localDeclarationFromFiles(files) {
-  const authority = clientAuthorityFromSource(files);
-  return authority ? (0, import_declared_data_contract2.describeDataClientLocalDeclaration)(authority) : void 0;
+    const authority = clientAuthorityFromSource(files);
+    return authority ? (0, import_declared_data_contract2.describeDataClientLocalDeclaration)(authority) : void 0;
 }
 function runtimeDeclarationFromFiles(files) {
-  return (0, import_runtime_types2.runtimeContextDeclaration)((0, import_groups_types.declaredRoles)(declaredRolesFromSource(files)));
+    return (0, import_runtime_types2.runtimeContextDeclaration)((0, import_groups_types.declaredRoles)(declaredRolesFromSource(files)));
 }
 function declaredTablesFromFiles(files) {
-  return (0, import_runtime_types2.declaredTablesDeclaration)(schemaAuthorityFromSource(files));
+    return (0, import_runtime_types2.declaredTablesDeclaration)(schemaAuthorityFromSource(files));
 }
 function filesDeclarationFromFiles(files) {
-  const canonical = declaredFilesFromSource(files);
-  return canonical ? (0, import_typed_files.describeFilesClient)(canonical).declaration : void 0;
+    const canonical = declaredFilesFromSource(files);
+    return canonical ? (0, import_typed_files.describeFilesClient)(canonical).declaration : void 0;
 }
-// Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
-  CONSUMER_CONTRACT,
-  ENDPOINT_DECLARATION,
-  FILES_DECLARATION_FILE,
-  RUNTIME_CONTEXT_DECLARATION,
-  SCHEMA_DECLARATION,
-  checkerContract,
-  consumerContractComponents,
-  consumerContractFingerprint,
-  consumerContractVerdict,
-  declaredTablesFromFiles,
-  filesDeclarationFromFiles,
-  generateFromFiles,
-  isRuntimeEndpointGlobal,
-  localDeclarationFromFiles,
-  parseConsumerContractHeader,
-  referenceCheckDeclarations,
-  runtimeDeclarationFromFiles
+    CONSUMER_CONTRACT,
+    ENDPOINT_DECLARATION,
+    FILES_DECLARATION_FILE,
+    RUNTIME_CONTEXT_DECLARATION,
+    SCHEMA_DECLARATION,
+    checkerContract,
+    consumerContractComponents,
+    consumerContractFingerprint,
+    consumerContractVerdict,
+    declaredTablesFromFiles,
+    filesDeclarationFromFiles,
+    generateFromFiles,
+    isRuntimeEndpointGlobal,
+    localDeclarationFromFiles,
+    parseConsumerContractHeader,
+    referenceCheckDeclarations,
+    runtimeDeclarationFromFiles
 });

@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-// pfb_f3cc58a01e76, tsk_746516: tests are not part of the app. A test source
+// , : tests are not part of the app. A test source
 // file (`*.test.*`, `*.spec.*`) and anything in a `tests/` or `__tests__/`
 // folder is held back by default and named as not published; under api/ a
 // test file would otherwise deploy as a live route. An app that imports

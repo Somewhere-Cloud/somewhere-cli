@@ -1,6 +1,6 @@
 /**
  * readability.mjs — detect minified/obfuscated published source for the
- * swpx/swpm npm "verdict layer" (task tsk_f30faf55).
+ * swpx/swpm npm "verdict layer" (task ).
  *
  * Pure ES module. No imports, no network, no node builtins, no dependencies.
  * Runs synchronously and environment-agnostically (Cloudflare Workers + node:test).

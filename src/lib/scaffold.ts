@@ -21,7 +21,7 @@ export const SCAFFOLD_PACKAGE_FILENAME = 'package.json';
 export const SCAFFOLD_GITIGNORE_FILENAME = '.gitignore';
 
 /**
- * The starters' .gitignore (tsk_8a68dfa2 item 8). Deploys skip dotfiles, so a
+ * The starters' .gitignore ( item 8). Deploys skip dotfiles, so a
  * pulled app never brings one down, and `somewhere typecheck`/`dev` then leave
  * the generated schema declarations (thousands of lines under src/) untracked
  * in git. Same text as the `somewhere init` starters; a test pins the two

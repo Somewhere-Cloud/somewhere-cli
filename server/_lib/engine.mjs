@@ -1,4 +1,4 @@
-/** The verdict engine — the heart of swpx (task tsk_f30faf55).
+/** The verdict engine — the heart of swpx (task ).
  *
  *  Takes the signals gathered for one package@version and returns the verdict
  *  LEVEL and the list of signals that drove it. This is the contract the CLI

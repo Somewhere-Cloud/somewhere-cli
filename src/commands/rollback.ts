@@ -9,7 +9,7 @@ import { unlinkedFolderHint } from '../lib/link-hint.js';
 import { saveLastActivation } from '../lib/base-files.js';
 
 /** Remember in the linked folder that it put this release live itself, so a
- *  later refused deploy names this folder's own rollback/restore (tsk_0dcd7530). */
+ *  later refused deploy names this folder's own rollback/restore. */
 export function rememberActivation(kind: 'rollback' | 'restore', projectId: string, result: Pick<RollbackResult, 'active_release_id' | 'version'>): void {
   const config = loadProjectConfig();
   if (!config || !result.active_release_id) return;

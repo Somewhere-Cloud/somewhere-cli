@@ -1,4 +1,4 @@
-// tsk_da2dba3d: optional checks cannot erase a confirmed live deploy.
+// : optional checks cannot erase a confirmed live deploy.
 // Real CLI transport against loopback only; no account, browser or deploy on the platform.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -103,7 +103,7 @@ test('pre-publication refusal never updates the local release anchor', async () 
   const result = await fixture({ mode: 'prelive' });
   assert.equal(result.status, 1); assert.deepEqual(result.state, result.initial);
   assert.deepEqual(result.requests.filter(r => r.startsWith('POST') && r !== 'POST /v1/deploy/prestart'), ['POST /v1/deploy']);
-  assert.equal(result.requests.filter(r => r === 'POST /v1/deploy/prestart').length, 1, 'one prestart (tsk_a92c59b9)');
+  assert.equal(result.requests.filter(r => r === 'POST /v1/deploy/prestart').length, 1, 'one prestart');
   const output = JSON.parse(result.stdout);
   assert.equal(output.error, 'BUILD_FAILED'); assert.equal(output.retry, false);
   assert.equal(output.deployment_outcome, undefined);

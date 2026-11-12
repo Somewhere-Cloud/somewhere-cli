@@ -1,4 +1,4 @@
-// Pre-launch, no legacy anything (founder, 2026-11-04, tsk_75a852f4; tsk_47dca4f8): what the CLI
+// Pre-launch, no legacy anything (founder, 2026-11-04, ; ): what the CLI
 // writes into a new app (the init starter, its AGENTS.md and the skills pack), what npm shows
 // (README, LICENSE) and every command's --help never name somewhere.tech or the @somewhere-tech
 // scope, and never call anything legacy, renamed, moved, deprecated or retired. Copy states what

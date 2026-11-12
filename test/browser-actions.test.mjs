@@ -236,7 +236,7 @@ test('vendored outline probe carries the platform visibility annotations', () =>
   assert.match(DOM_OUTLINE_SCRIPT, /aria-hidden/);
 });
 
-// tsk_eb818014 — a CSS attribute selector carries its own "=", so first-"="
+//  — a CSS attribute selector carries its own "=", so first-"="
 // splitting cut the selector in half and tried to open the remainder as a path.
 test('upload mappings take the file path from the last equals so attribute selectors survive', () => {
   const fixtureDir = mkdtempSync(join(tmpdir(), 'sw-upload-split-'));
@@ -295,7 +295,7 @@ test('an upload mapping missing either side fails locally with actionable copy',
   }
 });
 
-test('frame is carried onto each action for the platform, never dropped (tsk_7719cf76)', () => {
+test('frame is carried onto each action for the platform, never dropped', () => {
   const normalized = normalizeBrowserActions([
     { click: '#ok' },
     { fill: 'input[name=cardnumber]', value: '4242', frame: '#card iframe' },

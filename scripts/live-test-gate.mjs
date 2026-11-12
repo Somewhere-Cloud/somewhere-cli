@@ -1,4 +1,4 @@
-// tsk_fc1afab0: the one gate for tests and scripts that deploy to the real
+// : the one gate for tests and scripts that deploy to the real
 // platform. Both an explicit opt-in and an explicit test credential are
 // required, and both come from the environment only. The signed-in
 // ~/.somewhere/config.json is never read, so nothing behind this gate deploys

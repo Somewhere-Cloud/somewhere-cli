@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url';
 // Signed-out deploy against a local fixture of the public anonymous routes,
 // shaped like the platform's own (worker/src/routes/auth-platform.ts:
 // issueTemporaryPowChallenge, /temp-create; utils/errors errorResponse).
-// pfb_011a9fd3f5f3: typed errors keep code, status, retry_after_ms and request
+// : typed errors keep code, status, retry_after_ms and request
 // ids; non-JSON bodies are named with their status; nothing is resent and no
 // credential is sent to the public routes.
 const cli = join(dirname(fileURLToPath(import.meta.url)), '../dist/index.js');

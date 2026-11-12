@@ -108,7 +108,7 @@ export function platformErrorDetail(cause: unknown): string | null {
 }
 
 /**
- * The platform's code and request/trace ids for a text-mode failure (tsk_c95a437d): an agent reading
+ * The platform's code and request/trace ids for a text-mode failure: an agent reading
  * text output gets the same handles `--json` carries. Only validated shapes are printed, so a server
  * cannot place arbitrary text here; the message above stays the platform's own.
  */
@@ -189,7 +189,7 @@ export function table(
 const ZONELESS_TIMESTAMP = /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/;
 
 /** Epoch milliseconds for an API timestamp. Zoneless strings are UTC, never the
- *  machine's local time (pfb_b69363269589); ISO with Z/offset and epoch numbers
+ *  machine's local time; ISO with Z/offset and epoch numbers
  *  keep their own meaning. */
 export function parseApiTime(value: string | number): number {
   if (typeof value === 'number') return value;

@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-// tsk_d8eac29404da: a run record an older CLI filled with argument values and
+// : a run record an older CLI filled with argument values and
 // output is removed at startup, before any command runs (help, version and
 // usage errors included). Login and session files stay; nothing is read,
 // printed or copied; a symlinked record is removed without touching its target.

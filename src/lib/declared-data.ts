@@ -75,7 +75,7 @@ export function prepareDeclaredData(projectDir: string): LocalDeclaredData | und
     // No schema: no tables, no somewhere:data, no somewhere:files. Functions
     // still get the runtime context the platform compiler always declares
     // (`sw`, `SomewhereRuntimeContext`, `sw.endpoint`), so a bare typed
-    // handler checks the same locally as on deploy (pfb_861a411cb4a6).
+    // handler checks the same locally as on deploy.
     if (previousFiles?.startsWith(GENERATED_DATA_HEADER)) rmSync(filesPath);
     // A file of the user's own at the reserved path is left alone, as before.
     if (previous !== undefined && !previous.startsWith(GENERATED_DATA_HEADER)) return undefined;

@@ -60,7 +60,7 @@ test('customer-facing CLI copy uses exactly two words: dev and preview', () => {
   assert.doesNotMatch(refusal, /--cloud/);
 });
 
-// tsk_74375b3c — a promote ends the preview, and the loop says so in the two
+//  — a promote ends the preview, and the loop says so in the two
 // words the product uses. None of OUR nouns reach the terminal.
 test('after a promote the preview loop ends cleanly, in product language', () => {
   const dev = read('src/commands/dev.ts');
@@ -100,7 +100,7 @@ test('no internal field name is printable from the preview loop', () => {
   }
 });
 
-// tsk_14c5408c — a burst of saves must produce ONE preview update, not several
+//  — a burst of saves must produce ONE preview update, not several
 // overlapping ones. chokidar picks up whatever a formatter or a build tool
 // drops in the tree, so a burst is normal, not pathological.
 test('a burst of saves coalesces into one preview update', () => {

@@ -7,7 +7,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildScaffoldTsconfig } from '../dist/lib/scaffold.js';
 
-// `somewhere typecheck` is read-only (pfb_8f0f7cdd04a1): it never installs into
+// `somewhere typecheck` is read-only: it never installs into
 // the project, refuses when declared type packages are missing, and every
 // child it starts is bounded and stopped with its own children.
 const cli = join(dirname(fileURLToPath(import.meta.url)), '../dist/index.js');

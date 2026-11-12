@@ -117,7 +117,7 @@ test('expired handoff gives manual guidance without unlinking or replacing temp 
   exchangeMode = 'ready';
 });
 
-test('expired handoff of an expired temporary session is a note, not a blocker; only that record is dropped (tsk_97979518)', async () => {
+test('expired handoff of an expired temporary session is a note, not a blocker; only that record is dropped', async () => {
   exchangeMode = 'expired';
   const expiredAt = '2026-10-14T18:00:00.000Z';
   writeConfig({ token: 'smt_temp_expired', user: { email: '', username: '' }, temporary: true, temp_expires_at: expiredAt, claim_url: 'https://somewhere.cloud/claim/x', claim_handoff: { project_id: projectId, verifier, handoff_id: handoffId } });

@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-// tsk_de3c2c25: a browser refusal keeps the platform's code, HTTP status,
+// : a browser refusal keeps the platform's code, HTTP status,
 // request id, retry verdict and its documented data in `browser --json` and in
 // `verify --json` refusals, while anything outside that data contract is
 // dropped and text output is unchanged. Refusal shapes copy

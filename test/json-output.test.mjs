@@ -490,7 +490,7 @@ test('rollback replaces stale snapshot wording while preserving JSON', async () 
  * account and a real project named after the mkdtemp working directory
  * (sw-json-contract-cwd-*). 14+ landed on production on 2026-09-01 alone, and
  * the case asserted nothing about what those deploys DID — it was a green
- * light over a red surface (tsk_e929774b).
+ * light over a red surface.
  *
  * Everything now points at the local stub, which answers every route with a
  * JSON error. A command that reaches the network still takes a terminal path;
@@ -639,7 +639,7 @@ test('init --link --project links an exact existing project non-interactively', 
     assert.deepEqual(JSON.parse(result.stdout), { ...project, app_url: null });
     assert.deepEqual(
       JSON.parse(readFileSync(join(cwd, '.somewhere.json'), 'utf8')),
-      // A linked folder with no package.json pin records the CLI in .somewhere.json (tsk_a4641877).
+      // A linked folder with no package.json pin records the CLI in .somewhere.json.
       { project_id: project.id, name: project.name, subdomain: project.subdomain, cli_version: CLI_PACKAGE_VERSION },
     );
   });

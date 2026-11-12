@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-// Every formatter prints a typed server error's code and message (tsk_224b77a0): the top-level
+// Every formatter prints a typed server error's code and message: the top-level
 // handler (text and --json), a command with its own failure printer (fs), the MCP-tool path
 // (`call`, text and --json), and `mcp doctor`. Network failures name their real cause.
 const cli = join(dirname(fileURLToPath(import.meta.url)), '../dist/index.js');

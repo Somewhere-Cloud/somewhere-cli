@@ -190,7 +190,7 @@ test('buildBrowserBody: --snapshot is not a step', () => {
 // map is an opt-in section; without this the flag rendered whatever the
 // response happened to carry, which was nothing — `--wait button --snapshot`
 // matched a button and then printed "dom: 0 interactive elements" on a page
-// with three of them (tsk_bdd72f02c2).
+// with three of them.
 test('buildBrowserBody: --snapshot requests the DOM section', () => {
   assert.deepEqual(buildBrowserBody('https://example.com', { snapshot: true }).include, ['dom']);
 });
@@ -211,7 +211,7 @@ test('buildBrowserBody: --snapshot merges with --include without duplicating', (
 // section opt-in while still printing a count is how a bare
 // `somewhere browser https://example.com` claimed "dom: 0 interactive elements"
 // about a page with a link, while `--snapshot` on the same URL said 1
-// (pfb_57c43192d553).
+//.
 test('buildBrowserBody: the default report asks for the DOM section', () => {
   assert.deepEqual(buildBrowserBody('https://example.com', {}).include, ['dom']);
   assert.deepEqual(buildBrowserBody('https://example.com', { wait: 'button' }).include, ['dom']);
@@ -263,7 +263,7 @@ test('default EYES still reports a genuinely empty page as zero', async () => {
 // A stored screenshot came back as a storage path alone. Read as a URL — the
 // only thing a path in a report looks like — it is not one, so the single value
 // the command handed back for "here is your screenshot" could not be used to
-// see the screenshot (tsk_70fd0f63a9). Lead with the link; keep the stored path
+// see the screenshot. Lead with the link; keep the stored path
 // on its own line, because that is the durable handle for reading or replacing
 // the file later.
 test('formatBrowserReport: a stored screenshot prints a link that opens it', () => {
@@ -494,7 +494,7 @@ test('formatBrowserReport: --snapshot prints the full DOM map', () => {
 
 // "No map came back" and "the page has no controls" are different facts. Only
 // the second one is a count; printing the first as `0 interactive elements` is
-// a false statement about the page (pfb_57c43192d553).
+// a false statement about the page.
 test('formatBrowserReport: a missing DOM map is reported as not read, never as zero', () => {
   const out = formatBrowserReport({ passed: true, final_url: 'https://example.com/' }).join('\n');
   assert.match(out, /^dom: not read/m);

@@ -6,7 +6,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-// tsk_3c455b0d: platform-generated query diagnostics must not read as app failures.
+// : platform-generated query diagnostics must not read as app failures.
 test('errors labels generated diagnostics while preserving real app and API failures', async () => {
   const base = { method: 'POST', status_code: 500, error_code: 'INTERNAL_ERROR',
     error_message: 'DATABASE_ERROR: Network connection lost', kind: 'exception', created_at: new Date().toISOString() };

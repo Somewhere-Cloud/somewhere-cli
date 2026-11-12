@@ -95,7 +95,7 @@ function createProtectedOutput(path: string): number {
 /** The account-creation page. `login` sends an existing user through the OAuth
  *  device flow, which offers no way to create an account — a stranger with no
  *  Google or GitHub account had no front door from the CLI at all
- *  (tsk_0e9e13b8). This URL is the one that does. */
+ *. This URL is the one that does. */
 export const SIGNUP_URL = 'https://somewhere.cloud/auth?intent=signup';
 
 /** The one line `login` prints so a new user is never stranded, and the line
@@ -152,7 +152,7 @@ async function loginAction(opts: { browserCallback?: boolean; signup?: boolean }
 
 /**
  * The plan's display name from the public plan table, keyed by the tier id, so
- * a new or renamed plan never shows up as the wrong one (pfb_b69363269589).
+ * a new or renamed plan never shows up as the wrong one.
  * An unreadable table or an id it does not list prints the id itself.
  */
 export async function readPlanName(client: Pick<ApiClient, 'call'>, tierId: string): Promise<string> {
@@ -169,7 +169,7 @@ export async function readPlanName(client: Pick<ApiClient, 'call'>, tierId: stri
 /**
  * whoami's count is every project the account owns, in any status; `somewhere projects` lists owned
  * and shared/group projects but leaves out archived ones and ones being deleted. Say which is which,
- * so the two numbers reconcile instead of looking like a lost project (tsk_8a68dfa2). A failed
+ * so the two numbers reconcile instead of looking like a lost project. A failed
  * breakdown read never fails whoami: the count is still labelled.
  */
 export async function describeProjectCount(client: ApiClient, owned: number): Promise<string> {
@@ -302,7 +302,7 @@ export function registerAuth(program: Command) {
         // says so in the platform's own words rather than guessing "expired".
         // A typed refusal is printed as the platform's own code and message: it
         // knows the cause (an out-of-date CLI, a revoked session) and guessing
-        // "expired" sends the agent to the wrong fix (tsk_224b77a0). Only an
+        // "expired" sends the agent to the wrong fix. Only an
         // untyped 401 is reported as a login problem; an outage or a dropped
         // connection is not, and must not send a working login to `somewhere login`.
         const typed = typedServerError(err);

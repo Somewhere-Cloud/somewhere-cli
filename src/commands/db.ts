@@ -64,7 +64,7 @@ export function registerDb(program: Command) {
           } else {
             // Explicit SUCCESS, not a warning — an agent seeing "No rows
             // returned." after CREATE/INSERT couldn't tell success from a
-            // silent failure (tsk_abea03ab). Failures error loudly above.
+            // silent failure. Failures error loudly above.
             success('OK — no rows returned (normal for DDL and zero-row writes; failures error loudly).');
           }
           return;

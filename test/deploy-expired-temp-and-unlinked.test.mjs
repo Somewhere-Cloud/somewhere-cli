@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-// tsk_8a68dfa2 items 14 and 15: both answers come from this machine's own
+//  items 14 and 15: both answers come from this machine's own
 // record, so the stub API must see no request at all — no proof-of-work
 // mint, no project lookup, no auto-create.
 const distIndex = join(dirname(fileURLToPath(import.meta.url)), '..', 'dist', 'index.js');
@@ -88,7 +88,7 @@ test('expired temporary session + linked folder, --json: structured, no request'
   assert.deepEqual(requests, []);
 });
 
-test('expired temporary session + unlinked folder: one-line note, replaced only after a successful mint (tsk_97979518)', async () => {
+test('expired temporary session + unlinked folder: one-line note, replaced only after a successful mint', async () => {
   requests.length = 0;
   const { app, configDir } = fixture({ config: expiredTemp });
   const r = await run(['deploy'], app, configDir);

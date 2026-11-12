@@ -1,4 +1,4 @@
-// tsk_28753a0e, tsk_74d3bf0e: the plain `somewhere init` auth starter redeems a
+// , : the plain `somewhere init` auth starter redeems a
 // sign-in or group invitation link on /auth/magic. This drives the generated
 // landing hook and the real pinned SDK client over a recording fetch. Opening
 // or reloading the page sends nothing (a link preview or mail scanner cannot
@@ -96,7 +96,7 @@ function transpile(code) {
   return ts.transpileModule(code, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText;
 }
 
-// The typecheck never installs (read-only, pfb_8f0f7cdd04a1); this test installs
+// The typecheck never installs (read-only, ); this test installs
 // the starter's pinned dependencies itself, the way a developer runs npm install.
 const installStarter = (specs, cwd) => {
   const done = spawnSync(process.platform === 'win32' ? 'npm.cmd' : 'npm',

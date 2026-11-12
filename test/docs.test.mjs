@@ -205,7 +205,7 @@ test('docs --list discovers public topics and keeps quick links separate', async
   }
 });
 
-// tsk_926fbf8e — manual topics are public through the generated manifest.
+//  — manual topics are public through the generated manifest.
 // A topic response must use that page's own body, never prose from a page that
 // merely links to it.
 

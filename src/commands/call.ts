@@ -25,7 +25,7 @@ function parseArguments(value: string | undefined, file?: string): Record<string
   return parsed;
 }
 
-/** Arguments from the inline JSON or from `--file <path>` (tsk_81dd50f0), never both. */
+/** Arguments from the inline JSON or from `--file <path>`, never both. */
 export function readCallArguments(jsonArgs: string | undefined, file: string | undefined): Record<string, unknown> {
   if (file === undefined) return parseArguments(jsonArgs);
   if (jsonArgs !== undefined) {
@@ -51,7 +51,7 @@ export type CallScope =
   | { kind: 'linked'; args: Record<string, unknown>; note: string }
   | { kind: 'account'; reason: 'all-projects' | 'not-linked' | 'no-project-arg' };
 
-/** Decide which project a generic tool call runs against (tsk_0a027a93).
+/** Decide which project a generic tool call runs against.
  *  An explicit `project_id` always wins. In a linked directory, a tool that
  *  takes `project_id` runs against the linked project, as the first-class
  *  commands do; `--all-projects` omits that default, leaving scope to the tool.

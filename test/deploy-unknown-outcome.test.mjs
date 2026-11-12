@@ -8,7 +8,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 // The deploy body may have reached the server and no authoritative answer was
-// read (pfb_47695233e613): the request is never sent again, the outcome is
+// read: the request is never sent again, the outcome is
 // reported as unknown with deploy-history readback, and nothing says "not
 // applied" or advises a retry. A connection that never opened sent nothing.
 const cli = join(dirname(fileURLToPath(import.meta.url)), '../dist/index.js');
@@ -18,7 +18,7 @@ const server = createServer((req, res) => {
   let body = '';
   req.on('data', (c) => { body += c; });
   req.on('end', () => {
-    // The prestart (tsk_a92c59b9) is its own request, answered at once; the deploy request is what is dropped.
+    // The prestart is its own request, answered at once; the deploy request is what is dropped.
     if (req.method === 'POST' && req.url === '/v1/deploy/prestart') {
       res.writeHead(202, { 'content-type': 'application/json' });
       res.end(JSON.stringify({ ok: true, data: { prestarted: true } }));

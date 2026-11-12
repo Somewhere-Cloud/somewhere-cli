@@ -1,6 +1,6 @@
 // Project notices are advisory context fetched alongside the deploy, not before
 // it: the deploy request no longer waits on the notices round trip
-// (tsk_b0cb30bb; measured 0.1-0.9 s on the live path, up to its 3 s timeout).
+// (; measured 0.1-0.9 s on the live path, up to its 3 s timeout).
 // Both directions:
 //   - a slow notices answer: the deploy request is sent before it arrives, and
 //     the notice is still printed once, on stderr (stdout JSON stays clean);

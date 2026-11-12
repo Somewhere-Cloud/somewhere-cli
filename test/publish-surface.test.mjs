@@ -1,5 +1,5 @@
 /**
- * Publish-surface fixtures (tsk_c166924f).
+ * Publish-surface fixtures.
  *
  * BOTH directions, per rule 9:
  *   - the rule's TARGET fires: an agent's private notes/logs/transcripts sitting

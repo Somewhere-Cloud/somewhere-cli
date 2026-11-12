@@ -111,7 +111,7 @@ export function countFromResponse(value: unknown): number | null {
   return null;
 }
 
-/** The exact paths one deploy sends, as the platform will store them (tsk_23f34679). */
+/** The exact paths one deploy sends, as the platform will store them. */
 export interface UploadInventory {
   /** Every static file in the request body (text and binary), sorted. */
   static_files: string[];

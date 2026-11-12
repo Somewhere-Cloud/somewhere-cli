@@ -306,7 +306,7 @@ test('stdio MCP with a revoked refresh credential stays up in recovery mode with
   try {
     bridge.send({ jsonrpc: '2.0', id: 6, method: 'tools/list', params: {} });
     const listed = await bridge.nextMessage((message) => message.id === 6);
-    // Recovery mode (tsk_224b77a0): the one status tool, not a fatal exit.
+    // Recovery mode: the one status tool, not a fatal exit.
     assert.deepEqual(listed.result.tools.map((tool) => tool.name), ['somewhere_status']);
     bridge.send({ jsonrpc: '2.0', id: 7, method: 'tools/call', params: { name: 'somewhere_status', arguments: {} } });
     const status = await bridge.nextMessage((message) => message.id === 7);

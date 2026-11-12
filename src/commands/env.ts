@@ -174,7 +174,7 @@ export function registerEnv(program: Command) {
         process.exit(1);
       }
       // A positional value is visible in shell history and the process list
-      // (pfb_04b5a285eed0): say so, pointing to --stdin. Text mode: on
+      //: say so, pointing to --stdin. Text mode: on
       // stderr. --json: as an additive input_note field in the JSON result,
       // which env set's --json contract keeps as its only output.
       const inputNote = opts.stdin ? null

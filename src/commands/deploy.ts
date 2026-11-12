@@ -51,7 +51,7 @@ import {
 
 // Resolve the deploy target directory. `resolve` (not `join`) so an absolute
 // `dir` is honored as-is — `join(cwd, '/abs/path')` produced `/cwd/abs/path`
-// → ENOENT (tsk_c616fe5d). `resolve` also normalizes `..` segments.
+// → ENOENT. `resolve` also normalizes `..` segments.
 export function resolveTargetDir(dir?: string, cwd = process.cwd()): string {
   return dir ? resolve(cwd, dir) : cwd;
 }
@@ -69,7 +69,7 @@ export function prebuiltOptIn(opts: {
   return Boolean(opts.prebuilt || opts.allowBundled);
 }
 
-// Node-server pre-flight (tsk_8e8c6bc8): the #1 first-deploy failure is an
+// Node-server pre-flight: the #1 first-deploy failure is an
 // agent shipping an Express/Fastify app — it deploys "successfully" as dead
 // static files (routes never run, server source publicly served). Detect the
 // shape BEFORE upload and teach the platform shape. Warning only, never a
@@ -84,7 +84,7 @@ const NEXT_APP_SIGNAL_PREFIX = 'Next.js app';
 // or `next` in any dependency section. Nothing else.
 //
 // There used to be a third arm matching Next router PATHS (app/page.tsx,
-// pages/**). It was deleted (tsk_8a9d2d1a): `src/pages/HomePage.tsx` is
+// pages/**). It was deleted: `src/pages/HomePage.tsx` is
 // ordinary Vite + React-Router convention, and our OWN `somewhere init`
 // scaffold writes exactly that file — so `somewhere deploy` accused every
 // brand-new project of being a Next.js app on its first ever deploy. A real
@@ -152,7 +152,7 @@ export function detectNodeServerShape(
   // the pages still will not render — so a corroborated `next` signal is worth
   // saying even to a project that ships functions, and
   // `test/deploy-server-shape.test.mjs` pins that on purpose. The scaffold's
-  // false positive (tsk_8a9d2d1a) came from the router-path arm, not from this
+  // false positive came from the router-path arm, not from this
   // ordering, and deleting that arm fixes it with the true positive intact.
   const nextSignal = detectNextAppShape(files);
   if (nextSignal) return nextSignal;
@@ -359,7 +359,7 @@ export function readStaleReleaseDetails(data: Record<string, unknown> | undefine
 /**
  * A deploy refused because live is newer than this folder: which version is
  * live, what put it there (naming this folder's own rollback or restore when
- * that is the cause, tsk_0dcd7530), which files changed, and the one next step.
+ * that is the cause, ), which files changed, and the one next step.
  */
 export function formatStaleReleaseBaseExplanation(
   details: StaleReleaseDetails | string[] = {},
@@ -412,7 +412,7 @@ export function formatAmbiguousRetryStaleExplanation(transportFailure: string): 
 }
 
 /** Signed in, nothing linked: deploy never creates or links a project in the
- *  account on its own; say exactly how to (tsk_8a68dfa2 item 15). */
+ *  account on its own; say exactly how to ( item 15). */
 export function formatSignedInUnlinkedExplanation(): string {
   return [
     'No project is linked to this folder. You are signed in, so deploy will not create or pick a project in your account on its own.',
@@ -423,7 +423,7 @@ export function formatSignedInUnlinkedExplanation(): string {
   ].join('\n');
 }
 
-/** The folder's link names a project this sign-in cannot open (tsk_8a68dfa2
+/** The folder's link names a project this sign-in cannot open (
  *  item 14: typically a temporary project that expired unclaimed, after the
  *  developer signed in). The platform answers not-found and no-access alike,
  *  so this names possibilities only, never which one. Reached only when the
@@ -467,7 +467,7 @@ export function formatSignedOutExistingTargetExplanation(projectId: string, from
   ].join('\n');
 }
 
-/** The stored temporary session expired before this deploy (tsk_8a68dfa2
+/** The stored temporary session expired before this deploy (
  *  item 14). Built only from this machine's own record, so it says nothing
  *  about whether any project exists. */
 export function formatExpiredTemporaryProjectExplanation(expiredAt: string): string {
@@ -530,7 +530,7 @@ export function formatExplicitProjectBaseRequiredExplanation(ref: string): strin
 export const DEPLOY_PRESTART_TIMEOUT_MS = 5_000;
 
 /**
- * Prestart (tsk_a92c59b9, root decision 2026-11-04): ask the platform to start this project's compile container
+ * Prestart (, root decision 2026-11-04): ask the platform to start this project's compile container
  * now, so a cold one boots while the files are packed and uploaded instead of after the upload arrives. The
  * platform holds an instance it starts only until the deploy's compile (at most a minute) and only renews a warm
  * one. Sent once and never awaited or retried. Every outcome is ignored, including an older platform's 404 and a
@@ -587,7 +587,7 @@ export async function readExplicitProjectLiveBase(client: ApiClient, projectId: 
  *  deploy from this folder has gone live since (a first deploy that failed
  *  writes exactly this: source_base.release_id null). Nothing of the folder's
  *  is on that project, so a credential that cannot open it loses nothing by
- *  starting a new temporary project and replacing the link (tsk_b9900dbb). */
+ *  starting a new temporary project and replacing the link. */
 export function linkNeverDeployed(config: ProjectConfig | null | undefined): boolean {
   const base = config?.source_base;
   return Boolean(config?.project_id && base && base.project_id === config.project_id && base.release_id === null
@@ -757,7 +757,7 @@ export function registerDeploy(program: Command) {
       const storedConfig = loadConfig();
       // A link left by a first deploy that never went live, with no credential
       // here that can open its project, would refuse every signed-out deploy:
-      // set it aside and start a new temporary project (tsk_b9900dbb). A live
+      // set it aside and start a new temporary project. A live
       // temporary credential is checked against the project below.
       let replacedLink: ProjectConfigEntry | null = null;
       {
@@ -771,7 +771,7 @@ export function registerDeploy(program: Command) {
       // an existing project (a folder link or --project). A freshly minted
       // temporary account owns no project, so minting one only to get a
       // PROJECT_NOT_FOUND back is skipped: the answer comes from this
-      // machine's own record, before any request (tsk_8a68dfa2 item 14).
+      // machine's own record, before any request ( item 14).
       if (
         storedConfig?.temporary && storedConfig.temp_expires_at && temporarySessionExpired(storedConfig)
         && (opts.project || findLink(targetDir))
@@ -788,7 +788,7 @@ export function registerDeploy(program: Command) {
       // No stored credential at all, and the deploy names an existing project
       // (--project or a folder link). A freshly minted temporary account owns
       // no project, so minting one would only end in PROJECT_NOT_FOUND: say so
-      // before anything is created or sent (pfb_e653dbb1fa74).
+      // before anything is created or sent.
       const namedTarget = opts.project ? { projectId: String(opts.project), fromLink: false }
         : (() => { const entry = findLink(targetDir); return entry ? { projectId: entry.config.project_id, fromLink: true } : null; })();
       // A dry run keeps its own pre-request refusal (formatDryRunNeedsProjectExplanation).
@@ -823,10 +823,10 @@ export function registerDeploy(program: Command) {
       );
       let sideCar: StoredTempSession | null = besideRealLogin ? loadTempSession() : null;
       // The throwaway minted beside a real login belongs to this project root
-      // only; another directory gets its own (pfb_29428f76480e).
+      // only; another directory gets its own.
       const projectRoot = canonicalProjectRoot(targetDir);
 
-      // A dry run reads; it never provisions (pfb_a0af8bb647dc). Comparing
+      // A dry run reads; it never provisions. Comparing
       // needs a credential that can already open an existing project. Without
       // one, minting a temporary account or creating a project to compare
       // against would be the side effect a dry run promises not to have.
@@ -854,7 +854,7 @@ export function registerDeploy(program: Command) {
           // and overriding it also dragged in account mode's linked-project
           // requirement, so `--temporary` in an unlinked directory failed
           // outright instead of doing the one thing it was asked to do
-          // (pfb_9bbc936e5001).
+          //.
           if (!opts.json) info('Already logged in — deploying to your account.');
           token = getToken();
         } else if (besideRealLogin
@@ -878,7 +878,7 @@ export function registerDeploy(program: Command) {
           };
         } else {
           // An expired session is replaced, never reused or left to block the
-          // deploy; say so once (tsk_97979518). A folder linked to one of its
+          // deploy; say so once. A folder linked to one of its
           // projects was already refused above.
           const expiredAt = besideRealLogin
             ? (temporarySessionExpired(sideCar) ? sideCar!.temp_expires_at : undefined)
@@ -927,7 +927,7 @@ export function registerDeploy(program: Command) {
           } catch (err) {
             powSpinner?.fail('Could not create a temporary session');
             // The platform's typed error (code, status, retry, request ids): the
-            // same shape a signed-in deploy reports (pfb_011a9fd3f5f3).
+            // same shape a signed-in deploy reports.
             const status = err instanceof CliApiError
               ? ` ${dim(err.statusCode ? `[${err.code}, HTTP ${err.statusCode}]` : `[${err.code}]`)}` : '';
             error(`${err instanceof Error ? err.message : String(err)}${status}`, err);
@@ -1042,7 +1042,7 @@ export function registerDeploy(program: Command) {
       }
 
       // The target is known: let a cold compile container boot while the files are packed and uploaded
-      // (tsk_a92c59b9). Not for a dry run (nothing compiles) or a temporary workspace's new project.
+      //. Not for a dry run (nothing compiles) or a temporary workspace's new project.
       const stopPrestart = projectId && !tempSession && !opts.dryRun ? startDeployPrestart(client, projectId) : () => undefined;
 
       // An explicit --project is bound to the VERIFIED current project before
@@ -1052,7 +1052,7 @@ export function registerDeploy(program: Command) {
       let explicitProjectId: string | null = null;
       // The live-base read below depends only on the canonical project id. When the ref already IS one and this folder
       // records no base for it, the read starts beside the resolve; its result is used only if the resolve confirms
-      // that same id, otherwise the serial read below runs exactly as before (tsk_11b822ce). The resolve still binds
+      // that same id, otherwise the serial read below runs exactly as before. The resolve still binds
       // the target and refuses a mismatched link before anything is uploaded. readExplicitProjectLiveBase never rejects.
       const earlyLiveBase = opts.project && projectId && !tempSession && !opts.force
         && CANONICAL_PROJECT_ID.test(projectId) && !readSourceBase(targetProjectConfig, projectId)
@@ -1128,7 +1128,7 @@ export function registerDeploy(program: Command) {
 
       const spinner = opts.json ? null : ora('Collecting files...').start();
 
-      // Publish surface (tsk_c166924f): a deploy publishes the app, not the
+      // Publish surface: a deploy publishes the app, not the
       // folder it was built in. Name every held-back file — a silent exclusion
       // is how a private note gets published, and how a needed file goes
       // missing without anyone noticing.
@@ -1165,7 +1165,7 @@ export function registerDeploy(program: Command) {
         if (process.stderr.isTTY) spinner?.start();
       }
 
-      // Node-server pre-flight (tsk_8e8c6bc8) — see detectNodeServerShape.
+      // Node-server pre-flight — see detectNodeServerShape.
       const serverSignal = detectNodeServerShape(files, functions);
       if (serverSignal && !opts.json) {
         spinner?.stop();
@@ -1193,7 +1193,7 @@ export function registerDeploy(program: Command) {
         .reduce((sum, b64) => sum + Math.floor((b64.length * 3) / 4), 0);
       const totalBytes = textBytes + binaryBytes;
       // The exact paths this request carries: one source for the headline count,
-      // the terminal list and the JSON `uploaded` field (tsk_23f34679).
+      // the terminal list and the JSON `uploaded` field.
       const inventory = uploadInventory(files, binaryFiles, functions, scope);
 
       if (opts.dryRun && !opts.json) {
@@ -1221,7 +1221,7 @@ export function registerDeploy(program: Command) {
           // --scope functions deploys ONLY the backend: send no static at all
           // (an empty object, NOT omitted — the worker requires a files map).
           // Sending the on-disk static under scope:functions is what bricked
-          // compiled SPAs (tsk_08cff5f4); the worker now ignores it too, but
+          // compiled SPAs; the worker now ignores it too, but
           // the CLI shouldn't send it in the first place. --scope static is the
           // inverse: no functions.
           files: scope === 'functions' ? {} : files,
@@ -1231,7 +1231,7 @@ export function registerDeploy(program: Command) {
         }
         // A full deploy sends the whole directory, so its functions are the
         // complete set: a deployed function no longer here is removed and named
-        // in the output (pfb_f320d7733b8c). --scope functions keeps the ones it
+        // in the output. --scope functions keeps the ones it
         // leaves out unless --replace-functions is passed.
         const replaceFunctions = Boolean(opts.replaceFunctions) || !scope;
         if (scope !== 'static' && (replaceFunctions || Object.keys(functions).length > 0)) {
@@ -1327,7 +1327,7 @@ export function registerDeploy(program: Command) {
         // A release undone by a pointer move answers before its blank-page
         // check (post_live_render: pending). Wait for it, before this folder
         // records the release as its base: a blank page throws the same
-        // DEPLOY_BLANK_PAGE a gated deploy does (tsk_b9507144).
+        // DEPLOY_BLANK_PAGE a gated deploy does.
         if (spinner) spinner.text = 'Checking the live page...';
         const postLive = await awaitPostLiveRender(client, result.project_id ?? projectId ?? undefined, result);
         if (postLive.kind === 'settled') {
@@ -1340,7 +1340,7 @@ export function registerDeploy(program: Command) {
         const functionErrors = result.function_errors ?? [];
         const hasFunctionErrors = functionErrors.length > 0;
         // The platform confirmed this release before optional verification.
-        // Keep its source anchor even when a later check fails (tsk_da2dba3d).
+        // Keep its source anchor even when a later check fails.
         if (!hasFunctionErrors) {
           if (!tempSession && typeof result.version === 'number' && deployStateEntry) {
             saveProjectDeployState(
@@ -1436,7 +1436,7 @@ export function registerDeploy(program: Command) {
         if (formatted.projectRef) info(`Project: ${teal(formatted.projectRef)}`);
 
         // Build log: entry chunk, chunks + sizes, functions + sizes (returned
-        // by the worker since tsk_8af76ef9). Surface it instead of a bare
+        // by the worker since ). Surface it instead of a bare
         // "deployed." so the dev can see what the compiler actually produced.
         if (Array.isArray(result.build_log) && result.build_log.length > 0) {
           console.log(`\n${dim('Build')}`);
@@ -1609,7 +1609,7 @@ export function registerDeploy(program: Command) {
           process.exit(1);
         }
         // No answer to a request that may have been applied: never "not
-        // applied", never a blind retry (pfb_47695233e613).
+        // applied", never a blind retry.
         if (!opts.dryRun && outcomeUnknown(err)) {
           const unknown = err as CliApiError;
           const message = formatUnknownDeployOutcomeExplanation(unknown, String(projectId), deployRequestStartedAt);
@@ -1634,12 +1634,12 @@ export function registerDeploy(program: Command) {
         }
         // Always show the error code + HTTP status — "Project not found"
         // with no code/status left a customer unable to tell auth from
-        // routing from payload failures (pfb_70e9d140c5a0).
+        // routing from payload failures.
         const staleLink = err instanceof CliApiError && err.code === 'PROJECT_NOT_FOUND'
           && targetFromLink && !deployAnswered && projectId;
         if (err instanceof CliApiError) {
           // The correlation ids, ALWAYS — a deploy failure the developer cannot
-          // name is one we cannot find either (tsk_9c5ed7f8).
+          // name is one we cannot find either.
           const reference = formatErrorReference(err.meta);
           const signedIn = !tempSession;
           if (opts.json) {
@@ -1683,7 +1683,7 @@ export interface DeployResult {
   compiled_artifact_digest?: string | null;
   stage_timing_ms?: Record<string, number> | null;
   reference_check?: { status?: string } | null;
-  /** Present when the blank-page check runs after the answer (tsk_b9507144). */
+  /** Present when the blank-page check runs after the answer. */
   post_live_render?: (PostLiveRenderRecord & { note?: string }) | null;
   blank_page_check?: unknown;
 }
@@ -1703,7 +1703,7 @@ export function formatPostLiveRenderLine(wait: Awaited<ReturnType<typeof awaitPo
 /**
  * The after-live reference check runs in the background, so the deploy
  * answer can only say `pending`. Name the existing read that carries its
- * result (the deploy log) for this exact version (tsk_8a68dfa2 item 4). The
+ * result (the deploy log) for this exact version ( item 4). The
  * project is named unless this directory's link already selects it, because
  * `call` defaults to the linked project.
  */
@@ -1823,7 +1823,7 @@ export function formatDeploySuccess(
     headline = `${formatPublishSurface({ staticFiles: null, functions: options.functionCount })} deployed — site left untouched`;
   } else if (options.scope === 'static') {
     // "uploaded", not "deployed": the count is the source this command sent,
-    // and the platform may keep some of it private (tsk_1108097a).
+    // and the platform may keep some of it private.
     headline =
       `${staticLabel} uploaded (${formatBytes(options.totalBytes)}) — functions left untouched`;
   } else {
@@ -1912,7 +1912,7 @@ interface DeployRetryOptions {
  * Errors from a deploy re-sent after the CLI's OWN transport verdict
  * (TIMEOUT / SERVER_SLOW / NETWORK_ERROR) on the previous attempt. That first
  * attempt may have completed on the server, so a STALE_RELEASE_BASE answer to
- * the retry does not mean the deploy was not applied (tsk_8a68dfa2 item 1).
+ * the retry does not mean the deploy was not applied ( item 1).
  */
 const retriedAfterTransportFailure = new WeakMap<object, string>();
 
@@ -1941,7 +1941,7 @@ async function callDeployWithRetry<T>(
       if (!isRetryableDeployError(err)) throw err;
       // A request that may have reached the server is never resent: no
       // platform contract makes a second identical deploy safe while the first
-      // may still be running (pfb_47695233e613). Only a connection that never
+      // may still be running. Only a connection that never
       // opened, or the platform's own retry: true, is sent again.
       if (outcomeUnknown(err)) throw err;
       // Only the CLI's own verdicts leave the first attempt's outcome unknown;
@@ -2005,7 +2005,7 @@ function deployTimeoutMs(): number {
 /**
  * Should this failed deploy be sent again?
  *
- * Two independent answers, and both count (tsk_9c5ed7f8). The CLI knows about
+ * Two independent answers, and both count. The CLI knows about
  * the failures it detected itself — a timeout, a stalled server, a dropped
  * connection. The PLATFORM knows about the rest, and says so: `retry: true` on
  * the error body is the route stating that this request changed nothing and
@@ -2085,7 +2085,7 @@ const isInternalPath = (p: string) =>
   INTERNAL_PREFIXES.some((prefix) => p.startsWith(prefix));
 
 
-// ── Publish-surface notice (tsk_c166924f) ────────────────────────────────
+// ── Publish-surface notice ────────────────────────────────
 // Rule 8: the customer sees WHAT was held back and HOW to publish it. Nothing
 // about how the rule is implemented, no ticket ids. The "how" line prints once
 // per linked project — stored in the project's own .somewhere.json, never as a
@@ -2132,7 +2132,7 @@ export function printSensitiveFiles(sensitive: CollectedFiles['sensitive']): voi
   info(dim('Files blocked by the sensitive-path policy stay on your machine; --include and "!" lines do not publish them. The policy matches file names only: a secret under any other name uploads like any other file. Store a secret your code needs with `somewhere env set` and read it with sw.env in a function.'));
 }
 
-/** Why a dry run stops before reaching the platform (pfb_a0af8bb647dc). */
+/** Why a dry run stops before reaching the platform. */
 export function formatDryRunNeedsProjectExplanation(): string {
   return [
     'A dry run compares this folder with a project you have already deployed, and there is none to compare with here:',

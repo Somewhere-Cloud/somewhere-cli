@@ -13,8 +13,7 @@ Republish the platform contract 6 CLI after npm accepted earlier uploads without
 ### Changed
 
 - Typecheck knows the typed browser specifier `somewhere:rooms` (joinRoom,
-  watchLive), so a TypeScript page can import the rooms client without TS2307
-  (tsk_5cc533ad). The absolute `/__sw/rooms/client.js` path still builds.
+  watchLive), so a TypeScript page can import the rooms client without TS2307. The absolute `/__sw/rooms/client.js` path still builds.
 - A leftover `sw.db.live` call is reported with the rename to
   `sw.rooms.live(name, sw.db.from(...))` instead of a bare missing-property
   error.
@@ -31,7 +30,7 @@ Republish the platform contract 6 CLI after npm accepted earlier uploads without
   reported as an error, as the platform refuses it. The browser follows a list
   with `watchLive` from `/__sw/rooms/client.js`. The vendored platform
   parser, types, lint, deploy-path policy and repro guidance are re-synced
-  with the platform at consumer contract 4 (tech 5145fd90, tsk_8b1197b2).
+  with the platform at consumer contract 4 (tech 5145fd90, ).
 - The bundled skills pack is re-synced with the platform: seven skills,
   including `design`, and live lists taught through `sw.rooms.live`.
 
@@ -43,9 +42,9 @@ Republish the platform contract 6 CLI after npm accepted earlier uploads without
   lists the paths after the headline (20 or fewer), or points to the full
   list. `deploy --json` and `deploy --dry-run --json` add
   `uploaded: { static_files, functions }`, taken from the same selection as
-  the request and the headline count (tsk_23f34679).
+  the request and the headline count.
 - `somewhere init --template minimal` puts the greeting-removal steps at the
-  top of `db/schema.ts`, and `api/greeting.ts` points to them (tsk_a3dde3d6).
+  top of `db/schema.ts`, and `api/greeting.ts` points to them.
 
 ## 0.38.30
 
@@ -53,7 +52,7 @@ Republish the platform contract 6 CLI after npm accepted earlier uploads without
 
 - Typecheck accepts the `rooms: { save, referee }` table option in
   `db/schema.ts` instead of reporting TS2353. The vendored platform types are
-  re-synced at consumer contract 3 (tsk_4e67d49d).
+  re-synced at consumer contract 3.
 
 ## 0.38.29
 
@@ -62,7 +61,7 @@ Republish the platform contract 6 CLI after npm accepted earlier uploads without
 - Typecheck and lint know `sw.rooms` (`act`, `set`, `send`, `get`,
   `sw.rooms.server.*` and `sw.rooms.event(req)`) and the `rooms` table
   option. The vendored platform parser, types and lint are re-synced with the
-  platform at consumer contract 2 (tsk_4e67d49d).
+  platform at consumer contract 2.
 
 ## 0.38.28
 
@@ -70,7 +69,7 @@ Republish the platform contract 6 CLI after npm accepted earlier uploads without
 
 - After a rollback or restore, a refused deploy no longer says "live is newer
   than this folder" (live is the older version then). It says live was moved to
-  a different version than the one the folder came from (tsk_0dcd7530).
+  a different version than the one the folder came from.
 
 ## 0.38.27
 
@@ -78,7 +77,7 @@ Republish the platform contract 6 CLI after npm accepted earlier uploads without
 
 - Every `somewhere deploy` sends `source: "cli"`, so the platform records that
   the CLI shipped the release. A later refused deploy says "deployed by the
-  somewhere CLI" instead of leaving the tool unnamed (tsk_0dcd7530).
+  somewhere CLI" instead of leaving the tool unnamed.
 
 ## 0.38.26
 
@@ -87,8 +86,7 @@ Republish the platform contract 6 CLI after npm accepted earlier uploads without
 - `somewhere restore <version>` makes an earlier deployed version live again
   through the platform's restore (the same route as MCP
   `project_restore_version`). Nothing is re-uploaded, so going back never needs
-  `deploy --force`. `somewhere rollback` stays the previous-version shortcut
-  (tsk_7fe22c5c).
+  `deploy --force`. `somewhere rollback` stays the previous-version shortcut.
 
 ### Changed
 
@@ -97,13 +95,12 @@ Republish the platform contract 6 CLI after npm accepted earlier uploads without
   dashboard, GitHub, a rollback or restore, or this folder's own
   `somewhere rollback`/`restore` (no more blaming "another machine" after your
   own rollback). It lists the files that differ and gives one next step,
-  `somewhere pull` (tsk_0dcd7530).
+  `somewhere pull`.
 - Plain `somewhere pull` is the safe update when live is newer. Files you have
   not edited since the folder last pulled or deployed move to live. Your local
   edits and local-only files stay. It stops without writing anything when a
   file changed both here and live. The folder records its base files in
-  `.somewhere/base-files.json`. `--force` replaces local edits with live
-  (tsk_a7b38bae).
+  `.somewhere/base-files.json`. `--force` replaces local edits with live.
 
 ## 0.38.25
 
@@ -115,7 +112,7 @@ Republish the platform contract 6 CLI after npm accepted earlier uploads without
   terminal, an agent's sandboxed shell, an expired temporary workspace), the
   next `somewhere deploy` starts a new temporary project and replaces the link,
   saying so. The machine that holds the temporary credential still redeploys
-  the same project (tsk_b9900dbb).
+  the same project.
 - Signed out with a deployed link and no credential here, the refusal now says
   the temporary credential lives in `~/.somewhere/config.json` of the terminal
   that deployed, so run the command there, and how to sign in without a
@@ -142,16 +139,16 @@ Republish the platform contract 6 CLI after npm accepted earlier uploads without
   or absolute import names a file that does not exist. Only bare npm imports,
   which resolve on deploy, are left out of the verdict. Type errors exit 1,
   and the summary line says that `somewhere deploy` does not stop on type
-  errors (tsk_8f8e4863).
+  errors.
 - `somewhere pull --force` no longer deletes local files a deploy would never
   upload (AGENTS.md, CLAUDE.md, README.md, tests, dotfiles, ignored files). It
   replaces deployed files and removes only files the publish rules would upload
   that are no longer deployed. Without `--force`, those local-only files are no
-  longer listed as skipped, so pull records the source base again (tsk_10b73eac).
+  longer listed as skipped, so pull records the source base again.
 - A data `list()` call with a `limit` outside 1 to 100 used to show only
   `TS2769 No overload matches this call`. `somewhere typecheck` and
   `typecheck --deploy` now add the rule to that line: at most 100 rows per
-  call, and read further pages with `after` (tsk_dd9cf0e4).
+  call, and read further pages with `after`.
 
 ## 0.38.23
 
@@ -162,7 +159,7 @@ Republish the platform contract 6 CLI after npm accepted earlier uploads without
   the email, a `/reset-password` page that the emailed link opens, and the two
   functions behind them (`api/forgot-password.ts` calls `sw.auth.forgot`,
   `api/reset-password.ts` calls `sw.auth.reset`). A used or expired link says
-  so in plain words and offers a new one (tsk_b15c7c79).
+  so in plain words and offers a new one.
 
 ## 0.38.22
 
@@ -665,7 +662,7 @@ Republish the platform contract 6 CLI after npm accepted earlier uploads without
 
 - A refused `somewhere verify` names the invalid field and limit (`start_error_details`: code, status, path such as `actions[2].timeout_ms`, `limit_ms`) instead of echoing the platform message (#67).
 - Text-mode output for a platform failure adds one line with its code and request/trace ids (for example `code PROJECT_NOT_FOUND · request req_… · trace …`). The message stays the platform's own; `--json` is unchanged (#71).
-- `somewhere lint` vendors the platform's source lint at somewhere-tech#714: a file exempted from the request-ownership trace by a genuine verifier call reports `coverage.request_ownership` as `partial` instead of `checked`. Warning metadata only; findings and exit codes are unchanged (#72).
+- `somewhere lint` vendors the platform's source lint at the canonical source: a file exempted from the request-ownership trace by a genuine verifier call reports `coverage.request_ownership` as `partial` instead of `checked`. Warning metadata only; findings and exit codes are unchanged (#72).
 - `somewhere test-users prepare --help` no longer promises "about 1 hour" sessions or 24-hour identities. It says the session starts with the expiry prepare prints, that a refresh with saved-back state can renew it, and not to rely on expiry: remove the identities with `somewhere test-users cleanup`. A state copied before cleanup may keep working until its access token (JWT) expires (#70).
 
 ## 0.37.64
@@ -1228,7 +1225,7 @@ Republish the platform contract 6 CLI after npm accepted earlier uploads without
 
 ### Fixed
 
-- `tsk_5504e045` — **`somewhere preview` can no longer publish to production on
+- `` — **`somewhere preview` can no longer publish to production on
   its own.** A preview builds on your app's live version, so a project that has
   never been published needs one published first — and that publish is a real
   production release, the one thing this command can do to your live site. It
@@ -1245,7 +1242,7 @@ Republish the platform contract 6 CLI after npm accepted earlier uploads without
   running `somewhere preview --publish-first`. A run that cannot be asked — a
   script, an agent, a piped shell — is refused and told about the flag. Preview
   on a project that is already live never publishes anything, as before.
-- `tsk_5504e045` — **the plan refusal stopped claiming your project is
+- `` — **the plan refusal stopped claiming your project is
   unpublished.** On a Free or Builder account, `somewhere preview` on a live
   project refused with "Nothing was created — this project has not been
   published", which was simply untrue and sent people to re-deploy an app that
@@ -1265,7 +1262,7 @@ Republish the platform contract 6 CLI after npm accepted earlier uploads without
 
 ### Added
 
-- `tsk_5cfcfe00` — **`somewhere preview` is a command.** There are two loops and
+- `` — **`somewhere preview` is a command.** There are two loops and
   they are now named after where the app runs: `somewhere dev` runs your app on
   your machine, `somewhere preview` runs it on the platform. Every save goes to
   a private URL reachable only by you; production keeps serving what you last
@@ -1276,7 +1273,7 @@ Republish the platform contract 6 CLI after npm accepted earlier uploads without
 
 ### Fixed
 
-- `tsk_33023348` — **`somewhere promote` never reports an outcome it does not
+- `` — **`somewhere promote` never reports an outcome it does not
   know.** It used to print "Promote failed / Unknown error" for a promote that
   had already shipped, and the obvious retry then said "Production was not
   changed" about production that the first command had changed. Promote is the
@@ -1287,16 +1284,16 @@ Republish the platform contract 6 CLI after npm accepted earlier uploads without
   checked against the same evidence before it is allowed to stand. When neither
   side can be read it says the status is unknown and points at your production
   URL rather than guessing.
-- `tsk_74375b3c` — **a promote ends the preview cleanly.** Promoting closed the
+- `` — **a promote ends the preview cleanly.** Promoting closed the
   preview, but the loop kept watching, and your next save came back with a
   refusal written for an API client — then failed the same way on every save
   after that. The loop now recognises the end of a preview and stops on it, in
   two lines: what happened, and the one command that starts the next preview.
-- `tsk_5cfcfe00` — the preview copy no longer claims your preview has
+- `` — the preview copy no longer claims your preview has
   production's data. A preview runs against a separate copy of your schema with
   none of your production rows, which is exactly what makes it safe to try
   things in.
-- `tsk_d63b3b6a` — **an unresolvable import is reported, not a crash.**
+- `` — **an unresolvable import is reported, not a crash.**
   `somewhere dev` died on any import that could not be resolved — a typo'd
   package, one you had not installed yet — with an internal error naming the
   CLI's own bundler and nothing about your code, and every rebuild after that
@@ -1308,7 +1305,7 @@ Republish the platform contract 6 CLI after npm accepted earlier uploads without
   that it comes from the platform and should not be installed at all. The
   server survives, the last working page stays up, and a save that fixes it
   serves again.
-- `tsk_14c5408c` — a burst of saves stays one preview update. Saves inside the
+- `` — a burst of saves stays one preview update. Saves inside the
   debounce window accumulate into a single update, and a save that lands while
   one is in flight re-arms instead of starting a second, so two previews are
   never building at once.
@@ -1324,7 +1321,7 @@ Republish the platform contract 6 CLI after npm accepted earlier uploads without
 
 ### Fixed
 
-- `tsk_a8cb3d23`, `tsk_f79d71ce` — `somewhere dev` and `somewhere deploy` now
+- ``, `` — `somewhere dev` and `somewhere deploy` now
   derive dependency versions from the SAME code, so a build on your machine and
   a build on deploy resolve the same libraries. The platform's compiler reads
   your lockfile as of today: a version your lockfile pins is the version that
@@ -1349,11 +1346,11 @@ Republish the platform contract 6 CLI after npm accepted earlier uploads without
 
 ### Added
 
-- `tsk_0e9e13b8` — `somewhere signup` exists. Someone who has never used the
+- `` — `somewhere signup` exists. Someone who has never used the
   platform ran `somewhere login`, and the CLI's answer assumed they already had
   an account. `signup` prints the page that creates one, and `login` names it
   too, so the front door is a door.
-- `tsk_c166924f` — `somewhere deploy` publishes your **app**, not the folder it
+- `` — `somewhere deploy` publishes your **app**, not the folder it
   was built in. Notes, task lists, scratch files and agent instructions in your
   project root stay on your machine: the deploy prints `Not published (N): …`
   naming exactly what it held back, so the decision is visible rather than
@@ -1362,19 +1359,19 @@ Republish the platform contract 6 CLI after npm accepted earlier uploads without
 
 ### Fixed
 
-- `tsk_926fbf8e` — `somewhere docs <topic>` answers from the public corpus with
+- `` — `somewhere docs <topic>` answers from the public corpus with
   no login. Reading the documentation used to require an account, which is the
   wrong order: you read the docs to decide whether to make one.
-- `tsk_f250e561` — `somewhere status` exits 0 when the platform answers a plan
+- `` — `somewhere status` exits 0 when the platform answers a plan
   question. A feature your plan does not include is an ANSWER, not a failure;
   exiting non-zero made every scripted `status` on a Free account look like a
   broken command.
-- `tsk_a605ff7b`, `tsk_10be456b` — `somewhere browser` against a local URL now
+- ``, `` — `somewhere browser` against a local URL now
   fails inside a bound instead of hanging. Every wait on the local path has a
   deadline, a port with nothing listening is reported as such with the remedy
   named, and the browser's own favicon request — which the page never made — no
   longer counts as your app returning a 404.
-- `tsk_9c5ed7f8` — a failed `somewhere deploy` now says something you can act
+- `` — a failed `somewhere deploy` now says something you can act
   on. When the platform answers `retry: true` — its own statement that the
   request changed nothing and the same one is safe to send again — the CLI
   retries once instead of stopping (it parsed that field and never read it).
@@ -1382,12 +1379,12 @@ Republish the platform contract 6 CLI after npm accepted earlier uploads without
   of the bare words "Unknown error". And every deploy failure now prints the
   request id from the response, so a failure you can see is a failure we can
   find.
-- `tsk_eef0a0ef` — `somewhere dev` prints your app's output, not the platform's
+- `` — `somewhere dev` prints your app's output, not the platform's
   telemetry. Database calls were emitting raw internal metrics JSON and a
   repeated "deferred flush failed: HTTP 403" from a background channel you did
   not ask for and cannot fix. Both are gone by default; set
   `SOMEWHERE_DEV_TELEMETRY=1` to see them.
-- `tsk_a8cb3d23` — the local loop resolves a dependency at the version the build
+- `` — the local loop resolves a dependency at the version the build
   image serves, for every package the image carries. This already held for
   React; it now holds for the whole baked set (router, query, state, forms,
   validation, http, dates, utils, styling, animation, charts, icons), so a
@@ -1416,7 +1413,7 @@ Republish the platform contract 6 CLI after npm accepted earlier uploads without
 
 ### Added
 
-- `tsk_9ec50c84` — `somewhere browser` now drives a **localhost** target. The
+- `` — `somewhere browser` now drives a **localhost** target. The
   app `somewhere dev` is serving used to be the one address this CLI's own
   browser would not visit, so every visual and DOM check had to wait for a
   production deploy. A loopback URL is now driven by the browser already
@@ -1426,12 +1423,12 @@ Republish the platform contract 6 CLI after npm accepted earlier uploads without
   environment variable to point at one. Flags only the hosted browser can honour
   (`--store`, `--session`, `--extract`, non-`dom` `--include`) are refused by
   name rather than silently dropped from a report that still looks complete.
-- `tsk_70fd0f63` — `somewhere errors` gained a `kind` column and an
+- `` — `somewhere errors` gained a `kind` column and an
   `--exceptions` flag, so you can see only what actually broke.
 
 ### Fixed
 
-- `tsk_bdd72f02` — `somewhere browser --snapshot` now asks for the map it
+- `` — `somewhere browser --snapshot` now asks for the map it
   prints. `--snapshot` renders the interactive-element outline, but it never
   requested that section, so it printed whatever the response happened to carry
   — usually nothing. `browser --wait button --snapshot` would match a button and
@@ -1440,35 +1437,35 @@ Republish the platform contract 6 CLI after npm accepted earlier uploads without
   `--include` rather than replacing it. The local outline comes from the
   platform's own probe, so it is a preview of the hosted answer rather than a
   second opinion.
-- `tsk_ea4274ca` — `somewhere errors` no longer calls a working auth gate an
+- `` — `somewhere errors` no longer calls a working auth gate an
   exception. If you probed your own endpoint signed out — deliberately, to prove
   the gate holds — your 401 was listed as the only exception in 24 hours. Rows
   now show their kind: **refused** for a 4xx your handler returned on purpose,
   **exception** for an uncaught throw or a 5xx, with the summary line splitting
   the counts. Nothing is hidden by default.
-- `tsk_ea4274ca` — a stored screenshot printed as a storage path, which reads as
+- `` — a stored screenshot printed as a storage path, which reads as
   a URL and is not one, so the one value the command handed back for "here is
   your screenshot" could not be used to see it. The report now leads with the
   link that opens it and keeps the stored path on its own line, because that is
   the handle for reading or replacing the file later.
-- `tsk_53badecf` — `somewhere dev --check` and `somewhere deploy` no longer
+- `` — `somewhere dev --check` and `somewhere deploy` no longer
   report the `somewhere/db` import from our own managed-schema documentation as
   a missing npm package whose remedy is installing an unrelated package. The
   specifiers the platform provides are now treated as provided. A genuinely
   missing package still warns, and still names every file that imports it.
-- `tsk_a21bc829` — `somewhere dev` no longer asks you for a variable the
+- `` — `somewhere dev` no longer asks you for a variable the
   platform writes. It warned that `APP_URL` had no local value on projects whose
   source never mentions `APP_URL` — it never would, because deploy writes that
   key. The local loop now fills it with the local origin, or with the project's
   public URL when nothing is being served locally. Keys you genuinely own are
   still named, which is the point of that warning.
-- `tsk_6a2a09bc` / `tsk_320a0bc6` — the local loop now declares tables the way
+- `` / `` — the local loop now declares tables the way
   deploy declares them. It kept only the owner column and dropped the intent, so
   `sw.db.from` on a `shared()` table answered "this table has no declared
   intent" locally while working fine on the same deployed project. Intents,
   owner scopes and the owner-identity mode now cross over exactly as the deploy
   bundle bakes them.
-- `tsk_4df056ea` — when your plan does not include reaching the project database
+- `` — when your plan does not include reaching the project database
   from the local loop, `somewhere dev` now says so **once, at startup**, before
   you write a line of code. It previously started a clean serving loop and let
   you discover at the first request that every `sw.db` call was refused — with a
@@ -1478,7 +1475,7 @@ Republish the platform contract 6 CLI after npm accepted earlier uploads without
   Deploying is unaffected on every plan, and the deployed app reads and writes
   its database normally. `somewhere status` reports the same answer, including a
   `local_dev_db` object in `--json`.
-- `tsk_a21bc829` — `--check`'s help now says what the documentation says: it
+- `` — `--check`'s help now says what the documentation says: it
   needs a real `npm install`, because the typechecker reads package types out of
   `node_modules` and the CLI's dependency cache does not stand in for that.
 
@@ -1494,40 +1491,40 @@ Republish the platform contract 6 CLI after npm accepted earlier uploads without
 
 ### Changed
 
-- `tsk_0100d8e5` — the local loop now runs the CURRENT platform runtime. The
+- `` — the local loop now runs the CURRENT platform runtime. The
   copy the CLI carried had frozen several months behind, so `somewhere dev` was
   quietly running your `api/` functions against an older `sw.*` than your
   deployed ones. Re-synced deliberately, with a hash guard so it cannot drift
   silently again. What this changes for you is below.
-- `tsk_0100d8e5` — the structured database API works locally: `sw.db.from`,
+- `` — the structured database API works locally: `sw.db.from`,
   `.insert`, `.update`, `.delete`, `.count`. Tables need a scope declaration for
   the platform to scope them to the signed-in user; an undeclared table returns
   a clear error naming the table.
-- `tsk_0100d8e5` — also newly available in the local loop: sign-in with GitHub
+- `` — also newly available in the local loop: sign-in with GitHub
   and Discord, roles and moderation (`sw.auth.requireRole`,
   `sw.auth.moderation.*`), plans and entitlements (`sw.billing`), scheduling
   (`sw.calendar`), contacts, and durable agents (`sw.agent`). Email gains
   delivery `status` and `history`, payments gains `quote` and a per-user billing
   portal, and search gains `add`.
-- `tsk_0312cf17` — `somewhere dev` now builds with the same React version the
+- `` — `somewhere dev` now builds with the same React version the
   deploy image builds with. It previously installed the lowest version your
   range allowed (`^19.2.0` became 19.2.0) while deploy used 19.2.7, so the loop
   and production could differ by a patch release you would only discover in
   production.
-- `tsk_106f7ab1` — one vocabulary for previews across the CLI. Commands and
+- `` — one vocabulary for previews across the CLI. Commands and
   messages say **preview** and **production**; `somewhere promote` names its
   arguments `preview_session_id` and `preview_id`. `--draft` still works as an
   alias of `--preview`, so nothing you already type breaks.
 
 ### Fixed
 
-- `tsk_8a9d2d1a` — `somewhere deploy` no longer tells you "Next.js apps don't
+- `` — `somewhere deploy` no longer tells you "Next.js apps don't
   run here" when your app is not a Next.js app. Any project with a `src/pages/`
   folder tripped it — including the app `somewhere init` creates, so this was
   often the first thing a new project printed. A Next.js app is now identified
   the way the platform identifies one: a `next` dependency or a `next.config`
   file.
-- `tsk_cf48f4ab` — `somewhere dev --cloud` on a plan without private previews
+- `` — `somewhere dev --cloud` on a plan without private previews
   now refuses before doing anything, instead of publishing a first production
   version and only then telling you the command is unavailable. Nothing is
   created.
@@ -1549,7 +1546,7 @@ Republish the platform contract 6 CLI after npm accepted earlier uploads without
 
 ### Added
 
-- `tsk_95377909` — `somewhere dev` is now a LOCAL loop. It serves your app on
+- `` — `somewhere dev` is now a LOCAL loop. It serves your app on
   localhost and compiles it with the platform's own compiler — the same
   `compile-core` the deploy pipeline runs, vendored into the CLI at the exact
   esbuild version the compile container pins, with a hash manifest and a test
@@ -1562,31 +1559,31 @@ Republish the platform contract 6 CLI after npm accepted earlier uploads without
   There is no dev version of your app — same app, same data, same build.
   Functions execute in your machine's Node during the loop rather than on the
   platform's runtime, so a deploy is still what proves a function in production.
-- `tsk_737ff0d2` — the local server now answers on both `127.0.0.1` and `::1`,
+- `` — the local server now answers on both `127.0.0.1` and `::1`,
   so the `http://localhost:...` URL it prints opens in a browser that resolves
   `localhost` to IPv6 first. Non-loopback addresses are still refused.
-- `tsk_3269026d` — `api/` functions resolve npm packages through the same
+- `` — `api/` functions resolve npm packages through the same
   search path the compiler used, so a fresh scaffold's routes work with no
   `npm install`. The project's own `node_modules` always wins.
-- `tsk_8796c588` — the pre-start typecheck is skipped, with one line saying
+- `` — the pre-start typecheck is skipped, with one line saying
   why, when the project has no `node_modules` — instead of reporting dozens of
   unresolvable-type errors about code you did not write.
 
 ### Changed
 
-- `tsk_95377909` — the cloud preview watcher, which used to be bare
+- `` — the cloud preview watcher, which used to be bare
   `somewhere dev`, is now `somewhere dev --cloud`. `--local` is still accepted
   and does what bare `somewhere dev` does. `somewhere dev <cmd...>` still runs
   your own command with the project's environment variables injected.
 
 ### Fixed
 
-- `tsk_8a3f6540` — `somewhere dev --cloud` on a project that has never been
+- `` — `somewhere dev --cloud` on a project that has never been
   published now publishes the first version once, announced in plain words,
   instead of failing the initial sync. A private preview is a candidate built
   against your live version, so there was previously nothing for the first one
   to build on.
-- `tsk_e929774b` — the `--json` contract test no longer deploys to the live
+- `` — the `--json` contract test no longer deploys to the live
   platform on every `npm test`. It ran logged out with no API URL, so
   `deploy`, `deploy-check` and `browser` reached production and minted a real
   temporary account and a real project per run — while asserting nothing about
@@ -1601,32 +1598,32 @@ Republish the platform contract 6 CLI after npm accepted earlier uploads without
 
 ### Security
 
-- `tsk_f7ba3b57` — credential-at-rest hardening. Config is now written atomically at `0600` (a pre-existing world-readable `~/.somewhere/config.json` is tightened on every write, not just on create). `logout` now revokes the session server-side (best-effort) in addition to removing the local token.
+- `` — credential-at-rest hardening. Config is now written atomically at `0600` (a pre-existing world-readable `~/.somewhere/config.json` is tightened on every write, not just on create). `logout` now revokes the session server-side (best-effort) in addition to removing the local token.
 
 ### Breaking
 
-- `tsk_f7ba3b57` — `auth set <token>` no longer accepts the token as a positional argument (it was visible in the process table to other local users). Provide the token via the `SOMEWHERE_TOKEN` environment variable or stdin: `printf %s "$TOKEN" | somewhere auth set`.
+- `` — `auth set <token>` no longer accepts the token as a positional argument (it was visible in the process table to other local users). Provide the token via the `SOMEWHERE_TOKEN` environment variable or stdin: `printf %s "$TOKEN" | somewhere auth set`.
 
 ## 0.23.1
 
 ### Fixed
 
-- `tsk_e67bcc16` — made JSON mode a CLI-wide success/error contract, added JSON output to `docs`, `api`, and `init`, and covered every registered `--json` command with a parseability test.
-- `tsk_c6035afa` — duplicate of `tsk_06c1f77a`; rollback failures now remain structured JSON in JSON mode.
-- `tsk_41ee402b` — replaced the stale-era rollback snapshot wording with current recovery guidance; restoring the previous promoted release still requires the platform follow-up noted below.
-- `tsk_971775dc` — `logs --follow` now keeps polling after an empty initial query and suppresses overlapping records.
-- `tsk_8dc77749` — deploy requests now have an abortable long-call deadline, progress heartbeat, and one bounded retry instead of waiting without a terminal result.
-- `tsk_05a3cf11` — fixed the no-`node_modules` typecheck fallback to run `npx -y -p typescript tsc`.
-- `tsk_451eb155` — added non-interactive `init --link --project <ref>` with exact ID/name/slug/subdomain matching and JSON output.
-- `tsk_1584392a` — duplicate of `tsk_43fe9ff0`; corrected direct-run documentation for the multi-bin npm package.
-- `tsk_0160bfd4` — retained and regression-tested log-ID deduplication across follow polling cycles.
-- `tsk_208f7583` — replaced the confusing fresh-project rollback snapshot wording; the snapshot-selection platform follow-up is noted below.
-- `tsk_06c1f77a` — rollback API and network failures emit parseable JSON error envelopes.
-- `tsk_e6293ee2` — deploy warnings already present in the build log are no longer printed a second time.
-- `tsk_43fe9ff0` — documented the correct multi-bin invocation: `npx -y -p @somewhere-tech/cli@latest somewhere <command>` (or the equivalent `npm exec --package ... -- somewhere`).
-- `tsk_b210d436` — bare `somewhere docs` now streams the full reference; the topic menu remains available at `somewhere docs --list`.
-- `tsk_873f694c` — retained and regression-tested the real two-step project deletion confirmation flow and truthful server errors.
+- `` — made JSON mode a CLI-wide success/error contract, added JSON output to `docs`, `api`, and `init`, and covered every registered `--json` command with a parseability test.
+- `` — duplicate of ``; rollback failures now remain structured JSON in JSON mode.
+- `` — replaced the stale-era rollback snapshot wording with current recovery guidance; restoring the previous promoted release still requires the platform follow-up noted below.
+- `` — `logs --follow` now keeps polling after an empty initial query and suppresses overlapping records.
+- `` — deploy requests now have an abortable long-call deadline, progress heartbeat, and one bounded retry instead of waiting without a terminal result.
+- `` — fixed the no-`node_modules` typecheck fallback to run `npx -y -p typescript tsc`.
+- `` — added non-interactive `init --link --project <ref>` with exact ID/name/slug/subdomain matching and JSON output.
+- `` — duplicate of ``; corrected direct-run documentation for the multi-bin npm package.
+- `` — retained and regression-tested log-ID deduplication across follow polling cycles.
+- `` — replaced the confusing fresh-project rollback snapshot wording; the snapshot-selection platform follow-up is noted below.
+- `` — rollback API and network failures emit parseable JSON error envelopes.
+- `` — deploy warnings already present in the build log are no longer printed a second time.
+- `` — documented the correct multi-bin invocation: `npx -y -p @somewhere-tech/cli@latest somewhere <command>` (or the equivalent `npm exec --package ... -- somewhere`).
+- `` — bare `somewhere docs` now streams the full reference; the topic menu remains available at `somewhere docs --list`.
+- `` — retained and regression-tested the real two-step project deletion confirmation flow and truthful server errors.
 
 ### Platform follow-up
 
-- `tsk_41ee402b`, `tsk_208f7583` — rollback must select and restore the previous live/promoted release snapshot, not an intermediate deploy version, and every fresh deploy/promote path must persist the restorable snapshot before changing the live pointer.
+- ``, `` — rollback must select and restore the previous live/promoted release snapshot, not an intermediate deploy version, and every fresh deploy/promote path must persist the restorable snapshot before changing the live pointer.

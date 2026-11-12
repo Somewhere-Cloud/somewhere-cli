@@ -1,4 +1,4 @@
-// tsk_b9900dbb: a failed first anonymous deploy must not strand the folder, an
+// : a failed first anonymous deploy must not strand the folder, an
 // unreadable sign-in file is said out loud, and a network failure names its host.
 import test from 'node:test';
 import assert from 'node:assert/strict';

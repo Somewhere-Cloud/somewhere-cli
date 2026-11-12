@@ -5,7 +5,7 @@ import semver from 'semver';
 
 /**
  * A project records the CLI version it was built with, the way an npm project
- * records any dependency (tsk_a4641877). Getting a newer CLI is then a
+ * records any dependency. Getting a newer CLI is then a
  * deliberate `somewhere upgrade`, not whatever `npx …@latest` fetched today.
  *
  * Where the pin lives, read in this order (the first one found is the pin):

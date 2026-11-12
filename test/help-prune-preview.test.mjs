@@ -1,5 +1,5 @@
-// tsk_cd5cbc86 (CLI help half): deploy and promote both state what happens to
-// functions missing from the source. tsk_35c1bb78 / tsk_ac45ad01: the new
+//  (CLI help half): deploy and promote both state what happens to
+// functions missing from the source.  / : the new
 // preview and browser options are discoverable from --help.
 import test from 'node:test';
 import assert from 'node:assert/strict';

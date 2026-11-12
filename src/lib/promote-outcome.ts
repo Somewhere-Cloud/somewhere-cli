@@ -2,7 +2,7 @@
  * What a promote actually did — as opposed to what the response said.
  *
  * A promote is the one irreversible step in the preview loop, so it is the one
- * command that must never report an outcome it does not know (tsk_33023348: a
+ * command that must never report an outcome it does not know (: a
  * promote that had SHIPPED printed "Promote failed / Unknown error", and the
  * obvious retry then said "Production was not changed" about production that
  * had already changed).
@@ -127,7 +127,7 @@ export function describeUnreadablePromote(verdict: PromoteVerdict): {
  * pointer after the fact. When a refusal asserts production is untouched and
  * the pointer says otherwise, the pointer wins and the CLI says so.
  *
- * This is the second half of tsk_33023348: promoting twice is the obvious
+ * This is the second half of : promoting twice is the obvious
  * response to a false "failed", and the second attempt used to answer with a
  * confident falsehood.
  */

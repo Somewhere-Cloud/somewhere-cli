@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { summarizeVerifyReport, formatVerifySummaryLine } from '../dist/commands/verify.js';
 
-// tsk_da2dba3d slice 1 (ranking episode 1A): the platform already returns the refusal's structured
+//  slice 1 (ranking episode 1A): the platform already returns the refusal's structured
 // detail; the CLI summary forwarded only codes, so the agent saw start_errors:["VALIDATION_ERROR"]
 // and nothing to act on. The summary now carries shape-checked { code, status, path, limit_ms } and
 // names it, but never the message, which can quote selectors, values or URLs.

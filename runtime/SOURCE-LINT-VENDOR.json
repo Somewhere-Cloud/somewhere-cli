@@ -161,6 +161,6 @@
     "worker/src/utils/telegram.ts": "dfbc9e756b44b445b3c3504c90a1094a94e6f9853ff9c0e0a84fba0e8c4518da",
     "worker/src/vendor/neondatabase-serverless/source.generated.ts": "96a3c18fde7d8888fdb53a4d7cd0721c238a234521d2084d1e66868a8df8e69c"
   },
-  "sha256": "a9942d5c202b93227f3c0579e3fdd7b930bb68af9bd56211ee5ca41ee02a8874",
-  "fixtures_sha256": "908827d1430f4af5a83cae59ed476abc51dc9648757eac0089fe6e6db95f66c5"
+  "sha256": "0d7b9206de6e9ab4375d842ddc7482da8769ff343d47a055b9e33ce95a14f23e",
+  "fixtures_sha256": "8bad7b07fc6dd241b8ec8d21325a599f0da30946e18344dfb42db44fdcb7842a"
 }

@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 
 import { formatErrorReference, unclassifiedResponseMessage } from '../dist/lib/client.js';
 
-// tsk_9c5ed7f8. Two failures one screen apart on the same deploy: the platform
+// . Two failures one screen apart on the same deploy: the platform
 // answered "retry, nothing changed" and the CLI stopped anyway, and an error
 // body it could not classify was rendered as the bare word "Unknown error"
 // with no id anyone could look up afterwards.

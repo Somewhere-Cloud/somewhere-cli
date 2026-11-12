@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-// pfb_a0af8bb647dc: a dry run never provisions. Without a credential that can
+// : a dry run never provisions. Without a credential that can
 // already open an existing project it stops before any request: no
 // proof-of-work mint, no project create, no link, no config written. A linked
 // folder with a usable credential still gets the server's diff.

@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-// tsk_97979518, through the real entry point: index.ts runs claim recovery
+// , through the real entry point: index.ts runs claim recovery
 // before `init`, so a stored claim continuation is exchanged (one request)
 // before the local starter is written. Init is offline only when there is no
 // continuation record to recover.

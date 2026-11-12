@@ -3,7 +3,7 @@ export interface CliConfig {
   /** Long-lived (30-day) cli-pair refresh token (smtr_…). When present, the
    *  API client swaps the access key on a 401 API_KEY_EXPIRED via
    *  POST /v1/keys/cli-pair/refresh instead of forcing a manual re-login
-   *  (tsk_3642f3c4). Absent for login flows that don't yet return one. */
+   *. Absent for login flows that don't yet return one. */
   refresh_token?: string;
   /** ISO expiry of a refreshable cli-pair access key. MCP uses this to renew
    *  shortly before expiry, avoiding replay of a request that reached the
@@ -13,7 +13,7 @@ export interface CliConfig {
     email: string;
     username: string;
   };
-  /** True when `token` is a temporary no-login credential (tsk_35674c33)
+  /** True when `token` is a temporary no-login credential
    *  rather than a real account login. Distinguishes the two so getToken()
    *  can give temp-aware expiry messaging and deploy can reuse/re-mint
    *  instead of ever prompting `somewhere login`. */
@@ -55,10 +55,10 @@ export interface ProjectConfig {
    *  created empty here (genesis), else the release that was pulled or last
    *  deployed. Deploy sends it as base_release_id; the CLI never fetches one. */
   source_base?: SourceBaseState;
-  /** Set once the deploy output has explained the publish surface (tsk_c166924f). */
+  /** Set once the deploy output has explained the publish surface. */
   publish_notice_seen?: boolean;
   /** The CLI version this folder is pinned to when its package.json does not
-   *  declare @somewhere-cloud/cli (lib/project-pin.ts, tsk_a4641877). */
+   *  declare @somewhere-cloud/cli (lib/project-pin.ts, ). */
   cli_version?: string;
 }
 

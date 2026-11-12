@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 // Vendor the independent browser outline probe; no platform runtime or compiler.
+import { publicProjection } from './public-projection.mjs';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -7,13 +8,13 @@ import { join } from 'node:path';
 const monorepo = process.argv[2];
 if (!monorepo) throw new Error('Usage: node scripts/extract-runtime.mjs <monorepo>');
 function extractDomOutlineScript() {
-  const engineSrc = readFileSync(join(monorepo, 'worker/src/utils/browser-test.ts'), 'utf8');
+  const engineSrc = readFileSync(join(monorepo, 'worker/src/utils/browser-dom-outline.ts'), 'utf8');
   const stepsSrc = readFileSync(join(monorepo, 'worker/src/utils/browser-test-steps.ts'), 'utf8');
   const cap = stepsSrc.match(/MAX_OUTLINE_NODES\s*=\s*(\d+)\s*;/);
   if (!cap) throw new Error('MAX_OUTLINE_NODES not found in worker/src/utils/browser-test-steps.ts');
   const marker = 'const DOM_OUTLINE_SCRIPT = `';
   const start = engineSrc.indexOf(marker);
-  if (start === -1) throw new Error('DOM_OUTLINE_SCRIPT not found in worker/src/utils/browser-test.ts');
+  if (start === -1) throw new Error('DOM_OUTLINE_SCRIPT not found in worker/src/utils/browser-dom-outline.ts');
   const bodyStart = start + marker.length;
   const end = engineSrc.indexOf('`;', bodyStart);
   if (end === -1) throw new Error('unterminated DOM_OUTLINE_SCRIPT template');
@@ -30,7 +31,7 @@ function extractDomOutlineScript() {
     /export function computeOutlineVisibility\([\s\S]*?^}\n/m,
   );
   if (!helperMatch) {
-    throw new Error('computeOutlineVisibility not found in worker/src/utils/browser-test.ts');
+    throw new Error('computeOutlineVisibility not found in worker/src/utils/browser-dom-outline.ts');
   }
   const helperJs = helperMatch[0]
     .replace(/^export\s+/, '')
@@ -52,12 +53,13 @@ function extractDomOutlineScript() {
 
 const commit = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: monorepo, encoding: 'utf8' }).trim();
 const probe = extractDomOutlineScript();
-const output = `// VENDORED browser probe from worker/src/utils/browser-test.ts @ ${commit}\n`
+const output = `// Generated browser probe.\n`
   + `export const MAX_OUTLINE_NODES = ${probe.cap};\n`
-  + `export const DOM_OUTLINE_SCRIPT = ${JSON.stringify(probe.script)};\n`;
+  + `export const DOM_OUTLINE_SCRIPT = ${JSON.stringify(publicProjection(probe.script, 'probe.js'))};\n`;
 const outDir = join(import.meta.dirname, '..', 'runtime');
-writeFileSync(join(outDir, 'browser-probes.mjs'), output);
-writeFileSync(join(outDir, 'VENDOR.json'), JSON.stringify({ commit, files: {
-  'browser-probes.mjs': createHash('sha256').update(output).digest('hex'),
-} }, null, 2) + '\n');
-console.log(`Browser probe vendored from ${commit}`);
+const manifest = JSON.stringify({ files: { 'browser-probes.mjs': createHash('sha256').update(output).digest('hex') } }, null, 2) + '\n';
+for (const [name, content] of [['browser-probes.mjs', output], ['VENDOR.json', manifest]]) {
+  if (process.argv.includes('--check')) {
+    if (readFileSync(join(outDir, name), 'utf8') !== content) throw new Error(name + ' differs from the selected projection');
+  } else writeFileSync(join(outDir, name), content);
+}

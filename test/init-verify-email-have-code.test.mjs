@@ -8,7 +8,7 @@ import ts from 'typescript';
 import { createFeatureTemplate } from '../dist/lib/init-feature-template.js';
 import { resolveInitSelection } from '../dist/lib/init-features.js';
 
-// tsk_70d6db11: the code field only appeared after "Email me a code", so someone
+// : the code field only appeared after "Email me a code", so someone
 // arriving with a code already emailed had to send again, which replaces that
 // code. "I already have a code" opens the same form and sends nothing. The
 // verification calls, the send's own errors (429 included) and the API stay as

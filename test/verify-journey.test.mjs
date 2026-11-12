@@ -1,4 +1,4 @@
-// Multi-user verify journeys (tsk_f49ccbb75f994f1fb5179198087d24de): one run,
+// Multi-user verify journeys: one run,
 // several isolated signed-in browsers, bounded existing browser calls, and every
 // actor browser closed however the run ends.
 import test from 'node:test';
@@ -608,7 +608,7 @@ test('SIGTERM with a failed close reports that browser as unconfirmed and still 
   assert.match(stderr, /bob: close after its call finished failed \(AUTHORITY_UNAVAILABLE\); the platform closes an idle browser within 5 minutes/);
 });
 
-// Managed test users (founder 2026-10-20 22:45; backend tsk_b05cf814): a
+// Managed test users (founder 2026-10-20 22:45; backend ): a
 // "test_user" actor gets a fresh platform test identity, signs in once in its
 // own browser, and the identities are deleted after the browsers close.
 function testUserClient({ identities, failCreate, failDelete } = {}) {

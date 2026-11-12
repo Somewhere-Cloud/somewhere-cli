@@ -50,14 +50,14 @@ interface StatusApproved {
   // refresh_token is optional: the device-code approve flow returns it only
   // once the server mints a cli-pair (refreshable) key for device login.
   // When present, the CLI persists it so it can refresh on a 401 instead of
-  // forcing a manual re-login (tsk_3642f3c4).
+  // forcing a manual re-login.
   data: {
     status: 'approved';
     token: string;
     email: string;
     refresh_token?: string;
     expires_at?: string;
-    /** Present once the platform reports the approved scope (tsk_d560943d). */
+    /** Present once the platform reports the approved scope. */
     scope?: DeviceSessionScope | null;
     session_id?: string;
   };

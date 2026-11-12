@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-// `somewhere ai keys` (tsk_c91717a5) run as the real CLI against a local
+// `somewhere ai keys` run as the real CLI against a local
 // stand-in for /v1/ai/provider-keys. Replies copy worker/src/routes/
 // ai-provider-keys.ts (somewhere-tech #1261). The key is fake; after every run
 // no output and no file the CLI could have written may hold it.

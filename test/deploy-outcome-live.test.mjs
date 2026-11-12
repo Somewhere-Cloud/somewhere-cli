@@ -1,6 +1,6 @@
 /**
  * The one test in this suite that deploys for real — and the only one allowed
- * to (tsk_e929774b).
+ * to.
  *
  * Why it exists: test/json-output.test.mjs used to run `deploy --json` with no
  * API URL and no credential, so every `npm test` deployed anonymously to the
@@ -25,7 +25,7 @@
  * It runs only with BOTH SOMEWHERE_LIVE_DEPLOY_TEST=1 and SOMEWHERE_TEST_TOKEN
  * set. Otherwise it skips with a named reason: it never falls back to an
  * anonymous deploy, and never to the signed-in ~/.somewhere/config.json, which
- * made a plain `npm test` deploy on the developer's own account (tsk_fc1afab0).
+ * made a plain `npm test` deploy on the developer's own account.
  *
  *   SOMEWHERE_LIVE_DEPLOY_TEST=1 SOMEWHERE_TEST_TOKEN=<test account key> \
  *     node --test test/deploy-outcome-live.test.mjs
@@ -46,7 +46,7 @@ const API = (process.env.SOMEWHERE_API_URL || 'https://api.somewhere.cloud/v1').
 
 // Both an explicit opt-in and an explicit test credential, from the
 // environment only; the signed-in ~/.somewhere/config.json is never read
-// (tsk_fc1afab0). Without both, this test skips and makes no request.
+//. Without both, this test skips and makes no request.
 const gate = liveDeployCredential();
 const credential = gate.ok ? { token: gate.token } : null;
 const SKIP_REASON = gate.ok ? '' : gate.reason;

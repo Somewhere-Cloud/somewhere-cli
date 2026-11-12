@@ -8,7 +8,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createInterface } from 'node:readline';
 
-// The local MCP bridge (`somewhere mcp`) in recovery mode (tsk_224b77a0): with no login, or when the
+// The local MCP bridge (`somewhere mcp`) in recovery mode: with no login, or when the
 // platform refuses the login or the CLI version, it answers initialize and tools/list itself with ONE
 // status tool, returns an actionable error from it, stays alive, picks up a login made outside it
 // without replaying any earlier request, and reports transport failures with their real reason.

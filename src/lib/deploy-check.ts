@@ -79,7 +79,7 @@ export function projectTypeScriptVersion(projectDir: string): string | null {
 /** The deploy check runs the deploy's own pinned TypeScript; when the project
  *  does not have exactly that version it is fetched with npx. Said on stderr,
  *  and true whether or not the project has another TypeScript
- *  (pfb_d615d6b6c581). */
+ *. */
 export function announceDeployCheckFetch(projectDir: string): void {
   const own = projectTypeScriptVersion(projectDir);
   process.stderr.write(`The deploy check uses TypeScript ${DEPLOY_CHECK_TYPESCRIPT_VERSION}, the version deploys check with; `
@@ -248,7 +248,7 @@ async function startDeployCheck(projectDir: string): Promise<DeployCheckResult> 
 
   const { command, args } = deployCheckTsc(projectDir);
   // Bounded, with its process group stopped on timeout or Ctrl-C: an npx
-  // fetch of TypeScript never hangs or outlives the command (pfb_8f0f7cdd04a1).
+  // fetch of TypeScript never hangs or outlives the command.
   const run = await runBounded(command, [...args, '--project', config, '--pretty', 'false'], projectDir, { onAbort: cleanup });
   cleanup();
   const out = run.out;

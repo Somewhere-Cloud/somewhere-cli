@@ -27,7 +27,7 @@ export async function browserLogin(): Promise<CliConfig> {
         const username = url.searchParams.get('username') ?? '';
         // Optional: present only once the callback returns a refreshable
         // cli-pair key. Persisted so the client can refresh on a 401 instead
-        // of forcing a manual re-login (tsk_3642f3c4).
+        // of forcing a manual re-login.
         const refreshToken = url.searchParams.get('refresh_token') ?? undefined;
         const accessExpiresAt = url.searchParams.get('expires_at') ?? undefined;
 

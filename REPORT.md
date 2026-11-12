@@ -1,4 +1,4 @@
-# `somewhere browser <url>` default (EYES) reported 0 interactive elements — pfb_57c43192d553
+# `somewhere browser <url>` default (EYES) reported 0 interactive elements — 
 
 Branch: `sessions/cli-eyes-dom` (from `master` @ 5915315, 0.32.2). Not published, not pushed.
 
@@ -71,7 +71,7 @@ Two halves of one seam, confirmed on the wire before any code was changed:
    the factual claim *"this page has 0 interactive controls"*.
 
 The default report prints the count, so the default request has to ask for the
-map — the rule `--snapshot` already followed since tsk_bdd72f02c2. That earlier
+map — the rule `--snapshot` already followed since . That earlier
 fix repaired the `--snapshot` path only and left the default path claiming zero.
 
 ## Fix

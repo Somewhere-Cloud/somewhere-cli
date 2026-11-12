@@ -1,6 +1,6 @@
 /**
  * Close the loop on a release whose blank-page check runs after the deploy
- * answered (tsk_b9507144).
+ * answered.
  *
  * A release that can be undone by moving the live pointer answers before its
  * browser check, with post_live_render: { status: 'pending' }. The check takes

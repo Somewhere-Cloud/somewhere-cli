@@ -1,5 +1,5 @@
 // `somewhere deploy` asks the platform to start the project's compile container the moment the target is known,
-// before it packs and uploads (tsk_a92c59b9, root decision 2026-11-04). The call is never awaited: a fixture that
+// before it packs and uploads (, root decision 2026-11-04). The call is never awaited: a fixture that
 // holds the prestart answer until the deploy request ARRIVES proves the upload does not wait for it. Every
 // outcome (an older platform's 404, an error, no answer at all) leaves the deploy and its output unchanged. A dry
 // run and a temporary workspace send none.

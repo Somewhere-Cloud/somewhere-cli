@@ -16,7 +16,7 @@ const CLAUDE_PATH = join(HOME, '.claude.json');
 
 // Regression: installClaudeCode / login used to bake a frozen Bearer token
 // into ~/.claude.json; it never self-healed after a key rotation
-// (tsk_104fe2d0). The fix writes the stdio bridge, which re-reads the live
+//. The fix writes the stdio bridge, which re-reads the live
 // config at every launch.
 test('saveGlobalMcpConfig writes the stdio bridge, never a baked token', () => {
   saveGlobalMcpConfig();

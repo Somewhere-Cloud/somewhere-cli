@@ -1,6 +1,6 @@
 // A `.somewhere.json` holding only project_id (no subdomain) used to deploy
 // successfully and then print "Deploy failed … reading 'trim'" and exit 1
-// (pfb_c25665360473). The success path now reads the subdomain from the
+//. The success path now reads the subdomain from the
 // project record and prints the live URL. Both directions:
 //   - link without subdomain: exit 0, the live URL from the project record;
 //   - the lookup fails: still exit 0, no URL, no "Deploy failed";

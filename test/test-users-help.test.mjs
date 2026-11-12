@@ -1,6 +1,6 @@
 // `somewhere test-users prepare --help` names the initial (minted) expiry the
 // command prints, says a refresh with saved-back state can renew it, and points at
-// cleanup; it promises no fixed duration and no end time (tsk_70d6db11). 0.37.63
+// cleanup; it promises no fixed duration and no end time. 0.37.63
 // said "about 1 hour" and "24 hours", which the platform does not guarantee.
 import test from 'node:test';
 import assert from 'node:assert/strict';

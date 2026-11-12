@@ -61,7 +61,7 @@ import { decidePin, PINNED_CHILD_ENV } from './lib/project-pin.js';
 import { CLI_VERSION } from './lib/version.js';
 
 // A project pinned to another CLI version says so in one line, and a pinned
-// version installed in its node_modules runs the command (tsk_a4641877).
+// version installed in its node_modules runs the command.
 const pinned = decidePin(process.cwd(), CLI_VERSION, process.argv, process.env);
 if (pinned.notice) process.stderr.write(pinned.notice + '\n');
 if (pinned.delegate) {
@@ -75,7 +75,7 @@ if (pinned.delegate) {
 }
 
 // First, before any command, help, version or usage error can run: remove a run
-// record an older CLI may have filled with argument values (tsk_d8eac29404da).
+// record an older CLI may have filled with argument values.
 removeStaleRunRecord();
 
 const pkg = JSON.parse(
@@ -91,7 +91,7 @@ recordLastRun(pkg.version);
 const jsonOutputRequested = process.argv.includes('--json');
 setJsonOutputMode(jsonOutputRequested);
 
-// Local repro capture (tsk_da2dba3d): typed fields of the failure plus registered command names
+// Local repro capture: typed fields of the failure plus registered command names
 // only. The support group's own failures never replace the record it reports on.
 const startedAt = Date.now();
 let commandNames: string[] = [];
@@ -195,7 +195,7 @@ collectNotices(process.argv)
   .catch(() => {});
 try {
   const command = process.argv[2] || '';
-  // Help, version and update never wait on, or fail because of, an API call (tsk_224b77a0).
+  // Help, version and update never wait on, or fail because of, an API call.
   const skipRecovery = ['lint', 'upgrade', 'update', 'login', 'signup', 'logout', 'docs', 'help', '--help', '-h', '--version', '-V'].includes(command);
   const recovery = skipRecovery ? { kind: 'none' as const } : await recoverClaimHandoff();
   if (recovery.kind === 'recovered' && recovery.message && !jsonOutputRequested) info(recovery.message);

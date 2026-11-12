@@ -4,7 +4,7 @@ import { error, info, printJson, teal } from '../lib/output.js';
 
 /** `somewhere claim`: the claim URL of this computer's temporary workspace,
  *  for a signed-out person who deployed and wants to keep the app
- *  (tsk_b9900dbb). Reads the local credential only; nothing is sent. */
+ *. Reads the local credential only; nothing is sent. */
 export function registerClaim(program: Command) {
   program
     .command('claim')

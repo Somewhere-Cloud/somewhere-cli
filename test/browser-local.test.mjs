@@ -6,9 +6,9 @@
  * each other: the local dev server it had just started was the one address its
  * own browser tool would not visit. Every visual and DOM check waited until
  * after the first production deploy, which is the opposite of the workflow
- * `somewhere dev` sells (tsk_9ec50c8423).
+ * `somewhere dev` sells.
  *
- * It also proves the other half of tsk_bdd72f02c2: a wait that MATCHES and a
+ * It also proves the other half of : a wait that MATCHES and a
  * snapshot that reports "0 interactive elements" were describing the same page
  * and disagreeing about it. Here the two read the same static fixture — three
  * buttons and two inputs, the shape from the original report — and the snapshot

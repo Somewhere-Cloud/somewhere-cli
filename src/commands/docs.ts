@@ -7,8 +7,8 @@ import { cachedLatestVersion, isMinorBehind, NPM_UPDATE_COMMAND } from '../lib/n
 import { CLI_VERSION } from '../lib/version.js';
 import { callPlatformHelpTool } from './advisor.js';
 
-// Platform docs from the CLI — works with ZERO credentials (tsk_497b7eeb /
-// tsk_2ae9dce9 funnel work). The docs are public text URLs on the apex, so an
+// Platform docs from the CLI — works with ZERO credentials ( /
+//  funnel work). The docs are public text URLs on the apex, so an
 // anonymous agent that just discovered `--temporary` can learn everything it
 // can run without logging in: `somewhere docs start`. Deliberately a plain
 // fetch-and-print (no auth, no spinner, raw text to stdout) — the consumer is
@@ -277,7 +277,7 @@ export function parsePublicDocsGroups(value: unknown): PublicDocsGroup[] {
 }
 
 /** The manifest's topic aliases (`{ alias: canonicalId }`), the same names the
- *  signed-in docs tool resolves (tsk_51155c7d). Absent on older manifests. */
+ *  signed-in docs tool resolves. Absent on older manifests. */
 export function parsePublicDocsAliases(value: unknown): Record<string, string> {
   const aliases = value && typeof value === 'object' ? (value as Record<string, unknown>).aliases : undefined;
   if (!aliases || typeof aliases !== 'object' || Array.isArray(aliases)) return {};
@@ -313,7 +313,7 @@ async function fetchPublicManifestWithGroups(): Promise<{ pages: PublicDocsPage[
       headers: { 'User-Agent': 'somewhere-cli' },
     });
   } catch (cause) {
-    // A bare "fetch failed" names neither the host nor the reason (pfb_a2e65d951e62).
+    // A bare "fetch failed" names neither the host nor the reason.
     const inner = (cause as { cause?: { code?: string; message?: string } })?.cause;
     const reason = inner?.code ?? inner?.message ?? (cause instanceof Error ? cause.message : String(cause));
     throw new Error(`Could not reach ${DOCS_BASE} (${reason}) — check your connection. The docs are public and need no login.`);
@@ -336,7 +336,7 @@ async function fetchPublicManifest(): Promise<PublicDocsPage[]> {
 /** The topic index: every public topic with its one-line title, in the
  *  manifest's reading order, plus how to open a topic, a section, or search.
  *  This is what bare `somewhere docs` prints — the full manual is ~18k lines
- *  and only appears behind an explicit `--full` (tsk_a86f8a12). */
+ *  and only appears behind an explicit `--full`. */
 export function renderDocsIndex(pages: PublicDocsPage[], groups: PublicDocsGroup[]): string {
   const byId = new Map(pages.map((page) => [page.id, page]));
   const listed = new Set<string>();
@@ -433,7 +433,7 @@ export function searchPublicDocs(pages: PublicDocsPage[], query: string): DocsSe
 
 /** Published docs describe the latest CLI. When this CLI is a minor release or
  *  more behind, say so before the agent concludes the docs are wrong
- *  (tsk_f681c871). Reads the cached latest version only, so docs never wait on
+ *. Reads the cached latest version only, so docs never wait on
  *  the network; honors CI and the notifications opt-out; never fails the read. */
 function warnIfDocsNewerThanCli(): void {
   if (process.env.CI || process.env.SOMEWHERE_NO_NOTIFICATIONS) return;
@@ -572,7 +572,7 @@ export function registerDocs(program: Command) {
       }
       const requestedTopic = topic ?? 'docs';
       // Own keys only: `constructor`, `__proto__` or `toString` must not resolve
-      // to an Object.prototype member and report a false network error (tsk_409858c5).
+      // to an Object.prototype member and report a false network error.
       const ownKey = (map: object, name: string) => Object.prototype.hasOwnProperty.call(map, name);
       const lowerTopic = requestedTopic.toLowerCase();
       const key = ownKey(TOPICS, requestedTopic)
@@ -589,7 +589,7 @@ export function registerDocs(program: Command) {
         return;
       }
       if (!entry) {
-        // Manual topics (tsk_926fbf8e). The platform tool gives the signed-in
+        // Manual topics. The platform tool gives the signed-in
         // read; the generated public manifest carries each canonical page body
         // for anonymous reads. Never reconstruct a topic from cross-references
         // in another document.

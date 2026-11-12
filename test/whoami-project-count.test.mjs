@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { describeProjectCount } from '../dist/commands/auth.js';
 
-// tsk_8a68dfa2: whoami counted 6 projects while `somewhere projects` listed 5. whoami's number is
+// : whoami counted 6 projects while `somewhere projects` listed 5. whoami's number is
 // every owned project in any status; the list adds shared/group projects and leaves out archived
 // and being-deleted ones. whoami now says which is which so the two numbers reconcile.
 const stub = (allRows, archivedRows, fail = false) => ({

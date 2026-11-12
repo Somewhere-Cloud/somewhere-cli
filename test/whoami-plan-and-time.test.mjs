@@ -8,7 +8,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readPlanName } from '../dist/commands/auth.js';
 
-// pfb_b69363269589: whoami's plan label comes from the public plan table, and
+// : whoami's plan label comes from the public plan table, and
 // relative times treat the database's zoneless timestamps as UTC.
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 const pricing = { tiers: [{ id: 'free', name: 'Free' }, { id: 'builder', name: 'Builder' }, { id: 'pro', name: 'Pro' }] };

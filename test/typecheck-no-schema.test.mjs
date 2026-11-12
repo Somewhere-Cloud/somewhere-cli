@@ -1,6 +1,6 @@
 // A project without db/schema.ts still gets the runtime context the platform
 // compiler always declares, so a bare typed handler checks locally as it does
-// on deploy (pfb_861a411cb4a6). Nothing about the database is invented.
+// on deploy. Nothing about the database is invented.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';

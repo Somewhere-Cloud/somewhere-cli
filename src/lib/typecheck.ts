@@ -63,7 +63,7 @@ export interface TypecheckResult {
   raw: string;
   /** Set when tsc itself couldn't be run at all. */
   spawnError?: string;
-  /** This CLI's consumer contract against the platform's last announced one (tsk_0f3d05b9). */
+  /** This CLI's consumer contract against the platform's last announced one. */
   contract?: ContractVerdict;
 }
 
@@ -186,8 +186,8 @@ export function planDeclaredTypePackages(projectDir: string): DeclaredTypesPlan 
 
 /**
  * Resolve declared-but-missing type packages with a caller-supplied installer.
- * The CLI's own commands never install into a project (tsk_97979518,
- * pfb_8f0f7cdd04a1): they refuse with missingTypePackagesMessage instead.
+ * The CLI's own commands never install into a project (,
+ * ): they refuse with missingTypePackagesMessage instead.
  * Fail-open: an installer that throws never blocks the check.
  */
 export function ensureDeclaredTypePackages(

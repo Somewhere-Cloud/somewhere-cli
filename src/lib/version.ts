@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 /** The installed CLI's own version, read once from its package.json. Sent to
  *  the platform at `somewhere login` so the approval page can show which CLI
- *  build is asking for access (tsk_d560943d). */
+ *  build is asking for access. */
 function readVersion(): string {
   try {
     const pkg = JSON.parse(

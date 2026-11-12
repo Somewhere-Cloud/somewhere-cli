@@ -1,5 +1,5 @@
 /**
- * Rendering for the worker's structured BUILD_ERROR payload (tsk_de47d1d7).
+ * Rendering for the worker's structured BUILD_ERROR payload.
  *
  * The /deploy and /deploy/patch routes answer compile failures with
  *   { error: 'BUILD_ERROR', message, data: { file, line, column, error,

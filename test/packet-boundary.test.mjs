@@ -7,11 +7,11 @@ import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-// Reviewer 3606's packet boundary, from Journey's acceptance of tsk_da2dba3d:
-// B2 (tsk_fca1267b): a packet's code comes only from the function runtime's CLOSED set of failure codes;
+// Reviewer 3606's packet boundary, from Journey's acceptance of :
+// B2: a packet's code comes only from the function runtime's CLOSED set of failure codes;
 //   an app's own err.code (S11: a CODE-shaped canary, or a key id that matches the CODE regex) becomes
 //   APP_ERROR_CODE and never appears in the packet.
-// B3 (tsk_f184baa4): `logs` / `errors` TEXT output renders each stored row as one record with every
+// B3: `logs` / `errors` TEXT output renders each stored row as one record with every
 //   control character escaped (S10: a message forging an [info] row plus ANSI escapes). --json is faithful.
 const distIndex = join(dirname(fileURLToPath(import.meta.url)), '..', 'dist', 'index.js');
 const TRACE = '84d6a1b2c3d4e5f60718293a4b5c6d7e';

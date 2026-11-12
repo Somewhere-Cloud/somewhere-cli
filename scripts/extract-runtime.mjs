@@ -55,7 +55,7 @@ const commit = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: monorepo, encod
 const probe = extractDomOutlineScript();
 const output = `// Generated browser probe.\n`
   + `export const MAX_OUTLINE_NODES = ${probe.cap};\n`
-  + `export const DOM_OUTLINE_SCRIPT = ${JSON.stringify(publicProjection(probe.script, 'probe.js'))};\n`;
+  + `export const DOM_OUTLINE_SCRIPT = ${JSON.stringify(probe.script)};\n`;
 const outDir = join(import.meta.dirname, '..', 'runtime');
 const manifest = JSON.stringify({ files: { 'browser-probes.mjs': createHash('sha256').update(output).digest('hex') } }, null, 2) + '\n';
 for (const [name, content] of [['browser-probes.mjs', output], ['VENDOR.json', manifest]]) {

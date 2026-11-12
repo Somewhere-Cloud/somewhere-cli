@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { publicProjection } from './public-projection.mjs';
+import { publicProjection, assertBehaviorParity } from './public-projection.mjs';
 // Compare the deterministic public projection of the selected source.
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -18,6 +18,8 @@ const SOURCE = 'worker/src/utils/deploy-paths.ts';
 const commit = execFileSync('git', ['-C', root, 'rev-parse', `${rev}^{commit}`], { encoding: 'utf8' }).trim();
 const raw = execFileSync('git', ['-C', root, 'show', `${commit}:${SOURCE}`], { encoding: 'utf8' });
 const text = publicProjection(raw);
+assertBehaviorParity(raw, text);
+if (check) assertBehaviorParity(raw, readFileSync(join(import.meta.dirname, '../src/lib/vendor/deploy-paths.ts'), 'utf8'));
 const sha256 = createHash('sha256').update(text).digest('hex');
 const dest = join(import.meta.dirname, '..', 'src/lib/vendor');
 if (check) {

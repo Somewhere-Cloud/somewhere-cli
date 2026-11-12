@@ -1,22 +1,36 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { publicProjection } from '../scripts/public-projection.mjs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { publicProjection, assertBehaviorParity } from '../scripts/public-projection.mjs';
 
-test('projection removes comments and generated tracking markers without changing exports', async () => {
-  const marker = ['tsk', '0123456789abcdef'].join('_');
-  const text = `// Owner and source discussion\nexport const value = 7;\nexport const declaration = \`// Note (${marker})\ninterface Example {}\`;\n`;
-  const result = publicProjection(text);
-  assert.doesNotMatch(result, /Owner|0123456789abcdef/);
-  assert.equal(publicProjection(result), result);
-  const module = await import('data:text/javascript;base64,' + Buffer.from(result).toString('base64'));
-  assert.equal(module.value, 7);
-  assert.match(module.declaration, /interface Example/);
+test('only parsed comments are removed; literal bytes and tokens survive', async () => {
+  const marker = ['tsk', 'abc123'].join('_');
+  const source = `// ${marker}\nexport const text = "start\\n//keep this data\\nend";\nexport const task = "${marker}";\nexport const pattern = /${marker}/;\nexport const ${marker} = 1;\nexport const raw = String.raw\`\\s+\\n\`;`;
+  const projected = publicProjection(source);
+  assertBehaviorParity(source, projected);
+  const module = await import('data:text/javascript;base64,' + Buffer.from(projected).toString('base64'));
+  assert.equal(module.text, 'start\n//keep this data\nend');
+  assert.equal(module.task, marker);
+  assert.equal(module.pattern.source, marker);
+  assert.equal(module[marker], 1);
+  assert.equal(module.raw, String.raw`\s+\n`);
+  assert.ok(!projected.split('\n')[0].includes(marker));
+  assert.throws(() => assertBehaviorParity(source, projected.replace('keep this data', 'changed')), /token mismatch/);
 });
 
-test('projection preserves tagged raw strings and template boundaries', async () => {
-  const text = 'export const pattern = String.raw`\\s+\\n`;\nexport const code = `// comment\\nconst value = 1;`;';
-  const result = publicProjection(text);
-  const module = await import('data:text/javascript;base64,' + Buffer.from(result).toString('base64'));
-  assert.equal(module.pattern, String.raw`\s+\n`);
-  assert.match(module.code, /const value = 1/);
+test('vendor --check rejects a changed public literal even with its digest unchanged', t => {
+  const root = mkdtempSync(join(tmpdir(), 'vendor-parity-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  mkdirSync(join(root, 'shared'));
+  // Use the actual module as source so only the deliberate string mutation differs.
+  const { readFileSync } = requireFs;
+  const source = readFileSync(new URL('../src/lib/vendor/repro-guidance.ts', import.meta.url), 'utf8');
+  writeFileSync(join(root, 'shared/repro-guidance.ts'), source.replace('somewhere.repro/1', 'different.repro/1'));
+  const run = spawnSync(process.execPath, ['scripts/vendor-repro-guidance.mjs', root, '--check'], { encoding: 'utf8' });
+  assert.notEqual(run.status, 0);
+  assert.match(run.stderr, /executable token mismatch/);
 });
+import * as requireFs from 'node:fs';

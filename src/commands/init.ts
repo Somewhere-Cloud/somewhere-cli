@@ -77,7 +77,7 @@ export function registerInit(program: Command) {
     .description('Write a local starter; when signed in, also create a project and link this directory')
     .option('--name <name>', 'Project name (skip prompt); sign-in and invitation emails show it')
     .option('--subdomain <slug>', 'Subdomain for the new project; default: derived from --name')
-    .option('--link', 'Link to an existing project instead of creating one')
+    .option('--link', 'Scaffold an empty directory and link an existing project; non-empty directories are link-only')
     .option('--project <ref>', 'Existing project ID, name, slug, or subdomain (requires --link)')
     .option('--bare', 'Create and link only: no starter source or dependencies (AGENTS.md/CLAUDE.md are still added when absent)')
     .option('--template <name>', 'Starter to write: auth (default, cookie sign-in) or minimal (auth route, no sign-in UI)', 'auth')
@@ -249,7 +249,11 @@ export function registerInit(program: Command) {
 
       if (opts.link) {
         try {
-          await linkExisting(client, dir, opts.project, Boolean(opts.json), false);
+          await linkExisting(client, dir, opts.project, Boolean(opts.json), false, shouldScaffold ? async (project) => {
+            writeInitScaffold(dir, scaffoldFiles(project.name));
+            writeInitSkills(dir);
+            await installInitDependencies({ cwd: dir, quiet: Boolean(opts.json) });
+          } : undefined);
         } catch (err) {
           error(err instanceof Error ? err.message : String(err), err);
           process.exit(1);
@@ -454,6 +458,7 @@ export async function linkExisting(
   projectRef?: string,
   json = false,
   configureMcp = true,
+  scaffold?: (project: LinkProject) => Promise<void>,
 ) {
   const spinner = json ? null : ora('Fetching projects...').start();
   const result = await client.call<{
@@ -497,6 +502,7 @@ export async function linkExisting(
 
   const project = result.projects.find((p) => p.id === projectId)!;
   const appUrl = await getAuthoritativeAppUrl(client, project.id).catch(() => null);
+  await scaffold?.(project);
   const recordedCli = loadProjectConfig(dir)?.cli_version;
   saveProjectConfig(dir, {
     project_id: project.id,

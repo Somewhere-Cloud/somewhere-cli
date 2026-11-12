@@ -10,8 +10,9 @@ test('every TypeScript guidance snippet checks against generated starter declara
   const dir = mkdtempSync(join(tmpdir(), 'guide-snippets-'));
   try {
     mkdirSync(join(dir, 'db'));
-    writeFileSync(join(dir, 'db/schema.ts'), `import { schema, table, id, text, serverOnly } from 'somewhere/db';
-export default schema({ greetings: table({ id: id(), message: text() }, { scope: serverOnly() }) });`);
+    const schema = [...INIT_AGENTS_MD.matchAll(/```ts\n([\s\S]*?)```/g)].find(match => match[1].includes('export default schema('));
+    assert.ok(schema);
+    writeFileSync(join(dir, 'db/schema.ts'), schema[1]);
     writeFileSync(join(dir, 'tsconfig.json'), JSON.stringify({ compilerOptions: { target: 'ES2022', module: 'ESNext', moduleResolution: 'bundler', strict: true, skipLibCheck: true }, include: ['*.ts'] }));
     const snippets = [...INIT_AGENTS_MD.matchAll(/```ts\n([\s\S]*?)```/g)];
     assert.ok(snippets.length > 0);

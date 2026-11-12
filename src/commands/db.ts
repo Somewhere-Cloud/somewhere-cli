@@ -101,11 +101,21 @@ export function registerDb(program: Command) {
 
   db
     .command('dump')
-    .description('Export the full database as SQL (schema + every row). Pipe to a file: somewhere db dump > backup.sql')
+    .description('Export the database as SQL (schema + every row). Pipe to a file: somewhere db dump > backup.sql. Tables declared in db/schema.ts: --plane managed (project owner only); what each plane holds: --manifest')
     .option('--project <id>', 'Project ID (defaults to .somewhere.json)')
+    .option('--plane <plane>', 'raw (SQL tables, default) or managed (tables declared in db/schema.ts; owner only)')
+    .option('--manifest', 'Print the export manifest (tables per plane, name collisions, schema and access) as JSON')
     .option('-o, --output <file>', 'Write to file instead of stdout')
     .option('--json', 'Print the dump response as JSON')
     .action(async (opts) => {
+      if (opts.plane !== undefined && opts.plane !== 'raw' && opts.plane !== 'managed') {
+        error('--plane must be raw or managed.');
+        process.exit(1);
+      }
+      if (opts.manifest && opts.plane !== undefined) {
+        error('--manifest describes both planes; it takes no --plane.');
+        process.exit(1);
+      }
       let projectId: string | undefined = opts.project;
       if (!projectId) {
         const config = loadProjectConfig();
@@ -117,9 +127,13 @@ export function registerDb(program: Command) {
       }
 
       const client = new ApiClient(getToken());
-      const spinner = opts.json ? null : ora('Dumping database…').start();
+      const spinner = opts.json || opts.manifest ? null : ora('Dumping database…').start();
       try {
-        const res = await client.callRaw('POST', '/db/dump', { project_id: projectId });
+        const res = await client.callRaw('POST', '/db/dump', {
+          project_id: projectId,
+          ...(opts.manifest ? { format: 'manifest' } : {}),
+          ...(opts.plane ? { plane: opts.plane } : {}),
+        });
 
         if (!res.ok) {
           spinner?.fail('Dump failed');
@@ -129,6 +143,26 @@ export function registerDb(program: Command) {
           } catch {
             error(`HTTP ${res.status}: ${res.body.slice(0, 200)}`);
           }
+          process.exit(1);
+        }
+
+        // Checked before any file is created or any byte reaches stdout. An API that
+        // predates managed export ignores plane/format and answers 200 with the RAW
+        // SQL dump, which must never be saved as the managed tables or as a manifest.
+        if (opts.manifest) {
+          let manifest: { ok?: unknown; data?: { version?: unknown; planes?: unknown } } | null = null;
+          try { manifest = JSON.parse(res.body); } catch { manifest = null; }
+          if (!manifest || typeof manifest !== 'object' || typeof manifest.data?.version !== 'number' || !manifest.data.planes) {
+            error('The API did not return an export manifest (it predates managed export). Nothing was written.');
+            process.exit(1);
+          }
+          if (opts.output) writeFileSync(opts.output, res.body);
+          else process.stdout.write(res.body + '\n');
+          return;
+        }
+        if (opts.plane === 'managed' && res.headers['x-dump-plane'] !== 'managed') {
+          spinner?.fail('Dump failed');
+          error('The API did not return the managed tables (it predates managed export). Nothing was written.');
           process.exit(1);
         }
 

@@ -275,14 +275,15 @@ export function registerTasks(program: Command): void {
     });
 
   tasks
-    .command('delete <task-id>')
+    .command('delete <task-ids...>')
     .description('Delete a task that should never have existed; restorable for 30 days (board owner only)')
     .option('-p, --project <project>', 'Project slug or ID; defaults to the linked project')
     .requiredOption('--reason <text>', 'Why this task should never have existed')
     .option('--json', 'Print the complete response as JSON')
-    .action(async (taskId: string, opts: ProjectOptions & { reason: string }) => {
+    .action(async (taskIds: string[], opts: ProjectOptions & { reason: string }) => {
+      if (taskIds.length > 200) throw new Error('At most 200 task IDs may be deleted per call.');
       await runTaskTool('tasks_delete', compactRecord([
-        ['project_id', resolveProjectRef(opts.project)], ['task_id', taskId], ['reason', opts.reason],
+        ['project_id', resolveProjectRef(opts.project)], [taskIds.length === 1 ? 'task_id' : 'task_ids', taskIds.length === 1 ? taskIds[0] : taskIds], ['reason', opts.reason],
       ]), opts.json, (value) => {
         const data = unwrapPlatformData(value);
         if (!isRecord(data) || typeof data.id !== 'string') { printJson(value); return; }

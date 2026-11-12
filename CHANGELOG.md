@@ -1,3 +1,7 @@
+## 0.38.34
+
+- Allow tasks delete to accept up to 200 IDs, returning a result for each task.
+
 # Changelog
 
 ## 0.38.33

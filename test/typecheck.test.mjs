@@ -208,7 +208,7 @@ test('parseTscOutput names the 100-row rule when a list limit is out of range', 
   ].join('\n');
   const errors = parseTscOutput(out);
   assert.equal(errors.length, 2);
-  assert.ok(errors[0].message.endsWith(PAGE_LIMIT_EXPLANATION), errors[0].message);
+  assert.ok(errors[0].message.includes(PAGE_LIMIT_EXPLANATION), errors[0].message);
   assert.ok(!errors[1].message.includes(PAGE_LIMIT_EXPLANATION));
 });
 

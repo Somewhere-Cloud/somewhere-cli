@@ -59,7 +59,7 @@ test('init and deploy both name the browser check, so it is discoverable without
 test('a linked deploy suggests the project-default browser and verify runs', () => {
   assert.deepEqual(
     commandsOf(nextActions({ stage: 'deploy', projectLinked: true, liveUrl: 'https://app.somewhere.site', temporary: false })),
-    ['somewhere browser --screenshot', 'somewhere verify'],
+    ['somewhere browser --screenshot', 'somewhere verify', 'somewhere test'],
   );
 });
 
@@ -69,7 +69,7 @@ test('an unlinked deploy screenshots BY URL, with the --store the public path re
   const commands = commandsOf(
     nextActions({ stage: 'deploy', projectLinked: false, liveUrl: 'https://temp-app.somewhere.site', temporary: false }),
   );
-  assert.deepEqual(commands, ['somewhere browser https://temp-app.somewhere.site --screenshot --store']);
+  assert.deepEqual(commands, ['somewhere browser https://temp-app.somewhere.site --screenshot --store', 'somewhere test']);
 });
 
 test('a temporary deploy is addressed BY URL even though a link may exist', () => {
@@ -78,7 +78,7 @@ test('a temporary deploy is addressed BY URL even though a link may exist', () =
   // developer's own app. One step on this path, never two.
   assert.deepEqual(
     commandsOf(nextActions({ stage: 'deploy', projectLinked: true, liveUrl: 'https://temp-fresh.somewhere.site', temporary: true })),
-    ['somewhere browser https://temp-fresh.somewhere.site --screenshot --store'],
+    ['somewhere browser https://temp-fresh.somewhere.site --screenshot --store', 'somewhere test'],
   );
   assert.deepEqual(
     nextActions({ stage: 'deploy', projectLinked: true, liveUrl: null, temporary: true }),
@@ -112,7 +112,7 @@ test('login points at init or deploy depending on whether this directory is a pr
 test('rendering stays short, aligned, and plain by default', () => {
   const actions = nextActions({ stage: 'deploy', projectLinked: true, liveUrl: null, temporary: false });
   const lines = formatNextActions(actions);
-  assert.equal(lines.length, 2);
+  assert.equal(lines.length, 3);
   for (const line of lines) {
     assert.match(line, /^ {2}somewhere /);
     assert.doesNotMatch(line, /\x1B\[/); // no styling unless a caller asks

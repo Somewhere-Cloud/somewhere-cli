@@ -141,7 +141,7 @@
     "worker/src/utils/function-bundle-metadata.ts": "f1a3c29046a224c6a8299bae4356c56477433b3bc66a22abf0ddd9a45a63f5e7",
     "worker/src/utils/function-bundle-postgres.ts": "4afd199c82e98a940a36af01f305080907b6e450f97d894d971a4a6b6a933a9e",
     "worker/src/utils/function-bundle-transport.ts": "88fa4aafae50cf68178b1a415453d96e8aa31e74aa5791c5ce3e62586642ba78",
-    "worker/src/utils/function-bundle.ts": "c10528b9229f28ff6b6effd6664bc2e8f0c1c114c3d2d3c7a62723b1a22b8114",
+    "worker/src/utils/function-bundle.ts": "91f891e1d31318637fbdde81fac078cf78bd0ee8d1fea923e8223af15463f833",
     "worker/src/utils/function-trace-source.ts": "bdffc75e405e0772a693b835c752d4b72fbf491bef3e1e38daa7c8307bd40161",
     "worker/src/utils/journey-segment.ts": "b1d27c58bea03a791193d7120d88d232ea1c8374d6f25f72cd86b5b8c33c73a1",
     "worker/src/utils/json-exact-integers.ts": "e2eb8d3b2e17da363eb14fb46d876208579e2e92bfac173fb27527e6c4fb575e",
@@ -162,6 +162,6 @@
     "worker/src/utils/telegram.ts": "dfbc9e756b44b445b3c3504c90a1094a94e6f9853ff9c0e0a84fba0e8c4518da",
     "worker/src/vendor/neondatabase-serverless/source.generated.ts": "96a3c18fde7d8888fdb53a4d7cd0721c238a234521d2084d1e66868a8df8e69c"
   },
-  "sha256": "85e07441515ad748cfa1715915357d33ccd389b7f3db667a6ad5629077f1775b",
+  "sha256": "7d29bea79ce5015846e991685f6e6727483cbc4477c977cffa3e3cbdab1435a4",
   "fixtures_sha256": "908827d1430f4af5a83cae59ed476abc51dc9648757eac0089fe6e6db95f66c5"
 }

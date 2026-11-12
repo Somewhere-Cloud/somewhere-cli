@@ -11,7 +11,7 @@ Default: sign-in UI; minimal: SDK/auth route; bare: neither. \`init --catalog --
 \`npx @somewhere-cloud/cli deploy\` publishes raw source: signed out, a temporary URL, claim URL
 and expiry; linked, your account project. On a hosted VM, \`somewhere login\` uses browser approval and keeps you signed in.
 Account operations, test inbox and cron need login.
-Start auth/data/cron with \`somewhere docs recipe-signed-in-app --full\`.
+Core API shapes below cover a typical app; read deeper topics when needed.
 
 After edits: \`somewhere typecheck\` and focused local/browser tests. Publish:
 1. \`somewhere deploy\` (do not build first). Deploy
@@ -60,20 +60,6 @@ functions handle authorized exceptional writes and side effects. Declare the
 body schema (a missing or mistyped field is a 400); \`handle\` below is a
 public address its owner claimed:
 
-\`\`\`ts
-export default sw.endpoint({
-  auth: 'none',
-  body: { handle: 'string', title: 'string', from_email: 'email' },
-  handler: async ({ body }, sw) => {
-    const title = body.title.trim();
-    if (!title || title.length > 200 || /[\\r\\n]/.test(title)) return Response.json({ error: 'bad title' }, { status: 400 });
-    const { data: [profile] } = await sw.db.server.from('profiles', { where: { handle: body.handle }, limit: 1 });
-    if (!profile) return Response.json({ error: 'unknown handle' }, { status: 404 });
-    await sw.db.server.insert('entries', { user_id: profile.user_id, owner_email: profile.owner_email,
-      title, from_email: body.from_email, created_ms: Date.now() });
-  },
-});
-\`\`\`
 
 Use the looked-up owner, never the body. Rate limits/alerts: \`recipe-signed-in-app\`.
 Use \`serverOnly()\` only when every operation needs a function's own access check.
@@ -82,6 +68,52 @@ changes }\`; \`where: { a: 1, b: { in: ids }, c: { gte: 2 }, d: null }\` (one
 operator per column). Raw SQL uses a separate raw database, never managed tables.
 For cross-user managed work, authorize the caller and use \`sw.db.server.from\` /
 \`insert\` / \`update\` / \`remove\`; keep \`owner()\`/\`group()\`. Parallel reads: \`Promise.all\`.
+
+Core contract:
+- Schema is declaration only: imports and one default schema({...}) export. No
+  helper functions, loops, computed expressions or arbitrary TypeScript.
+- owner(): personal rows; group()/parent membership: invited teams and their children.
+- serverOnly(): every operation goes through a function with its own authorization.
+- publicRead: { where }: visitor reads of explicitly selected rows; client.read includes the primary key.
+- Built-in groups and email-domain app roles require VERIFIED email. For apps
+  that must work before verification, declare a membership/role table and check
+  it on the server before privileged operations.
+- Browser somewhere:data is generated from db/schema.ts. list reads at most 100
+  rows: { limit: 100, after: cursor }. No order option: sort in the client or use
+  a server endpoint. Cursor and row shapes come from the generated declaration.
+- Existing browser hooks live in src/auth; routes in src/App.tsx; layouts in
+  src/layouts. Extend them rather than replacing working authentication.
+
+\`\`\`ts
+export default sw.endpoint({
+  auth: 'required',
+  handler: async ({ user }, sw) => {
+    const { users } = await sw.auth.server.listUsers({ emails: [user.email] });
+    return { users };
+  },
+});
+\`\`\`
+GET endpoints export the endpoint as GET (export const GET = sw.endpoint({...})).
+Server database shapes (authorize cross-user operations before using server):
+\`\`\`ts
+async function writes(sw: SomewhereRuntimeContext) {
+  const id = crypto.randomUUID(); // generate related IDs before the transaction
+  await sw.db.server.tx([
+    { op: 'insert', table: 'greetings', values: { id, message: 'Hello' } },
+    { op: 'update', table: 'greetings', where: { id }, set: { message: 'Updated' } },
+  ]);
+  await sw.db.server.from('greetings', { where: { id }, limit: 1 });
+  await sw.db.server.insert('greetings', { id: crypto.randomUUID(), message: 'Hello' });
+  await sw.db.server.update('greetings', { where: { id }, set: { message: 'Updated' } });
+  await sw.db.server.remove('greetings', { where: { id } });
+}
+\`\`\`
+The same from/insert/update/remove verbs on sw.db apply caller scopes.
+Transactions take an ARRAY of write intents, never a callback.
+Transactions: \`somewhere docs sw.db --section swdbservertxintents-authorized-cross-user-writes\`.
+Updates: \`somewhere docs sw.db --section builder-verbs-and-where-shapes\`.
+Membership: \`somewhere docs sw.db --section owner-or-member-and-parent-access\`.
+Auth hooks: \`somewhere docs auth-client --section react-auth-state\`.
 
 Unique pair: \`unique: [['org_id','email']]\` in table options.
 

@@ -1,3 +1,7 @@
+## 0.38.36
+
+Republish the platform contract 6 CLI after npm accepted earlier uploads without making their tarballs installable. Publication now checks the exact registry version and latest tag once.
+
 ## 0.38.35
 
 - Allow tasks delete to accept up to 200 IDs, returning a result for each task.

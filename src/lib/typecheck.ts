@@ -398,13 +398,13 @@ export function explainPageLimit(message: string, detailLine: string): string {
 }
 
 const DIAGNOSTIC_HINTS: readonly { matches: RegExp; hint: string }[] = [
-  { matches: /SomewhereDb(?:Caller)?WriteIntent|readonly.*WriteIntent/, hint: 'sw.db.server.tx([{ op: "insert", table: "notes", values: { ... } }]) takes an array, never a callback. somewhere docs sw.db --section swdbservertxintents-authorized-cross-user-writes' },
+  { matches: /SomewhereDb(?:Caller)?WriteIntent|__SomewhereDbIntentFor|readonly.*WriteIntent/, hint: 'sw.db.server.tx([{ op: "insert", table: "notes", values: { ... } }]) takes an array, never a callback. somewhere docs sw.db --section swdbservertxintents-authorized-cross-user-writes' },
   { matches: /Expected 2 arguments, but got 3/, hint: 'Database update shape: sw.db.update(table, { where: { id }, set: { title } }). somewhere docs sw.db --section builder-verbs-and-where-shapes' },
   { matches: /\border\b.*does not exist|limit\?: undefined|A data list call reads at most 100/, hint: 'Browser list: limit 1–100; paginate with after. Sort in the client or use a server endpoint.' },
   { matches: /SCHEMA_DECLARATION_INVALID/, hint: 'db/schema.ts is declaration only: imports and export default schema({ tableName: table({...}, {...}) }); no helpers or arbitrary expressions.' },
 ];
 export function diagnosticHints(message: string): string[] {
-  return DIAGNOSTIC_HINTS.filter(rule => rule.matches.test(message)).map(rule => `hint: ${rule.hint}`);
+  return DIAGNOSTIC_HINTS.filter(rule => rule.matches.test(message) && !(message.includes('client.read must include primary key') && rule.matches.source === 'SCHEMA_DECLARATION_INVALID')).map(rule => `hint: ${rule.hint}`);
 }
 
 /**

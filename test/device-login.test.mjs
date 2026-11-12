@@ -8,7 +8,7 @@ const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 const pkg = JSON.parse(readFileSync(join(repoRoot, 'package.json'), 'utf8'));
 
 // What `somewhere login` tells the platform about this machine, so the
-// approval page can show a device card the owner can recognise (tsk_d560943d).
+// approval page can show a device card the owner can recognise.
 test('describeThisDevice reports hostname, CLI version, runtime, platform and arch', async () => {
   const { describeThisDevice } = await import(join(repoRoot, 'dist', 'lib', 'device-login.js'));
   const meta = describeThisDevice();

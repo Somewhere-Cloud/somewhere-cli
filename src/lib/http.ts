@@ -37,7 +37,7 @@ export function fetchWithProxy(
 /** Undici rejects a request that got no response with a bare "fetch failed"
  *  and hides the reason in `cause`. Every CLI request goes through here, so
  *  every such failure names the host it tried, the reason, and what to do
- *  (tsk_b9900dbb: `somewhere login` in a sandboxed agent shell printed only
+ *  (: `somewhere login` in a sandboxed agent shell printed only
  *  "fetch failed"). Timeouts and aborts pass through for their own messages;
  *  `cause` is kept so callers that read `cause.code` still can. */
 export function describeNetworkFailure(err: unknown, url: string): unknown {

@@ -4,7 +4,7 @@
  *
  * Two findings, one command (blind stranger run #2, 2026-09-02):
  *
- *   tsk_a605ff7b — pointed at a localhost address that was not being served the
+ *    — pointed at a localhost address that was not being served the
  *   way it expected, the command printed NOTHING for over 90 seconds and had to
  *   be interrupted. Three unbounded waits stacked up: the DevTools request
  *   channel had no per-command deadline at all, the page-load race was armed for
@@ -13,7 +13,7 @@
  *   worst possible answer from the one command whose job is to say whether the
  *   page rendered.
  *
- *   tsk_10be456b — the same local path reported FAIL on the app `somewhere init`
+ *    — the same local path reported FAIL on the app `somewhere init`
  *   scaffolds, on a page with zero console errors and zero page errors, because
  *   Chrome's own automatic /favicon.ico fetch 404'd and was counted as a failed
  *   request of the page. The hosted half never counted it. A first-run FAIL that

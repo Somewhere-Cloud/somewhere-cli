@@ -139,7 +139,7 @@ const WARNED_PATH = join(cliConfigDir(), 'outdated-warning.json');
 /** One stderr line, at most once a day, when the installed CLI is a minor
  *  release or more behind. Unlike the interactive update notice this also
  *  reaches agents and piped output, because an agent on an old CLI otherwise
- *  reads current docs and concludes they are wrong (tsk_f681c871). */
+ *  reads current docs and concludes they are wrong. */
 export async function getOutdatedWarning(
   currentVersion: string,
   options: OutdatedWarningOptions = {},

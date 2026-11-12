@@ -8,7 +8,7 @@ import { error, platformErrorEnvelope, printJsonError } from './output.js';
 // other refusal — an authorization or not-found answer included — carries no
 // data at all, so a session name can only come from the caller's own
 // live-session limit. A field the platform adds later, or anything echoed
-// from a request, stays out until it is named here (tsk_de3c2c25).
+// from a request, stays out until it is named here.
 
 type Check = (value: unknown) => boolean;
 

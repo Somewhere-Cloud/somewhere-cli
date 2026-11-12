@@ -8,7 +8,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 // `somewhere docs` with the docs host unreachable names the host and the
-// reason, never a bare "fetch failed" (pfb_a2e65d951e62).
+// reason, never a bare "fetch failed".
 const cli = join(dirname(fileURLToPath(import.meta.url)), '../dist/index.js');
 
 test('an unreachable docs host is named with its reason', async () => {

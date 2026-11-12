@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
  *
  * `somewhere init` used to close with "Run claude to keep building", which
  * reads as a partnership requirement on a platform any coding agent drives —
- * and does not say what to run here (pfb_aaff8e9d14fb).
+ * and does not say what to run here.
  *
  * The rule is about the CLI TELLING someone to run a vendor's tool. Naming a
  * vendor's config file is a different thing entirely: `somewhere mcp install`
@@ -50,7 +50,7 @@ test('init closes with the greenfield on-ramp, and it no longer opens with dev',
   // The closing copy moved into lib/next-actions.ts so create and link share
   // one answer; what init owns is the call. The ORDER assertion lives in
   // test/next-actions.test.mjs — `somewhere dev` refuses on a project that has
-  // never been deployed, so it can never be the first step (pfb_9a035f5ac8e9).
+  // never been deployed, so it can never be the first step.
   assert.match(init, /printNext\(\{ stage: 'init'/);
   assert.doesNotMatch(init, /Next: somewhere dev/);
   assert.doesNotMatch(init, /Run somewhere dev to build locally/);

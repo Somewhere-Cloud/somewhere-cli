@@ -1,5 +1,5 @@
 // A release whose blank-page check runs after the deploy answered (post_live_render: pending): the CLI reads the
-// settled check from GET /deploy/log?release_id= for up to 5 s before its final line (tsk_b9507144).
+// settled check from GET /deploy/log?release_id= for up to 5 s before its final line.
 //   - blank → the same DEPLOY_BLANK_PAGE outcome a gated deploy prints, exit 1, no base recorded;
 //   - still pending at 5 s → "live; blank-page check still running, see the deploy log", exit 0;
 //   - passed → the result carries that blank_page_check, exit 0;

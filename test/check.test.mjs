@@ -236,7 +236,7 @@ test('deploy-check help distinguishes compile-only mode from explicit --run exec
   assert.doesNotMatch(help, /safe to deploy|oracle/i);
 });
 
-// Projectless preflight (tsk_bac980aca5dc4d3883863d18e59a3104): before the
+// Projectless preflight: before the
 // first deploy there is no project to compile against. Local checks run; the
 // platform compile is reported as skipped and the verdict is never "passed".
 const { mkdtempSync, writeFileSync } = await import('node:fs');

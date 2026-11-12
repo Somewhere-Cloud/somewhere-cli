@@ -1,7 +1,7 @@
 import { extname } from 'node:path';
 
 /**
- * Root-level publish surface (tsk_c166924f).
+ * Root-level publish surface.
  *
  * A deploy publishes the APP, not the folder the app was built in. Coding
  * agents keep their working notes next to the code — NOTES.md, TODO.md,

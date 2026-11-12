@@ -253,7 +253,7 @@ test('runTypecheck accepts a fresh Vite-shaped scaffold', async () => {
   assert.equal(r.ok, true, r.raw);
 });
 
-// tsk_4e323e3b — a type package declared in package.json but not yet installed
+//  — a type package declared in package.json but not yet installed
 // is a missing tree, not a code error, and the first check on a fresh pull said
 // otherwise. These fixtures pin both directions: declared-but-missing resolves
 // and passes; genuinely undeclared still fails with the real diagnostic.

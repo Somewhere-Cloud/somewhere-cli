@@ -54,7 +54,7 @@ export function registerApi(program: Command) {
       }
 
       // An unsupported or malformed method is refused here, not reported later
-      // as a network problem (pfb_c1845661960e).
+      // as a network problem.
       if (!API_METHODS.has(method.toUpperCase())) {
         error(`Not sent: "${method.replace(/[\u0000-\u001F\u007F]/g, '?')}" is not a supported method. Use one of: ${[...API_METHODS].join(', ')}.`);
         process.exit(1);
@@ -209,7 +209,7 @@ const API_METHODS = new Set(['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'O
 
 /**
  * Keep a raw API call inside the configured API origin and its /v1 prefix
- * (pfb_8cef4606e9a3). A full URL, a protocol-relative or backslash path, a
+ *. A full URL, a protocol-relative or backslash path, a
  * fragment, or any `.`/`..` segment (percent-encoded too) is refused before a
  * request carries the token anywhere. A leading /v1 is accepted and dropped,
  * a missing leading slash is added, and the query string is kept.

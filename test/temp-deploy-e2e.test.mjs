@@ -254,7 +254,7 @@ test('deploy --json with no stored credential deploys and emits the anonymous co
 // Being logged in used to override the flag ("Already logged in — deploying to
 // your account."), which also dragged in account mode's linked-project
 // requirement, so `--temporary` in an unlinked directory failed outright
-// instead of doing the one thing it was asked to do (pfb_9bbc936e5001).
+// instead of doing the one thing it was asked to do.
 
 function realLoginHome(prefix) {
   const HOME = mkdtempSync(join(tmpdir(), prefix));

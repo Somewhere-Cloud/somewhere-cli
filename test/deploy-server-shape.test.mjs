@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { detectNodeServerShape, isNextAppShapeSignal } from '../dist/commands/deploy.js';
 import { createHappyPathTemplate } from '../dist/lib/init-template.js';
 
-// tsk_8e8c6bc8 — the Express-instinct pre-flight. The rule-9 fixture pair:
+//  — the Express-instinct pre-flight. The rule-9 fixture pair:
 // the intended target fires, real-world legitimate patterns pass clean.
 
 test('fires on express in package.json dependencies with no functions/', () => {
@@ -64,7 +64,7 @@ test('fires on next.config files', () => {
   assert.match(signal, /next\.config\.mjs/);
 });
 
-// tsk_8a9d2d1a — the pre-flight used to accuse our OWN starter of being a
+//  — the pre-flight used to accuse our OWN starter of being a
 // Next.js app, on a new developer's very first deploy, because it matched
 // router PATHS (`src/pages/*.tsx`) with no corroborating signal. The rule now
 // matches the platform's exactly: a next.config.*, or `next` in a dependency

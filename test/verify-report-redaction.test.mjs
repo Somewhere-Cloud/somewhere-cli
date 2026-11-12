@@ -1,5 +1,5 @@
 // Verify reports and their text mask the credential-bearing parts of URLs the
-// caller or the browser supplied (tsk_70d6db11): URL userinfo, the value of a
+// caller or the browser supplied: URL userinfo, the value of a
 // listed credential parameter (the platform log-sanitize list plus code and
 // auth_token) in the query or fragment, also when its name is percent-encoded or
 // it is nested encoded in another parameter, a JWT/key-shaped value under any

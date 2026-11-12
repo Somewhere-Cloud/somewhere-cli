@@ -120,7 +120,7 @@ test('minimal starter is a small typed frontend, function, and schema', () => {
     'react-dom': '19.2.7',
   });
   assert.deepEqual(pkg.devDependencies, {
-    // The starter records the CLI that wrote it (tsk_a4641877).
+    // The starter records the CLI that wrote it.
     '@somewhere-cloud/cli': CLI_PACKAGE_VERSION,
     '@types/react': '19.2.2',
     '@types/react-dom': '19.2.2',
@@ -150,9 +150,9 @@ test('minimal starter is a small typed frontend, function, and schema', () => {
   const agents = readFileSync(join(dir, 'AGENTS.md'), 'utf8');
   const claude = readFileSync(join(dir, 'CLAUDE.md'), 'utf8');
   assert.equal(agents, `# somewhere.cloud project contract\n${SKILLS_POINTER}\n${DECLARED_ACCESS_POINTER}\n${PORTABILITY_POINTER}\n${AGENT_WORKFLOW}\n`);
-  // 84 since tsk_5dbbc5a1: the public-form example declares its body schema with sw.endpoint.
-  // 86 since tsk_4af22ba8: the workflow names grant() for sharing your own rows with specific people.
-  // 87 since tsk_9b4a27f7: one line naming the data-and-code exits (pull, db dump, CSV, own PostgreSQL).
+  // 84 since : the public-form example declares its body schema with sw.endpoint.
+  // 86 since : the workflow names grant() for sharing your own rows with specific people.
+  // 87 since : one line naming the data-and-code exits (pull, db dump, CSV, own PostgreSQL).
   assert.ok(agents.trimEnd().split('\n').length <= 87, 'AGENTS.md must stay within 87 lines');
   assert.equal(claude, 'Read AGENTS.md for project instructions.\n');
   assert.equal(claude.trimEnd().split('\n').length, 1);
@@ -190,7 +190,7 @@ test('minimal starter is a small typed frontend, function, and schema', () => {
     previous = next;
   }
   assert.match(agents, /Promise\.all/);
-  // tsk_c8e60ff7: the generated client for normal data, one function for the
+  // : the generated client for normal data, one function for the
   // exceptional write, lookup-derived owner, and authorized structured server access.
   assert.match(agents, /pages use `somewhere:data`[\s\S]*without API files[\s\S]*`owner\(\)` for personal rows[\s\S]*`anyOf\(\)` for owner or a role, `allOf\(\)` for members-only rows[\s\S]*`shared\(\)` gives signed-in reads and creator-only writes[\s\S]*`client\.intake`[\s\S]*functions handle authorized exceptional writes and side effects[\s\S]*Use the looked-up owner, never the body[\s\S]*authorize the caller and use `sw\.db\.server\.from`/);
   assert.match(agents, /Raw SQL uses a separate raw database, never managed tables\./);

@@ -2991,7 +2991,7 @@ function cutBetween(text: string, start: string, end: string): string {
 }
 
 // The plain auth starter keeps the /auth/magic landing (sign-in and
-// invitation links open it, tsk_28753a0e) and leaves out only the
+// invitation links open it, ) and leaves out only the
 // "email me a sign-in link" form, which the magic-link module adds.
 function magicLinkTypes(request: boolean): string {
   return request ? MAGIC_LINK_TYPES : cutBetween(MAGIC_LINK_TYPES, '/** The "email me a sign-in link" form', '/**\n * The /auth/magic page');

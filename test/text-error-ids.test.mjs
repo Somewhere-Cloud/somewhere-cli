@@ -8,7 +8,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { platformErrorIds } from '../dist/lib/output.js';
 
-// tsk_c95a437d: a text-mode platform failure prints the code and request/trace ids, not only the message.
+// : a text-mode platform failure prints the code and request/trace ids, not only the message.
 const distIndex = join(dirname(fileURLToPath(import.meta.url)), '..', 'dist', 'index.js');
 let traceHeader = 'trace-4e1d2c3b5a69';
 const server = createServer(async (req, res) => {

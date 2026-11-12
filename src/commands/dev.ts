@@ -34,7 +34,7 @@ const RETRYABLE_DRAFT_CODES = new Set([
  *
  * A promote ends the preview session, but the watcher used to keep running and
  * keep failing, once per save, with the platform's API-client wording
- * (tsk_74375b3c). The loop knows perfectly well what happened; it should stop
+ *. The loop knows perfectly well what happened; it should stop
  * and say so, not relay a refusal written for a machine.
  */
 class PreviewFinishedError extends Error {
@@ -341,7 +341,7 @@ export function registerPreview(program: Command) {
     });
 }
 
-/** The open preview a fresh link should point at (tsk_35c1bb78): the one the
+/** The open preview a fresh link should point at: the one the
  *  caller named, or the only open one. Several open previews and no choice is
  *  an error that lists them, never a guess. */
 export function choosePreviewCandidate(
@@ -480,7 +480,7 @@ export class CloudDevUnavailableError extends Error {
  * answer by PUBLISHING THE WORKING DIRECTORY TO PRODUCTION, so collapsing the
  * two costs a customer a production release on a project that was already live
  * — which is exactly what happened, because a Free account's own production
- * deploy status answers 403 today (tsk_f4236589) and the 403 became `null`.
+ * deploy status answers 403 today and the 403 became `null`.
  *
  * A read that cannot answer is `unknown`, and unknown never publishes.
  */

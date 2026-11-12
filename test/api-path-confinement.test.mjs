@@ -8,7 +8,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 // `somewhere api` stays inside the configured API origin and /v1 prefix
-// (pfb_8cef4606e9a3): traversal and absolute-URL input is refused before any
+//: traversal and absolute-URL input is refused before any
 // request carries the token; valid relative paths and queries are unchanged.
 const cli = join(dirname(fileURLToPath(import.meta.url)), '../dist/index.js');
 const requests = [];
@@ -69,7 +69,7 @@ test('the final URL check refuses a path that would resolve outside the configur
   assert.match(normalizeApiPath('/x', 'https://api.example.test/v1').path, /^\/x$/);
 });
 
-// pfb_c1845661960e: an unsupported or malformed method is refused before any
+// : an unsupported or malformed method is refused before any
 // request, not reported as a network problem.
 for (const method of ['TRACE', 'CONNECT', 'GE T', 'GET\r\nX-Injected: 1']) {
   test(`unsupported method refused before any request: ${JSON.stringify(method)}`, async () => {

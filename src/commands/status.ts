@@ -259,7 +259,7 @@ export function registerStatus(program: Command) {
         }
       } catch (err) {
         // A plan entitlement is an answer, not a failure. A healthy project on
-        // a plan without cloud dev must still exit 0 (tsk_f250e561); only a
+        // a plan without cloud dev must still exit 0; only a
         // real problem — deploy failed, project unreachable, auth broken —
         // exits non-zero. The human output shows production only: preview was
         // not asked for, so the plan fact stays in `--json`.
@@ -295,7 +295,7 @@ export function registerStatus(program: Command) {
           console.log('');
           // The hosted code workspace is OPTIONAL and separate from the deployed
           // app — a non-'ready' status here (e.g. "waking") NEVER means the live
-          // site is down (audit #8 / tsk_30633bb3). Label it as the dev workspace
+          // site is down (audit #8 / ). Label it as the dev workspace
           // and say so, so "waking" doesn't read as an outage.
           const wsStatus = ws.status === 'ready' ? 'running' : `${ws.status} (starting)`;
           info(`Dev workspace: ${wsStatus} ${dim('— optional code workspace; your deployed app serves regardless')}`);

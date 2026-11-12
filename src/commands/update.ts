@@ -57,7 +57,7 @@ const message = (value: unknown): string =>
 /** Every refusal names the working alternative. A refusal that only explains
  * itself strands the user: CLIs at 0.37.0 and older refused every release once
  * npm moved to a newer provenance format, and nothing said npm still worked
- * (tsk_f681c871). */
+ *. */
 function refuse(cause: unknown): number {
   error(`Update refused: ${message(cause)}.`);
   info(`To install the latest release with npm instead, run: ${teal(NPM_UPDATE_COMMAND)}`);

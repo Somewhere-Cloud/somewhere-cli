@@ -726,7 +726,7 @@ function shapeVerificationReport(
   }
   if (lifecycle.length && !verdict.startsWith('INCOMPLETE')) verdict += ` INCOMPLETE — ${unknownNote(lifecycle)}`;
   // A page wider than the viewport passed silently before: the layout line
-  // said so, but the verdict did not (tsk_3e62d9b5). Overflow stays a warning,
+  // said so, but the verdict did not. Overflow stays a warning,
   // never a failure, so existing flows keep their outcome.
   if (verdict.startsWith('PASS')) verdict += overflowWarning(layout);
   verdict += retryNote;
@@ -785,7 +785,7 @@ export async function settleViewportRuns(
       // API envelope's `data`; keep only its shape-checked form so start_error_details can name it.
       const invalid = cause instanceof CliApiError ? safeInvalid(cause.data?.invalid) : undefined;
       // The rest of the platform's verdict, as `browser --json` carries it
-      // (tsk_de3c2c25): request id, retry only when the platform said so
+      //: request id, retry only when the platform said so
       // (false stays false), and the allowlisted browser data.
       const meta = cause instanceof CliApiError ? cause.meta : {};
       const data = cause instanceof CliApiError ? browserRefusalData(cause.code, cause.statusCode, cause.data) : undefined;
@@ -871,7 +871,7 @@ export async function runVerification(
   return shapeVerificationReport(targetLabel, flow, runs, refusals, resolved);
 }
 
-// ── Multi-user journeys (tsk_f49ccbb75f994f1fb5179198087d24de) ──────────────
+// ── Multi-user journeys ──────────────
 //
 // Several signed-in people in one run: each actor is its own named browser
 // session on the platform (a separate browser, so no cookie, storage or cache
@@ -1763,7 +1763,7 @@ export function formatVerifyReport(report: VerifyReport, evidencePath?: string):
   for (const step of report.steps) {
     lines.push(`step ${step.step} ${step.ran === false ? dim('not run') : step.passed ? green('✓') : red('✗')} [${step.viewport}] ${step.name}${formatStepDuration(step.duration_ms, step.ran)}${step.error ? ` ${dim(`— ${step.error}`)}` : ''}`);
     // The eval value, as `somewhere browser` prints it; reading it used to
-    // need --json or report.json (tsk_32e81790).
+    // need --json or report.json.
     if (step.value !== undefined) {
       const text = stringifyResult(step.value);
       if (!text.includes('\n')) lines.push(`  result: ${text}`);
@@ -1855,7 +1855,7 @@ export function summarizeVerifyReport(report: VerifyReport | VerifyJourneyReport
     ...(report.refusals ?? []).map((refusal) => refusal.detail?.code).filter((code): code is string => typeof code === 'string' && code !== ''),
     ...notStarted.map((segment) => segment.error!.code).filter((code) => typeof code === 'string' && code !== ''),
   ])];
-  // Structured, shape-checked detail only (tsk_da2dba3d): the code, status, the path inside the
+  // Structured, shape-checked detail only: the code, status, the path inside the
   // caller's own flow and a numeric limit. Never the message, which can quote selectors or values.
   const startErrorDetails = (report.refusals ?? []).flatMap((refusal, index) => {
     const detail = refusal.detail as { code?: unknown; status?: unknown; invalid?: unknown; data?: { invalid?: unknown } } | undefined;

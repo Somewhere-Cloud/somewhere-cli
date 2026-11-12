@@ -35,7 +35,7 @@ export interface LocalLintResult extends SourceLintSnapshot {
   checked_files: number;
   skipped: Array<{ path: string; reason: string }>;
   generic: GenericLintResult;
-  /** This CLI's consumer contract against the platform's last announced one (tsk_0f3d05b9). */
+  /** This CLI's consumer contract against the platform's last announced one. */
   contract: ContractVerdict;
 }
 

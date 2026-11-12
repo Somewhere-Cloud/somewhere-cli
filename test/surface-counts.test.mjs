@@ -151,7 +151,7 @@ test('deploy still reports honestly when it has no local tree to count', () => {
   assert.doesNotMatch(JSON.stringify(formatted), /undefined/);
 });
 
-// ── `_` helpers are uploaded but are not functions (pfb_f59a163c7083) ────────
+// ── `_` helpers are uploaded but are not functions ────────
 
 test('a `_`-prefixed helper under api/ is not counted as a function', () => {
   const functions = { 'api/club.ts': 'x', 'api/rounds/[id].ts': 'x', 'api/_lib.ts': 'x', 'api/_lib/club.ts': 'x' };

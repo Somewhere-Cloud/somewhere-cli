@@ -1,5 +1,5 @@
 /**
- * tsk_f250e561 — `somewhere status` must exit 0 on a healthy project.
+ *  — `somewhere status` must exit 0 on a healthy project.
  *
  * The blind run hit this on a healthy, deployed, Free-tier project:
  * `somewhere status --json` exited 1 carrying

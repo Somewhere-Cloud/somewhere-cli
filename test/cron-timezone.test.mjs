@@ -1,4 +1,4 @@
-// tsk_e40578e0 — `cron create --help` documented every expression as UTC and
+//  — `cron create --help` documented every expression as UTC and
 // exposed no way to say otherwise, while the platform had accepted an optional
 // IANA timezone since #33. These fixtures pin the flag, the help copy, and the
 // exact request body in both directions: named zone forwarded verbatim, omitted
@@ -222,7 +222,7 @@ test('both starter UI modes point from creating a schedule to running it now', (
   }
 });
 
-// tsk_b07f1dac item 3: `cron list` labelled every schedule UTC and `cron update
+//  item 3: `cron list` labelled every schedule UTC and `cron update
 // --help` called the expression UTC, while a trigger keeps the zone it was
 // created in. The list now shows each stored zone; update documents and can
 // change it.

@@ -1,4 +1,4 @@
-/** Author reputation — an ingredient for the narrative summary (tsk_f30faf55).
+/** Author reputation — an ingredient for the narrative summary.
  *
  *  "47 downloads but authored by sindresorhus (150 packages, 2M combined)" vs
  *  "12 downloads, author's only package, account 3 days old" are opposite stories

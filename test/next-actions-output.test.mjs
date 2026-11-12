@@ -3,7 +3,7 @@
  *
  * test/next-actions.test.mjs checks the decision; this runs the binary end to
  * end against a stub platform and checks the transcript an agent would read —
- * the acceptance line for tsk_34580e60: the deploy output itself has to say
+ * the acceptance line for : the deploy output itself has to say
  * how to look at the app in a browser.
  *
  * The negative half matters just as much: `--json` stdout stays the raw

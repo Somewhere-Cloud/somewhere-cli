@@ -1,5 +1,5 @@
 /**
- * Redacted repro packet for agent-ready errors (tsk_da2dba3d): the CLI's capture around the shared
+ * Redacted repro packet for agent-ready errors: the CLI's capture around the shared
  * module. Every validator, the outcome rule, the guidance map and the packet builder live in the
  * platform's shared/repro-guidance.ts, vendored byte-identical into ./vendor/ (see
  * scripts/vendor-repro-guidance.mjs). This file only maps the CLI's error types into typed fields and
@@ -29,7 +29,7 @@ export function buildRecord(cause: unknown, context: { cliVersion: string; comma
   }, { client: { kind: 'cli', version: context.cliVersion }, command: context.command, startedAt: context.startedAt, now: context.now });
 }
 
-/** The CLOSED set of codes the function runtime itself answers or reports for a failure (tsk_fca1267b):
+/** The CLOSED set of codes the function runtime itself answers or reports for a failure:
  *  its own crash codes, the scope rejection and DB_EXPOSED_SERVER_ERROR_CODES. An app's own err.code is
  *  owner text (it may hold anything, a key included, and still match the CODE shape), so it is never
  *  copied into a packet: any code outside this set becomes APP_ERROR_CODE. */

@@ -1,5 +1,5 @@
 // `somewhere call` failures keep the platform's typed status and ids in the local repro record
-// (tsk_da2dba3d, Docs tcm_02f33c28). The same 404 gave MCP {outcome refused, http_status 404,
+// (, Docs tcm_02f33c28). The same 404 gave MCP {outcome refused, http_status 404,
 // trace_id} but the CLI {outcome unknown, http_status null, ids null}: the tool-error envelope's
 // top-level http_status and _repro.collected ids were dropped. A transport failure (no tool
 // result) stays unknown; nothing untyped, and no planted secret, reaches the record or packet.
@@ -50,7 +50,7 @@ async function run(onToolsCall, tool = 'support_ticket') {
     child.on('close', (code) => resolve({ code, out, err }));
   });
   try {
-    const call = await cli(['call', tool, tool === 'support_ticket' ? '{"ticket_id":"pfb_000000000000"}' : '{"url":"https://example.invalid","actions":[{"wait":90000}]}', '--json']);
+    const call = await cli(['call', tool, tool === 'support_ticket' ? '{"ticket_id":""}' : '{"url":"https://example.invalid","actions":[{"wait":90000}]}', '--json']);
     const packet = await cli(['support', 'packet', '--json']);
     const raw = readFileSync(join(home, '.somewhere', 'last-error.json'), 'utf8');
     return { call, packet: JSON.parse(packet.out), packetText: packet.out, raw };

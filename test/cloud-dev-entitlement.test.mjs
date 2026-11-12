@@ -6,7 +6,7 @@
  * production release — the only thing this command can do to a customer's live
  * site — and every path into it is fixtured here.
  *
- * The bug this file now pins (tsk_5504e045, tsk_f4236589): the live-version read
+ * The bug this file now pins (, ): the live-version read
  * answered `null` for BOTH "nothing is live" and "I could not tell", and the
  * caller published on `null`. A Free account's own production deploy status
  * answers 403 today, so on a published Free project the CLI read 403 -> null ->
@@ -261,7 +261,7 @@ test('an explicit "not published" is the one answer that may lead to a publish',
 
 test('a refused status read is unknown, never "never published"', async () => {
   // The live 403: a Free account cannot read its own production deploy status
-  // (tsk_f4236589). The CLI must not turn that into a claim about publish state.
+  //. The CLI must not turn that into a claim about publish state.
   const call = async () => {
     throw new Error('CLOUD_DEV_NOT_ENABLED: `somewhere preview` is available on the Pro and Scale plans.');
   };

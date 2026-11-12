@@ -115,7 +115,7 @@ export function normalizeBrowserActions(raw: unknown, baseDir = process.cwd()):
   if (raw.length > 30) return { ok: false, error: `actions has ${raw.length} items; max is 30.` };
   const actions: BrowserSequenceAction[] = [];
   // One action out per action in; `frame` is attached after the loop. It was
-  // once dropped here, so a framed eval ran on the top page (tsk_7719cf76).
+  // once dropped here, so a framed eval ran on the top page.
   const frames: Array<string | undefined> = [];
   for (let index = 0; index < raw.length; index++) {
     const value = raw[index];

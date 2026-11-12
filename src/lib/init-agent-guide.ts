@@ -92,7 +92,7 @@ export const SKILLS_POINTER = `Skills: \`${SKILLS_DIR}/\` — `
   + skillNames(BUNDLED_SKILLS_PACK).map((name) => `\`${name}\``).join(', ')
   + '. Read the skill that matches the task. `somewhere skills status` inspects the installed pack; `somewhere skills update` updates unmodified files.';
 
-/** One line pointing agents at the declared-access recipes (tsk_d433436b): in
+/** One line pointing agents at the declared-access recipes: in
  *  the testing lane's experiment all three agents given it moved from
  *  serverOnly() plus hand-written checks to declared access. Kept outside
  *  AGENT_WORKFLOW, which is a byte mirror of the platform's agent workflow. */
@@ -101,7 +101,7 @@ export const DECLARED_ACCESS_POINTER = 'Access rules: before choosing `serverOnl
   + 'bookings and help desks in `somewhere docs sw.db --section provider-or-booker-and-owner-or-staff-recipes`; '
   + 'sharing your own rows with specific people (read-only sharing, co-authors) in `somewhere docs declared-data --section per-owner-sharing`.';
 
-/** One line telling agents the app's data and code can leave (tsk_9b4a27f7):
+/** One line telling agents the app's data and code can leave:
  *  an evaluating agent concluded the platform had no exits. Kept outside
  *  AGENT_WORKFLOW, which is a byte mirror of the platform's agent workflow. */
 export const PORTABILITY_POINTER = 'Your data and code are yours: `somewhere pull` (source), `somewhere db dump` (raw SQL database as one .sql file), '

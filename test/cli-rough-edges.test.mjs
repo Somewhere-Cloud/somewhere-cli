@@ -212,7 +212,7 @@ test('env set reads stdin without echoing it and rejects conflicting input or vi
   });
 });
 
-// tsk_0e470633: --stdin removes exactly one final LF or CRLF, from a pipe or a
+// : --stdin removes exactly one final LF or CRLF, from a pipe or a
 // redirected file (`< file`), and keeps every other byte.
 test('env set --stdin removes one final line ending and keeps everything else', async () => {
   await withPlatform(async ({ calls, env }) => {

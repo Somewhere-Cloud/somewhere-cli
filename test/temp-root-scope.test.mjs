@@ -1,5 +1,5 @@
 // `deploy --temporary` beside a real login keeps one throwaway per project
-// root (pfb_29428f76480e). Before, one account-global throwaway was reused for
+// root. Before, one account-global throwaway was reused for
 // every directory, so a deploy from an unrelated directory silently replaced
 // the first directory's app. Local stub server only; never api.somewhere.cloud.
 import test from 'node:test';

@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-// tsk_8a68dfa2 items 14 and 15 (CLI wording only). A folder linked to a
+//  items 14 and 15 (CLI wording only). A folder linked to a
 // project the sign-in cannot open is told how to relink, without the CLI
 // guessing which of not-found / no-access / expired it was; commands that need
 // a project in an unlinked folder name the linking commands. Nothing here

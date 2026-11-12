@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-// `somewhere auth roles grant|revoke|list` (tsk_8cdcca1d): one platform call each, to
+// `somewhere auth roles grant|revoke|list`: one platform call each, to
 // /v1/auth/app-roles[/grant|/revoke], with the developer key; an address becomes `email`,
 // anything else `user_id`; the project comes from --project or the linked folder; a
 // platform refusal is the command's error with its code.

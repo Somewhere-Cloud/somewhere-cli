@@ -1,4 +1,4 @@
--- Narrative summary + author reputation (tsk_f30faf55).
+-- Narrative summary + author reputation.
 -- SQLite has no ADD COLUMN IF NOT EXISTS; run once. The summary is the LLM's
 -- human-readable judgment; the author_* columns are the reputation ingredients
 -- that feed it.

@@ -1,5 +1,5 @@
-// tsk_1108097a: deploy and check report what they UPLOAD, not what the site
-// publishes. tsk_746516 (founder/task decision, superseding the earlier
+// : deploy and check report what they UPLOAD, not what the site
+// publishes.  (founder/task decision, superseding the earlier
 // upload-everything behaviour): a tests/ or __tests__/ folder is held back by
 // default and named as not published; other subfolders such as e2e/ still
 // upload. The CLI never claims a subfolder is private, and the platform's own
@@ -110,7 +110,7 @@ for (const [label, warnings] of [['a server that names private files', [SERVER_W
       assert.match(first.all, /Every other file in this folder, subfolders included, is uploaded with your app\./);
       assert.doesNotMatch(first.all, /A deploy publishes your app/);
       assert.match(first.all, /3 static files uploaded \(/);
-      // tsk_23f34679: the headline's files are named, from the same selection the request carried.
+      // : the headline's files are named, from the same selection the request carried.
       assert.match(first.all, /Uploaded: e2e\/run\.mjs, index\.html, src\/main\.js/);
       assert.doesNotMatch(first.all, /static files? deployed/);
 
@@ -203,7 +203,7 @@ test('non-TTY deploy prints collection once across all preflight warnings and ke
     assert.deepEqual(raw, deployData);
     assert.deepEqual(sent.static_files, Object.keys(deploy.body.files).sort());
     // No progress or preflight prose; only the local omissions, one line each by
-    // path and reason, so a --json caller still learns what stayed local (pfb_b141efbfc449).
+    // path and reason, so a --json caller still learns what stayed local.
     assert.deepEqual(json.stderr.trim().split('\n').map((line) => line.split(' — ')[0]),
       ['not published: NOTES.md', 'not published: tests/note.txt', 'not uploaded: linked.html'], json.all);
   });

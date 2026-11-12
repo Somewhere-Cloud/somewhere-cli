@@ -1,4 +1,4 @@
-/** No-login deploy path (tsk_35674c33): mint a short-lived, unauthenticated
+/** No-login deploy path: mint a short-lived, unauthenticated
  *  developer credential gated by client-side proof-of-work instead of a
  *  signup. This is the whole "auth" for logged-out `somewhere deploy` — see
  *  src/commands/deploy.ts for how the minted credential is cached/reused and
@@ -74,7 +74,7 @@ export function solvePow(nonce: string, difficulty: number): { suffix: string; h
  *
  *  Both routes are public: the request carries no credential, never runs the
  *  stored login's refresh, and is never resent. Failures are the platform's
- *  typed errors (pfb_011a9fd3f5f3): CliApiError with the documented `code`
+ *  typed errors: CliApiError with the documented `code`
  *  (RATE_LIMITED, INVALID_POW, TEMP_DEPLOYS_DISABLED, ...), HTTP status,
  *  retry / retry_after_ms and request/trace ids, and INVALID_RESPONSE with
  *  the status for a body that is not JSON. */

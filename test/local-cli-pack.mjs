@@ -1,5 +1,5 @@
 // A generated starter pins @somewhere-cloud/cli to the version being built
-// (tsk_a4641877). On a version PR that version is not on npm yet, so a test
+//. On a version PR that version is not on npm yet, so a test
 // that installs the starter installs THIS working tree instead: one `npm pack`
 // per test process, swapped in after asserting the pin is the package version.
 import assert from 'node:assert/strict';

@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-// pfb_7b36450727ee: a bad `logs --tail` is refused, not silently replaced; an
+// : a bad `logs --tail` is refused, not silently replaced; an
 // --include entry or "!" line that cannot publish what it names says so. The
 // upload policy is unchanged: nothing it held back is published.
 const cli = join(dirname(fileURLToPath(import.meta.url)), '../dist/index.js');

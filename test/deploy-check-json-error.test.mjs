@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-// pfb_3769086f6aa7: a platform refusal of POST /v1/deploy/check keeps its own
+// : a platform refusal of POST /v1/deploy/check keeps its own
 // code under --json (as `deploy --json` does), never the generic CLI_ERROR.
 const cli = join(dirname(fileURLToPath(import.meta.url)), '../bin/somewhere.js');
 let reply;

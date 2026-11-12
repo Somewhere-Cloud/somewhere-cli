@@ -9,7 +9,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 // Files the sensitive-path policy names never leave the machine (consumer review of
-// 0.38.4, pfb_8991bd81d349, pfb_1bc48b5a24ae, pfb_856072304b0c). The deploy API
+// 0.38.4, , , ). The deploy API
 // refuses these paths in any folder (worker/src/utils/deploy-paths.ts, vendored
 // byte-identical); the CLI now applies the same policy while collecting, before
 // any file is read into an upload and before any request. No opt-in reopens it.
@@ -116,8 +116,7 @@ test('the collector applies exactly the vendored deploy-path policy to every fil
   for (const path of sensitivePaths(c)) assert.equal(isSensitiveDeployPath(path), true, `${path} is what the API refuses`);
   const manifest = JSON.parse(readFileSync(join(root, 'src/lib/vendor/DEPLOY-PATHS-VENDOR.json'), 'utf8'));
   const text = readFileSync(join(root, 'src/lib/vendor/deploy-paths.ts'), 'utf8');
-  assert.equal(manifest.source, 'worker/src/utils/deploy-paths.ts');
-  assert.match(manifest.commit, /^[a-f0-9]{40}$/);
+  assert.deepEqual(Object.keys(manifest), ['sha256']);
   assert.equal(createHash('sha256').update(text).digest('hex'), manifest.sha256, 'the vendored copy matches its manifest');
   assert.doesNotMatch(text, /^import /m, 'the policy module has no imports');
 });

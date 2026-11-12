@@ -51,7 +51,7 @@ function ensureDir() {
  *  read (a sandboxed agent shell is the usual case) or cannot parse is said
  *  out loud: read as "signed out", it refused deploys to the folder's own
  *  temporary project and invited a new sign-in over the existing one
- *  (tsk_b9900dbb). */
+ *. */
 export function loadConfig(): CliConfig | null {
   let body: string;
   try {
@@ -113,7 +113,7 @@ export function clearConfig(): void {
 /**
  * A temporary-workspace credential held BESIDE a real login.
  *
- * `--temporary` means temporary whatever the login state (pfb_9bbc936e5001),
+ * `--temporary` means temporary whatever the login state,
  * so a signed-in developer can ship a throwaway app without being switched to
  * their account. Their real credential has to survive that, which is the whole
  * reason this is a separate file: config.json keeps the account login
@@ -122,7 +122,7 @@ export function clearConfig(): void {
  * It carries the temp projects too, one per project root, so a second
  * `--temporary` deploy from the same directory redeploys the SAME throwaway
  * instead of minting another, and a deploy from an unrelated directory gets its
- * own throwaway instead of replacing that one (pfb_29428f76480e). The
+ * own throwaway instead of replacing that one. The
  * project link is deliberately NOT written into the directory's
  * `.somewhere.json`: that file is the developer's own link, and a throwaway
  * their account does not own does not belong in it.
@@ -280,7 +280,7 @@ export function clearTempSession(): void {
 
 /** Swap in a freshly-refreshed access key + rotated refresh token, preserving
  *  the rest of the stored config (user, etc.). Used by the API client's
- *  refresh-on-401 path (tsk_3642f3c4). No-op if there's no config to update. */
+ *  refresh-on-401 path. No-op if there's no config to update. */
 export function updateTokens(
   token: string,
   refreshToken: string,
@@ -316,7 +316,7 @@ export function hasUsableCredential(config: CliConfig | null = loadConfig()): bo
 
 export function getToken(): string {
   const config = loadConfig();
-  // A temporary (--temporary, tsk_35674c33) credential carries its own
+  // A temporary (--temporary, ) credential carries its own
   // expiry independent of the normal login flow. Check it BEFORE the
   // generic "no token" case below so an expired temp session gets
   // temp-aware copy (re-mint vs. real login) instead of the bare
@@ -383,7 +383,7 @@ export function readProjectDeployState(
 /** Has this project directory already been told that files outside the app are
  *  not published? Kept on the project's own .somewhere.json so no new file is
  *  ever written into a customer's repo. An unlinked directory has no store, so
- *  the notice repeats — the safe direction (tsk_c166924f). */
+ *  the notice repeats — the safe direction. */
 export function publishNoticeSeen(dir: string): boolean {
   return loadProjectConfig(dir)?.publish_notice_seen === true;
 }
@@ -463,7 +463,7 @@ export function saveProjectDeployState(
  *  CLI key) never leaves a stale baked token behind. The OLD shape baked a
  *  `Bearer smt_...` into the config file at install time and never re-read it,
  *  so the next `somewhere login` silently 401'd MCP until the user hand-edited
- *  the file. Never reintroduce the http+headers shape (tsk_104fe2d0). */
+ *  the file. Never reintroduce the http+headers shape. */
 const SOMEWHERE_STDIO_ENTRY = { command: 'somewhere', args: ['mcp'] } as const;
 
 /** The entry for this invocation. When SOMEWHERE_CONFIG_DIR is set, the host

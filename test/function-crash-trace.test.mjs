@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-// tsk_da2dba3d slice 2b: a deployed function's crash (500 FUNCTION_ERROR + trace_id) is investigated
+//  slice 2b: a deployed function's crash (500 FUNCTION_ERROR + trace_id) is investigated
 // with `logs --trace` and packaged with `support packet --trace`. The owner's log rows carry the
 // caller's input in the message, the stack, the path and extra data fields (as a real handler's
 // rethrow does); the packet reads only code/status/request id/method/path-template, so none of it may

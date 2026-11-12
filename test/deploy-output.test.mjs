@@ -66,7 +66,7 @@ test('does not construct a linked-project URL when the deploy response omits pro
   assert.equal(formatted.liveMessage, 'Deployed. The platform did not report the live URL; `somewhere project view <project>` shows it.');
 });
 
-test('a missing URL names the command that shows it for this project (tsk_8f3c32bc)', () => {
+test('a missing URL names the command that shows it for this project', () => {
   const formatted = formatDeploySuccess(
     { project_id: 'proj_owned', has_functions: false },
     { functionCount: 0, totalBytes: 1024 },

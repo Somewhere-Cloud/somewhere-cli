@@ -6,7 +6,7 @@ import { cliConfigDir } from './config.js';
 /**
  * The local record of the last command (~/.somewhere/last-run.json, mode 600).
  *
- * Built from an allowlist by construction (pfb_04b5a285eed0): the registered
+ * Built from an allowlist by construction: the registered
  * command path, the names of the options given on the command line, the exit
  * code and when it ran. Operand values, option values, request bodies and
  * command output are never recorded, so a secret passed as an argument (an env
@@ -24,7 +24,7 @@ export interface LocalRunRecord {
 const RUN_RECORD_FILES = ['last-run.json', 'last-run.json.tmp'];
 
 /**
- * Remove this CLI's run record before anything else runs (tsk_d8eac29404da).
+ * Remove this CLI's run record before anything else runs.
  * CLI versions before 0.38.6 saved command arguments and output in it, so an
  * upgrade must not leave that file in place while a command runs. The file is
  * never read, copied or printed: only lstat'ed and unlinked. A symlink is

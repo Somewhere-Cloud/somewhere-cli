@@ -33,7 +33,7 @@ import { promotedDataNotes } from '../lib/promote-handoff.js';
  *
  * Tri-state on purpose: a read that FAILED must not look like a project with
  * nothing live, or the caller would treat an absence of evidence as evidence
- * (tsk_33023348).
+ *.
  */
 async function readActivePointer(projectId: string): Promise<ActivePointer> {
   try {
@@ -198,7 +198,7 @@ export function registerPromote(program: Command) {
       // that can later answer "did the promote land?" when the response itself
       // is unreadable — the candidate id can never answer it, because promote
       // rebuilds the candidate through the ordinary release path and produces a
-      // third id distinct from both (tsk_33023348).
+      // third id distinct from both.
       const pointerBefore = await readActivePointer(projectId);
 
       const spinner = opts.json ? null : ora('Promoting...').start();

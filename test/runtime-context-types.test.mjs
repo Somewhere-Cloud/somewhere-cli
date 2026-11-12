@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { runTypecheck } from '../dist/lib/typecheck.js';
 
 // The generated `sw` type is the platform's own runtime declaration, vendored by
-// scripts/vendor-declared-data.mjs (pfb_e53f8065214e). A handler written from the
+// scripts/vendor-declared-data.mjs. A handler written from the
 // docs must typecheck clean against it, and an undeclared binding must still fail:
 // the context is a real type, never `any`.
 const schema = `export default schema({
@@ -58,7 +58,7 @@ test('a docs-following handler typechecks clean against the generated sw type', 
 });
 
 // Every documented sw.groups method, called as the docs show it, with no casts
-// (tsk_668f0ce2: four builds hit TS2339 on sw.groups.add from a stale vendored copy).
+// (: four builds hit TS2339 on sw.groups.add from a stale vendored copy).
 test('every documented sw.groups method typechecks with no casts', async t => {
   const result = await project(t, `export default async function (req: Request, sw: SomewhereRuntimeContext) {
   const made = await sw.groups.create(req, { name: 'Crew' });
@@ -92,7 +92,7 @@ test('undeclared sw bindings still fail: the generated context is not any', asyn
   assert.match(result.raw, /Property 'nonexistent' does not exist on type 'SomewhereServerDb'/);
 });
 
-// Server reads of declared tables (pfb_d9739a248171): rows carry db/schema.ts's
+// Server reads of declared tables: rows carry db/schema.ts's
 // declared types, as the browser client's do. The race-7 builder cast 7 of 8
 // results; these are its handlers with the casts removed.
 const bookclubSchema = `import { id, integer, schema, serverOnly, table, text, timestamp } from 'somewhere/db';

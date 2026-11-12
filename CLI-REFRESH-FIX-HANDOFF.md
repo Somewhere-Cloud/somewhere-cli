@@ -1,4 +1,4 @@
-# Handoff — clear re-login error instead of bare 401 (tsk_8ba2113d)
+# Handoff — clear re-login error instead of bare 401
 
 Branch: `fix/login-refresh-clear-error` (off master 0.15.0). **Not published, not version-tagged.** Founder review required before publish.
 

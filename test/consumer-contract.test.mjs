@@ -1,4 +1,4 @@
-// The CLI knows when it is out of date (tsk_0f3d05b9): its vendored platform bundle carries the
+// The CLI knows when it is out of date: its vendored platform bundle carries the
 // consumer contract it implements; every platform response announces the platform's; typecheck
 // and lint refuse to claim a clean result when the two are known to differ, and say "unknown"
 // when nothing has been recorded. Offline: a loopback server stands in for the platform.

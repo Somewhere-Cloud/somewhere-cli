@@ -1,4 +1,4 @@
--- swpx / swpm verdict cache (tsk_f30faf55).
+-- swpx / swpm verdict cache.
 -- One row per package@version. MAL advisories are NOT stored here — they are
 -- checked live against OSV on every request (a version can be retroactively
 -- flagged), so caching them would be unsafe.

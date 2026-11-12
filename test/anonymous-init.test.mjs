@@ -240,7 +240,7 @@ test('explicit opt-in installs only the selected host typecheck hook, without MC
   assert.equal(existsSync(join(result.base, '.claude.json')), false);
 });
 
-// tsk_97979518: a temporary session left by an old no-login deploy is no
+// : a temporary session left by an old no-login deploy is no
 // credential once expired; it never blocks the local starter.
 const expiredTemp = { token: 'smt_expired_temp', temporary: true, temp_expires_at: '2026-10-14T18:00:00.000Z',
   claim_url: 'https://somewhere.cloud/claim/old', user: { email: '', username: '' } };

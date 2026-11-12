@@ -1,6 +1,6 @@
 /**
  * Stored log and error text is untrusted: an app writes it, often from caller input. Render it as ONE
- * line of terminal output (tsk_f184baa4): C0 controls, DEL, C1 controls, the Unicode line/paragraph
+ * line of terminal output: C0 controls, DEL, C1 controls, the Unicode line/paragraph
  * separators and the bidirectional overrides become visible escapes (\n, \r, \t, \x1b, \u202e ...),
  * so a message can neither start a forged row nor send a terminal escape sequence. Other text,
  * non-ASCII included, is kept as written. JSON output never uses this: JSON.stringify escapes.
@@ -19,7 +19,7 @@ export function terminalSafe(value: unknown): string {
 }
 
 /**
- * A stored multi-line value (a crash stack) rendered under its record (tsk_da2dba3d). Each line is escaped as
+ * A stored multi-line value (a crash stack) rendered under its record. Each line is escaped as
  * above AND starts with one fixed continuation marker, so no line of untrusted text can begin at the margin
  * or pass as a record of its own (a stack line written to look like `  [info]  ...` stays visibly inside
  * the stack). The marker is the ONLY prefix a continuation line ever gets; the text cannot choose another.

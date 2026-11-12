@@ -108,7 +108,7 @@ export interface CollectedFiles {
   oversize: Array<{ path: string; bytes: number }>;
   /** Opt-ins that changed nothing: an --include entry or a "!" line in
    *  .somewhereignore that cannot publish what it names. Said, never silent
-   *  (pfb_7b36450727ee); the upload policy itself is unchanged. */
+   *; the upload policy itself is unchanged. */
   notes: Array<{ source: string; reason: string }>;
   /** Root files held back because they are not part of the app (notes, logs,
    *  transcripts). Always printed by name — see printExcludedFiles. */
@@ -143,7 +143,7 @@ export function collectFiles(baseDir: string, options: CollectOptions = {}): Col
   const sizes = new Map<string, number>();
   walk(baseDir, baseDir, out, ignore, candidates, sizes);
 
-  // ── Root publish surface (tsk_c166924f) ─────────────────────────────────
+  // ── Root publish surface ─────────────────────────────────
   // Split the candidates into "definitely the app" and "root files nothing
   // vouches for yet", then let the definite half vouch for the rest. A deploy
   // is a full replacement, so getting this wrong DELETES a live file — hence
@@ -155,7 +155,7 @@ export function collectFiles(baseDir: string, options: CollectOptions = {}): Col
   const publish: string[] = [];
   const deferred: string[] = [];
   for (const relPath of candidates) {
-    // Tests are not part of the app (pfb_f3cc58a01e76, tsk_746516): a test
+    // Tests are not part of the app (, ): a test
     // source file (`*.test.ts`, `*.spec.tsx`, …) under api/ would deploy as a
     // live route, and anything in a `tests/` or `__tests__/` folder is held back
     // by default. An app that imports helpers from a test folder publishes them
@@ -463,8 +463,8 @@ function escapeRegExp(ch: string): string {
 /** Refusal text when published source names a held-back credentials file, or
  *  null. Names paths only; never the file's contents. */
 /** A file that would be published is over the per-file limit. Deploying
- *  without it would remove the live copy, so nothing is sent (tsk_97979518,
- *  pfb_9c4d1d7fc75c). Deliberate exclusions (.somewhereignore, .gitignore)
+ *  without it would remove the live copy, so nothing is sent (,
+ *  ). Deliberate exclusions (.somewhereignore, .gitignore)
  *  are how a large local file stays out. */
 export function oversizeRefusal(collected: Pick<CollectedFiles, 'oversize'>): string | null {
   if (collected.oversize.length === 0) return null;
@@ -491,7 +491,7 @@ function includeHadNoEffect(baseDir: string, raw: string, published: string[]): 
  * batch the way a deploy judges the tree: files the project's .gitignore or
  * .somewhereignore keeps out are not uploaded, and an uploaded file over the
  * per-file limit refuses the whole batch before anything is read or sent
- * (pfb_9c4d1d7fc75c). `paths` are relative to `baseDir`.
+ *. `paths` are relative to `baseDir`.
  */
 export function previewBatchCheck(baseDir: string, paths: string[]): { upload: string[]; ignored: string[]; oversize: Array<{ path: string; bytes: number }> } {
   const ignore = loadDeployIgnore(baseDir);

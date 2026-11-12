@@ -7,7 +7,7 @@ import ts from 'typescript';
 import { createFeatureTemplate } from '../dist/lib/init-feature-template.js';
 import { resolveInitSelection } from '../dist/lib/init-features.js';
 
-// tsk_da2dba3d (rank 2 of TRANSCRIPT-RANKING, Haiku invites run): after a failed
+//  (rank 2 of TRANSCRIPT-RANKING, Haiku invites run): after a failed
 // session check the starter always said "The server didn't answer. Check your
 // connection", even when the server answered 5xx, and never said the sign-in
 // state is unknown rather than failed, so an agent assumed its single-use link

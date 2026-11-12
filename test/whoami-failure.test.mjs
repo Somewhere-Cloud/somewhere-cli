@@ -69,7 +69,7 @@ test('HTML 503 (untyped): still non-zero, but not reported as an expired login',
   assert.deepEqual(json.config, stored);
 });
 
-// A typed refusal is the platform's own diagnosis: print its code and message, never a guess (tsk_224b77a0).
+// A typed refusal is the platform's own diagnosis: print its code and message, never a guess.
 for (const [name, status, code, message] of [
   ['out-of-date client (401)', 401, 'CLIENT_UPDATE_REQUIRED', 'This version of the Somewhere CLI is out of date. Access through this client version is revoked. Update with: npm i -g @somewhere-cloud/cli@latest, then run somewhere login.'],
   ['invalid key (401)', 401, 'INVALID_API_KEY', 'Invalid API key'],

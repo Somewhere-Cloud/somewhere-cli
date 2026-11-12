@@ -8,7 +8,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildRecord, buildPacket, routeTemplate } from '../dist/lib/repro-packet.js';
 
-// tsk_da2dba3d: the repro packet holds only typed, validated fields. Every canary below is planted
+// : the repro packet holds only typed, validated fields. Every canary below is planted
 // where a real failure carries free text (message, hint, data, headers, arguments, SQL, URL query,
 // project refs); none may reach last-error.json, the packet, or stdout.
 const distIndex = join(dirname(fileURLToPath(import.meta.url)), '..', 'dist', 'index.js');
@@ -81,7 +81,7 @@ test('a failure carrying secrets everywhere leaves only typed fields in last-err
   assert.equal(packet.recipe.rerun_original, false, 'a mutation with an unknown outcome is never rerun');
   assert.equal(packet.submit.automatic, false);
   // omitted names only failure parts the packet never reads; it makes no content guarantee about
-  // tokens, passwords or emails (platform #875, tsk_da2dba3d).
+  // tokens, passwords or emails (platform #875, ).
   assert.ok(packet.omitted.includes('message') && packet.omitted.includes('headers') && packet.omitted.includes('cookies'));
   for (const claim of ['tokens', 'passwords', 'emails']) assert.equal(packet.omitted.includes(claim), false, `no unproven content claim: ${claim}`);
   for (const step of packet.recipe.investigate) {

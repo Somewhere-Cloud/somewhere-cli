@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Round-trip invariant gate (tsk_dbc8f506, bug-class family 10):
+ * Round-trip invariant gate (, bug-class family 10):
  *
  *   deploy(tree) → pull → pulled tree is BYTE-IDENTICAL to what was deployed
  *   → deploy --dry-run of the pulled tree reports NO changes.
@@ -12,7 +12,7 @@
  * Each fixture runs on a fresh THROWAWAY project, archived afterwards.
  * Runs only with BOTH SOMEWHERE_LIVE_DEPLOY_TEST=1 and SOMEWHERE_TEST_TOKEN set;
  * the signed-in ~/.somewhere/config.json is never read, and the CLI runs with
- * its own config root holding the test token (tsk_fc1afab0).
+ * its own config root holding the test token.
  * Run: SOMEWHERE_LIVE_DEPLOY_TEST=1 SOMEWHERE_TEST_TOKEN=<test account key> node scripts/e2e-roundtrip.mjs
  */
 import { execFileSync } from 'node:child_process';
@@ -193,7 +193,7 @@ for (const [fixtureName, build] of Object.entries(FIXTURES)) {
       dryRun.split('\n').filter((l) => /Added|Modified|Removed/.test(l)).join(' | ') || dryRun.slice(0, 300),
     );
 
-    // 3. Server-only code never publicly served (pfb_f8d58b19 class).
+    // 3. Server-only code never publicly served ( class).
     if (fixtureName === 'functions-only') {
       const res = await fetch(`https://${project.subdomain}.somewhere.tech/_lib/secret.ts`);
       const text = await res.text();

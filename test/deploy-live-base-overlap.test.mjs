@@ -1,5 +1,5 @@
 // `deploy --project <uuid>` from a folder with no recorded base: the live-base read (GET /deploy/status) starts beside
-// the project resolve (GET /projects/<ref>) instead of after it (tsk_11b822ce). Its result is used only when the
+// the project resolve (GET /projects/<ref>) instead of after it. Its result is used only when the
 // resolve confirms the same canonical id; every refusal, the base selection and the request bodies are unchanged.
 // Held I/O against a local server: the resolve is held until the status read ARRIVES, so a serial client times out
 // of the hold instead.

@@ -30,7 +30,7 @@ export function registerLogs(program: Command) {
     .option('--follow', 'Keep polling for new logs')
     .option('--json', 'Print logs as newline-delimited JSON objects')
     .action(async (project: string | undefined, opts) => {
-      // A bad --tail is refused, never silently replaced (pfb_7b36450727ee).
+      // A bad --tail is refused, never silently replaced.
       if (!/^\d+$/.test(String(opts.tail)) || !Number.isSafeInteger(Number(opts.tail)) || Number(opts.tail) < 1) {
         error(`--tail must be a whole number of lines, from 1 to ${Number.MAX_SAFE_INTEGER} (got "${String(opts.tail)}").`);
         process.exit(1);
@@ -160,7 +160,7 @@ function parseTraceOption(value: string | undefined): string | undefined {
 function printStack(log: LogRow): void {
   const stack = log.data && typeof log.data === 'object' ? (log.data as { stack?: unknown }).stack : undefined;
   if (typeof stack !== 'string' || !stack) return;
-  // Each stack line carries the fixed continuation marker and is escaped like a message (tsk_da2dba3d):
+  // Each stack line carries the fixed continuation marker and is escaped like a message:
   // indentation alone let a stack line pass as a record of its own.
   for (const line of terminalContinuation(stack, 30)) console.log(dim(line));
 }

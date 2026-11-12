@@ -20,7 +20,7 @@ export interface PlatformToolCallOptions {
 }
 
 /** The typed fields of an ordered-edit refusal (project_patch / fs_replace `edits`,
- *  tsk_81dd50f0): which edit failed and why, the same handles the MCP response carries. */
+ *  ): which edit failed and why, the same handles the MCP response carries. */
 export interface EditRefusalDetail {
   edit_index?: number;
   path?: string;
@@ -235,7 +235,7 @@ async function withPlatformClient<T>(
   } catch (err) {
     // An HTTP refusal of the MCP request itself carries the platform's code and
     // message inside the SDK's flattened text: keep them typed, so every formatter
-    // prints them (tsk_224b77a0).
+    // prints them.
     const http = mcpHttpFailure(err);
     if (http?.code) {
       throw new PlatformToolError('mcp', `${http.code}: ${http.message}`, http.code, http.message, undefined, {}, http.status);
@@ -252,7 +252,7 @@ export async function listPlatformTools(
   options: PlatformToolCallOptions = {},
 ): Promise<Tool[]> {
   // The platform pages tools/list; reading only the first page hides later
-  // tools from `call --list` and from the linked-project default (tsk_bc255b87).
+  // tools from `call --list` and from the linked-project default.
   return withPlatformClient(options, async (client) => {
     const tools: Tool[] = [];
     const seen = new Set<string>();

@@ -125,7 +125,7 @@ export function registerTypecheck(program: Command) {
 
 /** Print the local TypeScript check verdict. */
 export function reportTypecheck(result: TypecheckResult): void {
-  // An unknown platform contract is said once, never presented as a match (tsk_0f3d05b9).
+  // An unknown platform contract is said once, never presented as a match.
   if (result.contract?.status === 'unknown') info(dim(result.contract.message));
   if (result.spawnError) {
     // A refusal (missing type packages) or a stopped run says what happened in

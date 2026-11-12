@@ -6,7 +6,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-// tsk_d0c55c3c: collapse only classified client disconnects in human output.
+// : collapse only classified client disconnects in human output.
 test('errors collapses recognized disconnects while preserving ambiguous outcomes and raw JSON', async () => {
   const base = { endpoint: '/api/poll', method: 'GET', status_code: 499, source: 'function', kind: 'refusal', created_at: new Date().toISOString() };
   const explicit = { ...base, id: 'explicit', error_code: 'CLIENT_DISCONNECTED', error_message: 'Caller closed connection' };

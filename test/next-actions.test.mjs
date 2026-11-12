@@ -33,7 +33,7 @@ test('init sends a brand-new project to deploy first, and only then to dev', () 
   assert.equal(commands[0], 'somewhere deploy');
   // `somewhere dev` proxies API calls to the DEPLOYED origin and refuses on a
   // project with no release (lib/project-urls.ts). Suggesting it first is the
-  // bug this module was written for (pfb_9a035f5ac8e9) — it must stay last,
+  // bug this module was written for — it must stay last,
   // and it must say it comes after the deploy.
   const dev = actions.find((a) => a.command === 'somewhere dev');
   assert.ok(dev, `no dev step in ${JSON.stringify(commands)}`);

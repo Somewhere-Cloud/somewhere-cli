@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-// tsk_da2dba3d (Journey tcm_b2713a6e): control-byte escaping alone still let a stack line visually forge a log
+//  (Journey tcm_b2713a6e): control-byte escaping alone still let a stack line visually forge a log
 // row, because continuation lines were only indented. Every stack continuation now carries one fixed marker,
 // so untrusted text can never begin a line or pass as a record at ANY indentation. --json stays exact.
 const here = dirname(fileURLToPath(import.meta.url));

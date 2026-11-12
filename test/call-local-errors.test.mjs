@@ -1,4 +1,4 @@
-// tsk_da2dba3d: distinguish local call admission from platform/unknown outcomes.
+// : distinguish local call admission from platform/unknown outcomes.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';

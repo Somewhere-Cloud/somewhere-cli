@@ -194,7 +194,7 @@ export async function recoverClaimHandoff(): Promise<ClaimHandoffRecovery> {
     // The server says the continuation expired (terminal) and this machine's
     // temporary session is past its own expiry too: neither can be used again,
     // so an unrelated command (init, a deploy that starts fresh) must not stop
-    // on it (tsk_97979518). Only that exact dead record is dropped.
+    // on it. Only that exact dead record is dropped.
     if (envelope.error === 'CLAIM_CLI_HANDOFF_EXPIRED' && temporaryConfigExpired(config)) {
       dropExpiredHandoff(config.token, state);
       return {

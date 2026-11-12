@@ -1,4 +1,4 @@
-// tsk_81dd50f0 (friction sweep F1): `somewhere call <tool> --file <path>` reads the
+//  (friction sweep F1): `somewhere call <tool> --file <path>` reads the
 // JSON arguments object from a file, so a large project_patch `edits` array never
 // has to fit on a command line. Inline JSON and --file are exclusive; every local
 // refusal says the tool was not called and sends nothing.

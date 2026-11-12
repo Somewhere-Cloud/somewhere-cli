@@ -1,4 +1,4 @@
-// tsk_0a027a93: `somewhere call <tool> '{}'` in a linked directory runs against
+// : `somewhere call <tool> '{}'` in a linked directory runs against
 // the linked project, as the first-class commands do. An explicit project_id
 // always wins; account-wide results need --all-projects.
 import test from 'node:test';
@@ -92,7 +92,7 @@ test('the CLI sends the linked project for cron_list, keeps an explicit one, and
   }
 });
 
-// tsk_bc255b87: the platform pages tools/list. A tool on a later page must
+// : the platform pages tools/list. A tool on a later page must
 // still get the linked project, and `call --list` must show every page.
 test('the linked project reaches a project tool listed on a later tools/list page', async () => {
   const home = mkdtempSync(join(tmpdir(), 'sw-call-paged-home-'));

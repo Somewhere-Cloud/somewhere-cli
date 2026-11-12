@@ -51,7 +51,7 @@ export function loadBaseFiles(dir: string, projectId: string, releaseId: string 
 
 /**
  * The last rollback or restore this folder ran, so a later refused deploy can
- * say the live version is this folder's own doing (tsk_0dcd7530).
+ * say the live version is this folder's own doing.
  */
 export interface LastActivation {
   project_id: string;

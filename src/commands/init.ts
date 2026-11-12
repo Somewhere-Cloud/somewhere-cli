@@ -190,7 +190,7 @@ export function registerInit(program: Command) {
       // provisioning and its proof-of-work / temporary-session isolation.
       // An expired temporary session (left by an earlier no-login deploy) is
       // no credential at all: it never blocks the local starter, and deploy
-      // replaces it with a fresh one (tsk_97979518).
+      // replaces it with a fresh one.
       const storedConfig = loadConfig();
       if (!hasUsableCredential(storedConfig) && !opts.link && !opts.bare) {
         const expiredTemporaryAt = temporaryConfigExpired(storedConfig) ? storedConfig.temp_expires_at : undefined;
@@ -541,7 +541,7 @@ export function writeInitSkills(dir: string): { version: string } | { kept: stri
   return installSkills(dir, BUNDLED_SKILLS_PACK, { cli: CLI_VERSION, source: 'bundled' });
 }
 
-/** Say which CLI version this folder is now pinned to (tsk_a4641877). */
+/** Say which CLI version this folder is now pinned to. */
 function reportPin(dir: string): void {
   recordPinIfMissing(dir, CLI_VERSION);
   const pin = readProjectPin(dir);

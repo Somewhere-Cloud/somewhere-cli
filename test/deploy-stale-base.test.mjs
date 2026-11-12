@@ -76,7 +76,7 @@ async function withServer(handler, fn) {
   }
 }
 
-test('a full deploy sends its complete function map as the replacement; partial scopes keep omitted functions unless asked (pfb_f320d7733b8c)', async () => {
+test('a full deploy sends its complete function map as the replacement; partial scopes keep omitted functions unless asked', async () => {
   const testHome = mkdtempSync(join(tmpdir(), 'sw-replace-functions-home-'));
   const fixtureDir = mkdtempSync(join(tmpdir(), 'sw-replace-functions-fixture-'));
   writeLogin(testHome);
@@ -117,7 +117,7 @@ test('a full deploy sends its complete function map as the replacement; partial 
   assert.equal(Object.hasOwn(bodies[4], 'replace_functions'), false, 'functions-only keeps omitted functions by default');
 });
 
-test('deploy output names removed and kept functions, and says nothing when there are none (pfb_f320d7733b8c)', async () => {
+test('deploy output names removed and kept functions, and says nothing when there are none', async () => {
   const testHome = mkdtempSync(join(tmpdir(), 'sw-function-report-home-'));
   const fixtureDir = mkdtempSync(join(tmpdir(), 'sw-function-report-fixture-'));
   writeLogin(testHome);
@@ -852,7 +852,7 @@ test('promote writes the returned version to the linked project state', async ()
 });
 
 // --- Release-native CAS (STALE_RELEASE_BASE) — the live path base_version alone
-// does NOT protect (tsk_5e729c8): the platform enforces staleness on the
+// does NOT protect: the platform enforces staleness on the
 // release-native deploy via base_release_id, returning 409 STALE_RELEASE_BASE.
 // The CLI must anchor the release it last deployed and refuse when it moved.
 
@@ -1105,7 +1105,7 @@ test('pull persists active_release_id so the next deploy anchors base_release_id
   });
 });
 
-// tsk_07232dc7: the folder's recorded source base is what deploy sends —
+// : the folder's recorded source base is what deploy sends —
 // null (genesis) for a project created empty here — and a folder with no
 // record is never given one from the server.
 test('a project created empty here deploys from genesis and records the published release', async () => {
@@ -1163,7 +1163,7 @@ test('a folder with no recorded base gets BASE_REQUIRED explained and nothing is
     assert.match(result.stderr, /no record of which published version its files came from/);
     assert.match(result.stderr, /somewhere pull/);
     assert.deepEqual(requests.filter((r) => !r.startsWith('GET /v1/projects') && r !== 'POST /v1/deploy/prestart'), ['POST /v1/deploy'], 'one deploy request; no source/status read to manufacture a base');
-    assert.equal(requests.filter((r) => r === 'POST /v1/deploy/prestart').length, 1, 'one prestart (tsk_a92c59b9), which reads nothing');
+    assert.equal(requests.filter((r) => r === 'POST /v1/deploy/prestart').length, 1, 'one prestart, which reads nothing');
     assert.equal(readProject(fixtureDir).source_base, undefined);
   });
 });
@@ -1205,7 +1205,7 @@ test('promote does not advance the folder source base; the next deploy still nam
   });
 });
 
-// ── Explicit --project binds to the verified live release (founder 2026-10-23, tsk_832371f0) ──
+// ── Explicit --project binds to the verified live release (founder 2026-10-23, ) ──
 // An unlinked folder that names its target deploys without --force: the CLI reads the
 // project's live release first and declares it as base_release_id, so the server's
 // stale-overwrite fence still decides. A linked folder's recorded base wins; a link to a

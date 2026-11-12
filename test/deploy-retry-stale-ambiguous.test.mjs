@@ -1,5 +1,5 @@
 // A deploy whose first attempt timed out may have gone live; it is never re-sent
-// and never reported "NOT applied" (tsk_8a68dfa2 item 1, pfb_47695233e613):
+// and never reported "NOT applied" ( item 1, ):
 //   - first attempt times out → one send, outcome unknown, exit non-zero;
 //   - first attempt answered by the platform with retry: true (it changed
 //     nothing), retry refused stale → the existing "NOT applied" explanation;
@@ -68,7 +68,7 @@ async function deploy(firstAttempt, extraArgs = []) {
   }
 }
 
-// A timed-out first attempt is no longer re-sent (pfb_47695233e613): its
+// A timed-out first attempt is no longer re-sent: its
 // outcome is unknown and is reported as such, so no stale refusal of a resend
 // can be misread as "not applied".
 test('a deploy whose first attempt times out is not re-sent; its outcome is reported unknown', async () => {

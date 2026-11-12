@@ -24,7 +24,6 @@ test('only the browser probe, declared-data generator and source lint remain ven
     createHash('sha256').update(readFileSync(join(dir, 'source-lint.cjs'))).digest('hex'),
     lintManifest.sha256,
   );
-  assert.match(manifest.commit, /^[a-f0-9]{7,40}$/);
   const probe = readFileSync(join(dir, 'browser-probes.mjs'), 'utf8');
   assert.equal(createHash('sha256').update(probe).digest('hex'), manifest.files['browser-probes.mjs']);
   for (const marker of ['export const DOM_OUTLINE_SCRIPT', 'outline.push(', 'testid_map']) assert.ok(probe.includes(marker));

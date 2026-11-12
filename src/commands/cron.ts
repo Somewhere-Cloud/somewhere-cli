@@ -118,7 +118,7 @@ function cronRows(value: unknown): CronRow[] {
 
 /** The plan's schedule policy, which the platform returns for a one-project
  *  listing. Printed even when the list is empty, so an agent learns whether a
- *  schedule will be accepted before trying (tsk_a86f8a12). */
+ *  schedule will be accepted before trying. */
 export function cronPolicyLine(value: unknown): string | null {
   const data = unwrapPlatformData(value);
   const policy = isRecord(data) && isRecord(data.policy) ? data.policy : null;
@@ -498,7 +498,7 @@ export function registerCron(program: Command): void {
         if (rows.length === 0) {
           console.log(dim('No scheduled triggers.'));
         } else {
-          // Each trigger's schedule is read in its own stored zone (tsk_b07f1dac).
+          // Each trigger's schedule is read in its own stored zone.
           table(['ID', 'Name', 'Schedule', 'Time zone', 'Handler', 'Enabled', 'Next run (UTC)'], rows.map((row) => [
             cronRowId(row) ?? '—',
             truncateText(row.name, 32),

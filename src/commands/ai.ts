@@ -6,7 +6,7 @@ import { getToken } from '../lib/config.js';
 import { dim, error, info, printJson, printJsonError, success, teal } from '../lib/output.js';
 
 // `somewhere ai keys` — a project's own AI provider keys (bring your own key,
-// tsk_c91717a5). Routes: worker/src/routes/ai-provider-keys.ts.
+// ). Routes: worker/src/routes/ai-provider-keys.ts.
 //   GET    /v1/ai/provider-keys?project_id=        → { project_id, keys: [{ provider, updated_at }] }
 //   POST   /v1/ai/provider-keys { project_id, provider, key } → { project_id, provider, set: true }
 //   DELETE /v1/ai/provider-keys/:project_id/:provider → { project_id, provider, deleted: true }

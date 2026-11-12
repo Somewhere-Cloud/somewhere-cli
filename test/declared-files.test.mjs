@@ -1,4 +1,4 @@
-// somewhere:files local types (pfb_3a25c9e8d7db). The declaration comes from the
+// somewhere:files local types. The declaration comes from the
 // vendored platform compiler (typed-files.cjs describeFilesClient over the
 // worker's declaredFilesFromSource), so a local typecheck sees exactly the
 // collections and operations the deploy compile generates. Both directions:

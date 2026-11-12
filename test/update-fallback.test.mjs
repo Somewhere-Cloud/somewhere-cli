@@ -1,4 +1,4 @@
-// tsk_f681c871: every `somewhere update` refusal names the npm command that
+// : every `somewhere update` refusal names the npm command that
 // still works, and agents on a CLI a minor release or more behind are told so
 // once a day, even with piped (non-TTY) output.
 import assert from 'node:assert/strict';
@@ -119,7 +119,7 @@ test('outdated warning: minor gap warns once a day; patch gap and current stay q
   const first = await getOutdatedWarning('0.33.10', options(now));
   assert.match(first, /somewhere CLI 0\.33\.10 is behind the latest release 0\.37\.6/);
   assert.match(first, /npm i -g @somewhere-cloud\/cli@latest/);
-  // A project pin keeps selecting its recorded CLI after a global update (tsk_224b77a0): say how to move it.
+  // A project pin keeps selecting its recorded CLI after a global update: say how to move it.
   assert.match(first, /records an older CLI version keeps using it: run somewhere upgrade in that project/);
   assert.doesNotMatch(first, /\n/);
   assert.equal(await getOutdatedWarning('0.33.10', options(now + 60_000)), null, 'once a day');

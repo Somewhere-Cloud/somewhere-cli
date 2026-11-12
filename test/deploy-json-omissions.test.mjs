@@ -56,7 +56,7 @@ test('--json names every local omission on stderr and leaves stdout as the deplo
     'public/linked.txt': null,
   });
   assert.equal(result.status, 0, result.stderr);
-  // tsk_23f34679: stdout is the server's answer plus the exact paths the request carried.
+  // : stdout is the server's answer plus the exact paths the request carried.
   assert.deepEqual(JSON.parse(result.stdout), { ...dryRun, uploaded: { static_files: ['index.html'], functions: [] } });
   const lines = result.stderr.trim().split('\n').filter((line) => /^(not published|never uploaded|not uploaded): /.test(line));
   assert.deepEqual(lines.map((line) => line.split(' — ')[0]), [

@@ -5,7 +5,7 @@
  * returns it in `steps[].result`. The text formatter read only `result`, so the
  * default output mode of the command an agent uses to assert on a live page
  * silently dropped what it asserted — `--json` had it all along
- * (pfb_4a4d8dd84186).
+ *.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';

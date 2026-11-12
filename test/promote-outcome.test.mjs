@@ -12,7 +12,7 @@ import {
 
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
 
-// tsk_33023348 — a promote that lands must never be reported as a failure, and
+//  — a promote that lands must never be reported as a failure, and
 // a refusal must never assert "production was not changed" unchecked.
 
 test('a readable refusal is a decision; anything else leaves the outcome unknown', () => {

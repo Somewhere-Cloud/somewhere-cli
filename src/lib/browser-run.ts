@@ -121,7 +121,7 @@ const NAVIGATION_TIMEOUT_MS = 30_000;
  * for one, so a 404 there says nothing about the app — and the hosted verdict
  * never counted it, because a deployed project answers that path. Counting it
  * locally made `somewhere init`'s own scaffold report FAIL with a clean page
- * underneath (tsk_10be456b). A favicon the page DECLARES has initiator type
+ * underneath. A favicon the page DECLARES has initiator type
  * `parser`, so a broken declared icon still fails, as it should.
  */
 export function isBrowserOwnFaviconRequest(url: string | undefined, initiatorType: string | undefined): boolean {
@@ -518,7 +518,7 @@ export async function runLocalBrowser(req: LocalBrowserRequest): Promise<LocalBr
     // comes first, drop the other's timer rather than leaving it armed. The
     // budget is the navigation's, NOT the whole run's: spending every second on
     // a document that never loads and then reporting as if it had is what made
-    // this command look hung (tsk_a605ff7b).
+    // this command look hung.
     const navigationBudgetMs = Math.max(0, Math.min(NAVIGATION_TIMEOUT_MS, deadline - Date.now()));
     let loadTimer: ReturnType<typeof setTimeout> | undefined;
     await Promise.race([
@@ -611,7 +611,7 @@ export async function runLocalBrowser(req: LocalBrowserRequest): Promise<LocalBr
     } catch (err) {
       // A probe that could not run leaves the map UNKNOWN. Reporting it as an
       // empty outline would print "0 interactive elements" — a claim about the
-      // page that nothing here measured (pfb_57c43192d553).
+      // page that nothing here measured.
       domError = `DOM probe failed: ${err instanceof Error ? err.message : String(err)}`;
       consoleErrors.push(`[inspect] ${domError}`);
     }

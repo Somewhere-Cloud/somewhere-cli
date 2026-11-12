@@ -1,5 +1,5 @@
 // Which directories `somewhere init` writes a starter into, links as existing
-// source, or refuses, decided before any request (pfb_82e8752b7581). A
+// source, or refuses, decided before any request. A
 // fixture API refuses every call and records it, so "nothing was created" is
 // the recorded request list, never a real project.
 import assert from 'node:assert/strict';

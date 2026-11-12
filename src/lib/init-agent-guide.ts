@@ -72,6 +72,13 @@ For cross-user managed work, authorize the caller and use \`sw.db.server.from\` 
 Core contract:
 - Schema is declaration only: imports and one default schema({...}) export. No
   helper functions, loops, computed expressions or arbitrary TypeScript.
+Schema call shape (db/schema.ts):
+\`\`\`ts
+import { schema, table, id, text, serverOnly } from 'somewhere/db';
+export default schema({
+  greetings: table({ id: id(), message: text() }, { scope: serverOnly() }),
+});
+\`\`\`
 - owner(): personal rows; group()/parent membership: invited teams and their children.
 - serverOnly(): every operation goes through a function with its own authorization.
 - publicRead: { where }: visitor reads of explicitly selected rows; client.read includes the primary key.

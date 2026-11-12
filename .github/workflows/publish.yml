@@ -114,3 +114,21 @@ jobs:
           if [ -n "${NODE_AUTH_TOKEN:-}" ] || [ -n "${NPM_TOKEN:-}" ]; then echo "an npm token is set; this publisher authenticates only through OIDC" >&2; exit 1; fi
           if npm view "@somewhere-cloud/cli@$EXPECTED_VERSION" version >/dev/null 2>&1; then echo "@somewhere-cloud/cli@$EXPECTED_VERSION already exists on npm" >&2; exit 1; fi
           npm publish --provenance --access public
+
+      - name: Confirm npm serves the published version
+        env:
+          EXPECTED_VERSION: ${{ steps.candidate.outputs.version }}
+        run: |
+          actual=$(npm view "@somewhere-cloud/cli@$EXPECTED_VERSION" version --registry=https://registry.npmjs.org --fetch-retries=0 --fetch-timeout=15000) || {
+            echo "::error::publish reported success but npm does not have it"
+            exit 1
+          }
+          if [ "$actual" != "$EXPECTED_VERSION" ]; then
+            echo "::error::publish reported success but npm does not have it"
+            exit 1
+          fi
+          latest=$(npm view @somewhere-cloud/cli dist-tags.latest --registry=https://registry.npmjs.org --fetch-retries=0 --fetch-timeout=15000)
+          if [ "$latest" != "$EXPECTED_VERSION" ]; then
+            echo "::error::npm latest is $latest, expected $EXPECTED_VERSION"
+            exit 1
+          fi

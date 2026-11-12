@@ -1023,7 +1023,7 @@ Republish the platform contract 6 CLI after npm accepted earlier uploads without
   every named step, page/console/network health, and desktop and mobile
   screenshots. `somewhere deploy --verify <flow.json>` can run the same check
   immediately after publishing.
-  During the platform #24 rollout, hosted action flows on an older serving
+  During the platform rollout, hosted action flows on an older serving
   release fail honestly with a missing-screenshot or unfiltered expected-
   refusal health result; they do not crash or report a false pass. Re-run the
   same command after the rollout reaches the project.

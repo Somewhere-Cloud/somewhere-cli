@@ -581,7 +581,8 @@ export const APP_TAGLINE = "Build your app in src/pages/HomePage.tsx.";
 // "Continue with …" buttons above the email form, in this order. The platform
 // owns the OAuth clients, so nothing else is needed: Google is on by default;
 // remove it for email-only sign-in, or add 'github' / 'discord' and deploy.
-export const SIGN_IN_PROVIDERS: SignInProvider[] = ['google'];
+export const SIGN_IN_PROVIDERS: SignInProvider[] = [];
+export const SHOW_EMAIL_VERIFICATION = false;
 `;
 }
 
@@ -3121,9 +3122,9 @@ export function VerifyEmailPanel({ verification }: { verification: EmailVerifica
 function signedInLayout(): string {
   let out = replaceOnce(SIGNED_IN_LAYOUT, "import { useSignOut } from '../auth/hooks';\n",
     "import { useSignOut } from '../auth/hooks';\nimport { useEmailVerification } from '../auth/useEmailVerification';\n");
-  out = replaceOnce(out, "import { AppShell } from '../ui/AppShell';\n", "import { AppShell } from '../ui/AppShell';\nimport { VerifyEmailPanel } from '../ui/VerifyEmail';\n");
+  out = replaceOnce(out, "import { AppShell } from '../ui/AppShell';\n", "import { AppShell } from '../ui/AppShell';\nimport { VerifyEmailPanel } from '../ui/VerifyEmail';\nimport { SHOW_EMAIL_VERIFICATION } from '../config';\n");
   out = replaceOnce(out, '  const signOut = useSignOut();\n', '  const signOut = useSignOut();\n  const verification = useEmailVerification();\n');
-  out = replaceOnce(out, '      {children}\n', '      <VerifyEmailPanel verification={verification} />\n      {children}\n');
+  out = replaceOnce(out, '      {children}\n', '      {SHOW_EMAIL_VERIFICATION ? <VerifyEmailPanel verification={verification} /> : null}\n      {children}\n');
   return out;
 }
 

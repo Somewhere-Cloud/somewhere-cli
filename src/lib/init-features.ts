@@ -17,7 +17,7 @@ interface InitModuleDefinition {
 const MODULES: readonly InitModuleDefinition[] = [
   {
     id: 'auth',
-    summary: 'Email/password sign-up, sign-in and sign-out through the SDK cookie session: the packaged /api/auth route, auth hooks over the SDK provider, a sign-in page, a "Forgot password?" link with /forgot-password and /reset-password pages over api/forgot-password.ts and api/reset-password.ts (sw.auth.forgot, sw.auth.reset), a "Verify your email" code panel for password accounts (the session decides the account; no token in page code), the /auth/magic page that sign-in and sw.auth.invite (group) invitation links open, routed in front of the sign-in gate (it redeems the one-time token once and opens the link\'s redirect_uri only when it is a page of this app), and a per-user private boundary behind a loading state. This is what plain `somewhere init` writes.',
+    summary: 'Email/password sign-up, sign-in and sign-out through the SDK cookie session: the packaged /api/auth route, auth hooks over the SDK provider, a sign-in page, a "Forgot password?" link with /forgot-password and /reset-password pages over api/forgot-password.ts and api/reset-password.ts (sw.auth.forgot, sw.auth.reset), a "Verify your email" code panel for password accounts (the session decides the account; no token in page code), the /auth/magic page that sign-in and sw.auth.invite (group) invitation links open, routed in front of the sign-in gate (an explicit Continue press redeems the one-time token once and opens the link\'s redirect_uri only when it is a page of this app), and a per-user private boundary behind a loading state. This is what plain `somewhere init` writes.',
     requires: [],
   },
   {

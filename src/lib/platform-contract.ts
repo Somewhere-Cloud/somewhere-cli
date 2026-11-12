@@ -69,6 +69,7 @@ export function recordPlatformContract(headers: { get(name: string): string | nu
   file.origins[origin] = seen;
   mkdirSync(cliConfigDir(), { recursive: true, mode: 0o700 });
   writeFileSync(seenPath(), JSON.stringify(file, null, 2) + '\n', { mode: 0o600 });
+  warnContract({ ...vendor().consumerContractVerdict(cliConsumerContract(), seen, now), cli: cliConsumerContract(), platform: seen });
   return seen;
 }
 
@@ -84,11 +85,15 @@ export function seenPlatformContract(apiBase: string): SeenPlatformContract | nu
 export function platformContractVerdict(apiBase: string, now = Date.now()): ContractVerdict {
   const cli = cliConsumerContract();
   const platform = seenPlatformContract(apiBase);
-  return { ...vendor().consumerContractVerdict(cli, platform, now), cli, platform };
+  const verdict = { ...vendor().consumerContractVerdict(cli, platform, now), cli, platform };
+  warnContract(verdict);
+  return verdict;
 }
 
-/** The typecheck error a known-incompatible verdict becomes. */
-export function contractError(verdict: ContractVerdict): { file: string; line: number; column: number; code: string; message: string } | null {
-  if (verdict.compatible !== false) return null;
-  return { file: '.', line: 1, column: 1, code: `CLI_CONTRACT_${verdict.status.toUpperCase()}`, message: verdict.message };
+/** Contract drift is advisory; each command prints at most one plain line. */
+let warned = false;
+function warnContract(verdict: ContractVerdict): void {
+  if (warned || verdict.compatible !== false) return;
+  warned = true;
+  console.error(`Warning: CLI consumer contract ${verdict.cli?.version ?? 'unknown'} differs from platform ${verdict.platform?.version ?? 'unknown'}; continuing with this CLI's checks.`);
 }

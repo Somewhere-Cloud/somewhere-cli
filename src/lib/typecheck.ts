@@ -17,7 +17,7 @@ import { fileURLToPath } from 'node:url';
 import { SCAFFOLD_TSCONFIG_FILENAME } from './scaffold.js';
 import { TYPECHECK_TYPESCRIPT_VERSION } from './typecheck-version.js';
 import { API_BASE_URL } from './client.js';
-import { contractError, platformContractVerdict, type ContractVerdict } from './platform-contract.js';
+import { platformContractVerdict, type ContractVerdict } from './platform-contract.js';
 import { prepareDeclaredData, type LocalDeclaredData } from './declared-data.js';
 
 export interface TypeError {
@@ -402,13 +402,9 @@ export function runTypecheck(
   projectDir: string,
   options: { installTypePackages?: TypePackageInstaller | false; apiBase?: string } = {},
 ): Promise<TypecheckResult> {
-  // Decided first, so a CLI known to be out of date never reports its older rules' verdict
-  // (a schema refusal included) as the platform's. Unknown is stated, not guessed.
+  // Contract drift is advisory; code diagnostics determine success.
   const contract = platformContractVerdict(options.apiBase ?? API_BASE_URL);
-  const outdated = contractError(contract);
-  const withContract = (result: TypecheckResult): TypecheckResult => (outdated
-    ? { ...result, ok: false, errors: [outdated, ...result.errors], contract }
-    : { ...result, contract });
+  const withContract = (result: TypecheckResult): TypecheckResult => ({ ...result, contract });
   let declaredData: LocalDeclaredData | undefined;
   try { declaredData = prepareDeclaredData(projectDir); }
   catch (error) {

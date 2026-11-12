@@ -54,7 +54,7 @@ export async function lintProject(directory: string, options: { generic?: boolea
   const generic: GenericLintResult = options.generic ? genericLint(directory) : { status: 'not-requested', findings: [] };
   return {
     ...report,
-    ok: collected.skipped.length === 0 && !['failed', 'unavailable'].includes(generic.status) && contract.compatible !== false,
+    ok: collected.skipped.length === 0 && !['failed', 'unavailable'].includes(generic.status),
     duration_ms: Math.round((performance.now() - started) * 1000) / 1000,
     checked_files: Object.keys(collected.files).length + Object.keys(collected.functions).length,
     skipped: collected.skipped,

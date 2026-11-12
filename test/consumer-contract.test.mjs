@@ -78,30 +78,30 @@ test('same contract: current; the typecheck verdict is its own', async () => {
   assert.equal(result.ok, true, result.raw);
 });
 
-test('a newer platform contract: typecheck and lint never claim a clean result', async () => {
+test('a newer platform contract: real typecheck and lint results remain successful', async () => {
   reset();
   recordPlatformContract(header(CLI.version + 1, 'b'.repeat(64)), 'https://api.example.test/v1/me');
   const result = await runTypecheck(project());
-  assert.equal(result.ok, false);
-  assert.equal(result.errors[0].code, 'CLI_CONTRACT_OUTDATED');
-  assert.match(result.errors[0].message, /somewhere update/);
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.errors, []);
   const lint = await lintProject(project());
-  assert.equal(lint.ok, false);
+  assert.equal(lint.ok, true);
   assert.equal(lint.contract.status, 'outdated');
 });
 
-test('a schema refusal by an outdated CLI is reported after the outdated contract, not alone', async () => {
+test('a schema refusal still fails when the contract differs', async () => {
   reset();
   recordPlatformContract(header(CLI.version + 1, 'b'.repeat(64)), 'https://api.example.test/v1/me');
   const result = await runTypecheck(project("import { schema, table, id, text, owner, grant } from 'somewhere/db';\nexport default schema({ notes: table({ id: id(), t: text() }, { scope: grant({ table: 'x', grantee: 'y', operations: ['read'] }) }) });\n"));
-  assert.deepEqual(result.errors.map((e) => e.code), ['CLI_CONTRACT_OUTDATED', 'SCHEMA_DECLARATION_INVALID']);
+  assert.deepEqual(result.errors.map((e) => e.code), ['SCHEMA_DECLARATION_INVALID']);
 });
 
-test('an older platform: ahead, also not claimed clean', async () => {
+test('an older platform: ahead is advisory', async () => {
   reset();
   recordPlatformContract(header(CLI.version - 1, 'c'.repeat(64)), 'https://api.example.test/v1/me');
   const result = await runTypecheck(project());
-  assert.equal(result.errors[0].code, 'CLI_CONTRACT_AHEAD');
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.errors, []);
 });
 
 test('another origin and an unreadable record mean unknown, never current', async () => {

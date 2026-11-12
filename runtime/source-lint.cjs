@@ -70,27 +70,52 @@ var require_function_route = __commonJS({
         module2.exports = { functionRouteSegments: functionRouteSegments2, displayRoute: displayRoute2, routeShape: routeShape2, typedClientRoute };
     }
 });
-var SENSITIVE_PARAMS, SENSITIVE_PARAM_NAMES;
-var init_log_sanitize = __esm({
-    "worker/src/utils/log-sanitize.ts"() {
+function createConsoleDiagnostics() {
+    function sanitizeMessage(input) {
+        return input.slice(0, 8192).replace(/https?:\/\/[^\s<>"')]+/gi, (url) => url.replace(/(https?:\/\/)[^/@\s]+@/gi, "$1<redacted>@").split(/[?#]/, 1)[0]).replace(/(["']?(?:password|code|token|key|secret|signature|access_token|refresh_token|authorization|cookie)["']?\s*:\s*)(?:"[^"]*"|'[^']*'|[^\s,}]+)/gi, "$1<redacted>").replace(/\b(?:Cookie|Set-Cookie)\s*[:=]\s*[^\r\n]+/gi, "Cookie: <redacted>").replace(/\bBearer\s+[^\s,;'"<>]+/gi, "Bearer <redacted>").replace(/\b(?:token|code|key|secret|password|signature|access_token|refresh_token|session|sid|sessionid)\s*=\s*(?:"[^"]*"|'[^']*'|[^\s&;,]+)/gi, (match) => match.slice(0, match.indexOf("=") + 1) + "<redacted>").replace(/[A-Z0-9.!#$%&'*+\/=?^_`{|}~-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, "<email>").replace(/\b[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b/g, "<redacted>").replace(/\b(?:smt_|(?:sk|pk)[_-])[A-Za-z0-9_-]+/g, "<redacted>").replace(/[A-Za-z0-9+/_-]{32,}={0,2}/g, "<redacted>").slice(0, 300);
+    }
+    function safeError(value) {
+        try {
+            const record = Object.create(null);
+            if (value && typeof value === "object") {
+                let current2 = value;
+                for (let depth = 0; current2 && depth < 6; depth++, current2 = Object.getPrototypeOf(current2)) {
+                    for (const key of ["name", "message", "status", "code", "stack"]) {
+                        if (Object.hasOwn(record, key))
+                            continue;
+                        const descriptor = Object.getOwnPropertyDescriptor(current2, key);
+                        if (descriptor)
+                            record[key] = "value" in descriptor ? descriptor.value : "[Getter]";
+                    }
+                }
+            }
+            const name = typeof record.name === "string" ? sanitizeMessage(record.name).slice(0, 80) : "Error";
+            const message = typeof record.message === "string" ? record.message : typeof value === "string" ? value : "Unknown error";
+            const status = typeof record.status === "number" && Number.isInteger(record.status) && record.status >= 100 && record.status <= 599 ? record.status : 0;
+            const failure = /Network connection lost/i.test(message) ? "connection_lost" : /DEADLINE|timed? ?out/i.test(message) ? "deadline_exceeded" : /object.*reset|reset.*object/i.test(message) ? "object_reset" : /no such column/i.test(message) ? "missing_column" : /no such table/i.test(message) ? "missing_table" : /SQLITE_CONSTRAINT|constraint failed/i.test(message) ? "constraint" : /overload|too many requests/i.test(message) ? "overloaded" : "unclassified";
+            const code = typeof record.code === "string" && /^[A-Z][A-Z0-9_]{0,63}$/.test(record.code) ? sanitizeMessage(record.code) : void 0;
+            const frames = typeof record.stack === "string" ? record.stack.split("\n").slice(1).flatMap((line) => {
+                const match = line.match(/([^\s()]+?):(\d+)(?::\d+)?\)?$/);
+                if (!match)
+                    return [];
+                const file = match[1].split(/[\\/]/).pop() ?? "";
+                return [sanitizeMessage(file) + ":" + match[2]];
+            }).slice(0, 2) : [];
+            return name + " message=" + JSON.stringify(sanitizeMessage(message)) + " status=" + status + (code ? " code=" + code : "") + " class=" + failure + (frames.length ? " frames=" + frames.join(",") : "");
+        }
+        catch {
+            return "Error class=uninspectable";
+        }
+    }
+    return { sanitizeMessage, safeError };
+}
+var diagnostics, sanitizeConsoleMessage, safeConsoleError;
+var init_console_privacy = __esm({
+    "worker/src/utils/console-privacy.ts"() {
         "use strict";
-        SENSITIVE_PARAMS = [
-            "access_token",
-            "refresh_token",
-            "code",
-            "state",
-            "creator_secret",
-            "secret",
-            "signature",
-            "api_key",
-            "apikey",
-            "token",
-            "key",
-            "sig",
-            "dsn",
-            "password"
-        ];
-        SENSITIVE_PARAM_NAMES = new Set(SENSITIVE_PARAMS);
+        diagnostics = createConsoleDiagnostics();
+        sanitizeConsoleMessage = diagnostics.sanitizeMessage;
+        safeConsoleError = diagnostics.safeError;
     }
 });
 var require_declared_data_contract = __commonJS({
@@ -1373,8 +1398,11 @@ function scanSourceForSecrets(files, functions) {
 }
 var import_function_route = __toESM(require_function_route());
 var VERIFY_SIGNUP_FETCH_PROLOGUE = "    const verifySignup = await __sw_captureVerifySignup(request); request = verifySignup.request;";
+init_console_privacy();
+init_console_privacy();
+init_console_privacy();
+init_console_privacy();
 var COMPILE_UNAVAILABLE_REALERT_MS = 60 * 60 * 1e3;
-init_log_sanitize();
 var NATIVE_RUNTIME_SERVICE_BINDING = "RUNTIME_PLATFORM_API";
 var MANAGED_RUNTIME_SERVICE_BINDING = "RUNTIME_MANAGED_DATA";
 var OUTBOUND_BRIDGE_HANDLER_PREFIX = "async fetch(request, env, ctx) {\n" + VERIFY_SIGNUP_FETCH_PROLOGUE + "\n\n    __sw_assertBridgeRuntime(env);\n    env = __sw_declaredDataEnv(env);";
@@ -1714,13 +1742,35 @@ function __sw_runtimeErrorMetadata(error) {
 }
 `;
 var LEGACY_DATABASE_LAYOUT = Object.freeze({ layout: "legacy" });
+init_console_privacy();
 var RUNTIME_CONSOLE_MAX_ENTRIES = 200;
 var RUNTIME_CONSOLE_MAX_BYTES = 64 * 1024;
 var RUNTIME_CONSOLE_MAX_ENTRY_BYTES = 4 * 1024;
-var RUNTIME_NATIVE_CONSOLE_JS = String.raw `
+var RUNTIME_NATIVE_CONSOLE_JS = `
+const __sw_consoleDiagnostics = (function () {
+  // Name annotations inserted by the build tool have no runtime dependency.
+  const __name = function (value) { return value; };
+  return (${createConsoleDiagnostics.toString()})();
+})();
 const __sw_nativeConsole = Object.freeze(Object.fromEntries(
   ['log', 'info', 'warn', 'error', 'debug'].map(function (level) {
-    return [level, globalThis.console[level].bind(globalThis.console)];
+    const output = globalThis.console[level].bind(globalThis.console);
+    return [level, function () {
+      try {
+        const values = Array.from(arguments).slice(0, 16).map(function (value) {
+          if (value && (typeof value === 'object' || typeof value === 'function')) {
+            try {
+              const message = Object.getOwnPropertyDescriptor(value, 'message');
+              const stack = Object.getOwnPropertyDescriptor(value, 'stack');
+              if (message && stack) return __sw_consoleDiagnostics.safeError(value);
+            } catch (_) { return '[Uninspectable]'; }
+            return '[Structured log omitted]';
+          }
+          return typeof value === 'string' ? __sw_consoleDiagnostics.sanitizeMessage(value) : value;
+        });
+        return output.apply(null, values);
+      } catch (_) { return undefined; }
+    }];
   })
 ));
 `;

@@ -2517,10 +2517,10 @@ export function useMagicLinkRequest(): MagicLinkRequest {
  */
 export function landingTarget(search: string, origin: string): string {
   const requested = new URLSearchParams(search).get('redirect_uri');
-  if (!requested) return '/';
+  if (!requested || requested.startsWith('//') || requested.includes('\\\\')) return '/';
   try {
     const url = new URL(requested, origin);
-    return url.origin === origin ? url.pathname + url.search + url.hash : '/';
+    return url.origin === origin && !url.pathname.startsWith('//') ? url.href : '/';
   } catch {
     return '/';
   }

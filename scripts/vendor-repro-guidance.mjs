@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { publicProjection } from './public-projection.mjs';
+import { publicProjection, assertBehaviorParity } from './public-projection.mjs';
 // Compare the deterministic public projection of the selected source.
 import { createHash } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -9,7 +9,10 @@ const [sourceRoot, mode] = process.argv.slice(2);
 if (!sourceRoot || (mode && mode !== '--check')) throw new Error('Usage: node scripts/vendor-repro-guidance.mjs <platform-source> [--check]');
 const root = resolve(sourceRoot);
 const SOURCE = 'shared/repro-guidance.ts';
-const text = publicProjection(readFileSync(join(root, SOURCE), 'utf8'));
+const raw = readFileSync(join(root, SOURCE), 'utf8');
+const text = publicProjection(raw);
+assertBehaviorParity(raw, text);
+if (mode === '--check') assertBehaviorParity(raw, readFileSync(join(import.meta.dirname, '../src/lib/vendor/repro-guidance.ts'), 'utf8'));
 const sha256 = createHash('sha256').update(text).digest('hex');
 const dest = join(import.meta.dirname, '..', 'src/lib/vendor');
 const manifest = JSON.stringify({ sha256 }, null, 2) + '\n';

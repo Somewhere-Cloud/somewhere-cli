@@ -1,33 +1,33 @@
-   
-                                                                                                  
-  
-                                                                                             
-                                                                                                 
-                                                                                                  
-                                                                                              
-                                         
-  
-                                                                                                   
-                                                                                            
-                                                                                                 
-                                                                                                     
-                                                                                                  
-                                                                                                      
-                                                                                                  
-                                                                       
-  
-                                                                     
-   
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 export const REPRO_SCHEMA = 'somewhere.repro/1';
 export const LAST_ERROR_FILE = 'last-error.json';
 export const OMITTED = ['message', 'hint_text', 'stack', 'console', 'request_body', 'response_body', 'arguments', 'route_data',
   'sql', 'url_query', 'headers', 'cookies', 'source', 'env'] as const;
 
 const CODE = /^[A-Z][A-Z0-9_]{1,63}$/;
-                                                                                                 
+
 const OPAQUE_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/;
 const CLI_VERSION = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]{1,20})?$/;
-                                                                                                    
+
 const UNKNOWN_CODES = new Set(['TIMEOUT', 'NETWORK_ERROR', 'SERVER_SLOW', 'DEPLOY_OUTCOME_UNKNOWN']);
 const COMMAND_NAME = /^[a-z][a-z0-9-]{0,31}$/;
 const TOOL_NAME = /^[a-z][a-z0-9_]{0,63}$/;
@@ -36,9 +36,9 @@ const MUTATING = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
 export type Outcome = 'refused' | 'unknown' | 'failed';
 
-                                                                                                      
-                                                                                                     
-                                                                                                
+
+
+
 export interface InvalidDetail { path: string; limit_ms?: number }
 const INVALID_PATH = /^(actions|steps)(\[\d{1,4}\](\.[a-z_]{1,32})?)?$/;
 export function safeInvalid(value: unknown): InvalidDetail | undefined {
@@ -54,7 +54,7 @@ export function safeStatus(value: unknown): number | undefined {
 }
 export interface ReproRecord {
   schema: typeof REPRO_SCHEMA;
-                                                                                                          
+
   client: { kind: 'cli' | 'mcp'; version: string };
   captured_at: string;
   command?: string;
@@ -71,15 +71,15 @@ export interface ReproRecord {
   invalid?: InvalidDetail;
 }
 
-                                                                                                  
-                                                                                                       
+
+
 const ROUTE_WORDS = new Set(['app', 'attach', 'auth', 'browser', 'check-handler', 'cli-logout', 'cli-pair', 'connect', 'connection', 'create', 'cron',
   'db', 'deploy', 'deploys', 'disconnect', 'domains', 'dump', 'email', 'env', 'errors', 'export', 'feedback', 'files', 'fs', 'github', 'groups',
   'hosted', 'inbox', 'installations', 'jobs', 'keys', 'logs', 'me', 'members', 'messages', 'notices', 'platform-feedback', 'postgres', 'preview',
   'previews', 'pricing', 'projects', 'promote', 'query', 'refresh', 'releases', 'rollback', 'rows', 'run', 'schema', 'secrets', 'sessions', 'source',
   'status', 'tables', 'tasks', 'test', 'test-inbox', 'test-users', 'upload', 'urls', 'users', 'verify', 'versions', 'whoami']);
 
-                                                                               
+
 export function routeTemplate(path: string): string | undefined {
   if (typeof path !== 'string' || !path.startsWith('/')) return undefined;
   const bare = path.split(/[?#]/)[0];
@@ -98,7 +98,7 @@ export function operationLabel(method: string, path: string): string | undefined
   return METHODS.has(verb) && route ? `${verb} ${route}` : undefined;
 }
 
-                                                                                                                    
+
 export function safeOperation(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined;
   if (value.startsWith('tool:')) return toolOperation(value.slice(5));
@@ -110,16 +110,16 @@ export function toolOperation(name: unknown): string | undefined {
   return typeof name === 'string' && TOOL_NAME.test(name) ? `tool:${name}` : undefined;
 }
 
-                                                                                               
+
 export function commandPath(names: string[]): string | undefined {
   const kept = names.filter((name) => COMMAND_NAME.test(name)).slice(0, 4);
   return kept.length ? kept.join(' ') : undefined;
 }
 
 
-                                                                                     
+
 export interface FailureFields {
-                                                                                                          
+
   platform: boolean;
   code?: unknown;
   status?: unknown;
@@ -141,8 +141,8 @@ export interface RecordContext {
   now?: number;
 }
 
-                                                                                                   
-                                                                                       
+
+
 export function buildRecordFromFields(fields: FailureFields, context: RecordContext): ReproRecord {
   const code = fields.platform && typeof fields.code === 'string' && CODE.test(fields.code) ? fields.code : fields.platform ? 'UNCLASSIFIED' : 'CLI_ERROR';
   const status = safeStatus(fields.status);
@@ -150,7 +150,7 @@ export function buildRecordFromFields(fields: FailureFields, context: RecordCont
   const id = (value: unknown) => (typeof value === 'string' && OPAQUE_ID.test(value) ? value : undefined);
   const now = context.now ?? Date.now();
   const mutating = operation ? MUTATING.has(operation.split(' ')[0]) || operation.startsWith('tool:') : false;
-                                                                                                                
+
   const outcome: Outcome = fields.responseIncomplete === true || UNKNOWN_CODES.has(code)
     || (mutating && (status === undefined || status >= 500)) ? 'unknown'
     : status !== undefined && status >= 400 && status < 500 ? 'refused' : 'failed';
@@ -175,15 +175,15 @@ export function buildRecordFromFields(fields: FailureFields, context: RecordCont
 type Step = string[];
 interface Guidance { surface: string; investigate: Step[]; recipe: string[] }
 
-                                                                                                              
+
 function guidanceFor(record: ReproRecord): Guidance {
   const op = record.operation ?? '';
-                                                                                                 
-                                                                                                  
-                                     
+
+
+
   const project = record.project_id ? ['--project', record.project_id] : ['--project', '<PROJECT>'];
-                                                                                            
-                                                                                                 
+
+
   if (record.code === 'FUNCTION_ERROR' || record.code === 'CONTEXT_BUILD_FAILED') {
     const trace = record.trace_id && /^[0-9a-f]{32}$/.test(record.trace_id) ? record.trace_id : '<TRACE_ID>';
     return { surface: 'function_crash',
@@ -238,7 +238,7 @@ export function buildPacket(record: ReproRecord): ReproPacket {
   return scrubbed(packet);
 }
 
-                                                                                                   
+
 const SECRET_SHAPES = [/smt_[A-Za-z0-9]/, /eyJ[A-Za-z0-9_-]{8,}\./, /sk_(live|test)_/, /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[a-z]{2,}/i, /password/i, /bearer\s/i, /\?[^"]*=/];
 function scrubbed(packet: ReproPacket): ReproPacket {
   const text = JSON.stringify(packet.collected);

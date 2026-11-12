@@ -1,12 +1,12 @@
-   
-                               
-  
-                                                                               
-                                                                              
-                                                                              
-                                                                            
-                                                              
-   
+
+
+
+
+
+
+
+
+
 
 export type DeployPathIssueKind = 'unsafe' | 'sensitive';
 
@@ -20,21 +20,21 @@ const MAX_DEPLOY_SEGMENT_LENGTH = 255;
 const RAW_STATIC_MARKER = '.somewhere/raw-static';
 const PRIVATE_KEY_NAME_RE = /^id_(?:rsa|dsa|ecdsa|ed25519)$/i;
 const SENSITIVE_EXTENSION_RE = /\.(?:pem|key|p12|pfx)$/i;
-                                                                             
-                                                                           
-                                                                             
-                                                                        
-                                                                               
-                                                   
-                                                                              
-                                                                            
-                                                                             
-                             
+
+
+
+
+
+
+
+
+
+
 const SENSITIVE_BASENAME_RE = /^(?:credentials(?:\.(?:json|ya?ml|toml|ini|txt|env|cfg|conf|properties))?|secrets?(?:\.(?:json|ya?ml|toml|ini))?|service[-_.]?account(?:[-_.]?key)?\.json|(?:[a-z0-9][a-z0-9-]*-)?firebase-adminsdk(?:-[a-z0-9]+)*\.json)$/i;
-                                                                               
-                                                                            
-                                                                            
-                                                                           
+
+
+
+
 const SENSITIVE_ENV_TEMPLATE_RE = /^\.env\.(?:example|sample|template|dist)$/i;
 const SENSITIVE_DOT_SEGMENT_RE = /^(?:\.env(?:\..*)?|\.git|\.ssh|\.aws|\.npmrc|\.yarnrc|\.pypirc|\.netrc|\.dockerconfigjson|\.htpasswd)$/i;
 
@@ -90,7 +90,7 @@ function unsafePathReason(path: string): string | null {
   return null;
 }
 
-                                                                                 
+
 export function isSensitiveDeployPath(path: string): boolean {
   const inspected = decodeForInspection(path) ?? path;
   const lowerPath = inspected.toLowerCase();
@@ -99,8 +99,8 @@ export function isSensitiveDeployPath(path: string): boolean {
   const segments = inspected.split('/');
   for (const segment of segments) {
     const lower = segment.toLowerCase();
-                                                                              
-                                                                               
+
+
     if (lower === '.well-known') continue;
     if (isSensitiveDotSegment(segment)) return true;
     if (PRIVATE_KEY_NAME_RE.test(segment)) return true;
@@ -119,7 +119,7 @@ export function inspectDeployPath(path: string, options: { allowSensitive?: bool
   return null;
 }
 
-                                                                           
+
 export function isSafeDeployExportPath(path: string): boolean {
   return inspectDeployPath(path) === null;
 }

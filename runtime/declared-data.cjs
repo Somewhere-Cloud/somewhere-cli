@@ -24,16 +24,16 @@ var __copyProps = (to, from, except, desc) => {
   return to;
 };
 var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__getProtoOf(mod)) : {}, __copyProps(
-                                                                        
-                                                                   
-                                                                        
-                                                                       
+
+
+
+
   isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
   mod
 ));
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 
-                                      
+
 function createConsoleDiagnostics() {
   function sanitizeMessage(input) {
     return input.slice(0, 8192).replace(/https?:\/\/[^\s<>"')]+/gi, (url) => url.replace(/(https?:\/\/)[^/@\s]+@/gi, "$1<redacted>@").split(/[?#]/, 1)[0]).replace(/(["']?(?:password|code|token|key|secret|signature|access_token|refresh_token|authorization|cookie)["']?\s*:\s*)(?:"[^"]*"|'[^']*'|[^\s,}]+)/gi, "$1<redacted>").replace(/\b(?:Cookie|Set-Cookie)\s*[:=]\s*[^\r\n]+/gi, "Cookie: <redacted>").replace(/\bBearer\s+[^\s,;'"<>]+/gi, "Bearer <redacted>").replace(/\b(?:token|code|key|secret|password|signature|access_token|refresh_token|session|sid|sessionid)\s*=\s*(?:"[^"]*"|'[^']*'|[^\s&;,]+)/gi, (match) => match.slice(0, match.indexOf("=") + 1) + "<redacted>").replace(/[A-Z0-9.!#$%&'*+\/=?^_`{|}~-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, "<email>").replace(/\b[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b/g, "<redacted>").replace(/\b(?:smt_|(?:sk|pk)[_-])[A-Za-z0-9_-]+/g, "<redacted>").replace(/[A-Za-z0-9+/_-]{32,}={0,2}/g, "<redacted>").slice(0, 300);
@@ -79,7 +79,7 @@ var init_console_privacy = __esm({
   }
 });
 
-                                                       
+
 var require_declared_data_contract = __commonJS({
   "worker/containers/compile/declared-data-contract.cjs"(exports2, module2) {
     "use strict";
@@ -766,7 +766,7 @@ export{data,DataError};
   }
 });
 
-                                           
+
 var require_typed_data = __commonJS({
   "worker/containers/compile/typed-data.cjs"(exports2, module2) {
     "use strict";
@@ -795,7 +795,7 @@ var require_typed_data = __commonJS({
   }
 });
 
-                                             
+
 var require_groups_types = __commonJS({
   "worker/containers/compile/groups-types.cjs"(exports2, module2) {
     "use strict";
@@ -992,7 +992,7 @@ interface SomewhereRuntimeContext {
   }
 });
 
-                                              
+
 var require_runtime_types = __commonJS({
   "worker/containers/compile/runtime-types.cjs"(exports2, module2) {
     "use strict";
@@ -4034,7 +4034,7 @@ interface SomewhereEndpointConfig<Auth extends SomewhereEndpointAuth, Schema ext
   }
 });
 
-                                            
+
 var require_typed_files = __commonJS({
   "worker/containers/compile/typed-files.cjs"(exports2, module2) {
     "use strict";
@@ -4204,7 +4204,7 @@ export{files};
   }
 });
 
-                                             
+
 var require_schema_types = __commonJS({
   "worker/containers/compile/schema-types.cjs"(exports2, module2) {
     "use strict";
@@ -4293,7 +4293,7 @@ ${(signatures + policySignatures).replace(/^function /gm, "  export function ")}
   }
 });
 
-                                                 
+
 var require_checker_contract = __commonJS({
   "worker/containers/compile/checker-contract.cjs"(exports2, module2) {
     "use strict";
@@ -4379,7 +4379,7 @@ var require_checker_contract = __commonJS({
   }
 });
 
-                                                       
+
 var require_generated_declarations = __commonJS({
   "worker/containers/compile/generated-declarations.cjs"(exports2, module2) {
     "use strict";
@@ -4423,7 +4423,7 @@ var require_generated_declarations = __commonJS({
   }
 });
 
-                                                              
+
 var require_generated_declarations_render = __commonJS({
   "worker/containers/compile/generated-declarations-render.cjs"(exports2, module2) {
     "use strict";
@@ -4455,7 +4455,7 @@ var require_generated_declarations_render = __commonJS({
   }
 });
 
-                                                  
+
 var require_consumer_contract = __commonJS({
   "worker/containers/compile/consumer-contract.cjs"(exports2, module2) {
     "use strict";
@@ -4488,7 +4488,7 @@ export default schema({
       ["allOf(member(), owner())", one("owner, member, allOf", `${MEMBERSHIPS}
   ${contacts(`allOf(${MEMBER}, owner())`)}`)],
       ["parent()", one("owner, parent, hasMany", "tickets: table({ id: id(), subject: text() }, { scope: owner(), client: { read: true }, relations: { comments: hasMany('comments', 'ticket_id') } }),\n  comments: table({ id: id(), ticket_id: text({ references: 'tickets' }), body: text() }, { scope: parent({ via: 'ticket_id' }), client: { read: true } }),")],
-                                                                                          
+
       ["refused: grant() inside allOf", one("owner, member, anyOf, allOf, grant", `${SHARES}
   ${MEMBERSHIPS}
   ${contacts(`allOf(${MEMBER}, anyOf(owner(), grant({ table: 'shares', grantee: 'grantee_id', operations: ['read'] })))`)}`)],
@@ -4563,7 +4563,7 @@ export default schema({
   }
 });
 
-                                
+
 var declared_data_vendor_entry_exports = {};
 __export(declared_data_vendor_entry_exports, {
   CONSUMER_CONTRACT: () => import_consumer_contract.CONSUMER_CONTRACT,
@@ -4586,7 +4586,7 @@ __export(declared_data_vendor_entry_exports, {
 });
 module.exports = __toCommonJS(declared_data_vendor_entry_exports);
 
-                                                   
+
 function isCanonicalBigintText(value) {
   if (!/^(0|-?[1-9][0-9]*)$/.test(value)) return false;
   const negative = value.startsWith("-");
@@ -4595,10 +4595,10 @@ function isCanonicalBigintText(value) {
   return digits.length < limit.length || digits.length === limit.length && digits <= limit;
 }
 
-                                                        
+
 var SHARED_AUTHOR_COLUMN = "_sw_author_id";
 
-                                                          
+
 function tableAllowsClientWrites(table) {
   return Boolean(table.client && (table.client.create !== null || table.client.update !== null || table.client.delete || table.client.intake !== void 0));
 }
@@ -4865,7 +4865,7 @@ function parseLinkPermissions(value, read, update, create, columns, scope) {
   return { read: linkRead, edit, children, maxDays, ...input.anonymousCreate === true ? { anonymousCreate: true } : {} };
 }
 
-                                            
+
 function record(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value) ? value : null;
 }
@@ -4913,10 +4913,10 @@ function bakeIntakePermissions(schema, declarations, intents, scopes) {
   }
 }
 
-                                     
+
 var STALE_JOB_WINDOW_MS = 45 * 60 * 1e3;
 
-                                                               
+
 var BINDING_OPERATIONS = ["read", "create", "update", "delete"];
 var ROW_OPERATIONS = ["read", "update", "delete"];
 var MAX_JOB_BINDING_SECONDS = STALE_JOB_WINDOW_MS / 1e3;
@@ -5135,7 +5135,7 @@ function validateBindings(input, tableInfo, errors) {
   }
 }
 
-                                                
+
 var ROLE_NAME_PATTERN = /^[a-z][a-z0-9_]{0,63}$/;
 var EMAIL_DOMAIN_PATTERN = /^(?=.{4,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z][a-z0-9-]{0,61}[a-z0-9]$/;
 function validRoleDomainMap(value) {
@@ -5152,18 +5152,18 @@ var ROLE_DOMAIN_MAP_JS = `
         return true;
       }`;
 
-                                
+
 init_console_privacy();
 
-                             
+
 init_console_privacy();
 
-                                               
+
 init_console_privacy();
 init_console_privacy();
 var COMPILE_UNAVAILABLE_REALERT_MS = 60 * 60 * 1e3;
 
-                                                  
+
 var SAFE_SCOPE_IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*$/;
 var GROUP_ROLE_NAME = /^[a-z][a-z0-9_]{0,63}$/;
 function validGroupRoles(value) {
@@ -5466,7 +5466,7 @@ function bakedMemberFromDeclared(scope, explicitOperations = false) {
   return validBakedMemberScope(member) ? member : null;
 }
 
-                                                             
+
 function readGrantScope(r, table, line, fail) {
   r.expectPunct("(", "after grant");
   r.expectPunct("{", "in grant options");
@@ -5603,7 +5603,7 @@ function validateDeclaredMemberships(tables, tableByName, knownColumns, errors) 
   }
 }
 
-                                                        
+
 var LITERAL_WORDS =                 new Set(["true", "false", "null"]);
 var STATEMENT_WORDS =                 new Set([
   "import",
@@ -5826,7 +5826,7 @@ function matchingClose(tokens, open) {
   return -1;
 }
 
-                                                              
+
 var MAX_PARENT_EDGES2 = 4;
 var parentScopeLines =                 new WeakMap();
 function rememberParentLine(sentinel, line) {
@@ -5910,7 +5910,7 @@ function fileParentTarget(t) {
   };
 }
 
-                                                                
+
 function validateDeclaredRelations(tables, tableByName, knownColumns, markedGone, errors) {
   const columnByName = (t, col) => t.columns.find((c) => c.name === col);
   for (const t of tables) {
@@ -5967,7 +5967,7 @@ function validateDeclaredRelations(tables, tableByName, knownColumns, markedGone
   }
 }
 
-                                                            
+
 function validateRowLinks(tables, tableByName, errors) {
   const childOf =                 new Map();
   for (const t of tables) {
@@ -6004,7 +6004,7 @@ function validateRowLinks(tables, tableByName, errors) {
   }
 }
 
-                                                             
+
 var REFERENCE_HELPERS = ["id", "text", "integer", "bigint"];
 function validateIntake(tables, tableByName, errors) {
   for (const t of tables) {
@@ -6054,7 +6054,7 @@ function validateIntake(tables, tableByName, errors) {
   }
 }
 
-                                                            
+
 var FILE_OPERATIONS = ["read", "upload", "replace", "delete"];
 var MAX_FILE_COLLECTIONS = 20;
 var COLLECTION_NAME = /^[a-z][a-z0-9_]{0,63}$/;
@@ -6397,7 +6397,7 @@ function canonicalFileCollectionsJson(collections) {
   });
 }
 
-                                            
+
 var BUILT_IN_GROUP_ROLES2 = ["owner", "admin", "member"];
 var ROLE_NAME = /^[a-z][a-z0-9_]{0,63}$/;
 function isPrototypeName(name) {
@@ -6438,7 +6438,7 @@ function roleVocabularyErrors(policy) {
   return errors;
 }
 
-                                                             
+
 var GROUP_OPERATIONS = ["read", "create", "update", "delete"];
 var DEFAULT_GROUP_COLUMN = "group_id";
 var IDENT = /^[A-Za-z_][A-Za-z0-9_]*$/;
@@ -6601,7 +6601,7 @@ function resolveGroupsAndParents(tables, tableByName, privatePolicy, vocabulary,
   resolveGroupReferences(tables, errors);
 }
 
-                                                                
+
 var APP_ROLE_OPERATIONS = ["read", "create", "update", "delete"];
 var declaredLines =                 new WeakMap();
 function readAppRoleScope(r, tableName, line, fail) {
@@ -6706,7 +6706,7 @@ function resolveAppRoleScopes(tables, appRoles, errors) {
   }
 }
 
-                                                            
+
 var EMAIL_DOMAIN = EMAIL_DOMAIN_PATTERN;
 var GROUP_KEYS = ["roles", "adminGrantableRoles"];
 var APP_ROLE_KEYS = ["grantableBy", "emailDomain"];
@@ -6820,7 +6820,7 @@ function emailDomainRoleErrors(appRoles) {
   return errors;
 }
 
-                                                              
+
 function readSchemaOptions(reader, fail, fileErrors) {
   const o = {};
   if (!reader.tryPunct(",") || reader.peek().kind === "punct" && reader.peek().value === ")") return o;
@@ -6865,7 +6865,7 @@ function readSchemaOptions(reader, fail, fileErrors) {
   return o;
 }
 
-                                                         
+
 function policyOwner(policy) {
   if (policy.kind === "owner") return policy;
   if (policy.kind === "any_of") return policy.policies.map(policyOwner).find((value) => value !== null) ?? null;
@@ -7078,7 +7078,7 @@ var Reader = class {
     this.bareIdIsText = (table) => !options.legacyIntegerIdDefault && !options.integerKeyTables?.has(table.toLowerCase());
   }
   pos = 0;
-                                                                                                          
+
   bareIdIsText;
   peek() {
     return this.tokens[this.pos];
@@ -7110,7 +7110,7 @@ var Reader = class {
     }
     return t;
   }
-                                                    
+
   readKey(context) {
     const t = this.next();
     if (t.kind === "ident" || t.kind === "string") return { name: t.value, line: t.line };
@@ -7127,7 +7127,7 @@ var Reader = class {
       `line ${t.line}: expected a literal value (string, number, true/false, or null) ${context}, found ${describeToken(t)}. Computed values are not allowed \u2014 the declaration must be readable without running it.`
     );
   }
-                                                          
+
   readLiteralObject(context) {
     this.expectPunct("{", context);
     const out =                 new Map();
@@ -8134,21 +8134,21 @@ function canonicalTableShape(t) {
       unique: c.unique,
       references: c.references,
       onDelete: c.onDelete,
-                                                                               
+
       ...c.renamedFrom ? { renamedFrom: c.renamedFrom } : {}
     })),
     indexes: t.indexes,
     uniques: t.uniques,
     ...t.removedColumns.length > 0 ? { removedColumns: t.removedColumns } : {},
-                                                                  
+
     ...t.rooms ? { rooms: t.rooms } : {},
-                                                                           
-                                                        
+
+
     ...t.groupRefs && t.groupRefs.length > 0 ? { groupRefs: t.groupRefs } : {},
-                                                                                  
-                                                                             
-                                                                              
-                                                                            
+
+
+
+
     ...t.relations.length > 0 ? {
       relations: t.relations.map((rel) => ({
         name: rel.name,
@@ -8161,7 +8161,7 @@ function canonicalTableShape(t) {
   };
 }
 
-                                                              
+
 var import_declared_data_contract = __toESM(require_declared_data_contract());
 function declareEntry(dictionary, name, value) {
   Object.defineProperty(dictionary, name, { value, writable: true, enumerable: true, configurable: true });
@@ -8206,7 +8206,7 @@ function declaredRolesFromSource(files) {
   ));
 }
 
-                                
+
 var import_declared_data_contract2 = __toESM(require_declared_data_contract());
 var import_typed_data = __toESM(require_typed_data());
 var import_runtime_types2 = __toESM(require_runtime_types());
@@ -8217,7 +8217,7 @@ var import_runtime_types3 = __toESM(require_runtime_types());
 var import_typed_files2 = __toESM(require_typed_files());
 var checkerContract = __toESM(require_checker_contract());
 
-                                             
+
 var import_runtime_types = __toESM(require_runtime_types());
 var import_generated_declarations = __toESM(require_generated_declarations());
 var import_generated_declarations_render = __toESM(require_generated_declarations_render());
@@ -8242,7 +8242,7 @@ function isRuntimeEndpointGlobal(diag, functions) {
   return RUNTIME_ENDPOINT_ACCESS.test(lines2.slice(diag.line - 1).join("\n").slice(diag.column - 1));
 }
 
-                                
+
 var import_consumer_contract = __toESM(require_consumer_contract());
 function generateFromFiles(files) {
   const authority = clientAuthorityFromSource(files);
@@ -8262,7 +8262,7 @@ function filesDeclarationFromFiles(files) {
   const canonical = declaredFilesFromSource(files);
   return canonical ? (0, import_typed_files.describeFilesClient)(canonical).declaration : void 0;
 }
-                                                             
+
 0 && (module.exports = {
   CONSUMER_CONTRACT,
   ENDPOINT_DECLARATION,

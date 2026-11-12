@@ -31,7 +31,7 @@ export function publicProjection(text, filename = 'vendor.ts') {
         : trivia.slice(start, finish);
       position = finish;
     }
-    output += gap + trivia.slice(position) + text.slice(token.start, token.end);
+    output += (gap + trivia.slice(position)).replace(/[ \t]+(?=\r?\n)/g, '') + text.slice(token.start, token.end);
     end = token.end;
   }
   return output;

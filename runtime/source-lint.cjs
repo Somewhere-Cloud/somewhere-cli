@@ -25,16 +25,16 @@ var __copyProps = (to, from, except, desc) => {
   return to;
 };
 var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__getProtoOf(mod)) : {}, __copyProps(
-                                                                        
-                                                                   
-                                                                        
-                                                                       
+
+
+
+
   isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
   mod
 ));
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 
-                                               
+
 var require_function_route = __commonJS({
   "worker/containers/compile/function-route.cjs"(exports, module2) {
     "use strict";
@@ -78,7 +78,7 @@ var require_function_route = __commonJS({
   }
 });
 
-                                      
+
 function createConsoleDiagnostics() {
   function sanitizeMessage(input) {
     return input.slice(0, 8192).replace(/https?:\/\/[^\s<>"')]+/gi, (url) => url.replace(/(https?:\/\/)[^/@\s]+@/gi, "$1<redacted>@").split(/[?#]/, 1)[0]).replace(/(["']?(?:password|code|token|key|secret|signature|access_token|refresh_token|authorization|cookie)["']?\s*:\s*)(?:"[^"]*"|'[^']*'|[^\s,}]+)/gi, "$1<redacted>").replace(/\b(?:Cookie|Set-Cookie)\s*[:=]\s*[^\r\n]+/gi, "Cookie: <redacted>").replace(/\bBearer\s+[^\s,;'"<>]+/gi, "Bearer <redacted>").replace(/\b(?:token|code|key|secret|password|signature|access_token|refresh_token|session|sid|sessionid)\s*=\s*(?:"[^"]*"|'[^']*'|[^\s&;,]+)/gi, (match) => match.slice(0, match.indexOf("=") + 1) + "<redacted>").replace(/[A-Z0-9.!#$%&'*+\/=?^_`{|}~-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, "<email>").replace(/\b[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b/g, "<redacted>").replace(/\b(?:smt_|(?:sk|pk)[_-])[A-Za-z0-9_-]+/g, "<redacted>").replace(/[A-Za-z0-9+/_-]{32,}={0,2}/g, "<redacted>").slice(0, 300);
@@ -124,7 +124,7 @@ var init_console_privacy = __esm({
   }
 });
 
-                                                       
+
 var require_declared_data_contract = __commonJS({
   "worker/containers/compile/declared-data-contract.cjs"(exports, module2) {
     "use strict";
@@ -811,7 +811,7 @@ export{data,DataError};
   }
 });
 
-                                     
+
 var source_lint_exports = {};
 __export(source_lint_exports, {
   SOURCE_LINT_VERSION: () => SOURCE_LINT_VERSION,
@@ -820,7 +820,7 @@ __export(source_lint_exports, {
 });
 module.exports = __toCommonJS(source_lint_exports);
 
-                                             
+
 var PLACEHOLDER = /[xX]{8,}|0{8,}|\*{8,}|example|your|replace|placeholder|changeme|dummy|redacted/i;
 var isPlaceholder = (material) => PLACEHOLDER.test(material);
 function anonJwt(material) {
@@ -841,19 +841,19 @@ var SECRET_PATTERNS = [
   { kind: "platform-developer-key", label: "platform developer key", envName: "SOMEWHERE_API_KEY", pattern: /\bsmt_[A-Za-z0-9]{20,}\b/g, ignore: isPlaceholder },
   { kind: "stripe-secret-key", label: "Stripe secret or restricted key", envName: "STRIPE_SECRET_KEY", pattern: /\b(?:sk|rk)_(?:live|test)_[A-Za-z0-9]{20,}\b/g, ignore: isPlaceholder },
   { kind: "stripe-webhook-secret", label: "Stripe webhook signing secret", envName: "STRIPE_WEBHOOK_SECRET", pattern: /\bwhsec_[A-Za-z0-9+/=]{20,}/g, ignore: isPlaceholder },
-                                                                           
-                                                                             
+
+
   { kind: "aws-access-key-id", label: "AWS access key id", envName: "AWS_ACCESS_KEY_ID", pattern: /\b(?:AKIA|ASIA)[0-9A-Z]{16}\b/g, ignore: isPlaceholder },
   { kind: "github-token", label: "GitHub access token", envName: "GITHUB_TOKEN", pattern: /\b(?:ghp_|gho_|ghu_|ghs_|ghr_|github_pat_)[A-Za-z0-9_]{20,}\b/g, ignore: isPlaceholder },
   { kind: "anthropic-api-key", label: "Anthropic API key", envName: "ANTHROPIC_API_KEY", pattern: /\bsk-ant-[A-Za-z0-9_-]{30,}\b/g, ignore: isPlaceholder },
   { kind: "openai-api-key", label: "OpenAI API key", envName: "OPENAI_API_KEY", pattern: /\bsk-(?:proj-)?[A-Za-z0-9_-]{30,}\b/g, ignore: isPlaceholder },
   { kind: "slack-token", label: "Slack access token", envName: "SLACK_TOKEN", pattern: /\bxox[baprs]-[A-Za-z0-9-]{20,}\b/g, ignore: isPlaceholder },
-                                                                              
-                                                                              
-                                                
+
+
+
   { kind: "mailgun-api-key", label: "Mailgun API key", envName: "MAILGUN_API_KEY", pattern: /\bkey-(?=[a-z]*[0-9])(?=[0-9]*[a-z])[a-z0-9]{32}(?![A-Za-z0-9_-])/g, ignore: isPlaceholder },
   { kind: "sendgrid-api-key", label: "SendGrid API key", envName: "SENDGRID_API_KEY", pattern: /\bSG\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}/g, ignore: isPlaceholder },
-                                                             
+
   {
     kind: "signed-token",
     label: "signed access token (JWT)",
@@ -861,14 +861,14 @@ var SECRET_PATTERNS = [
     pattern: /(?<![A-Za-z0-9_.-])eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]{10,}/g,
     ignore: anonJwt
   },
-                                                                      
-                                                                                 
-                                                                                 
-                                                                                 
-                                                                               
-                                                                             
-                                                                        
-                                                  
+
+
+
+
+
+
+
+
   {
     kind: "postgres-connection-string",
     label: "Postgres connection string with a password",
@@ -876,8 +876,8 @@ var SECRET_PATTERNS = [
     pattern: /\bpostgres(?:ql)?:\/\/[^\s:/?#@'"`]+:[^\s@'"`]+@[^\s/?#'"`]+/g,
     ignore: placeholderPassword
   },
-                                                                             
-                                               
+
+
   {
     kind: "connection-string",
     label: "database connection string with a password",
@@ -1318,24 +1318,24 @@ function scanSourceForSecrets(files, functions) {
   return findings;
 }
 
-                                      
+
 var import_function_route = __toESM(require_function_route());
 
-                                      
+
 var VERIFY_SIGNUP_FETCH_PROLOGUE = "    const verifySignup = await __sw_captureVerifySignup(request); request = verifySignup.request;";
 
-                                
+
 init_console_privacy();
 
-                             
+
 init_console_privacy();
 
-                                               
+
 init_console_privacy();
 init_console_privacy();
 var COMPILE_UNAVAILABLE_REALERT_MS = 60 * 60 * 1e3;
 
-                                                
+
 var NATIVE_RUNTIME_SERVICE_BINDING = "RUNTIME_PLATFORM_API";
 var MANAGED_RUNTIME_SERVICE_BINDING = "RUNTIME_MANAGED_DATA";
 var OUTBOUND_BRIDGE_HANDLER_PREFIX = "async fetch(request, env, ctx) {\n" + VERIFY_SIGNUP_FETCH_PROLOGUE + "\n    // Establish artifact-owned data authority before any environment read.\n    __sw_assertBridgeRuntime(env);\n    env = __sw_declaredDataEnv(env);";
@@ -1362,12 +1362,12 @@ var BINDING_META_BEFORE_CAPTURE = `    // Reserved candidate proof: checked agai
     }
 `;
 
-                                                        
+
 var RETAINED_PREFIX = "_sw_retained__";
 var RETENTION_DAYS = 30;
 var RETENTION_MS = RETENTION_DAYS * 24 * 3600 * 1e3;
 
-                                                     
+
 var RETIRED_TABLE_JS = `      // A read of a table retired with removedTable() (pfb_cdfc184b9e7c): name
       // the table, its retention date, and how to restore it. Mirrors
       // utils/db-schema-deploy/retired-table.ts.
@@ -1412,11 +1412,11 @@ var RETIRED_TABLE_JS = `      // A read of a table retired with removedTable() (
       }
 `;
 
-                                    
+
 var DATABASE_FULL_PATTERN = /SQLITE_FULL|database or disk is full|database is full|at maximum size|exceeds the maximum database size|database size limit (?:has been )?(?:reached|exceeded)/i;
 var DATABASE_FULL_MESSAGE = "The database could not complete this write because its storage is full. Database storage and the account allowance are shown under Usage in the dashboard.";
 
-                                        
+
 var DB_TYPED_ERRORS_JS = `      // The REST bridge's refusal as the caller sees it. A typed envelope
       // { error, message } becomes that code and message; anything else keeps
       // the fallback code and never pastes a JSON body into the message.
@@ -1654,7 +1654,7 @@ var DB_OUTCOME_ERROR_CODES = Object.freeze([
   "IDEMPOTENCY_TRIGGER_WRITE",
   "IDEMPOTENCY_UNAVAILABLE",
   "IDEMPOTENCY_RECEIPT_INVALID",
-                                                                                              
+
   "CREATOR_OUTCOME_UNKNOWN"
 ]);
 var DB_OUTCOME_ERROR_JS = String.raw`
@@ -1684,10 +1684,10 @@ function __sw_runtimeErrorMetadata(error) {
 }
 `;
 
-                                              
+
 var LEGACY_DATABASE_LAYOUT = Object.freeze({ layout: "legacy" });
 
-                                                
+
 init_console_privacy();
 var RUNTIME_CONSOLE_MAX_ENTRIES = 200;
 var RUNTIME_CONSOLE_MAX_BYTES = 64 * 1024;
@@ -1849,7 +1849,7 @@ function __sw_createConsoleScope(env, request) {
 }
 `;
 
-                                              
+
 var RUNTIME_LOG_LIFECYCLE_JS = String.raw`
 function drainPendingBackground(platformCtx, ctx) {
   const pending = (platformCtx && platformCtx.__sw_pendingBackground) || [];
@@ -1868,7 +1868,7 @@ function drainPendingBackground(platformCtx, ctx) {
 
 `;
 
-                                           
+
 var RUNTIME_HOT_CONFIG_PATH = "/v1/runtime/hot-config";
 var RUNTIME_HOT_CONFIG_REPLY_MAX_BYTES = 64 * 1024;
 var HOT_CONFIG_PULL_JS = `
@@ -1925,11 +1925,11 @@ async function __sw_hotConfigPull(env) {
 }
 `;
 
-                                          
+
 var APP_ACCESS_MAX_SECONDS = 60;
 var APP_ACCESS_SELECTION_MARGIN_SECONDS = 5;
 
-                                     
+
 var ACCESS_TOKEN_JS = `const __sw_accessNow = Date.now.bind(Date);
 const __sw_accessInteger = Number.isSafeInteger.bind(Number);
 /** Portable access JWT: no network or isolate identity state. Public key only. */
@@ -1958,7 +1958,7 @@ async function __sw_verifyAccessToken(binding, token, audience) {
 
 `;
 
-                                
+
 var APP_MCP_CONTEXT_JS = `
   const __sw_mcpRequest = __sw_signedDelivery && __sw_signedDelivery.source === 'mcp'
     ? new Request(request.clone(), { headers: { 'content-type': 'application/json' } }) : null;
@@ -1974,7 +1974,7 @@ var APP_MCP_CONTEXT_JS = `
   }
 `;
 
-                                     
+
 var CONTEXT_HEAD_JS = `// \u2500\u2500 Primordial freeze (tsk_327fe8a4, opinionated-not-greenfield) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
 // The structured-query guard, the cookie jars, and the identity path all rely
 // on core JavaScript built-ins behaving as specified. Customer/npm code in the
@@ -3865,12 +3865,12 @@ function buildPlatformContext(env, request, runtimeFetch = fetch, outboundFetch 
     //     login path verifies their existing bcrypt hashes. One verify
     //     is ~10-50ms CPU; don't loop it.`;
 
-                              
+
 var FETCH_JS = `    /** @deprecated Use the wrapped global fetch directly. */
     fetch: __sw_outboundFetch,
 `;
 
-                               
+
 var CRYPTO_JS = `    crypto: {
       hmacSha256Hex: async function (message, secret) {
         const enc = new TextEncoder();
@@ -3906,10 +3906,10 @@ var CRYPTO_JS = `    crypto: {
     },
 `;
 
-                                                 
+
 var CODE_RUN_RELEASE_HEADER = "X-Sw-Code-Run-Release";
 
-                                            
+
 function managedIntentFromIR(ir, schema) {
   if (ir.table.kind !== "project") throw new Error("Managed queries require a declared project table.");
   const predicates = {
@@ -3963,16 +3963,16 @@ function managedIntentFromIR(ir, schema) {
 }
 var MANAGED_INTENT_WIRE_SOURCE = `(${managedIntentFromIR.toString()})`;
 
-                                 
+
 var SQL_TOKEN_PATTERN = /\s+|--[^\r\n]*|\/\*[\s\S]*?(?:\*\/|$)|[xX]'(?:[^']*)'|'(?:''|[^'])*'|"(?:""|[^"])*"|`(?:``|[^`])*`|\[[^\]]*\]|0[xX][0-9a-fA-F]+|(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?|[A-Za-z_\u0080-￿][A-Za-z0-9_$\u0080-￿]*|[\s\S]/g;
 var SQL_BLOB_START = /^[xX]'/;
 var SQL_WORD_START = /^[A-Za-z_\u0080-￿]/;
 
-                                              
+
 var READ_FIRST_KEYWORDS = ["SELECT", "WITH", "VALUES"];
 var WRITE_KEYWORDS = ["INSERT", "UPDATE", "DELETE"];
 
-                                         
+
 var PLATFORM_DATA_DOOR_VERSION = 1;
 var PLATFORM_DATA_DOOR_LIMITS = Object.freeze({ statements: 100, sqlBytes: 1e5, params: 100 });
 var PLATFORM_DATA_RESPONSE_MAX_BYTES = 4 * 1024 * 1024;
@@ -4142,13 +4142,13 @@ function fnv1a(text) {
 }
 var PLATFORM_DATA_DOOR_REVISION = `door-${PLATFORM_DATA_DOOR_VERSION}-${fnv1a(PLATFORM_DATA_DOOR_SOURCE)}`;
 
-                                                  
+
 function createBoundedReplyReader(maxBytes) {
   const bounded = {
-                                                          
-                                                                                   
-                                                                                
-                                                   
+
+
+
+
     async read(response, deadline) {
       const declared = Number(response.headers.get("content-length"));
       if (Number.isFinite(declared) && declared > maxBytes) {
@@ -4194,10 +4194,10 @@ function createBoundedReplyReader(maxBytes) {
         return { ok: false, reason: "transport" };
       }
     },
-                                                                                   
-                                                                               
-                                                                                    
-                                                                
+
+
+
+
     async fetch(send, timeoutMs) {
       let timer;
       const deadline = new Promise((resolve) => {
@@ -4229,7 +4229,7 @@ var readBoundedReply = defaultReader.read;
 var fetchBoundedReply = defaultReader.fetch;
 var BOUNDED_REPLY_READER_SOURCE = `(${createBoundedReplyReader.toString()})`;
 
-                                     
+
 var DB_ROW_LINKS_JS = `
       let __sw_linkAuthority = null;
       function __sw_linkUnavailable() {
@@ -4364,7 +4364,7 @@ var DB_ROW_LINKS_JS = `
       });
 `;
 
-                                  
+
 var DB_INTAKE_JS = `
       async function __sw_clientIntakePost(payload, clientIp) {
         if (!__sw_usesManagedEndpoint() || !env.SW_EXECUTION_ATTESTATION || env.SW_CODE_RUN_RELEASE || isDraftExecution) {
@@ -4416,7 +4416,7 @@ var DB_INTAKE_JS = `
       });
 `;
 
-                                   
+
 var DB_MANAGED_JS = `
       const __sw_managedIntent = ${MANAGED_INTENT_WIRE_SOURCE};
       const __sw_managedReply = ${BOUNDED_REPLY_READER_SOURCE}(${PLATFORM_DATA_RESPONSE_MAX_BYTES});
@@ -4604,7 +4604,7 @@ var DB_MANAGED_JS = `
       }
 ` + DB_ROW_LINKS_JS + DB_INTAKE_JS;
 
-                                                
+
 var DB_STRUCTURED_EXECUTION_JS = `      async function __sw_structExec(label, ir, principalId, mutation, generatedRead) {
         ensureBinding();
         if (__sw_usesManagedEndpoint()) return __sw_managedCall([{ label: label, ir: ir, principalId: principalId, mutation: mutation }], false, undefined, undefined, generatedRead);
@@ -4708,7 +4708,7 @@ var DB_STRUCTURED_EXECUTION_JS = `      async function __sw_structExec(label, ir
       }
 `;
 
-                                         
+
 function createSchemaValidator(context) {
   const isoTimestampRe = /^\d{4}-\d{2}-\d{2}([T ]\d{2}:\d{2}(:\d{2}(\.\d{1,9})?)?(Z|[+-]\d{2}:?\d{2})?)?$/;
   const wholeNumberRe = /^-?\d+$/;
@@ -5039,7 +5039,7 @@ function createSchemaValidator(context) {
 }
 var SCHEMA_VALIDATOR_JS = "      const __sw_createSchemaValidator = (" + createSchemaValidator.toString() + ");\n";
 
-                                   
+
 function renderPolicySql(request) {
   const r = request;
   if (r.render === "ident") {
@@ -5549,7 +5549,7 @@ function policyWithoutGrants(policy) {
 }
 var POLICY_SQL_JS = "      const __sw_renderPolicySql = (" + renderPolicySql.toString() + ");\n      const __sw_policyOwnerColumn = (" + policyOwnerColumn.toString() + ");\n      const __sw_policyWithoutGrants = (" + policyWithoutGrants.toString() + ");\n";
 
-                                  
+
 function renderQuerySql(ir, principalId, returning, context) {
   if (!ir.table || ir.table.kind !== "project") {
     const err = new Error('sw.db: table kind "' + (ir.table && ir.table.kind) + '" is not yet supported \u2014 the structured builder renders project tables only.');
@@ -5596,10 +5596,10 @@ function renderQuerySql(ir, principalId, returning, context) {
       params.push(...guard.params);
       return guard.sql;
     },
-                                                                           
-                                                                      
-                                                                           
-                                                              
+
+
+
+
     renderPredicate(p, qualifier) {
       if (p.op === "or") {
         const branches = [];
@@ -5631,21 +5631,21 @@ function renderQuerySql(ir, principalId, returning, context) {
       params.push(p.value);
       return col + " " + context.binaryOperators[p.op] + " ?";
     },
-                                                                           
-                                                                              
-                                                                             
-                                                                           
-                                                                           
-                                                                          
-                                                                         
-                                                                               
-                                                  
-      
-                                                                 
-                                                                            
-                                                                         
-                                                                            
-                                                                             
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     relationExistsSql(rf) {
       const childT = helpers.table(rf.table);
       const childAliasName = "__sw_rel";
@@ -5668,13 +5668,13 @@ function renderQuerySql(ir, principalId, returning, context) {
         frags.push(helpers.linkGuard(rf.scope.link, childAlias + "." + q(rf.scope.link.column), null));
       return "EXISTS (SELECT 1 FROM " + childT + " AS " + childAlias + " WHERE " + frags.join(" AND ") + ")";
     },
-                                                                         
-                                                                           
-                                                                       
-                                                                         
-                                                                        
-                                                                        
-                                                             
+
+
+
+
+
+
+
     policySql(rendered) {
       for (let i = 0; i < rendered.params.length; i++)
         params.push(rendered.params[i]);
@@ -5691,9 +5691,9 @@ function renderQuerySql(ir, principalId, returning, context) {
     policyInsertPredicate(policy, proposedValues) {
       return helpers.policySql(context.renderPolicy({ render: "insert", principal: principalId, table: ir.table.name, physical: context.physicalMap(), policy, proposed: proposedValues }));
     },
-                                                                                               
-                                                                                               
-                                                                             
+
+
+
     policyFixedKeys(policy) {
       const keys = [];
       if (policy.k === "m") {
@@ -5711,10 +5711,10 @@ function renderQuerySql(ir, principalId, returning, context) {
       }
       return keys;
     },
-                                                                                                    
-                                                                                                   
-                                                                                                       
-                     
+
+
+
+
     conflictUpdateSql(updatePredicate, fixed) {
       const sets = context.map(ir.values, function(e) {
         return q(e.column) + " = excluded." + q(e.column);
@@ -5729,13 +5729,13 @@ function renderQuerySql(ir, principalId, returning, context) {
       }
       return " ON CONFLICT DO UPDATE SET " + sets.join(", ") + " WHERE CASE WHEN " + held.join(" AND ") + " THEN 1 ELSE json_extract('{}', 'SW_POLICY_AUTHORITY_REQUIRED') END";
     },
-                                                                               
-                                                                              
-                                                                             
-                                                                              
-                                                                             
-                                                                             
-                                                                           
+
+
+
+
+
+
+
     linkGuard(link, rowRef, rowValue) {
       if (link && link.creator) return helpers.creatorGuard(link, rowRef, rowValue);
       if (!link || typeof link.grant !== "string" || !/^lnk_[0-9a-f]{32}$/.test(link.grant) || typeof link.token !== "string" || !/^[0-9a-f]{64}$/.test(link.token) || typeof link.digest !== "string" || !/^[0-9a-f]{64}$/.test(link.digest) || typeof link.epoch !== "number" || !Number.isSafeInteger(link.epoch) || link.epoch < 1 || typeof link.root !== "string" || !/^[a-z_][a-z0-9_]{0,63}$/.test(link.root) || typeof link.write !== "boolean")
@@ -5770,11 +5770,11 @@ function renderQuerySql(ir, principalId, returning, context) {
       }
       return "EXISTS (SELECT 1 FROM " + q("_sw_row_link_sessions") + " AS " + ls + " JOIN " + q("_sw_row_links") + " AS " + lg + " ON " + lg + "." + q("id") + " = " + ls + "." + q("grant_id") + " JOIN " + q("_sw_row_link_epochs") + " AS " + le + " ON " + le + "." + q("table_name") + " = " + lg + "." + q("table_name") + " WHERE " + ls + "." + q("token_digest") + " = ? AND " + ls + "." + q("expires_at") + " > unixepoch() AND " + lg + "." + q("id") + " = ? AND " + lg + "." + q("table_name") + " = ? AND " + lg + "." + q("row_key") + " = " + key + " AND " + lg + "." + q("revoked_at") + " IS NULL AND (" + lg + "." + q("expires_at") + " IS NULL OR " + lg + "." + q("expires_at") + " > unixepoch()) AND " + lg + "." + q("access") + (link.write ? " = 'edit'" : " IN ('read', 'edit')") + " AND " + le + "." + q("digest") + " = ? AND " + le + "." + q("epoch") + " = ? AND " + lg + "." + q("minted_epoch") + " = " + le + "." + q("epoch") + team + ")";
     },
-                                                                                                         
-                                                                                                      
-                                                                                                     
-                                                                                                    
-                                                                               
+
+
+
+
+
     creatorGuard(link, rowRef, rowValue) {
       const creator = link.creator;
       if (!creator || typeof link.grant !== "string" || !/^crt_[0-9a-f]{32}$/.test(link.grant) || typeof link.token !== "string" || !/^[0-9a-f]{64}$/.test(link.token) || typeof link.digest !== "string" || !/^[0-9a-f]{64}$/.test(link.digest) || typeof link.epoch !== "number" || !Number.isSafeInteger(link.epoch) || link.epoch < 1 || typeof link.root !== "string" || !/^[a-z_][a-z0-9_]{0,63}$/.test(link.root) || typeof link.write !== "boolean" || typeof creator.key !== "string" || !/^[a-z_][a-z0-9_]{0,63}$/.test(creator.key) || typeof creator.owner !== "string" || !/^[a-z_][a-z0-9_]{0,63}$/.test(creator.owner))
@@ -5866,10 +5866,10 @@ function renderQuerySql(ir, principalId, returning, context) {
       }
       return frags.length ? " WHERE " + frags.join(" AND ") : "";
     },
-                                                                                           
-                                                                                                   
-                                                                                               
-                                                                                
+
+
+
+
     canHint(scope, operation) {
       if (ir.kind !== "select" || !ir.scope || (ir.scope.mode === "public" ? !ir.scope.privateScope : ir.scope.mode === "server" || ir.scope.mode === "link" || ir.scope.mode === "intake"))
         context.fail("sw.db.from: can hints need a signed-in caller on a private table; nothing ran.");
@@ -6136,7 +6136,7 @@ function renderQuerySql(ir, principalId, returning, context) {
 }
 var QUERY_SQL_JS = "      const __sw_renderQuerySql = (" + renderQuerySql.toString() + ");\n";
 
-                                     
+
 var DB_RENDER_IR_JS = `${POLICY_SQL_JS}${QUERY_SQL_JS}      // One write names each column once (tsk_2515cf9e). Column names are
       // case-insensitive, an UPDATE applies the LAST of two assignments to the
       // same column, and authorization reads the FIRST proposed value \u2014 so
@@ -6228,7 +6228,7 @@ var DB_RENDER_IR_JS = `${POLICY_SQL_JS}${QUERY_SQL_JS}      // One write names e
       }
 `;
 
-                                                
+
 var DB_GENERATED_OWNER_READ_JS = `      function __sw_registerGeneratedOwnerRead(namespace) {
         if (typeof __sw_generatedOwnerReadSet === 'undefined') return namespace;
         __sw_generatedOwnerReadSet(namespace, function (table) {
@@ -6264,7 +6264,7 @@ var DB_GENERATED_OWNER_READ_JS = `      function __sw_registerGeneratedOwnerRead
       }
 `;
 
-                                       
+
 var DB_PUBLIC_READ_JS = DB_GENERATED_OWNER_READ_JS + `      function __sw_sharedAuthRequiredMessage(table, verb) {
         return verb === 'from' || verb === 'count' || verb === 'aggregate'
           ? 'sw.db.' + verb + ' on "' + table + '": shared() is a signed-in shared view, and this request has no verified user. Send the request signed in (session cookie or Authorization: Bearer token). For intentionally public catalog data, declare an explicit client.read column allowlist plus client.publicRead in db/schema.ts, run \`somewhere deploy\`, then read through the generated \`somewhere:data\` client (docs({ topic: \\'declared-data\\' })). client.publicRead does not grant anonymous authority to ordinary sw.db.from calls in custom functions.'
@@ -6414,7 +6414,7 @@ var DB_PUBLIC_READ_JS = DB_GENERATED_OWNER_READ_JS + `      function __sw_shared
 
 `;
 
-                                     
+
 var DB_AGGREGATE_JS = `      // The result key for one aggregate. Composed from the closed function name
       // and the validated column, NEVER from caller-supplied text \u2014 so a caller
       // cannot name a key, only ask for a function of a column.
@@ -6642,7 +6642,7 @@ var DB_AGGREGATE_JS = `      // The result key for one aggregate. Composed from 
       }
 `;
 
-                                     
+
 var DB_RELATIONS_JS = `      // \u2500\u2500 Composed joins (tsk_1186c9a) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
       // THE SCOPE-COMPOSITION INVARIANT: a relation key shapes the relationship;
       // it is NEVER trusted for access. Every participating table independently
@@ -6817,7 +6817,7 @@ var DB_RELATIONS_JS = `      // \u2500\u2500 Composed joins (tsk_1186c9a) \u2500
       }
 `;
 
-                                                
+
 var ROLE_NAME_PATTERN = /^[a-z][a-z0-9_]{0,63}$/;
 var EMAIL_DOMAIN_PATTERN = /^(?=.{4,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z][a-z0-9-]{0,61}[a-z0-9]$/;
 var ROLE_DOMAIN_MAP_JS = `
@@ -6831,7 +6831,7 @@ var ROLE_DOMAIN_MAP_JS = `
         return true;
       }`;
 
-                                  
+
 var DB_POLICY_HELPERS_JS = `${ROLE_DOMAIN_MAP_JS}
       function __sw_structPolicyIdent(value) { return typeof value === 'string' && value && __sw_reMatch(__SW_STRUCT_IDENT_RE, value); }
       function __sw_structPolicyMember(value) {
@@ -7121,10 +7121,10 @@ var DB_POLICY_RESOLVE_SCOPE_JS = `
         }
 `;
 
-                                                        
+
 var SHARED_AUTHOR_COLUMN = "_sw_author_id";
 
-                                             
+
 var DB_LIVE_INVALIDATION_JS = `      function __sw_liveInvalidation(table) {
         const wanted = String(table || '').toLowerCase();
         for (let i = 0; i < LIVE_MANIFEST.invalidation.length; i++) {
@@ -7399,7 +7399,7 @@ var DB_LIVE_INVALIDATION_JS = `      function __sw_liveInvalidation(table) {
 
 `;
 
-                           
+
 var DB_JS = `    db: (function () {
       // Two execution paths for sw.db, picked once at function start.
       //   1. Production prefers the native D1 binding (env.PROJECT_DB).
@@ -9513,7 +9513,7 @@ ${DB_AGGREGATE_JS}
       __sw_liveDoor.set(__sw_dbNamespace, __sw_liveDeclare);
       return __sw_registerGeneratedOwnerRead(__sw_dbNamespace);`;
 
-                               
+
 var DB_RAW_JS = `      var __sw_rawReadDbInstance = null;
       var __sw_splitRawDbInstance = null;
       function __sw_splitRefusal(code, message, status) {
@@ -9712,7 +9712,7 @@ var DB_RAW_JS = `      var __sw_rawReadDbInstance = null;
       }
 `;
 
-                                           
+
 var DB_COMPOSED_WRITES_JS = `      // Per-column conditions are ANDed. A bounded $or group remains one
       // predicate inside the independent platform ownership/member constraint.
       function __sw_structCompileWhere(where, allowOr) {
@@ -10105,7 +10105,7 @@ var DB_COMPOSED_WRITES_JS = `      // Per-column conditions are ANDed. A bounded
       }
 `;
 
-                                            
+
 var DB_SESSION_RECOVERY_JS = `      // \u2500\u2500 Read replicas, at the one native-binding chokepoint \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
       // A bookmark is valid only for the database that issued it. Its string
       // carries no provenance, so shape validation is necessary but not
@@ -10299,7 +10299,7 @@ var DB_SESSION_RECOVERY_JS = `      // \u2500\u2500 Read replicas, at the one na
       }
 `;
 
-                                    
+
 var DB_COALESCE_JS = `      // STATE LIVES ON A HOISTED FUNCTION, deliberately. This fragment is
       // concatenated into the sw.db namespace AFTER that namespace's own
       // \`return\`, so only hoisted function declarations here ever execute \u2014 a
@@ -10437,7 +10437,7 @@ var DB_COALESCE_JS = `      // STATE LIVES ON A HOISTED FUNCTION, deliberately. 
       }
 `;
 
-                                        
+
 function createDeclaredResultDecoder(context) {
   const checks = {
     value(column, value) {
@@ -10539,7 +10539,7 @@ function createDeclaredResultDecoder(context) {
 }
 var DECLARED_RESULT_FACTORY_SOURCE = "(" + createDeclaredResultDecoder.toString() + ")";
 
-                                           
+
 var DB_RESULT_FIDELITY_JS = `      var __sw_declaredResultChecks;
       function __sw_declaredResults() {
         if (__sw_declaredResultChecks) return __sw_declaredResultChecks;
@@ -10782,7 +10782,7 @@ var DB_RESULT_FIDELITY_JS = `      var __sw_declaredResultChecks;
       }
     })(),`;
 
-                                 
+
 var POSTGRES_JS = `    get postgres() {
       const connectionString = env.PROJECT_POSTGRES_DSN;
       if (typeof __sw_neon !== 'undefined' && connectionString) {
@@ -10881,7 +10881,7 @@ var POSTGRES_JS = `    get postgres() {
     },
 `;
 
-                           
+
 var FS_JS = `    fs: (function () {
       function __sw_fsDevOnly(op) {
         const err = new Error('sw.fs.' + op + ' is a project-wide scanner, not a per-user operation, so it is not on the default user-facing sw.fs. It runs with project authority in run_code (sw.fs.dev.' + op + ') \u2014 a developer-authenticated context \u2014 not in a request, cron, queue, or job handler. Per-user ' + op + ' is not offered \u2014 model per-user data in sw.db, or filter results yourself.');
@@ -11409,7 +11409,7 @@ var FS_JS = `    fs: (function () {
     })(),
 `;
 
-                                
+
 var STORAGE_JS = `    storage: (function () {
       // sw.storage.* was removed when sw.fs replaced the legacy storage
       // API \u2014 the old storage route now returns 410 GONE (see
@@ -11441,7 +11441,7 @@ var STORAGE_JS = `    storage: (function () {
     })(),
 `;
 
-                              
+
 var EMAIL_JS = `    email: {
       send(opts) {
         return platformJSON('/v1/email/send', {
@@ -11505,7 +11505,7 @@ var EMAIL_JS = `    email: {
     },
 `;
 
-                                         
+
 var AI_USER_MEMORY_MERGE_SQL = `INSERT INTO _ai_user_memory (user_id, blob_json, updated_at)
 VALUES (?, ?, ?)
 ON CONFLICT(user_id) DO UPDATE SET blob_json = (
@@ -11521,7 +11521,7 @@ ON CONFLICT(user_id) DO UPDATE SET blob_json = (
 WHERE json_type(_ai_user_memory.blob_json) = 'object'
 RETURNING blob_json`;
 
-                           
+
 var AI_JS = `    ai: (function () {
       // Legacy memory uses the bound database; split memory uses private transport.
       const DB = env.PROJECT_DB;
@@ -12024,10 +12024,10 @@ var AI_JS = `    ai: (function () {
     })(),
 `;
 
-                                             
+
 var AGENT_STEP_JS = "function assertAgentActive(signal) {\n    if (signal?.aborted)\n        throw Object.assign(new Error('Agent invocation cancelled.'), { code: 'AGENT_CANCELLED' });\n}\nasync function runAgentToolCalls(calls, execute, signal) {\n    const results = [];\n    for (let index = 0; index < calls.length; index++) {\n        assertAgentActive(signal);\n        const call = calls[index];\n        try {\n            results.push(await execute(call, index));\n        }\n        catch (error) {\n            assertAgentActive(signal);\n            results.push({\n                tool_use_id: typeof call.id === 'string' ? call.id : '',\n                content: error && typeof error === 'object' && 'message' in error && typeof error.message === 'string' ? error.message : String(error),\n                is_error: true,\n            });\n        }\n    }\n    return results;\n}\nasync function executeModelToolStep(host) {\n    assertAgentActive(host.signal);\n    const startedAt = Date.now();\n    const response = await host.callModel();\n    const blocks = Array.isArray(response?.content) ? response.content : [];\n    const toolUses = blocks.filter((block) => block && block.type === 'tool_use');\n    const truncated = response?.stop_reason === 'max_tokens' || response?.stop_reason === 'length';\n    const observation = { blocks, toolUses, truncated, startedAt, durationMs: Date.now() - startedAt };\n    await host.afterResponse(response, observation);\n    assertAgentActive(host.signal);\n    const executes = !truncated && toolUses.length > 0 && (!host.requireToolUseStop || response.stop_reason === 'tool_use');\n    const results = executes ? await host.executeTools(toolUses) : [];\n    assertAgentActive(host.signal);\n    return { response, ...observation, results, executes };\n}\n";
 
-                              
+
 var AGENT_JS = `    agent: (function () {
       ${AGENT_STEP_JS}
       let invocationBodyPromise = null;
@@ -12618,7 +12618,7 @@ var AGENT_JS = `    agent: (function () {
     })(),
 `;
 
-                              
+
 var IMAGE_JS = `    image: (function () {
       // Image transformations \u2014 URL builder. Returns a string URL that
       // points at Cloudflare's image resizer on the project's domain.
@@ -12675,7 +12675,7 @@ var IMAGE_JS = `    image: (function () {
     })(),
 `;
 
-                                             
+
 var AUTH_MANAGED_VISITOR_JS = `      // Visitor identity is declared when the release has visitor-owned tables:
       // legacy bundles carry the signing key; split bundles carry no key and no
       // managed binding, so the declaration itself is the signal.
@@ -12777,7 +12777,7 @@ var AUTH_MANAGED_VISITOR_JS = `      // Visitor identity is declared when the re
       __sw_visitorSessionToken = function () { return visitorIdentity && visitorIdentity.token ? visitorIdentity.token() : null; };
 `;
 
-                                    
+
 var AUTH_SERVER_JS = `        server: (function () {
           const reply = ${BOUNDED_REPLY_READER_SOURCE}(${PLATFORM_DATA_RESPONSE_MAX_BYTES});
           function refuse(code, status, message) {
@@ -12816,7 +12816,7 @@ var AUTH_SERVER_JS = `        server: (function () {
         })(),
 `;
 
-                                              
+
 var AUTH_REFRESH_RESPONSE_JS = `(async function (refresh) {
   const response = await platformFetch('/v1/auth/refresh', { method: 'POST', body: JSON.stringify({ project_id: projectId, refresh_token: refresh }) });
   let result;
@@ -12836,7 +12836,7 @@ var AUTH_REFRESH_RESPONSE_JS = `(async function (refresh) {
   return result.data;
 })`;
 
-                             
+
 var AUTH_JS = `    auth: (function () {
       const DB = env.PROJECT_DB;
       // Forward an end-user JWT (app_user) directly as the Authorization
@@ -14430,7 +14430,7 @@ ${AUTH_MANAGED_VISITOR_JS}      function __sw_visitorController() {
     })(),
 `;
 
-                             
+
 var JOBS_JS = `    jobs: {
       async create(opts) {
         // A row-bound job ({ row: { binding, id } }) acts for the signed-in
@@ -14499,7 +14499,7 @@ var JOBS_JS = `    jobs: {
     },
 `;
 
-                              
+
 var QUEUE_JS = `    queue: {
       push(opts) {
         return platformJSON('/v1/queue', {
@@ -14513,7 +14513,7 @@ var QUEUE_JS = `    queue: {
     },
 `;
 
-                             
+
 var LOGS_JS = `    logs: {
       _send(level, message, data) {
         const delivery = (async function () {
@@ -14613,7 +14613,7 @@ var LOGS_JS = `    logs: {
     },
 `;
 
-                                  
+
 var ANALYTICS_JS = `    analytics: {
       async track(event, opts) {
         opts = opts || {};
@@ -14657,7 +14657,7 @@ var ANALYTICS_JS = `    analytics: {
     // storage, returns the raw fetch Response so callers can stream
     // the binary out (e.g. to the browser).`;
 
-                               
+
 var RENDER_JS = `    render: (function () {
       // A storage call from a signed-in visitor carries the visitor's original
       // credential, as sw.fs does, so the platform can verify who the file
@@ -14711,7 +14711,7 @@ var RENDER_JS = `    render: (function () {
     })(),
 `;
 
-                               
+
 var SEARCH_JS = `    search: {
       async add(path) {
         const userId = await __sw_requireSubject('sw.search.add');
@@ -14811,7 +14811,7 @@ var SEARCH_JS = `    search: {
     },
 `;
 
-                              
+
 var INBOX_JS = `    inbox: (function () {
       const __sw_inboxIdentityKeys = new Set([
         'as_user', 'asUser', 'user_id', 'userId', 'owner',
@@ -14990,7 +14990,7 @@ var INBOX_JS = `    inbox: (function () {
     // sw.connect.* \u2014 read-side third-party connections (tsk_1b20).
     // Opposite of sw.payments: read another account's data, don't accept money.`;
 
-                                
+
 var CONNECT_JS = `    connect: {
       stripe: {
         // Returns { url } \u2014 send the creator's browser there to authorize
@@ -15031,7 +15031,7 @@ var CONNECT_JS = `    connect: {
     },
 `;
 
-                                 
+
 var PAYMENTS_JS = `    async quote(resource, range, opts) {
       opts = opts || {};
       const env = opts.env || projectEnv;
@@ -15231,7 +15231,7 @@ var PAYMENTS_JS = `    async quote(resource, range, opts) {
     },
 `;
 
-                                
+
 var BILLING_JS = `    billing: {
       definePlans(plans) {
         if (!Array.isArray(plans)) {
@@ -15271,7 +15271,7 @@ var BILLING_JS = `    billing: {
     },
 `;
 
-                               
+
 var GROUPS_JS = `    groups: (() => {
       const reply = ${BOUNDED_REPLY_READER_SOURCE}(${PLATFORM_DATA_RESPONSE_MAX_BYTES});
       function refuse(code, status, message) {
@@ -15368,7 +15368,7 @@ var GROUPS_JS = `    groups: (() => {
     })(),
 `;
 
-                              
+
 var TASKS_JS = `    tasks: (() => {
       function queryOptions(opts, keys) {
         const q = new URLSearchParams({ project_id: projectId });
@@ -15455,7 +15455,7 @@ var TASKS_JS = `    tasks: (() => {
     })(),
 `;
 
-                             
+
 var CRON_JS = `    cron: {
       create(opts) {
         return platformJSON('/v1/cron', {
@@ -15478,7 +15478,7 @@ var CRON_JS = `    cron: {
     },
 `;
 
-                                 
+
 var CALENDAR_JS = `    calendar: {
       hold(resourceOrOpts, range, ttl) {
         const body = (resourceOrOpts && typeof resourceOrOpts === 'object' && range === undefined)
@@ -15612,7 +15612,7 @@ var CALENDAR_JS = `    calendar: {
     },
 `;
 
-                                   
+
 var RATE_LIMIT_JS = `    rateLimit: {
       // sw.rateLimit.check(key, max, windowSeconds) \u2192 { allowed, remaining, reset, ... }
       // Fixed-window counter, scoped per (project, key). On allowed=false the
@@ -15669,7 +15669,7 @@ var RATE_LIMIT_JS = `    rateLimit: {
     },
 `;
 
-                            
+
 var WEB_JS = `    web: {
       // sw.web.scrape(url, opts?) \u2014 fetch a URL, return its content as
       // markdown by default. opts: { formats?, only_main?, wait_for? }
@@ -15713,7 +15713,7 @@ var WEB_JS = `    web: {
     // \u2014 write your own dedup if you need it; this layer is the
     // primitive, not the policy.`;
 
-                                      
+
 var NOTIFICATIONS_JS = `    notifications: (function () {
       // Direct DB binding for the bell store (tsk_5d490a39). Each IIFE binds
       // its own copy \u2014 mirrors ai.ts / auth.ts \u2014 because fragments are
@@ -15915,7 +15915,7 @@ var NOTIFICATIONS_JS = `    notifications: (function () {
     })(),
 `;
 
-                             
+
 var PUSH_JS = `    push: (function () {
       // The signed-in user of THIS request owns the device. The platform
       // re-verifies the carried session; no argument can name a user.
@@ -16000,7 +16000,7 @@ var PUSH_JS = `    push: (function () {
       };
     })(),`;
 
-                              
+
 var ROOMS_JS = `    rooms: (function () {
       function __sw_roomsError(code, message, status) {
         const err = new Error(message);
@@ -16139,7 +16139,7 @@ var ROOMS_JS = `    rooms: (function () {
     })(),
 `;
 
-                                     
+
 var CONTEXT_TAIL_JS = `  };
   // sw.realtime is RETIRED (tsk_e0cc5403). There is no namespace: the property
   // is a non-enumerable accessor, so it never appears on Object.keys(sw), in a
@@ -16341,7 +16341,7 @@ var CONTEXT_TAIL_JS = `  };
   return sw;
 }`;
 
-                                
+
 var PARTS = [
   CONTEXT_HEAD_JS,
   FETCH_JS,
@@ -16383,13 +16383,13 @@ var PARTS = [
 ];
 var PLATFORM_CONTEXT_JS = PARTS.join("\n").trim();
 
-                                      
+
 var import_declared_data_contract = __toESM(require_declared_data_contract());
 
-                          
+
 var PUBLIC_RESULT_MAX_AGE_SECONDS = 120;
 
-                                                
+
 function declaredBranchReads(shape) {
   const policy = shape.policy;
   if (!policy || policy.k !== "a" || !Array.isArray(policy.reads)) return null;
@@ -16407,9 +16407,9 @@ function declaredReadFields(shape) {
 }
 function declaredListGetPlan(operation, input, shape, fields, fail) {
   const helpers = {
-                                                                            
-                                                                                 
-                                             
+
+
+
     key(value, column) {
       if (column && column.t === "integer") {
         if (typeof value === "number" && Number.isSafeInteger(value)) return value;
@@ -16489,7 +16489,7 @@ const __sw_dataReadFields = (${declaredReadFields.toString()});
 const __sw_dataListGetPlan = (${declaredListGetPlan.toString()});
 const __sw_dataListGetPayload = (${declaredListGetPayload.toString()});`;
 
-                                      
+
 var DECLARED_DATA_RUNTIME_JS = String.raw`
 // The generated client's read-field grant and list/get translation, shared
 // with the platform's direct managed browser read (declared-data-read-plan.ts).
@@ -17064,7 +17064,7 @@ async function __sw_handleDeclaredData(request, sw, env) {
 }
 `;
 
-                                       
+
 var DECLARED_FILES_RUNTIME_JS = String.raw`
 async function __sw_handleDeclaredFiles(request, sw, env, fetcher) {
   if (__sw_artifactExecution !== 'standard') {
@@ -17106,7 +17106,7 @@ async function __sw_handleDeclaredFiles(request, sw, env, fetcher) {
 }
 `;
 
-                                       
+
 var LINK_COOKIE_NAME = "__Host-sw_link";
 var LINK_COOKIE_MAX_ENTRIES = 4;
 var LINK_COOKIE_MAX_BYTES = 3500;
@@ -17417,7 +17417,7 @@ async function __sw_dataLinked(request, sw, input, table, shape) {
 }
 `;
 
-                                    
+
 var PUSH_CLIENT_MODULE_JS = `
 const DOOR = '/__sw/push';
 const WORKER_URL = '/__sw/push/sw.js';
@@ -17725,7 +17725,7 @@ async function __sw_handlePushDoor(request, sw, env) {
 }
 `;
 
-                                    
+
 var LIVE_CLIENT_MODULE_JS = `
 const LIVE_PING_FRAME = '{"type":"sw_ping"}';
 const LIVE_PING_MS = 25000;
@@ -17936,7 +17936,7 @@ export function watchLive(load, render, onError) {
 }
 `.trim();
 
-                                     
+
 var ROOMS_CLIENT_MODULE_JS = `
 const TICKET_PATH = '/__sw/rooms/ticket';
 const CONNECT_PATH = '/__sw/rooms/connect';
@@ -18378,7 +18378,7 @@ async function __sw_handleRoomsDoor(request, sw) {
 }
 `;
 
-                                            
+
 var FUNCTION_TRACE_SOURCE = String.raw`
 /** The trace id for this invocation, or null when tracing did not initialize. */
 function traceIdOf(platformCtx) {
@@ -18751,7 +18751,7 @@ async function reportFunctionError(env, request, code, err, responseStatus, requ
 }
 `;
 
-                                      
+
 function isHelperModulePath(path) {
   return path.replace(/^\/+/, "").split("/").some((segment) => segment.startsWith("_"));
 }
@@ -18760,13 +18760,13 @@ function isRoutedFunctionPath(path) {
   return path.startsWith("api/") || !path.includes("/") && /\[/.test(path);
 }
 
-                                         
+
 var ENDPOINT_AUTH_MODES = ["required", "optional", "none"];
 var ENDPOINT_AUTH_MODE_INVALID = "ENDPOINT_AUTH_MODE_INVALID";
 var ENDPOINT_AUTH_MODES_HINT = "Supported modes: 'required' (caller must be signed in), 'optional' (user when signed in, otherwise null), 'none' (public).";
 var MODES = new Set(ENDPOINT_AUTH_MODES);
 
-                                          
+
 var ENDPOINT_RATE_LIMIT_INVALID = "ENDPOINT_RATE_LIMIT_INVALID";
 var ENDPOINT_RATE_LIMIT_MAX_COUNT = 1e6;
 var ENDPOINT_RATE_LIMIT_HINT = `rateLimit accepts '<count>/<unit>' with a whole count from 1 to ${ENDPOINT_RATE_LIMIT_MAX_COUNT} and a unit of second, minute, hour or day, for example '30/minute'; without rateLimit there is no limit.`;
@@ -18801,7 +18801,7 @@ function __sw_endpointRateLimit(spec) {
 }
 `;
 
-                                                   
+
 function isCanonicalBigintText(value) {
   if (!/^(0|-?[1-9][0-9]*)$/.test(value)) return false;
   const negative = value.startsWith("-");
@@ -18810,7 +18810,7 @@ function isCanonicalBigintText(value) {
   return digits.length < limit.length || digits.length === limit.length && digits <= limit;
 }
 
-                                                          
+
 function tableAllowsClientWrites(table) {
   return Boolean(table.client && (table.client.create !== null || table.client.update !== null || table.client.delete || table.client.intake !== void 0));
 }
@@ -19065,10 +19065,10 @@ function parseLinkPermissions(value, read, update, create, columns, scope) {
   return { read: linkRead, edit, children, maxDays, ...input.anonymousCreate === true ? { anonymousCreate: true } : {} };
 }
 
-                                     
+
 var STALE_JOB_WINDOW_MS = 45 * 60 * 1e3;
 
-                                                               
+
 var BINDING_OPERATIONS = ["read", "create", "update", "delete"];
 var ROW_OPERATIONS = ["read", "update", "delete"];
 var MAX_JOB_BINDING_SECONDS = STALE_JOB_WINDOW_MS / 1e3;
@@ -19287,7 +19287,7 @@ function validateBindings(input, tableInfo, errors) {
   }
 }
 
-                                      
+
 function compileRoutePattern(file) {
   const pattern = (0, import_function_route.functionRouteSegments)(file).map((s) => ({ type: s.type, value: s.value }));
   return { pattern, displayPath: (0, import_function_route.displayRoute)(pattern), shape: (0, import_function_route.routeShape)(pattern) };
@@ -19631,7 +19631,7 @@ globalThis.sw.endpoint = function (config) {
 };
 `.trim();
 
-                                               
+
 function apiIndexRouteFindings(functions) {
   const paths = Object.keys(functions ?? {}).sort();
   const pathsByShape =                 new Map();
@@ -19665,7 +19665,7 @@ function isApiIndexHandlerPath(file) {
   return /^api\/.+\/index\.(?:ts|tsx|mts|js|mjs|jsx)$/.test(file) || /^api\/index\.(?:ts|tsx|mts|js|mjs|jsx)$/.test(file);
 }
 
-                                           
+
 var astralIdentifierCodes = [509, 0, 227, 0, 150, 4, 294, 9, 1368, 2, 2, 1, 6, 3, 41, 2, 5, 0, 166, 1, 574, 3, 9, 9, 7, 9, 32, 4, 318, 1, 80, 3, 71, 10, 50, 3, 123, 2, 54, 14, 32, 10, 3, 1, 11, 3, 46, 10, 8, 0, 46, 9, 7, 2, 37, 13, 2, 9, 6, 1, 45, 0, 13, 2, 49, 13, 9, 3, 2, 11, 83, 11, 7, 0, 3, 0, 158, 11, 6, 9, 7, 3, 56, 1, 2, 6, 3, 1, 3, 2, 10, 0, 11, 1, 3, 6, 4, 4, 68, 8, 2, 0, 3, 0, 2, 3, 2, 4, 2, 0, 15, 1, 83, 17, 10, 9, 5, 0, 82, 19, 13, 9, 214, 6, 3, 8, 28, 1, 83, 16, 16, 9, 82, 12, 9, 9, 7, 19, 58, 14, 5, 9, 243, 14, 166, 9, 71, 5, 2, 1, 3, 3, 2, 0, 2, 1, 13, 9, 120, 6, 3, 6, 4, 0, 29, 9, 41, 6, 2, 3, 9, 0, 10, 10, 47, 15, 343, 9, 54, 7, 2, 7, 17, 9, 57, 21, 2, 13, 123, 5, 4, 0, 2, 1, 2, 6, 2, 0, 9, 9, 49, 4, 2, 1, 2, 4, 9, 9, 330, 3, 10, 1, 2, 0, 49, 6, 4, 4, 14, 10, 5350, 0, 7, 14, 11465, 27, 2343, 9, 87, 9, 39, 4, 60, 6, 26, 9, 535, 9, 470, 0, 2, 54, 8, 3, 82, 0, 12, 1, 19628, 1, 4178, 9, 519, 45, 3, 22, 543, 4, 4, 5, 9, 7, 3, 6, 31, 3, 149, 2, 1418, 49, 513, 54, 5, 49, 9, 0, 15, 0, 23, 4, 2, 14, 1361, 6, 2, 16, 3, 6, 2, 1, 2, 4, 101, 0, 161, 6, 10, 9, 357, 0, 62, 13, 499, 13, 245, 1, 2, 9, 726, 6, 110, 6, 6, 9, 4759, 9, 787719, 239];
 var astralIdentifierStartCodes = [0, 11, 2, 25, 2, 18, 2, 1, 2, 14, 3, 13, 35, 122, 70, 52, 268, 28, 4, 48, 48, 31, 14, 29, 6, 37, 11, 29, 3, 35, 5, 7, 2, 4, 43, 157, 19, 35, 5, 35, 5, 39, 9, 51, 13, 10, 2, 14, 2, 6, 2, 1, 2, 10, 2, 14, 2, 6, 2, 1, 4, 51, 13, 310, 10, 21, 11, 7, 25, 5, 2, 41, 2, 8, 70, 5, 3, 0, 2, 43, 2, 1, 4, 0, 3, 22, 11, 22, 10, 30, 66, 18, 2, 1, 11, 21, 11, 25, 71, 55, 7, 1, 65, 0, 16, 3, 2, 2, 2, 28, 43, 28, 4, 28, 36, 7, 2, 27, 28, 53, 11, 21, 11, 18, 14, 17, 111, 72, 56, 50, 14, 50, 14, 35, 39, 27, 10, 22, 251, 41, 7, 1, 17, 2, 60, 28, 11, 0, 9, 21, 43, 17, 47, 20, 28, 22, 13, 52, 58, 1, 3, 0, 14, 44, 33, 24, 27, 35, 30, 0, 3, 0, 9, 34, 4, 0, 13, 47, 15, 3, 22, 0, 2, 0, 36, 17, 2, 24, 20, 1, 64, 6, 2, 0, 2, 3, 2, 14, 2, 9, 8, 46, 39, 7, 3, 1, 3, 21, 2, 6, 2, 1, 2, 4, 4, 0, 19, 0, 13, 4, 31, 9, 2, 0, 3, 0, 2, 37, 2, 0, 26, 0, 2, 0, 45, 52, 19, 3, 21, 2, 31, 47, 21, 1, 2, 0, 185, 46, 42, 3, 37, 47, 21, 0, 60, 42, 14, 0, 72, 26, 38, 6, 186, 43, 117, 63, 32, 7, 3, 0, 3, 7, 2, 1, 2, 23, 16, 0, 2, 0, 95, 7, 3, 38, 17, 0, 2, 0, 29, 0, 11, 39, 8, 0, 22, 0, 12, 45, 20, 0, 19, 72, 200, 32, 32, 8, 2, 36, 18, 0, 50, 29, 113, 6, 2, 1, 2, 37, 22, 0, 26, 5, 2, 1, 2, 31, 15, 0, 328, 18, 16, 0, 2, 12, 2, 33, 125, 0, 80, 921, 103, 110, 18, 195, 2637, 96, 16, 1071, 18, 5, 26, 3994, 6, 582, 6842, 29, 1763, 568, 8, 30, 18, 78, 18, 29, 19, 47, 17, 3, 32, 20, 6, 18, 433, 44, 212, 63, 129, 74, 6, 0, 67, 12, 65, 1, 2, 0, 29, 6135, 9, 1237, 42, 9, 8936, 3, 2, 6, 2, 1, 2, 290, 16, 0, 30, 2, 3, 0, 15, 3, 9, 395, 2309, 106, 6, 12, 4, 8, 8, 9, 5991, 84, 2, 70, 2, 1, 3, 0, 3, 1, 3, 3, 2, 11, 2, 0, 2, 6, 2, 64, 2, 3, 3, 7, 2, 6, 2, 27, 2, 3, 2, 4, 2, 0, 4, 6, 2, 339, 3, 24, 2, 24, 2, 30, 2, 24, 2, 30, 2, 24, 2, 30, 2, 24, 2, 30, 2, 24, 2, 7, 1845, 30, 7, 5, 262, 61, 147, 44, 11, 6, 17, 0, 322, 29, 19, 43, 485, 27, 229, 29, 3, 0, 496, 6, 2, 3, 2, 1, 2, 14, 2, 196, 60, 67, 8, 0, 1205, 3, 2, 26, 2, 1, 2, 0, 3, 0, 2, 9, 2, 3, 2, 0, 2, 0, 7, 0, 5, 0, 2, 0, 2, 0, 2, 2, 2, 1, 2, 0, 3, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 1, 2, 0, 3, 3, 2, 6, 2, 3, 2, 3, 2, 0, 2, 9, 2, 16, 6, 2, 2, 4, 2, 16, 4421, 42719, 33, 4153, 7, 221, 3, 5761, 15, 7472, 16, 621, 2467, 541, 1507, 4938, 6, 4191];
 var nonASCIIidentifierChars = "\u200C\u200D\xB7\u0300-\u036F\u0387\u0483-\u0487\u0591-\u05BD\u05BF\u05C1\u05C2\u05C4\u05C5\u05C7\u0610-\u061A\u064B-\u0669\u0670\u06D6-\u06DC\u06DF-\u06E4\u06E7\u06E8\u06EA-\u06ED\u06F0-\u06F9\u0711\u0730-\u074A\u07A6-\u07B0\u07C0-\u07C9\u07EB-\u07F3\u07FD\u0816-\u0819\u081B-\u0823\u0825-\u0827\u0829-\u082D\u0859-\u085B\u0897-\u089F\u08CA-\u08E1\u08E3-\u0903\u093A-\u093C\u093E-\u094F\u0951-\u0957\u0962\u0963\u0966-\u096F\u0981-\u0983\u09BC\u09BE-\u09C4\u09C7\u09C8\u09CB-\u09CD\u09D7\u09E2\u09E3\u09E6-\u09EF\u09FE\u0A01-\u0A03\u0A3C\u0A3E-\u0A42\u0A47\u0A48\u0A4B-\u0A4D\u0A51\u0A66-\u0A71\u0A75\u0A81-\u0A83\u0ABC\u0ABE-\u0AC5\u0AC7-\u0AC9\u0ACB-\u0ACD\u0AE2\u0AE3\u0AE6-\u0AEF\u0AFA-\u0AFF\u0B01-\u0B03\u0B3C\u0B3E-\u0B44\u0B47\u0B48\u0B4B-\u0B4D\u0B55-\u0B57\u0B62\u0B63\u0B66-\u0B6F\u0B82\u0BBE-\u0BC2\u0BC6-\u0BC8\u0BCA-\u0BCD\u0BD7\u0BE6-\u0BEF\u0C00-\u0C04\u0C3C\u0C3E-\u0C44\u0C46-\u0C48\u0C4A-\u0C4D\u0C55\u0C56\u0C62\u0C63\u0C66-\u0C6F\u0C81-\u0C83\u0CBC\u0CBE-\u0CC4\u0CC6-\u0CC8\u0CCA-\u0CCD\u0CD5\u0CD6\u0CE2\u0CE3\u0CE6-\u0CEF\u0CF3\u0D00-\u0D03\u0D3B\u0D3C\u0D3E-\u0D44\u0D46-\u0D48\u0D4A-\u0D4D\u0D57\u0D62\u0D63\u0D66-\u0D6F\u0D81-\u0D83\u0DCA\u0DCF-\u0DD4\u0DD6\u0DD8-\u0DDF\u0DE6-\u0DEF\u0DF2\u0DF3\u0E31\u0E34-\u0E3A\u0E47-\u0E4E\u0E50-\u0E59\u0EB1\u0EB4-\u0EBC\u0EC8-\u0ECE\u0ED0-\u0ED9\u0F18\u0F19\u0F20-\u0F29\u0F35\u0F37\u0F39\u0F3E\u0F3F\u0F71-\u0F84\u0F86\u0F87\u0F8D-\u0F97\u0F99-\u0FBC\u0FC6\u102B-\u103E\u1040-\u1049\u1056-\u1059\u105E-\u1060\u1062-\u1064\u1067-\u106D\u1071-\u1074\u1082-\u108D\u108F-\u109D\u135D-\u135F\u1369-\u1371\u1712-\u1715\u1732-\u1734\u1752\u1753\u1772\u1773\u17B4-\u17D3\u17DD\u17E0-\u17E9\u180B-\u180D\u180F-\u1819\u18A9\u1920-\u192B\u1930-\u193B\u1946-\u194F\u19D0-\u19DA\u1A17-\u1A1B\u1A55-\u1A5E\u1A60-\u1A7C\u1A7F-\u1A89\u1A90-\u1A99\u1AB0-\u1ABD\u1ABF-\u1ACE\u1B00-\u1B04\u1B34-\u1B44\u1B50-\u1B59\u1B6B-\u1B73\u1B80-\u1B82\u1BA1-\u1BAD\u1BB0-\u1BB9\u1BE6-\u1BF3\u1C24-\u1C37\u1C40-\u1C49\u1C50-\u1C59\u1CD0-\u1CD2\u1CD4-\u1CE8\u1CED\u1CF4\u1CF7-\u1CF9\u1DC0-\u1DFF\u200C\u200D\u203F\u2040\u2054\u20D0-\u20DC\u20E1\u20E5-\u20F0\u2CEF-\u2CF1\u2D7F\u2DE0-\u2DFF\u302A-\u302F\u3099\u309A\u30FB\uA620-\uA629\uA66F\uA674-\uA67D\uA69E\uA69F\uA6F0\uA6F1\uA802\uA806\uA80B\uA823-\uA827\uA82C\uA880\uA881\uA8B4-\uA8C5\uA8D0-\uA8D9\uA8E0-\uA8F1\uA8FF-\uA909\uA926-\uA92D\uA947-\uA953\uA980-\uA983\uA9B3-\uA9C0\uA9D0-\uA9D9\uA9E5\uA9F0-\uA9F9\uAA29-\uAA36\uAA43\uAA4C\uAA4D\uAA50-\uAA59\uAA7B-\uAA7D\uAAB0\uAAB2-\uAAB4\uAAB7\uAAB8\uAABE\uAABF\uAAC1\uAAEB-\uAAEF\uAAF5\uAAF6\uABE3-\uABEA\uABEC\uABED\uABF0-\uABF9\uFB1E\uFE00-\uFE0F\uFE20-\uFE2F\uFE33\uFE34\uFE4D-\uFE4F\uFF10-\uFF19\uFF3F\uFF65";
@@ -19779,7 +19779,7 @@ var types$1 = {
   name: new TokenType("name", startsExpr),
   privateId: new TokenType("privateId", startsExpr),
   eof: new TokenType("eof"),
-                             
+
   bracketL: new TokenType("[", { beforeExpr: true, startsExpr: true }),
   bracketR: new TokenType("]"),
   braceL: new TokenType("{", { beforeExpr: true, startsExpr: true }),
@@ -19798,19 +19798,19 @@ var types$1 = {
   ellipsis: new TokenType("...", beforeExpr),
   backQuote: new TokenType("`", startsExpr),
   dollarBraceL: new TokenType("${", { beforeExpr: true, startsExpr: true }),
-                                                                   
-                                                                  
-                                         
-    
-                                                                    
-                                                
-    
-                                                                    
-                    
-    
-                                                                   
-                                                                    
-                                   
+
+
+
+
+
+
+
+
+
+
+
+
+
   eq: new TokenType("=", { beforeExpr: true, isAssign: true }),
   assign: new TokenType("_=", { beforeExpr: true, isAssign: true }),
   incDec: new TokenType("++/--", { prefix: true, postfix: true, startsExpr: true }),
@@ -19829,7 +19829,7 @@ var types$1 = {
   slash: binop("/", 10),
   starstar: new TokenType("**", { beforeExpr: true }),
   coalesce: binop("??", 1),
-                         
+
   _break: kw("break"),
   _case: kw("case", beforeExpr),
   _catch: kw("catch"),
@@ -19929,100 +19929,100 @@ function getLineInfo(input, offset2) {
   }
 }
 var defaultOptions = {
-                                                                     
-                                                               
-                                                                      
-                                                               
-                                                                    
-                             
+
+
+
+
+
+
   ecmaVersion: null,
-                                                                  
-                                                                   
-                                                                   
+
+
+
   sourceType: "script",
-                                                                     
-                                                                 
-                                                            
-                                                                  
-                                        
+
+
+
+
+
   onInsertedSemicolon: null,
-                                                                   
-                     
+
+
   onTrailingComma: null,
-                                                                      
-                                                                      
-                                                                   
-                                                         
+
+
+
+
   allowReserved: null,
-                                                                 
-           
+
+
   allowReturnOutsideFunction: false,
-                                                                  
-                                                                       
-                                           
+
+
+
   allowImportExportEverywhere: false,
-                                                                                                            
-                                                                                  
-                                                           
+
+
+
   allowAwaitOutsideFunction: null,
-                                                           
-                                                                               
+
+
   allowSuperOutsideMethod: null,
-                                                                 
-                                                                   
-                           
+
+
+
   allowHashBang: false,
-                                                                   
-                                                                     
-                                               
+
+
+
   checkPrivateFields: true,
-                                                                  
-                                                                
-                                                                   
-           
+
+
+
+
   locations: false,
-                                                             
-                                                              
-                                                                  
-                                                         
-                                                   
+
+
+
+
+
   onToken: null,
-                                                               
-                                                                 
-                                                                 
-                                                                  
-                                                                    
-                                                                    
-                                                               
-                                                                 
-                                                                   
-                                                                   
-                                                                     
-                               
+
+
+
+
+
+
+
+
+
+
+
+
   onComment: null,
-                                                                  
-                                                                    
-                                                                  
-                                                                   
-                                                                  
-            
-    
-                                                                 
+
+
+
+
+
+
+
+
   ranges: false,
-                                                                
-                                                           
-                                                             
-                                                                  
-                               
+
+
+
+
+
   program: null,
-                                                                   
-                                       
+
+
   sourceFile: null,
-                                                           
-                              
+
+
   directSourceFile: null,
-                                                               
-                                                 
+
+
   preserveParens: false
 };
 var warnedAboutEcmaVersion = false;
@@ -20516,11 +20516,11 @@ pp$8.parseStatement = function(context, topLevel, exports) {
         }
       }
       return starttype === types$1._import ? this.parseImport(node) : this.parseExport(node, exports);
-                                                                    
-                                                                 
-                                                                 
-                                                            
-                                                                
+
+
+
+
+
     default:
       if (this.isAsyncFunction()) {
         if (context) {
@@ -21478,7 +21478,7 @@ pp$8.adaptDirectivePrologue = function(statements) {
   }
 };
 pp$8.isDirectiveCandidate = function(statement) {
-  return this.options.ecmaVersion >= 5 && statement.type === "ExpressionStatement" && statement.expression.type === "Literal" && typeof statement.expression.value === "string" &&                                 
+  return this.options.ecmaVersion >= 5 && statement.type === "ExpressionStatement" && statement.expression.type === "Literal" && typeof statement.expression.value === "string" &&
   (this.input[statement.start] === '"' || this.input[statement.start] === "'");
 };
 var pp$7 = Parser.prototype;
@@ -23283,16 +23283,16 @@ pp$1.regexp_pattern = function(state) {
   if (state.pos !== state.source.length) {
     if (state.eat(
       41
-             
+
     )) {
       state.raise("Unmatched ')'");
     }
     if (state.eat(
       93
-             
+
     ) || state.eat(
       125
-             
+
     )) {
       state.raise("Lone quantifier brackets");
     }
@@ -23315,7 +23315,7 @@ pp$1.regexp_disjunction = function(state) {
   this.regexp_alternative(state);
   while (state.eat(
     124
-           
+
   )) {
     if (trackDisjunction) {
       state.branchID = state.branchID.sibling();
@@ -23330,7 +23330,7 @@ pp$1.regexp_disjunction = function(state) {
   }
   if (state.eat(
     123
-           
+
   )) {
     state.raise("Lone quantifier brackets");
   }
@@ -23359,23 +23359,23 @@ pp$1.regexp_eatAssertion = function(state) {
   state.lastAssertionIsQuantifiable = false;
   if (state.eat(
     94
-           
+
   ) || state.eat(
     36
-           
+
   )) {
     return true;
   }
   if (state.eat(
     92
-           
+
   )) {
     if (state.eat(
       66
-             
+
     ) || state.eat(
       98
-             
+
     )) {
       return true;
     }
@@ -23383,29 +23383,29 @@ pp$1.regexp_eatAssertion = function(state) {
   }
   if (state.eat(
     40
-           
+
   ) && state.eat(
     63
-           
+
   )) {
     var lookbehind = false;
     if (this.options.ecmaVersion >= 9) {
       lookbehind = state.eat(
         60
-               
+
       );
     }
     if (state.eat(
       61
-             
+
     ) || state.eat(
       33
-             
+
     )) {
       this.regexp_disjunction(state);
       if (!state.eat(
         41
-               
+
       )) {
         state.raise("Unterminated group");
       }
@@ -23421,7 +23421,7 @@ pp$1.regexp_eatQuantifier = function(state, noError) {
   if (this.regexp_eatQuantifierPrefix(state, noError)) {
     state.eat(
       63
-             
+
     );
     return true;
   }
@@ -23430,33 +23430,33 @@ pp$1.regexp_eatQuantifier = function(state, noError) {
 pp$1.regexp_eatQuantifierPrefix = function(state, noError) {
   return state.eat(
     42
-           
+
   ) || state.eat(
     43
-           
+
   ) || state.eat(
     63
-           
+
   ) || this.regexp_eatBracedQuantifier(state, noError);
 };
 pp$1.regexp_eatBracedQuantifier = function(state, noError) {
   var start = state.pos;
   if (state.eat(
     123
-           
+
   )) {
     var min = 0, max = -1;
     if (this.regexp_eatDecimalDigits(state)) {
       min = state.lastIntValue;
       if (state.eat(
         44
-               
+
       ) && this.regexp_eatDecimalDigits(state)) {
         max = state.lastIntValue;
       }
       if (state.eat(
         125
-               
+
       )) {
         if (max !== -1 && max < min && !noError) {
           state.raise("numbers out of order in {} quantifier");
@@ -23474,14 +23474,14 @@ pp$1.regexp_eatBracedQuantifier = function(state, noError) {
 pp$1.regexp_eatAtom = function(state) {
   return this.regexp_eatPatternCharacters(state) || state.eat(
     46
-           
+
   ) || this.regexp_eatReverseSolidusAtomEscape(state) || this.regexp_eatCharacterClass(state) || this.regexp_eatUncapturingGroup(state) || this.regexp_eatCapturingGroup(state);
 };
 pp$1.regexp_eatReverseSolidusAtomEscape = function(state) {
   var start = state.pos;
   if (state.eat(
     92
-           
+
   )) {
     if (this.regexp_eatAtomEscape(state)) {
       return true;
@@ -23494,17 +23494,17 @@ pp$1.regexp_eatUncapturingGroup = function(state) {
   var start = state.pos;
   if (state.eat(
     40
-           
+
   )) {
     if (state.eat(
       63
-             
+
     )) {
       if (this.options.ecmaVersion >= 16) {
         var addModifiers = this.regexp_eatModifiers(state);
         var hasHyphen = state.eat(
           45
-                 
+
         );
         if (addModifiers || hasHyphen) {
           for (var i = 0; i < addModifiers.length; i++) {
@@ -23529,12 +23529,12 @@ pp$1.regexp_eatUncapturingGroup = function(state) {
       }
       if (state.eat(
         58
-               
+
       )) {
         this.regexp_disjunction(state);
         if (state.eat(
           41
-                 
+
         )) {
           return true;
         }
@@ -23548,7 +23548,7 @@ pp$1.regexp_eatUncapturingGroup = function(state) {
 pp$1.regexp_eatCapturingGroup = function(state) {
   if (state.eat(
     40
-           
+
   )) {
     if (this.options.ecmaVersion >= 9) {
       this.regexp_groupSpecifier(state);
@@ -23558,7 +23558,7 @@ pp$1.regexp_eatCapturingGroup = function(state) {
     this.regexp_disjunction(state);
     if (state.eat(
       41
-             
+
     )) {
       state.numCapturingParens += 1;
       return true;
@@ -23582,7 +23582,7 @@ function isRegularExpressionModifier(ch) {
 pp$1.regexp_eatExtendedAtom = function(state) {
   return state.eat(
     46
-           
+
   ) || this.regexp_eatReverseSolidusAtomEscape(state) || this.regexp_eatCharacterClass(state) || this.regexp_eatUncapturingGroup(state) || this.regexp_eatCapturingGroup(state) || this.regexp_eatInvalidBracedQuantifier(state) || this.regexp_eatExtendedPatternCharacter(state);
 };
 pp$1.regexp_eatInvalidBracedQuantifier = function(state) {
@@ -23622,7 +23622,7 @@ pp$1.regexp_eatExtendedPatternCharacter = function(state) {
 pp$1.regexp_groupSpecifier = function(state) {
   if (state.eat(
     63
-           
+
   )) {
     if (!this.regexp_eatGroupName(state)) {
       state.raise("Invalid group");
@@ -23652,11 +23652,11 @@ pp$1.regexp_eatGroupName = function(state) {
   state.lastStringValue = "";
   if (state.eat(
     60
-           
+
   )) {
     if (this.regexp_eatRegExpIdentifierName(state) && state.eat(
       62
-             
+
     )) {
       return true;
     }
@@ -23743,7 +23743,7 @@ pp$1.regexp_eatBackReference = function(state) {
 pp$1.regexp_eatKGroupName = function(state) {
   if (state.eat(
     107
-           
+
   )) {
     if (this.regexp_eatGroupName(state)) {
       state.backReferenceNames.push(state.lastStringValue);
@@ -23760,7 +23760,7 @@ pp$1.regexp_eatCControlLetter = function(state) {
   var start = state.pos;
   if (state.eat(
     99
-           
+
   )) {
     if (this.regexp_eatControlLetter(state)) {
       return true;
@@ -23824,7 +23824,7 @@ pp$1.regexp_eatRegExpUnicodeEscapeSequence = function(state, forceU) {
   var switchU = forceU || state.switchU;
   if (state.eat(
     117
-           
+
   )) {
     if (this.regexp_eatFixedHexDigits(state, 4)) {
       var lead = state.lastIntValue;
@@ -23832,10 +23832,10 @@ pp$1.regexp_eatRegExpUnicodeEscapeSequence = function(state, forceU) {
         var leadSurrogateEnd = state.pos;
         if (state.eat(
           92
-                 
+
         ) && state.eat(
           117
-                 
+
         ) && this.regexp_eatFixedHexDigits(state, 4)) {
           var trail = state.lastIntValue;
           if (trail >= 56320 && trail <= 57343) {
@@ -23850,10 +23850,10 @@ pp$1.regexp_eatRegExpUnicodeEscapeSequence = function(state, forceU) {
     }
     if (switchU && state.eat(
       123
-             
+
     ) && this.regexp_eatHexDigits(state) && state.eat(
       125
-             
+
     ) && isValidUnicode(state.lastIntValue)) {
       return true;
     }
@@ -23874,7 +23874,7 @@ pp$1.regexp_eatIdentityEscape = function(state) {
     }
     if (state.eat(
       47
-             
+
     )) {
       state.lastIntValue = 47;
       return true;
@@ -23918,10 +23918,10 @@ pp$1.regexp_eatCharacterClassEscape = function(state) {
     var result;
     if (state.eat(
       123
-             
+
     ) && (result = this.regexp_eatUnicodePropertyValueExpression(state)) && state.eat(
       125
-             
+
     )) {
       if (negate && result === CharSetString) {
         state.raise("Invalid property name");
@@ -23939,7 +23939,7 @@ pp$1.regexp_eatUnicodePropertyValueExpression = function(state) {
   var start = state.pos;
   if (this.regexp_eatUnicodePropertyName(state) && state.eat(
     61
-           
+
   )) {
     var name = state.lastStringValue;
     if (this.regexp_eatUnicodePropertyValue(state)) {
@@ -24002,16 +24002,16 @@ pp$1.regexp_eatLoneUnicodePropertyNameOrValue = function(state) {
 pp$1.regexp_eatCharacterClass = function(state) {
   if (state.eat(
     91
-           
+
   )) {
     var negate = state.eat(
       94
-             
+
     );
     var result = this.regexp_classContents(state);
     if (!state.eat(
       93
-             
+
     )) {
       state.raise("Unterminated character class");
     }
@@ -24037,7 +24037,7 @@ pp$1.regexp_nonEmptyClassRanges = function(state) {
     var left = state.lastIntValue;
     if (state.eat(
       45
-             
+
     ) && this.regexp_eatClassAtom(state)) {
       var right = state.lastIntValue;
       if (state.switchU && (left === -1 || right === -1)) {
@@ -24053,7 +24053,7 @@ pp$1.regexp_eatClassAtom = function(state) {
   var start = state.pos;
   if (state.eat(
     92
-           
+
   )) {
     if (this.regexp_eatClassEscape(state)) {
       return true;
@@ -24079,21 +24079,21 @@ pp$1.regexp_eatClassEscape = function(state) {
   var start = state.pos;
   if (state.eat(
     98
-           
+
   )) {
     state.lastIntValue = 8;
     return true;
   }
   if (state.switchU && state.eat(
     45
-           
+
   )) {
     state.lastIntValue = 45;
     return true;
   }
   if (!state.switchU && state.eat(
     99
-           
+
   )) {
     if (this.regexp_eatClassControlLetter(state)) {
       return true;
@@ -24112,7 +24112,7 @@ pp$1.regexp_classSetExpression = function(state) {
     var start = state.pos;
     while (state.eatChars(
       [38, 38]
-              
+
     )) {
       if (state.current() !== 38 && (subResult = this.regexp_eatClassSetOperand(state))) {
         if (subResult !== CharSetString) {
@@ -24127,7 +24127,7 @@ pp$1.regexp_classSetExpression = function(state) {
     }
     while (state.eatChars(
       [45, 45]
-              
+
     )) {
       if (this.regexp_eatClassSetOperand(state)) {
         continue;
@@ -24159,7 +24159,7 @@ pp$1.regexp_eatClassSetRange = function(state) {
     var left = state.lastIntValue;
     if (state.eat(
       45
-             
+
     ) && this.regexp_eatClassSetCharacter(state)) {
       var right = state.lastIntValue;
       if (left !== -1 && right !== -1 && left > right) {
@@ -24181,16 +24181,16 @@ pp$1.regexp_eatNestedClass = function(state) {
   var start = state.pos;
   if (state.eat(
     91
-           
+
   )) {
     var negate = state.eat(
       94
-             
+
     );
     var result = this.regexp_classContents(state);
     if (state.eat(
       93
-             
+
     )) {
       if (negate && result === CharSetString) {
         state.raise("Negated character class may contain strings");
@@ -24201,7 +24201,7 @@ pp$1.regexp_eatNestedClass = function(state) {
   }
   if (state.eat(
     92
-           
+
   )) {
     var result$1 = this.regexp_eatCharacterClassEscape(state);
     if (result$1) {
@@ -24215,16 +24215,16 @@ pp$1.regexp_eatClassStringDisjunction = function(state) {
   var start = state.pos;
   if (state.eatChars(
     [92, 113]
-            
+
   )) {
     if (state.eat(
       123
-             
+
     )) {
       var result = this.regexp_classStringDisjunctionContents(state);
       if (state.eat(
         125
-               
+
       )) {
         return result;
       }
@@ -24239,7 +24239,7 @@ pp$1.regexp_classStringDisjunctionContents = function(state) {
   var result = this.regexp_classString(state);
   while (state.eat(
     124
-           
+
   )) {
     if (this.regexp_classString(state) === CharSetString) {
       result = CharSetString;
@@ -24258,14 +24258,14 @@ pp$1.regexp_eatClassSetCharacter = function(state) {
   var start = state.pos;
   if (state.eat(
     92
-           
+
   )) {
     if (this.regexp_eatCharacterEscape(state) || this.regexp_eatClassSetReservedPunctuator(state)) {
       return true;
     }
     if (state.eat(
       98
-             
+
     )) {
       state.lastIntValue = 8;
       return true;
@@ -24315,7 +24315,7 @@ pp$1.regexp_eatHexEscapeSequence = function(state) {
   var start = state.pos;
   if (state.eat(
     120
-           
+
   )) {
     if (this.regexp_eatFixedHexDigits(state, 2)) {
       return true;
@@ -24720,11 +24720,11 @@ pp.readToken_numberSign = function() {
 };
 pp.getTokenFromCode = function(code) {
   switch (code) {
-                                                                    
-                                      
+
+
     case 46:
       return this.readToken_dot();
-                          
+
     case 40:
       ++this.pos;
       return this.finishToken(types$1.parenL);
@@ -24771,8 +24771,8 @@ pp.getTokenFromCode = function(code) {
           return this.readRadixNumber(2);
         }
       }
-                                                                
-                        
+
+
     case 49:
     case 50:
     case 51:
@@ -24783,14 +24783,14 @@ pp.getTokenFromCode = function(code) {
     case 56:
     case 57:
       return this.readNumber(false);
-                              
+
     case 34:
     case 39:
       return this.readString(code);
-                                                                      
-                                                               
-                                                                     
-                                               
+
+
+
+
     case 47:
       return this.readToken_slash();
     case 37:
@@ -25106,14 +25106,14 @@ pp.readInvalidTemplateToken = function() {
         if (this.input[this.pos + 1] !== "{") {
           break;
         }
-                     
+
       case "`":
         return this.finishToken(types$1.invalidTemplate, this.input.slice(this.start, this.pos));
       case "\r":
         if (this.input[this.pos + 1] === "\n") {
           ++this.pos;
         }
-                     
+
       case "\n":
       case "\u2028":
       case "\u2029":
@@ -25130,33 +25130,33 @@ pp.readEscapedChar = function(inTemplate) {
   switch (ch) {
     case 110:
       return "\n";
-                  
+
     case 114:
       return "\r";
-                  
+
     case 120:
       return String.fromCharCode(this.readHexChar(2));
-          
+
     case 117:
       return codePointToString(this.readCodePoint());
-          
+
     case 116:
       return "	";
-                  
+
     case 98:
       return "\b";
-                  
+
     case 118:
       return "\v";
-                      
+
     case 102:
       return "\f";
-                  
+
     case 13:
       if (this.input.charCodeAt(this.pos) === 10) {
         ++this.pos;
       }
-             
+
     case 10:
       if (this.options.locations) {
         this.lineStart = this.pos;
@@ -25277,7 +25277,7 @@ function tokenizer2(input, options) {
   return Parser.tokenizer(input, options);
 }
 
-                                                             
+
 function readGrantScope(r, table, line, fail) {
   r.expectPunct("(", "after grant");
   r.expectPunct("{", "in grant options");
@@ -25414,7 +25414,7 @@ function validateDeclaredMemberships(tables, tableByName, knownColumns, errors) 
   }
 }
 
-                                                        
+
 var LITERAL_WORDS =                 new Set(["true", "false", "null"]);
 var STATEMENT_WORDS =                 new Set([
   "import",
@@ -25637,7 +25637,7 @@ function matchingClose(tokens, open) {
   return -1;
 }
 
-                                                              
+
 var MAX_PARENT_EDGES = 4;
 var parentScopeLines =                 new WeakMap();
 function rememberParentLine(sentinel, line) {
@@ -25721,7 +25721,7 @@ function fileParentTarget(t) {
   };
 }
 
-                                                                
+
 function validateDeclaredRelations(tables, tableByName, knownColumns, markedGone, errors) {
   const columnByName = (t, col) => t.columns.find((c) => c.name === col);
   for (const t of tables) {
@@ -25778,7 +25778,7 @@ function validateDeclaredRelations(tables, tableByName, knownColumns, markedGone
   }
 }
 
-                                                            
+
 function validateRowLinks(tables, tableByName, errors) {
   const childOf =                 new Map();
   for (const t of tables) {
@@ -25815,7 +25815,7 @@ function validateRowLinks(tables, tableByName, errors) {
   }
 }
 
-                                                             
+
 var REFERENCE_HELPERS = ["id", "text", "integer", "bigint"];
 function validateIntake(tables, tableByName, errors) {
   for (const t of tables) {
@@ -25865,7 +25865,7 @@ function validateIntake(tables, tableByName, errors) {
   }
 }
 
-                                                            
+
 var FILE_OPERATIONS = ["read", "upload", "replace", "delete"];
 var MAX_FILE_COLLECTIONS = 20;
 var COLLECTION_NAME = /^[a-z][a-z0-9_]{0,63}$/;
@@ -26186,7 +26186,7 @@ function validateFileCollections(collections, table, errors) {
   }
 }
 
-                                            
+
 var BUILT_IN_GROUP_ROLES2 = ["owner", "admin", "member"];
 var ROLE_NAME = /^[a-z][a-z0-9_]{0,63}$/;
 function isPrototypeName(name) {
@@ -26227,7 +26227,7 @@ function roleVocabularyErrors(policy) {
   return errors;
 }
 
-                                                             
+
 var GROUP_OPERATIONS = ["read", "create", "update", "delete"];
 var DEFAULT_GROUP_COLUMN = "group_id";
 var IDENT = /^[A-Za-z_][A-Za-z0-9_]*$/;
@@ -26390,7 +26390,7 @@ function resolveGroupsAndParents(tables, tableByName, privatePolicy, vocabulary,
   resolveGroupReferences(tables, errors);
 }
 
-                                                                
+
 var APP_ROLE_OPERATIONS = ["read", "create", "update", "delete"];
 var declaredLines =                 new WeakMap();
 function readAppRoleScope(r, tableName, line, fail) {
@@ -26495,7 +26495,7 @@ function resolveAppRoleScopes(tables, appRoles, errors) {
   }
 }
 
-                                                            
+
 var EMAIL_DOMAIN = EMAIL_DOMAIN_PATTERN;
 var GROUP_KEYS = ["roles", "adminGrantableRoles"];
 var APP_ROLE_KEYS = ["grantableBy", "emailDomain"];
@@ -26600,7 +26600,7 @@ function emailDomainRoleErrors(appRoles) {
   return errors;
 }
 
-                                                              
+
 function readSchemaOptions(reader, fail, fileErrors) {
   const o = {};
   if (!reader.tryPunct(",") || reader.peek().kind === "punct" && reader.peek().value === ")") return o;
@@ -26645,7 +26645,7 @@ function readSchemaOptions(reader, fail, fileErrors) {
   return o;
 }
 
-                                                         
+
 function policyOwner(policy) {
   if (policy.kind === "owner") return policy;
   if (policy.kind === "any_of") return policy.policies.map(policyOwner).find((value) => value !== null) ?? null;
@@ -26856,7 +26856,7 @@ var Reader = class {
     this.bareIdIsText = (table) => !options.legacyIntegerIdDefault && !options.integerKeyTables?.has(table.toLowerCase());
   }
   pos = 0;
-                                                                                                          
+
   bareIdIsText;
   peek() {
     return this.tokens[this.pos];
@@ -26888,7 +26888,7 @@ var Reader = class {
     }
     return t;
   }
-                                                    
+
   readKey(context) {
     const t = this.next();
     if (t.kind === "ident" || t.kind === "string") return { name: t.value, line: t.line };
@@ -26905,7 +26905,7 @@ var Reader = class {
       `line ${t.line}: expected a literal value (string, number, true/false, or null) ${context}, found ${describeToken(t)}. Computed values are not allowed \u2014 the declaration must be readable without running it.`
     );
   }
-                                                          
+
   readLiteralObject(context) {
     this.expectPunct("{", context);
     const out =                 new Map();
@@ -27897,7 +27897,7 @@ function extractSchemaTs(source, options = {}) {
   }
 }
 
-                                               
+
 var MAX_FILE_BYTES = 256 * 1024;
 var MAX_PAYLOAD_CHARS = 8 * 1024;
 var COMPARE_WINDOW = 96;
@@ -28228,7 +28228,7 @@ function requestOwnershipFindings(functions, schema) {
   return { findings, skippedFiles, truncated };
 }
 
-                                           
+
 var MAX_FILE_BYTES2 = 256 * 1024;
 var MAX_FINDINGS_PER_FILE2 = 20;
 var MAX_FINDINGS2 = 100;
@@ -28386,7 +28386,7 @@ function sequentialEmailFindings(functions) {
   return { findings, skippedFiles, truncated };
 }
 
-                                                 
+
 var MAX_FILE_BYTES3 = 256 * 1024;
 var MAX_FINDINGS_PER_FILE3 = 20;
 var MAX_FINDINGS3 = 100;
@@ -28493,7 +28493,7 @@ function userEmailScanFindings(functions) {
   return { findings, skippedFiles, truncated };
 }
 
-                                     
+
 var SOURCE_LINT_VERSION = "6";
 async function lintSourceSnapshot(files, functions = {}) {
   const entries2 = (map) => Object.keys(map).sort().map((key) => [key, map[key]]);

@@ -1,8 +1,6 @@
 #!/usr/bin/env node
 // Vendor the independent browser outline probe; no platform runtime or compiler.
-import { publicProjection } from './public-projection.mjs';
 import { createHash } from 'node:crypto';
-import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 const monorepo = process.argv[2];
@@ -51,7 +49,6 @@ function extractDomOutlineScript() {
   return { script, cap: MAX_OUTLINE_NODES };
 }
 
-const commit = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: monorepo, encoding: 'utf8' }).trim();
 const probe = extractDomOutlineScript();
 const output = `// Generated browser probe.\n`
   + `export const MAX_OUTLINE_NODES = ${probe.cap};\n`

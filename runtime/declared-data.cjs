@@ -4529,12 +4529,12 @@ export default schema({
       const age = Number.isFinite(seen.seen_at) ? ` (last seen ${Math.max(0, Math.round((now - seen.seen_at) / 36e5))} h ago${seen.origin ? ` from ${seen.origin}` : ""})` : "";
       if (seen.digest === cli.digest) return { status: "current", compatible: true, message: Number.isFinite(seen.seen_at) ? `This CLI implements consumer contract ${cli.version}, the one the platform last announced${age}. A platform release since then is not known until the CLI next talks to the platform.` : `This CLI implements consumer contract ${cli.version}.` };
       if (seen.version > cli.version) {
-        return { status: "outdated", compatible: false, message: `This CLI implements consumer contract ${cli.version}; the platform is at ${seen.version}${age}. Its typecheck and lint judge your code by older platform rules, so a form the platform accepts may be reported as an error and newer forms are unknown to it. Update the CLI (somewhere update), then run this again.` };
+        return { status: "outdated", compatible: false, message: `This CLI implements consumer contract ${cli.version}; the platform is at ${seen.version}${age}. Checks continue using this CLI's rules.` };
       }
       if (seen.version < cli.version) {
-        return { status: "ahead", compatible: false, message: `This CLI implements consumer contract ${cli.version}; the platform is still at ${seen.version}${age}. It may accept forms the platform does not yet deploy. Use the CLI version that matches the platform, or wait for the platform release.` };
+        return { status: "ahead", compatible: false, message: `This CLI implements consumer contract ${cli.version}; the platform is still at ${seen.version}${age}. Checks continue using this CLI's rules.` };
       }
-      return { status: "mismatch", compatible: false, message: `This CLI and the platform both say consumer contract ${cli.version} but with different digests${age}; one of them is not a released build. Reinstall the CLI from npm.` };
+      return { status: "mismatch", compatible: false, message: `This CLI and the platform both say consumer contract ${cli.version} but with different digests${age}; checks continue using this CLI's rules.` };
     }
     module2.exports = {
       CONSUMER_CONTRACT: CONSUMER_CONTRACT2,

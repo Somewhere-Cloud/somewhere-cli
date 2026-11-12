@@ -149,7 +149,7 @@
     "worker/src/utils/managed-groups/policy.ts": "2c5b48479a2925bea9a820022c63ca5fa827e2ff5531fe1ab6c0b058b7212b39",
     "worker/src/utils/platform-compile-failure.ts": "c850af378f59b4cfc81f1df5c1eaa6db2e0fef145870e01d631b54b766cadbc2",
     "worker/src/utils/platform-data/bounded-reply.ts": "e115fa1031afc8cbe2e22c3d6a53828555581192e57130105afe3b652bf19bb9",
-    "worker/src/utils/platform-data/door.ts": "59ba7dda8663d7f1c2529ee01943047d866ca01a39626373e4f046458d08e440",
+    "worker/src/utils/platform-data/door.ts": "02d876c0ac37a1c258766aa07c5837389cc397c4acb445ffd0d9f3af57a56ce3",
     "worker/src/utils/platform-data/read-only.ts": "8625ff7a41c74ef18fb4656da1de2359267b2ab286812a01703ae0aec528efbf",
     "worker/src/utils/platform-data/targets.ts": "cbd3f00d1ecdda0aa7fc3f5a822a43ca2d12b9558e0b4ef9c6e4156516512875",
     "worker/src/utils/project-custom-hosts.ts": "ef693b4ea70f93fd66f3b3cda88ce68664540366caa33fa0169bf7bcfce80b2a",

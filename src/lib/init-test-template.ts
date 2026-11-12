@@ -1,27 +1,50 @@
 import type { InitScaffoldFile } from './init-scaffold.js';
 
-const example = `import { test } from 'node:test';
-import { createUser, expectStatus, expectRefusal, UserSession } from '@somewhere-cloud/cli/testing';
+const session = `import { test, expect, data, expectRefused, ready } from '@somewhere-cloud/cli/testing';
 
-// Run once: APP_URL=https://your-app.somewhere.site node --test tests/session.test.ts
-// Rerun alone: add --test-name-pattern='independent user session' before the file.
-test('independent user session', async () => {
-  const url = process.env.APP_URL;
-  if (!url) throw new Error('Set APP_URL to the deployed starter URL');
-  const user = await createUser(url);
-  const me = await user.request('/api/auth/me');
-  await expectStatus(me, 200);
-  const identity = await me.json() as { user: { id: string } | null };
-  if (!identity.user?.id) throw new Error('Session cookie did not authenticate the user');
-  // The default starter declares no browser data access. A malformed op probe
-  // would be 400 and must fail this assertion, never pass as access denial.
-  await expectRefusal(await new UserSession(url).data('notes', '', { operation: 'list' }), 403, 'DATA_ACCESS_DENIED');
-  await expectStatus(await user.post('/api/auth/logout', {}), 200);
-  const after = await user.request('/api/auth/me');
-  await expectStatus(after, 200);
-  if ((await after.json() as { user: unknown }).user !== null) throw new Error('Server did not confirm sign-out');
+test('session and sign-out', async ({ newUser }) => {
+  const user = await newUser();
+  const me = await user.request.get('/api/auth/me');
+  expect(me.status()).toBe(200);
+  expect((await me.json()).user.id).toBe(user.id);
+  await user.page.goto('/');
+  await ready(user.page, 'signed-in');
+  expect((await user.request.post('/api/auth/logout', { data: {} })).status()).toBe(200);
+  expect((await (await user.request.get('/api/auth/me')).json()).user).toBeNull();
+  await user.page.reload();
+  await ready(user.page, 'signed-out');
 });
 `;
-export function starterTests(): InitScaffoldFile[] {
-  return [{ path: 'tests/session.test.ts', content: example }];
+const closed = `
+test('browser data is closed', async ({ anonymous }) => {
+  await expectRefused(await data(anonymous, 'notes', { operation: 'list' }), 403, 'DATA_ACCESS_DENIED');
+});
+`;
+const isolation = `
+test('owners can read only their own notes', async ({ newUser }) => {
+  const owner = await newUser();
+  const outsider = await newUser();
+  const title = 'isolation-' + crypto.randomUUID();
+  const created = await data(owner.request, 'notes', { operation: 'create', values: { title, body: 'test row' } });
+  expect(created.status()).toBe(200);
+  const row = (await created.json()).data as { id: number; title: string };
+  expect(row.title).toBe(title);
+  const own = await data(owner.request, 'notes', { operation: 'get', id: row.id });
+  expect(own.status()).toBe(200);
+  expect((await own.json()).data.title).toBe(title);
+  const list = await data(outsider.request, 'notes', { operation: 'list', where: { title } });
+  expect(list.status()).toBe(200);
+  expect((await list.json()).data, 'another user must not see the owner row').toEqual([]);
+  // Hidden rows read as not there (200, data null); prove absence and a refused write.
+  const hidden = await data(outsider.request, 'notes', { operation: 'get', id: row.id });
+  expect(hidden.status()).toBe(200);
+  expect((await hidden.json()).data).toBeNull();
+  await expectRefused(await data(outsider.request, 'notes', { operation: 'update', id: row.id, values: { title: 'changed' } }), 404, 'DATA_NOT_FOUND');
+  const unchanged = await data(owner.request, 'notes', { operation: 'get', id: row.id });
+  expect(unchanged.status()).toBe(200);
+  expect((await unchanged.json()).data.title).toBe(title);
+});
+`;
+export function starterTests(privateData = false): InitScaffoldFile[] {
+  return [{ path: 'tests/app.spec.ts', content: session + (privateData ? isolation : closed) }];
 }

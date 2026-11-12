@@ -30,6 +30,7 @@ const PACKAGE_JSON = `{
   },
   "devDependencies": {
     "@somewhere-cloud/cli": "${CLI_VERSION}",
+    "@playwright/test": "1.65.0",
     "@types/react": "19.2.2",
     "@types/react-dom": "19.2.2",
     "typescript": "5.9.3",
@@ -3332,15 +3333,17 @@ export function createFeatureTemplate(
   const agent = selection.modules.includes('agent');
   const magicLink = selection.modules.includes('magic-link');
   const files: InitScaffoldFile[] = [
-    ...starterTests(),
+    ...starterTests(privateData),
     { path: '.gitignore', content: 'node_modules\ndist\nbuild\n.env\n# Generated from db/schema.ts by somewhere typecheck, dev and deploy.\n__somewhere_data.d.ts\n__somewhere_files.d.ts\n' },
     { path: 'AGENTS.md', content: INIT_AGENTS_MD.replace(/## Getting started[^]*?After edits:/, `## Testing
-Use @somewhere-cloud/cli/testing; run APP_URL=<deployed-url> node --test tests/session.test.ts.
-Each test creates its own fixture; never substitute admin credentials for users.
-Use waitForApp(page, 'signed-in' | 'signed-out') for browser readiness.
-The platform enforces declared access rules: test your app's own rules once.
-After a failure, rerun only the failing test with --test-name-pattern.
-One full passing run is the stop rule. Do not repeat a passing suite.
+Write tests/*.spec.ts importing test, expect from @somewhere-cloud/cli/testing.
+Each test creates its own users with newUser() and unique row values.
+Run somewhere test against the linked production app (five workers).
+After a failure, fix it and run somewhere test --failed, then one full run.
+One green FULL run is the stop rule; test your app's own rules once.
+Use ready(page) for starter session readiness, or an explicit locator.
+Test users are removed afterwards; rows, files and mail they created remain.
+Managed users bypass signup/onboarding; test those separately if you customize them.
 
 After edits:`) },
     { path: 'CLAUDE.md', content: INIT_CLAUDE_MD },

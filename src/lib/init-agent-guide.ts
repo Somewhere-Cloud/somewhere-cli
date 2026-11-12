@@ -11,13 +11,13 @@ Default: sign-in UI; minimal: SDK/auth route; bare: neither. \`init --catalog --
 \`npx @somewhere-cloud/cli deploy\` publishes raw source: signed out, a temporary URL, claim URL
 and expiry; linked, your account project. On a hosted VM, \`somewhere login\` uses browser approval and keeps you signed in.
 Account operations, test inbox and cron need login.
-Start auth/data/cron with \`somewhere docs recipe-signed-in-app --full\`.
+Core API shapes below cover a typical app; read deeper topics when needed.
 
 After edits: \`somewhere typecheck\` and focused local/browser tests. Publish:
-1. \`somewhere deploy\` (do not build first). Deploy
+1. \`somewhere deploy\` (do not build first; type errors stop upload; override: \`somewhere deploy --allow-type-errors\`). Deploy
    checks compilation, schema and secrets; \`somewhere deploy-check\` runs them without publishing
    (diagnosis, review, \`--run /api/x\`).
-2. Run \`somewhere verify\` on the final journey (\`--flow flow.json\`); rerun after fixes. Sign test users up
+2. Run \`somewhere test\` (project tests against production), then \`somewhere verify\` on the final journey (\`--flow flow.json\`); rerun after fixes. Sign test users up
    in-app at \`*.test.somewhere.site\`; more: \`actors\` + \`journey\` (\`somewhere docs browser\`).
 3. Inspect: \`somewhere browser\`; diagnose: \`somewhere logs --tail 10\`, \`somewhere errors\`.
 4. Test mail: \`somewhere email test-inbox <addr>\` includes \`verification_code\`.
@@ -60,20 +60,6 @@ functions handle authorized exceptional writes and side effects. Declare the
 body schema (a missing or mistyped field is a 400); \`handle\` below is a
 public address its owner claimed:
 
-\`\`\`ts
-export default sw.endpoint({
-  auth: 'none',
-  body: { handle: 'string', title: 'string', from_email: 'email' },
-  handler: async ({ body }, sw) => {
-    const title = body.title.trim();
-    if (!title || title.length > 200 || /[\\r\\n]/.test(title)) return Response.json({ error: 'bad title' }, { status: 400 });
-    const { data: [profile] } = await sw.db.server.from('profiles', { where: { handle: body.handle }, limit: 1 });
-    if (!profile) return Response.json({ error: 'unknown handle' }, { status: 404 });
-    await sw.db.server.insert('entries', { user_id: profile.user_id, owner_email: profile.owner_email,
-      title, from_email: body.from_email, created_ms: Date.now() });
-  },
-});
-\`\`\`
 
 Use the looked-up owner, never the body. Rate limits/alerts: \`recipe-signed-in-app\`.
 Use \`serverOnly()\` only when every operation needs a function's own access check.
@@ -82,6 +68,59 @@ changes }\`; \`where: { a: 1, b: { in: ids }, c: { gte: 2 }, d: null }\` (one
 operator per column). Raw SQL uses a separate raw database, never managed tables.
 For cross-user managed work, authorize the caller and use \`sw.db.server.from\` /
 \`insert\` / \`update\` / \`remove\`; keep \`owner()\`/\`group()\`. Parallel reads: \`Promise.all\`.
+
+Core contract:
+- Schema is declaration only: imports and one default schema({...}) export. No
+  helper functions, loops, computed expressions or arbitrary TypeScript.
+Schema call shape (db/schema.ts):
+\`\`\`ts
+import { schema, table, id, text, serverOnly } from 'somewhere/db';
+export default schema({
+  greetings: table({ id: id(), message: text() }, { scope: serverOnly() }),
+});
+\`\`\`
+- owner(): personal rows; group()/parent membership: invited teams and their children.
+- serverOnly(): every operation goes through a function with its own authorization.
+- publicRead: { where }: visitor reads of explicitly selected rows; client.read includes the primary key.
+- Built-in groups and email-domain app roles require VERIFIED email. For apps
+  that must work before verification, declare a membership/role table and check
+  it on the server before privileged operations.
+- Browser somewhere:data is generated from db/schema.ts. list reads at most 100
+  rows: { limit: 100, after: cursor }. No order option: sort in the client or use
+  a server endpoint. Cursor and row shapes come from the generated declaration.
+- Existing browser hooks live in src/auth; routes in src/App.tsx; layouts in
+  src/layouts. Extend them rather than replacing working authentication.
+
+\`\`\`ts
+export default sw.endpoint({
+  auth: 'required',
+  handler: async ({ user }, sw) => {
+    const { users } = await sw.auth.server.listUsers({ emails: [user.email] });
+    return { users };
+  },
+});
+\`\`\`
+GET endpoints export the endpoint as GET (export const GET = sw.endpoint({...})).
+Server database shapes (authorize cross-user operations before using server):
+\`\`\`ts
+async function writes(sw: SomewhereRuntimeContext) {
+  const id = crypto.randomUUID(); // generate related IDs before the transaction
+  await sw.db.server.tx([
+    { op: 'insert', table: 'greetings', values: { id, message: 'Hello' } },
+    { op: 'update', table: 'greetings', where: { id }, set: { message: 'Updated' } },
+  ]);
+  await sw.db.server.from('greetings', { where: { id }, limit: 1 });
+  await sw.db.server.insert('greetings', { id: crypto.randomUUID(), message: 'Hello' });
+  await sw.db.server.update('greetings', { where: { id }, set: { message: 'Updated' } });
+  await sw.db.server.remove('greetings', { where: { id } });
+}
+\`\`\`
+The same from/insert/update/remove verbs on sw.db apply caller scopes.
+Transactions take an ARRAY of write intents, never a callback.
+Transactions: \`somewhere docs sw.db --section swdbservertxintents-authorized-cross-user-writes\`.
+Updates: \`somewhere docs sw.db --section builder-verbs-and-where-shapes\`.
+Membership: \`somewhere docs sw.db --section owner-or-member-and-parent-access\`.
+Auth hooks: \`somewhere docs auth-client --section react-auth-state\`.
 
 Unique pair: \`unique: [['org_id','email']]\` in table options.
 
@@ -92,14 +131,7 @@ export const SKILLS_POINTER = `Skills: \`${SKILLS_DIR}/\` — `
   + skillNames(BUNDLED_SKILLS_PACK).map((name) => `\`${name}\``).join(', ')
   + '. Read the skill that matches the task. `somewhere skills status` inspects the installed pack; `somewhere skills update` updates unmodified files.';
 
-/** One line pointing agents at the declared-access recipes: in
- *  the testing lane's experiment all three agents given it moved from
- *  serverOnly() plus hand-written checks to declared access. Kept outside
- *  AGENT_WORKFLOW, which is a byte mirror of the platform's agent workflow. */
-export const DECLARED_ACCESS_POINTER = 'Access rules: before choosing `serverOnly()` plus hand-written checks, read the declared-access recipes: '
-  + 'teams, creator-or-owner and parent rows in `somewhere docs sw.db --section owner-or-member-and-parent-access`; '
-  + 'bookings and help desks in `somewhere docs sw.db --section provider-or-booker-and-owner-or-staff-recipes`; '
-  + 'sharing your own rows with specific people (read-only sharing, co-authors) in `somewhere docs declared-data --section per-owner-sharing`.';
+export const DECLARED_ACCESS_POINTER = '';
 
 /** One line telling agents the app's data and code can leave:
  *  an evaluating agent concluded the platform had no exits. Kept outside

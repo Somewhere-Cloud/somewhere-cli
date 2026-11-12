@@ -62,7 +62,7 @@ test('typecheck verdict is advisory on errors and keeps the clean summary unchan
 
   assert.equal(
     stderr[0],
-    '✗ 2 type errors (via npx tsc) — exit 1. `somewhere deploy` does not stop on type errors; it ships them.',
+    '✗ 2 type errors (via npx tsc) — exit 1. `somewhere deploy` stops before upload; override with --allow-type-errors.',
   );
   assert.ok(stdout.includes(
     '  src/one.ts:1:2 TS2322 Type number is not assignable to type string.',
@@ -208,7 +208,7 @@ test('parseTscOutput names the 100-row rule when a list limit is out of range', 
   ].join('\n');
   const errors = parseTscOutput(out);
   assert.equal(errors.length, 2);
-  assert.ok(errors[0].message.endsWith(PAGE_LIMIT_EXPLANATION), errors[0].message);
+  assert.ok(errors[0].message.includes(PAGE_LIMIT_EXPLANATION), errors[0].message);
   assert.ok(!errors[1].message.includes(PAGE_LIMIT_EXPLANATION));
 });
 

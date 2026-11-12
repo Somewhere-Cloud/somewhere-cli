@@ -579,9 +579,10 @@ export const APP_NAME = ${JSON.stringify(appName)};
 export const APP_TAGLINE = "Build your app in src/pages/HomePage.tsx.";
 
 // "Continue with …" buttons above the email form, in this order. The platform
-// owns the OAuth clients, so nothing else is needed: Google is on by default;
-// remove it for email-only sign-in, or add 'github' / 'discord' and deploy.
-export const SIGN_IN_PROVIDERS: SignInProvider[] = ['google'];
+// owns the OAuth clients. Add providers when this app uses social sign-in:
+// add 'github' / 'discord' and deploy.
+export const SIGN_IN_PROVIDERS: SignInProvider[] = [];
+export const SHOW_EMAIL_VERIFICATION = false;
 `;
 }
 
@@ -3121,9 +3122,9 @@ export function VerifyEmailPanel({ verification }: { verification: EmailVerifica
 function signedInLayout(): string {
   let out = replaceOnce(SIGNED_IN_LAYOUT, "import { useSignOut } from '../auth/hooks';\n",
     "import { useSignOut } from '../auth/hooks';\nimport { useEmailVerification } from '../auth/useEmailVerification';\n");
-  out = replaceOnce(out, "import { AppShell } from '../ui/AppShell';\n", "import { AppShell } from '../ui/AppShell';\nimport { VerifyEmailPanel } from '../ui/VerifyEmail';\n");
+  out = replaceOnce(out, "import { AppShell } from '../ui/AppShell';\n", "import { AppShell } from '../ui/AppShell';\nimport { VerifyEmailPanel } from '../ui/VerifyEmail';\nimport { SHOW_EMAIL_VERIFICATION } from '../config';\n");
   out = replaceOnce(out, '  const signOut = useSignOut();\n', '  const signOut = useSignOut();\n  const verification = useEmailVerification();\n');
-  out = replaceOnce(out, '      {children}\n', '      <VerifyEmailPanel verification={verification} />\n      {children}\n');
+  out = replaceOnce(out, '      {children}\n', '      {SHOW_EMAIL_VERIFICATION ? <VerifyEmailPanel verification={verification} /> : null}\n      {children}\n');
   return out;
 }
 
@@ -3199,11 +3200,11 @@ function readme(selection: InitSelection): string {
     'clears private pages at once and shows "Signing out…" until the server answers;',
     'if it cannot confirm, the sign-in page says so and offers "Sign out again". The gate is',
     'only UX: functions and `db/schema.ts` decide what a request may read or write.',
-    'A password account sees a "Verify your email" panel until it enters the 6-digit',
+    'Set SHOW_EMAIL_VERIFICATION in src/config.ts to show the verify-email panel.',
     'code the platform emails it (`auth.requestEmailVerification` / `auth.verifyEmail`',
     'through the same SDK route; the session cookie decides the account).',
     'Google, GitHub and Discord sign-in are platform-hosted: `SIGN_IN_PROVIDERS`',
-    '(`src/config.ts`) starts as `[\'google\']`; remove it for email-only sign-in or',
+    '(`src/config.ts`) starts empty for email-only sign-in; enable Google or',
     'add the others. The buttons, `auth.<provider>SignInUrl` and the `/auth/callback`',
     'page (the SDK\'s `AuthCallback`) are already wired.',
     'Password reset and MFA enrolment are not generated.',

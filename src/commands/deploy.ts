@@ -1,3 +1,7 @@
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
+import { runTypecheck } from '../lib/typecheck.js';
+import { reportTypecheck } from './typecheck.js';
 import { clearBaseFiles, hashFiles, loadLastActivation, saveBaseFiles } from '../lib/base-files.js';
 import { withVerifyProgress } from '../lib/verify-progress.js';
 import { Command } from 'commander';
@@ -701,12 +705,25 @@ export function registerDeploy(program: Command) {
       'After the deploy is live, run one browser verification flow at desktop and phone size. Omit the file for the default health check.',
     )
     .option('--json', 'Print the raw deploy response as JSON on stdout; files left out locally are listed on stderr by path and reason')
+    .option('--allow-type-errors', 'Upload even when the local TypeScript check fails')
     .option('--timing', 'Print collection, upload, release, activation, and verification timings')
     .action(async (dir: string | undefined, opts) => {
       // performance.now() counts from process start, so this is the real
       // start-up cost (runtime boot + module load) before the command ran.
       const startupMs = performance.now();
       const targetDir = resolveTargetDir(dir);
+      if (existsSync(join(targetDir, 'tsconfig.json'))) {
+        const checked = await runTypecheck(targetDir);
+        if (!checked.ok) {
+          reportTypecheck(checked);
+          if (!opts.allowTypeErrors) {
+            error('Deploy stopped before upload. To proceed anyway: somewhere deploy --allow-type-errors');
+            process.exitCode = 1;
+            return;
+          }
+          warn('Proceeding with type errors (--allow-type-errors).');
+        }
+      }
       // A bad local flow must not publish source or mint a temporary account.
       const verifyFlow = opts.verify && !opts.dryRun
         ? loadVerifyFlow(typeof opts.verify === 'string' ? opts.verify : undefined, targetDir)

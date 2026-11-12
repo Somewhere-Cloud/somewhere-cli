@@ -28,11 +28,13 @@ function runner() {
       const map = await client.call<{ browser_data: { contract_digest: string | null } }>('GET', '/db/access-map', undefined, { project_id: projectId });
       const owned: IssuedIdentity[] = [];
       const contexts: BrowserContext[] = [];
+      const partialIds: string[] = [];
       try {
         await use(async () => {
           let created: Awaited<ReturnType<typeof createTestIdentities>>;
           try { created = await createTestIdentities(client, projectId, 'user', 1, 'pw'); }
           catch (error) {
+            partialIds.push(...((error as { createdIds?: string[] }).createdIds ?? []));
             owned.push(...((error as { issued?: IssuedIdentity[] }).issued ?? []));
             throw error;
           }
@@ -48,7 +50,7 @@ function runner() {
       } finally {
         const failures: string[] = [];
         for (const context of contexts) try { await context.close(); } catch { failures.push('Browser context cleanup failed'); }
-        const ids = owned.map(identity => identity.user.id);
+        const ids = [...new Set([...owned.map(identity => identity.user.id), ...partialIds])];
         if (ids.length) {
           try {
             await client.call('DELETE', '/auth/test-users', { project_id: projectId, ids });

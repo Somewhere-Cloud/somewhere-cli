@@ -10,7 +10,8 @@ for ordinary app reads and writes. The platform enforces those rules on every ca
 Start with owner() for personal rows:
 
 Schema: db/schema.ts is declaration only: imports and a default schema export.
-No helper functions, constants, spreads or arbitrary TypeScript expressions.
+No helper functions or arbitrary TypeScript expressions. Named declarative
+constants and spreads of those constants are supported.
 id() is a random text key; references use text(). owner() adds/fills user_id.
 
 \`\`\`ts

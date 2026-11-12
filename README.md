@@ -46,7 +46,7 @@ For optional after-edit checking, explicitly run `somewhere hooks install --host
 | `somewhere logout` | Clear stored credentials |
 | `somewhere whoami` | Show current user, plan, project count |
 | `somewhere init` | Create project + write `.somewhere.json` |
-| `somewhere init --link` | Link to an existing project |
+| `somewhere init --link --project <id> --template auth` | Scaffold an empty directory and link an existing project; non-empty directories are link-only |
 | `somewhere projects` | List all projects with status |
 | `somewhere project create <name>` | Create a new project |
 | `somewhere project view [name]` | Show project details |

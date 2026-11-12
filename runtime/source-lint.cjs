@@ -17718,6 +17718,12 @@ export function watchLive(load, render, onError) {
   let pongTimer = null;
   let reconnectTimer = null;
   let drops = 0;
+  // Set by an account_full control (tsk_d1da4622): terminal until the page is deliberately shown again or comes
+  // back online; the automatic safety refresh does not re-ask, so a full account never causes a reconnect storm.
+  let accountFull = null;
+  // Set by an admission_unavailable control: a temporary refusal. The reconnect backs off (never at once) and the
+  // back-off is kept across refused handshakes; only a healthy admission (the socket's first resync) resets it.
+  let refused = null;
 
   function report(err) {
     const retrying = failures <= LIVE_RETRY_LIMIT;
@@ -17759,14 +17765,21 @@ export function watchLive(load, render, onError) {
     ws.onmessage = function (message) {
       if (stopped || generation !== socketGeneration) return;
       if (pongTimer !== null) { clearTimeout(pongTimer); pongTimer = null; }
-      drops = 0;
       let frame = null;
       try { frame = JSON.parse(message.data); } catch (_) { return; }
       if (!frame || frame.type !== 'live_control') return;
       // resync_required: rows changed, or this socket just went live.
       // release_changed / access_revoked / reauthorize_required: the socket
       // closes next; the close handler reconnects through a fresh load.
-      if (frame.event === 'resync_required') refresh(false);
+      // Only an admitted socket is sent resync_required, so it is the healthy-admission signal that resets back-off.
+      if (frame.event === 'resync_required') { drops = 0; refused = null; refresh(false); }
+      if (frame.event === 'admission_unavailable') refused = { code: frame.code || 'ROOM_ADMISSION_UNAVAILABLE', message: frame.message || 'Live list admission is temporarily unavailable.' };
+      if (frame.event === 'account_full') {
+        accountFull = { code: frame.code || 'ROOM_ACCOUNT_FULL', message: frame.message || 'This app has reached its limit of people connected at once.' };
+        // Terminal: cancel pending retries and reconnects; an in-flight load will not reconnect either (see refresh).
+        if (retryTimer !== null) { clearTimeout(retryTimer); retryTimer = null; }
+        if (reconnectTimer !== null) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+      }
     };
     ws.onopen = function () {
       if (stopped || generation !== socketGeneration) return;
@@ -17785,6 +17798,13 @@ export function watchLive(load, render, onError) {
       if (closed || stopped || generation !== socketGeneration) return;
       closed = true;
       stopPing();
+      if (accountFull) {
+        socket = null;
+        liveKey = null;
+        failures = LIVE_RETRY_LIMIT + 1;
+        report(liveError(accountFull.code, accountFull.message));
+        return;
+      }
       // An error may leave the socket half-open; close it explicitly so no stale
       // connection lingers behind the replacement.
       try { ws.close(1000, 'replaced'); } catch (_) {}
@@ -17794,9 +17814,13 @@ export function watchLive(load, render, onError) {
       // anything that changed while the socket was down. The first drop
       // reconnects at once; repeated drops back off and are reported.
       drops += 1;
-      if (drops > 3) report(liveError('LIVE_DISCONNECTED', 'The live connection keeps closing; reconnecting.'));
+      const wasRefused = refused;
+      refused = null;
+      if (wasRefused) report(liveError(wasRefused.code, wasRefused.message));
+      else if (drops > 3) report(liveError('LIVE_DISCONNECTED', 'The live connection keeps closing; reconnecting.'));
       if (reconnectTimer !== null) return;
-      const delay = drops === 1 ? 0 : Math.min(500 * Math.pow(2, drops - 2), 15000);
+      // A temporary admission refusal never reconnects at once; the back-off grows across refused handshakes.
+      const delay = wasRefused ? Math.min(1000 * Math.pow(2, drops - 1), 30000) : drops === 1 ? 0 : Math.min(500 * Math.pow(2, drops - 2), 15000);
       reconnectTimer = setTimeout(function () { reconnectTimer = null; refresh(true); }, delay);
     }
     ws.onclose = onClose;
@@ -17825,6 +17849,8 @@ export function watchLive(load, render, onError) {
                : 'load() must return the JSON of a function that returns sw.rooms.live(name, read).');
       }
       failures = 0;
+      // A full account is terminal until a deliberate retry: a load already in flight renders but never reconnects.
+      if (accountFull) return;
       const nextKey = String(live.release_id) + ':' + String(live.fingerprint);
       if (reconnect || !socket || nextKey !== liveKey) connect(live);
     }).catch(function (err) {
@@ -17847,10 +17873,11 @@ export function watchLive(load, render, onError) {
     failures = Math.min(failures, LIVE_RETRY_LIMIT);
     refresh(!socket && reconnectTimer === null);
   }
-  function onVisibility() { if (document.visibilityState === 'visible') repair(); }
+  function deliberateRepair() { accountFull = null; repair(); }
+  function onVisibility() { if (document.visibilityState === 'visible') deliberateRepair(); }
   document.addEventListener('visibilitychange', onVisibility);
-  if (typeof window !== 'undefined') window.addEventListener('online', repair);
-  const safety = setInterval(function () { if (document.visibilityState !== 'hidden') repair(); }, LIVE_SAFETY_REFRESH_MS);
+  if (typeof window !== 'undefined') window.addEventListener('online', deliberateRepair);
+  const safety = setInterval(function () { if (document.visibilityState !== 'hidden' && !accountFull) repair(); }, LIVE_SAFETY_REFRESH_MS);
   refresh(true);
 
   return function stop() {
@@ -17861,7 +17888,7 @@ export function watchLive(load, render, onError) {
     if (reconnectTimer !== null) clearTimeout(reconnectTimer);
     clearInterval(safety);
     document.removeEventListener('visibilitychange', onVisibility);
-    if (typeof window !== 'undefined') window.removeEventListener('online', repair);
+    if (typeof window !== 'undefined') window.removeEventListener('online', deliberateRepair);
     if (socket) { try { socket.close(1000, 'stopped'); } catch (_) {} }
   };
 }
@@ -17875,7 +17902,12 @@ const RENEW_MS = 240000;
 const PING_MS = 30000;
 const PING_FRAME = '{"t":"ping"}';
 const PONG_FRAME = '{"t":"pong"}';
-const FINAL_BYE = { row_deleted: 'ROOM_ROW_DELETED', full: 'ROOM_FULL' };
+const FINAL_BYE = { row_deleted: 'ROOM_ROW_DELETED', full: 'ROOM_FULL', account_full: 'ROOM_ACCOUNT_FULL' };
+const FINAL_MESSAGE = {
+  ROOM_FULL: 'This room is full.',
+  ROOM_ROW_DELETED: 'This room\\'s row was deleted.',
+  ROOM_ACCOUNT_FULL: 'This app has reached its limit of people connected at once across all its rooms. Try again later.',
+};
 
 function roomError(code, message, extra) {
   const err = new Error(message);
@@ -18194,7 +18226,7 @@ class Room {
       if (this._stopped) return;
       const finalCode = this._bye && FINAL_BYE[this._bye];
       if (finalCode) {
-        return this._finish(roomError(finalCode, finalCode === 'ROOM_FULL' ? 'This room is full.' : 'This room\\'s row was deleted.'));
+        return this._finish(roomError(finalCode, FINAL_MESSAGE[finalCode]));
       }
       this._setStatus('reconnecting', { code: this._bye || 'dropped' });
       // expired / app_updated rejoin at once with a fresh ticket; a drop backs off.

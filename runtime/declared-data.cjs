@@ -4445,8 +4445,8 @@ var require_consumer_contract = __commonJS({
   "worker/containers/compile/consumer-contract.cjs"(exports2, module2) {
     "use strict";
     var CONSUMER_CONTRACT2 = Object.freeze({
-      version: 5,
-      digest: "5624c3f3f8db6bb4535b5e3e1466700b3967b33e907ad4315681cbcb2b1d1996"
+      version: 6,
+      digest: "8318cd690fc6072c5429b9c64791ead8c4af99058b37b7e83d038dda97308832"
     });
     var MEMBERSHIPS = "memberships: table({ id: id(), team_id: text(), member_id: text() }, { scope: owner(), client: { read: true } }),";
     var SHARES = "shares: table({ id: id(), grantee_id: text() }, { scope: owner(), client: { read: true, create: ['grantee_id'], delete: true }, unique: [['user_id', 'grantee_id']] }),";
@@ -4486,7 +4486,7 @@ export default schema({
       ["refused: a column named mine", one("owner", "notes: table({ id: id(), mine: text() }, { scope: owner(), client: { read: true } }),")]
     ]);
     var DERIVED = ["generateFromFiles", "localDeclarationFromFiles", "declaredTablesFromFiles", "runtimeDeclarationFromFiles", "filesDeclarationFromFiles"];
-    function consumerContractComponents2(data, sourceLintVersion, hash) {
+    function consumerContractComponents2(data, sourceLintVersion, hash, sourceLintImplementation) {
       const forms = {};
       for (const [name, source] of CONSUMER_CONTRACT_FORMS) {
         const files = { "db/schema.ts": source };
@@ -4504,6 +4504,7 @@ export default schema({
         endpoint_declaration: hash(String(data.ENDPOINT_DECLARATION)),
         files_declaration: hash(String(data.FILES_DECLARATION_FILE)),
         source_lint_version: String(sourceLintVersion),
+        source_lint_implementation: hash(sourceLintImplementation),
         forms
       };
     }

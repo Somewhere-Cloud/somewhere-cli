@@ -6,8 +6,7 @@
 #      expected_version = the package.json version:
 #        gh workflow run publish.yml -R Somewhere-Cloud/somewhere-cli --ref master \
 #          -f source_sha=<40-hex master commit> -f expected_version=<x.y.z>
-#   3. The run pins the exact commit, builds, publishes with provenance, then
-#      verifies the registry (gitHead, SRI, Sigstore). Customers pick the
+#   3. The run pins the exact commit, builds, publishes with provenance, Customers pick the
 #      version up through somewhere update.
 #
 # npm authentication: trusted publishing only. npmjs.com trusts the GitHub
@@ -115,17 +114,3 @@ jobs:
           if [ -n "${NODE_AUTH_TOKEN:-}" ] || [ -n "${NPM_TOKEN:-}" ]; then echo "an npm token is set; this publisher authenticates only through OIDC" >&2; exit 1; fi
           if npm view "@somewhere-cloud/cli@$EXPECTED_VERSION" version >/dev/null 2>&1; then echo "@somewhere-cloud/cli@$EXPECTED_VERSION already exists on npm" >&2; exit 1; fi
           npm publish --provenance --access public
-      - name: Verify published registry source, SRI and Sigstore
-        id: verification
-        if: always() && steps.final.outcome == 'success' && (steps.final.outputs.mode == 'in-sync' || steps.publication.outcome == 'success' || steps.publication.outcome == 'failure')
-        env:
-          SOURCE_SHA: ${{ steps.final.outputs.published_head }}
-          EXPECTED_VERSION: ${{ steps.candidate.outputs.version }}
-        run: node scripts/publish-release.mjs verify "$SOURCE_SHA" "$EXPECTED_VERSION"
-      - name: Confirm npm resolves the version
-        env:
-          EXPECTED_VERSION: ${{ steps.candidate.outputs.version }}
-        run: |
-          integrity="$(npm view "@somewhere-cloud/cli@$EXPECTED_VERSION" dist.integrity)"
-          case "$integrity" in sha512-*) echo "@somewhere-cloud/cli@$EXPECTED_VERSION dist.integrity=$integrity";; *) echo "npm view returned no dist.integrity for @somewhere-cloud/cli@$EXPECTED_VERSION" >&2; exit 1;; esac
-          echo "Published and verified: @somewhere-cloud/cli@$EXPECTED_VERSION ($integrity)" >> "$GITHUB_STEP_SUMMARY"

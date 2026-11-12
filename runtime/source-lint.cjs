@@ -19578,7 +19578,7 @@ globalThis.sw.endpoint = function (config) {
         );
         return __sw_mergeHeaders(
           __sw_runtimeMade(new Response(
-            JSON.stringify({ ok: false, error: 'RATE_LIMIT_UNAVAILABLE', message: 'Rate limiting is temporarily unavailable; this request was blocked. A later identical request can succeed.' }),
+            JSON.stringify({ ok: false, error: 'RATE_LIMIT_UNAVAILABLE', message: 'Temporary platform condition: this request was not admitted. Retry the request; do not remove rateLimit.' }),
             { status: 503, headers: { 'Content-Type': 'application/json', 'Retry-After': String(rateLimit.windowSeconds) } }
           )),
           corsHeaders

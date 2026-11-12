@@ -5,13 +5,45 @@ import { SKILLS_DIR, skillNames } from './skills-pack.js';
 // docs lint byte-compares this value when SOMEWHERE_CLI_REPO points here.
 export const AGENT_WORKFLOW = `## Build, deploy, test
 
-If every access rule can be declared (owner, member, parent, public read), declare
-it and use the generated browser client. If a rule cannot be declared (for example
-it depends on an unverified email, or a role your app assigns), use serverOnly()
-tables and check access in your own sw.endpoint functions.
-Built-in groups and email-domain roles require VERIFIED email. For access before
-verification, use your own membership/role table with server-side checks. Never
-give a privileged role solely because an unverified address claims a domain.
+Declare access rules in db/schema.ts; use the schema-generated browser client
+for ordinary app reads and writes. The platform enforces those rules on every call.
+Start with owner() for personal rows:
+
+Schema: db/schema.ts is declaration only: imports and a default schema export.
+No helper functions, constants, spreads or arbitrary TypeScript expressions.
+id() is a random text key; references use text(). owner() adds/fills user_id.
+
+\`\`\`ts
+import { schema, table, id, text, owner } from 'somewhere/db';
+export default schema({
+  notes: table({ id: id(), title: text() }, {
+    scope: owner(),
+    client: { read: ['id', 'title'], create: ['title'], update: ['title'], delete: true },
+  }),
+});
+\`\`\`
+
+Browser data is generated from the schema. list returns at most 100 rows, no
+order option: sort in the client or use a server endpoint for ordered queries.
+
+\`\`\`ts
+import { data } from 'somewhere:data';
+async function useNotesData() {
+  const { data: note } = await data.notes.create({ title: 'Hello' });
+  if (note) await data.notes.update(note.id, { title: 'Updated' });
+  const page = await data.notes.list({ limit: 100 });
+  if (page.has_more && page.next) return data.notes.list({ limit: 100, after: page.next });
+  return page;
+}
+\`\`\`
+
+
+Use serverOnly() and endpoint checks only when a required rule cannot be expressed
+by the declared scopes: compare the rule's identities/relationships with owner,
+member and parent; a custom application-assigned role needs an explicit server check.
+Built-in groups and email-domain roles require VERIFIED email. If the app must
+work before verification, use its own membership/role table and server checks.
+Never grant privilege solely because an unverified address claims a domain.
 
 Starter map:
 - src/App.tsx + src/routes.ts: route selection, including a detail path parameter;
@@ -46,19 +78,6 @@ export const DELETE = sw.endpoint({
 });
 \`\`\`
 
-Schema: db/schema.ts is declaration only: imports and a default schema export.
-No helper functions, constants, spreads or arbitrary TypeScript expressions.
-id() is a random text key; references use text(). owner() adds/fills user_id.
-
-\`\`\`ts
-import { schema, table, id, text, owner } from 'somewhere/db';
-export default schema({
-  notes: table({ id: id(), title: text() }, {
-    scope: owner(),
-    client: { read: ['id', 'title'], create: ['title'], update: ['title'], delete: true },
-  }),
-});
-\`\`\`
 
 Scopes:
 - owner(): personal rows, caller ownership applied by the platform.
@@ -93,17 +112,6 @@ async function writeNotes(sw: SomewhereRuntimeContext, ownerId: string) {
 }
 \`\`\`
 
-Browser data is generated from the schema. list returns at most 100 rows, no
-order option: sort in the client or use a server endpoint for ordered queries.
-
-\`\`\`ts
-import { data } from 'somewhere:data';
-async function readNotes() {
-  const page = await data.notes.list({ limit: 100 });
-  if (page.has_more && page.next) return data.notes.list({ limit: 100, after: page.next });
-  return page;
-}
-\`\`\`
 
 Call your API with fetch(path, { method: 'POST', credentials: 'same-origin',
 headers: { 'content-type': 'application/json' }, body: JSON.stringify(values) }).

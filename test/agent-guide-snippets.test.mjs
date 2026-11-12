@@ -21,3 +21,14 @@ test('every TypeScript guidance snippet checks against generated starter declara
     assert.equal(result.ok, true, JSON.stringify(result, null, 2));
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
+
+test('the schema grammar accepts named declarative constants and their spreads', async () => {
+  const { createRequire } = await import('node:module');
+  const require = createRequire(import.meta.url);
+  const generator = require('../runtime/declared-data.cjs');
+  assert.doesNotThrow(() => generator.generateFromFiles({
+    'db/schema.ts': `import { schema, table, id, text, owner } from 'somewhere/db';
+const fields = { title: text() };
+export default schema({ notes: table({ id: id(), ...fields }, { scope: owner(), client: { read: ['id', 'title'] } }) });`,
+  }));
+});

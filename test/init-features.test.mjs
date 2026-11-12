@@ -326,8 +326,8 @@ test('the magic-link landing follows only a same-origin redirect_uri', async () 
   const origin = 'https://crew.somewhere.site';
   const target = (redirect) => landingTarget(redirect === undefined ? '?token=t' : `?token=t&redirect_uri=${encodeURIComponent(redirect)}`, origin);
   assert.equal(target(undefined), '/');
-  assert.equal(target('https://crew.somewhere.site/join?invite_id=inv_1'), '/join?invite_id=inv_1', 'an invitation lands on its page with its id');
-  assert.equal(target('/teams/7#tasks'), '/teams/7#tasks');
+  assert.equal(target('https://crew.somewhere.site/join?invite_id=inv_1'), 'https://crew.somewhere.site/join?invite_id=inv_1', 'an invitation lands on its page with its id');
+  assert.equal(target('/teams/7#tasks'), 'https://crew.somewhere.site/teams/7#tasks');
   for (const hostile of ['https://evil.example/x', '//evil.example/x', '/\\evil.example', 'javascript:alert(1)', 'https://crew.somewhere.site.evil.example/', 'http://crew.somewhere.site/']) {
     assert.equal(target(hostile), '/', hostile);
   }

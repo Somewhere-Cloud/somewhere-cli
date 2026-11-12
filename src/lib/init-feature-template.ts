@@ -1,3 +1,4 @@
+import { starterTests } from './init-test-template.js';
 import { CLI_VERSION } from './version.js';
 import type { InitScaffoldFile } from './init-scaffold.js';
 import type { InitSelection } from './init-features.js';
@@ -378,6 +379,7 @@ export function useSignOut(): SignOutAction {
     setError(null);
     try {
       await auth.signOut();
+      if (!auth.getState().signOutUnconfirmed) window.location.replace('/');
     } catch (reason: unknown) {
       setError(authErrorMessage(reason));
       setPending(false);
@@ -398,7 +400,9 @@ export function useUnconfirmedSignOut(): UnconfirmedSignOut | null {
     pending,
     retry() {
       setPending(true);
-      void auth.signOut().finally(() => setPending(false));
+      void auth.signOut().then(() => {
+        if (!auth.getState().signOutUnconfirmed) window.location.replace('/');
+      }).finally(() => setPending(false));
     },
   };
 }
@@ -510,12 +514,19 @@ function mainTsx(styled: boolean, agent: boolean): string {
 import { createRoot } from 'react-dom/client';
 import { SomewhereAuthProvider } from '@somewhere-cloud/sdk/react';
 import { App } from './App';
+import { useAuthState, useUnconfirmedSignOut } from './auth/hooks';
 import { auth } from './services/auth';
 ${styles}
+function ReadyApp() {
+  const session = useAuthState();
+  const unconfirmed = useUnconfirmedSignOut();
+  return <div data-app-state={unconfirmed ? 'sign-out-unconfirmed' : session.status}><App /></div>;
+}
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <SomewhereAuthProvider client={auth}>
-      <App />
+      <ReadyApp />
     </SomewhereAuthProvider>
   </StrictMode>,
 );
@@ -529,6 +540,7 @@ function mainTsxWithFixtures(styles: string): string {
 import { createRoot } from 'react-dom/client';
 import { SomewhereAuthProvider } from '@somewhere-cloud/sdk/react';
 import { App } from './App';
+import { useAuthState, useUnconfirmedSignOut } from './auth/hooks';
 import { FIXTURES_PATH } from './fixtures/assistant';
 import { AssistantFixturesPage } from './pages/AssistantFixturesPage';
 import { auth } from './services/auth';
@@ -536,6 +548,11 @@ ${styles}
 // /fixtures renders declared preview states from static data, outside the
 // sign-in provider, so it sends no request. Everything else is the app.
 const preview = window.location.pathname === FIXTURES_PATH;
+function ReadyApp() {
+  const session = useAuthState();
+  const unconfirmed = useUnconfirmedSignOut();
+  return <div data-app-state={unconfirmed ? 'sign-out-unconfirmed' : session.status}><App /></div>;
+}
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
@@ -543,7 +560,7 @@ createRoot(document.getElementById('root')!).render(
       <AssistantFixturesPage />
     ) : (
       <SomewhereAuthProvider client={auth}>
-        <App />
+        <ReadyApp />
       </SomewhereAuthProvider>
     )}
   </StrictMode>,
@@ -3315,8 +3332,17 @@ export function createFeatureTemplate(
   const agent = selection.modules.includes('agent');
   const magicLink = selection.modules.includes('magic-link');
   const files: InitScaffoldFile[] = [
+    ...starterTests(),
     { path: '.gitignore', content: 'node_modules\ndist\nbuild\n.env\n# Generated from db/schema.ts by somewhere typecheck, dev and deploy.\n__somewhere_data.d.ts\n__somewhere_files.d.ts\n' },
-    { path: 'AGENTS.md', content: INIT_AGENTS_MD },
+    { path: 'AGENTS.md', content: INIT_AGENTS_MD.replace(/## Getting started[^]*?After edits:/, `## Testing
+Use @somewhere-cloud/cli/testing; run APP_URL=<deployed-url> node --test tests/session.test.ts.
+Each test creates its own fixture; never substitute admin credentials for users.
+Use waitForApp(page, 'signed-in' | 'signed-out') for browser readiness.
+The platform enforces declared access rules: test your app's own rules once.
+After a failure, rerun only the failing test with --test-name-pattern.
+One full passing run is the stop rule. Do not repeat a passing suite.
+
+After edits:`) },
     { path: 'CLAUDE.md', content: INIT_CLAUDE_MD },
     { path: 'README.md', content: readme(selection) },
     { path: 'package.json', content: PACKAGE_JSON },

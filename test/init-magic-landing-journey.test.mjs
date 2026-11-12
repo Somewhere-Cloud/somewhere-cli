@@ -280,7 +280,7 @@ test('Continue sends the token once and opens its same-origin page', async () =>
   assert.deepEqual({ url: tab.verifies()[0].url, method: tab.verifies()[0].method, body: tab.verifies()[0].body },
     { url: '/api/auth/magic-link/verify', method: 'POST', body: { token: 'tok_once' } });
   assert.equal(tab.verifies()[0].addressBar, `${ORIGIN}/auth/magic`);
-  assert.deepEqual(tab.events.filter(([kind]) => kind === 'navigate'), [['navigate', '/teams/7?invite_id=inv_1']]);
+  assert.deepEqual(tab.events.filter(([kind]) => kind === 'navigate'), [['navigate', 'https://crew.somewhere.site/teams/7?invite_id=inv_1']]);
   assert.equal(tab.history.state, null, 'the spent token is forgotten');
 });
 
@@ -293,7 +293,7 @@ test('another account signed in here is shown, and signed out before the link is
   await tab.press();
   const order = tab.events.filter(([kind, , url]) => kind === 'fetch' && /\/(logout|magic-link\/verify)$/.test(url)).map(([, , url]) => url);
   assert.deepEqual(order, ['/api/auth/logout', '/api/auth/magic-link/verify'], 'sign-out is answered before the token is sent');
-  assert.deepEqual(tab.events.filter(([kind]) => kind === 'navigate'), [['navigate', '/teams/7?invite_id=inv_1']]);
+  assert.deepEqual(tab.events.filter(([kind]) => kind === 'navigate'), [['navigate', 'https://crew.somewhere.site/teams/7?invite_id=inv_1']]);
 });
 
 test('a sign-out the server did not confirm sends nothing and keeps the link usable', async () => {
@@ -316,7 +316,7 @@ test('a sign-out the server did not confirm sends nothing and keeps the link usa
   await tab.press();
   assert.equal(tab.fetches().filter(c => c.url.endsWith('/logout')).length, 3);
   assert.equal(tab.verifies().length, 1);
-  assert.deepEqual(tab.events.filter(([kind]) => kind === 'navigate'), [['navigate', '/teams/7?invite_id=inv_1']]);
+  assert.deepEqual(tab.events.filter(([kind]) => kind === 'navigate'), [['navigate', 'https://crew.somewhere.site/teams/7?invite_id=inv_1']]);
 });
 
 test('a cross-origin redirect_uri is ignored and the invitee lands home', async () => {

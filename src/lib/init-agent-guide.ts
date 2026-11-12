@@ -130,13 +130,14 @@ admitted; retry it and keep rateLimit protection.
 
 On demand:
 - Membership/parent: \`somewhere docs sw.db --section owner-or-member-and-parent-access\`
-- Groups: \`somewhere docs sw.groups --section share-data-with-a-group\`
+- Groups: \`somewhere docs sw.groups --section create-a-group\`
 - Transactions: \`somewhere docs sw.db --section transaction-intents\`
 - Updates: \`somewhere docs sw.db --section update-shape\`
 - Browser limits: \`somewhere docs sw.db --section browser-list-limits\`
 - Direct HTTP data tests: \`somewhere docs declared-data --section calling-the-data-endpoint-directly\`
 - Auth hooks: \`somewhere docs auth-client --section react-auth-state\`
 - Files/background import: \`somewhere docs recipe-csv-import --section larger-files\`
+- Scheduled work: \`somewhere docs cron --section create-a-schedule\`
 - Server-rendered pages: \`somewhere docs recipe-seo --section 5-server-rendered-pages-and-redirects\`
 `;
 

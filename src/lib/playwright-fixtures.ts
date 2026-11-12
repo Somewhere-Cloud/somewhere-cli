@@ -4,10 +4,12 @@ import type { APIRequestContext, APIResponse, BrowserContext, Locator, Page, Tes
 import { ApiClient } from './client.js';
 import { getToken, loadProjectConfig } from './config.js';
 import { buildStorageState, createTestIdentities, expiryOf, productionOrigin, type IssuedIdentity } from './test-identities.js';
+import { diagnostics, rememberSecrets, scrub, timed } from './test-diagnostics.js';
+import type { TestInfo } from '@playwright/test';
 import type { DataRequest } from '../testing.js';
 
 export interface TestUser { id: string; email: string; page: Page; request: APIRequestContext }
-interface Fixtures { newUser: () => Promise<TestUser>; anonymous: APIRequestContext }
+interface Fixtures { _evidence: void; newUser: () => Promise<TestUser>; anonymous: APIRequestContext }
 type RunnerTest = TestType<PlaywrightTestArgs & PlaywrightTestOptions & Fixtures, PlaywrightWorkerArgs & PlaywrightWorkerOptions>;
 let loaded: { test: RunnerTest; expect: typeof import('@playwright/test').expect } | undefined;
 const digests = new WeakMap<APIRequestContext, string | null>();
@@ -19,20 +21,26 @@ function runner() {
   try { pw = require('@playwright/test') as typeof import('@playwright/test'); }
   catch { throw new Error('Install project test dependencies: npm install -D @playwright/test @somewhere-cloud/cli'); }
   const test = pw.test.extend<Fixtures>({
-    newUser: async ({ browser }, use) => {
+    _evidence: [async ({}, use, info) => {
+      try { await use(); } finally {
+        const report = diagnostics(info);
+        await info.attach('somewhere-diagnostics', { body: Buffer.from(JSON.stringify({ ...report, title: scrub(info.title), errors: info.errors.map(error => scrub(error.message ?? 'Test failed').split('\n').find(line => line.trim()) ?? 'Test failed'), secretAudit: 'issued values scrubbed before reporting' })), contentType: 'application/json' });
+      }
+    }, { auto: true }],
+    newUser: async ({ browser }, use, info) => {
       const projectId = loadProjectConfig()?.project_id;
       if (!projectId) throw new Error('Run somewhere test from a linked project folder.');
       const client = new ApiClient(getToken());
-      const urls = await client.call<{ prod_fallback: string }>('GET', `/projects/${encodeURIComponent(projectId)}/urls`);
+      const urls = await timed(info, 'target lookup', () => client.call<{ prod_fallback: string }>('GET', `/projects/${encodeURIComponent(projectId)}/urls`));
       const { origin, host } = productionOrigin(urls.prod_fallback);
-      const map = await client.call<{ browser_data: { contract_digest: string | null } }>('GET', '/db/access-map', undefined, { project_id: projectId });
+      const map = await timed(info, 'access map', () => client.call<{ browser_data: { contract_digest: string | null } }>('GET', '/db/access-map', undefined, { project_id: projectId }));
       const owned: IssuedIdentity[] = [];
       const contexts: BrowserContext[] = [];
       const partialIds: string[] = [];
       try {
         await use(async () => {
           let created: Awaited<ReturnType<typeof createTestIdentities>>;
-          try { created = await createTestIdentities(client, projectId, 'user', 1, 'pw'); }
+          try { created = await timed(info, 'test-user creation', () => createTestIdentities(client, projectId, 'user', 1, 'pw')); }
           catch (error) {
             partialIds.push(...((error as { createdIds?: string[] }).createdIds ?? []));
             owned.push(...((error as { issued?: IssuedIdentity[] }).issued ?? []));
@@ -40,36 +48,47 @@ function runner() {
           }
           owned.push(...created.issued);
           const issued = created.issued[0];
+          rememberSecrets(issued.access_token, issued.refresh_token);
           const context = await browser.newContext({ baseURL: origin, extraHTTPHeaders: { Origin: origin }, storageState: buildStorageState(origin, host, issued, expiryOf(issued, created.receivedAt)) });
           contexts.push(context);
-          constrain(context.request, origin);
+          constrain(context.request, origin, info);
           digests.set(context.request, map.browser_data.contract_digest);
-          const page = await context.newPage();
+          const page = await timed(info, 'page creation', () => context.newPage());
+          page.on('load', () => { void page.evaluate<number>("performance.getEntriesByType('navigation')[0]?.duration ?? 0").then(ms => { diagnostics(info).timings['page load'] = ms; }).catch(() => {}); });
           return { id: issued.user.id, email: issued.user.email, page, request: context.request };
         });
       } finally {
         const failures: string[] = [];
-        for (const context of contexts) try { await context.close(); } catch { failures.push('Browser context cleanup failed'); }
+        for (const context of contexts) try {
+          if (info.status !== info.expectedStatus) {
+            const page = context.pages()[0];
+            if (page && !/auth|login|signup|reset/i.test(new URL(page.url()).pathname)) {
+              const path = info.outputPath('failure.png');
+              await page.screenshot({ path, mask: [page.locator('input, textarea')] });
+              diagnostics(info).screenshot = path;
+            }
+          }
+          await context.close(); } catch { failures.push('Browser context cleanup failed'); }
         const ids = [...new Set([...owned.map(identity => identity.user.id), ...partialIds])];
         if (ids.length) {
           try {
-            await client.call('DELETE', '/auth/test-users', { project_id: projectId, ids });
-            const remaining = await client.call<{ identities: { id: string }[] }>('GET', '/auth/test-users', undefined, { project_id: projectId });
+            await timed(info, 'test-user deletion', () => client.call('DELETE', '/auth/test-users', { project_id: projectId, ids }));
+            const remaining = await timed(info, 'cleanup confirmation', () => client.call<{ identities: { id: string }[] }>('GET', '/auth/test-users', undefined, { project_id: projectId }));
             if (remaining.identities.some(identity => ids.includes(identity.id))) failures.push('Test user cleanup unconfirmed');
           } catch { failures.push('Test user cleanup unconfirmed; app rows remain'); }
         }
         if (failures.length) throw new Error(failures.join('; '));
       }
     },
-    anonymous: async ({ browser }, use) => {
+    anonymous: async ({ browser }, use, info) => {
       const projectId = loadProjectConfig()?.project_id;
       if (!projectId) throw new Error('Run from a linked project folder.');
       const client = new ApiClient(getToken());
-      const urls = await client.call<{ prod_fallback: string }>('GET', `/projects/${encodeURIComponent(projectId)}/urls`);
+      const urls = await timed(info, 'target lookup', () => client.call<{ prod_fallback: string }>('GET', `/projects/${encodeURIComponent(projectId)}/urls`));
       const { origin } = productionOrigin(urls.prod_fallback);
-      const map = await client.call<{ browser_data: { contract_digest: string | null } }>('GET', '/db/access-map', undefined, { project_id: projectId });
+      const map = await timed(info, 'access map', () => client.call<{ browser_data: { contract_digest: string | null } }>('GET', '/db/access-map', undefined, { project_id: projectId }));
       const context = await browser.newContext({ baseURL: origin, extraHTTPHeaders: { Origin: origin } });
-      constrain(context.request, origin);
+      constrain(context.request, origin, info);
       digests.set(context.request, map.browser_data.contract_digest);
       try { await use(context.request); } finally { await context.close(); }
     },
@@ -79,16 +98,22 @@ function runner() {
 }
 
 // Patch the shared-cookie client, preserving its identity and cookie rotation.
-function constrain(client: APIRequestContext, origin: string): void {
-  for (const method of ['fetch', 'get', 'post', 'put', 'patch', 'delete', 'head'] as const) {
+function constrain(client: APIRequestContext, origin: string, info: TestInfo): void {
+  for (const method of ['fetch'] as const) {
     const original = client[method].bind(client) as (url: string, options?: Record<string, unknown>) => Promise<APIResponse>;
-    Object.defineProperty(client, method, { value: (path: string, options: Record<string, unknown> = {}) => {
+    Object.defineProperty(client, method, { value: async (path: string, options: Record<string, unknown> = {}) => {
       const url = new URL(path, origin);
       if (url.origin !== origin) throw new Error('Fixture requests must stay on the app origin');
       const headers = new Headers(options.headers as Record<string, string> | undefined);
       if (headers.has('Authorization')) throw new Error('Fixture clients do not accept Authorization headers');
       headers.set('Origin', origin);
-      return original(url.href, { ...options, headers: Object.fromEntries(headers), maxRedirects: 0 });
+      const response = await timed(info, 'app requests', () => original(url.href, { ...options, headers: Object.fromEntries(headers), maxRedirects: 0 }));
+      let code = 'none';
+      if (response.status() >= 400) {
+        try { const body = await response.json() as { error?: unknown }; if (typeof body.error === 'string' && /^[A-Z_]+$/.test(body.error)) code = body.error; } catch {}
+      }
+      diagnostics(info).request = { method: String(options.method ?? 'GET').toUpperCase(), path: scrub(url.pathname), status: response.status(), code };
+      return response;
     } });
   }
 }

@@ -1,3 +1,5 @@
+import { ApiClient } from './client.js';
+import { getToken, loadProjectConfig } from './config.js';
 import type { Reporter, FullResult, Suite, TestCase, TestResult } from '@playwright/test/reporter';
 import { writePrivateFile } from './test-identities.js';
 import { scrub, type Diagnostics } from './test-diagnostics.js';
@@ -22,7 +24,15 @@ export default class TestReporter implements Reporter {
     const passed = this.entries.filter(entry => entry.status === 'passed').length;
     const skipped = this.entries.filter(entry => entry.status === 'skipped').length;
     const failed = this.entries.length - passed - skipped;
-    const report = { passed, failed, skipped, notRun: Math.max(0, this.total - this.entries.length), setupErrors: this.errors, target: process.env.SW_TEST_ORIGIN, release: process.env.SW_TEST_RELEASE ?? 'release unknown', browser: process.env.SW_TEST_BROWSER, duration: result.duration, browserProbeMs: Number(process.env.SW_TEST_BROWSER_LAUNCH_MS), subset: process.env.SW_TEST_SUBSET === 'true', tests: this.entries };
+    const releases = new Set(this.entries.map(entry => entry.release).filter(Boolean));
+    const projectId = loadProjectConfig()?.project_id;
+    if (projectId && releases.size) {
+      try {
+        const map = await new ApiClient(getToken()).call<{ release: { id: string } }>('GET', '/db/access-map', undefined, { project_id: projectId });
+        releases.add(map.release.id);
+      } catch { this.errors++; console.error('Could not verify release at end of run'); }
+    }
+    const report = { passed, failed, skipped, notRun: Math.max(0, this.total - this.entries.length), setupErrors: this.errors, target: process.env.SW_TEST_ORIGIN, release: releases.size > 1 ? 'release changed during run' : [...releases][0] ?? 'release unavailable (no access map)' , browser: process.env.SW_TEST_BROWSER, duration: result.duration, browserProbeMs: Number(process.env.SW_TEST_BROWSER_LAUNCH_MS), subset: process.env.SW_TEST_SUBSET === 'true', tests: this.entries };
     writePrivateFile(process.env.SW_TEST_RESULTS!, JSON.stringify(report) + '\n');
     console.log(process.env.SW_TEST_JSON === 'true' ? JSON.stringify(report) : `${report.subset ? 'SUBSET (not a full green; passed tests previously failed when using --failed): ' : 'FULL: '}${passed} passed, ${failed} failed, ${skipped} skipped, ${report.notRun} not run · ${report.target} · ${report.release} · ${report.browser} · ${(result.duration / 1000).toFixed(1)} s`);
     return { status: result.status === 'passed' && failed === 0 && this.errors === 0 && passed > 0 ? 'passed' : 'failed' };

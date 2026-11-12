@@ -6,7 +6,7 @@ export function scrub(value: string): string {
   return value.replace(/\u001b\[[0-9;]*m/g, '').replace(/eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+|smt_[A-Za-z0-9_-]+/g, '[redacted]');
 }
 export interface RequestEvidence { method: string; path: string; status: number; code: string }
-export interface Diagnostics { request?: RequestEvidence; screenshot?: string; timings: Record<string, number> }
+export interface Diagnostics { release?: string; request?: RequestEvidence; screenshot?: string; timings: Record<string, number> }
 const reports = new WeakMap<TestInfo, Diagnostics>();
 export function diagnostics(info: TestInfo): Diagnostics {
   let report = reports.get(info);

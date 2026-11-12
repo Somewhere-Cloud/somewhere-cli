@@ -491,9 +491,9 @@ function insertError(status, payload) {
   if (receipt) error.idempotency = receipt;
   return error;
 }
-
-
-
+// One logical request's outcome across its explicit retries (one value per request handle). A later
+// refusal, or this client's local retry horizon, describes only that attempt: it never erases an
+// earlier committed result, and after an unknown attempt it never proves the write absent.
 function requestOutcome() {
   let known = null;
   return {
@@ -513,14 +513,14 @@ function requestOutcome() {
   };
 }
 async function createWithReceipt(table, values, extra, eligible) {
-
-
+  // create takes only values: the retry key is a private random nonce this client allocates,
+  // never a caller choice. Anything more refuses before the network.
   if (extra.length !== 0) throw new DataError(400, {error:'DATA_INPUT_INVALID', message:'create takes only the values to insert. Nothing was sent.'});
   if (!eligible) return invoke(table, 'create', {values});
-
+  // 128 random bits as 32 lowercase hex characters: the platform's exact client key format.
   const key = Array.from(crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2,'0')).join('');
   const createdAt = Date.now();
-
+  // Serialize once: retries never observe later caller mutations or re-run toJSON.
   const body = JSON.stringify({values, contract, table, operation:'create', idempotency_key:key});
   let handle;
   const attach = target => { Object.defineProperty(target, 'request', {value:handle, enumerable:false, writable:false, configurable:false}); return target; };
@@ -538,7 +538,7 @@ async function createWithReceipt(table, values, extra, eligible) {
     catch (_) { throw attach(insertError(response.status, {error:'INVALID_DATA_RESPONSE', message:'The write response could not be read. Retry this request with its original key.', outcome:'unknown'})); }
     if (!response.ok) throw attach(insertError(response.status, payload));
     if (!payload || typeof payload !== 'object' || Array.isArray(payload) || !insertReceipt(payload.idempotency)) {
-
+      // A successful old/malformed response cannot establish receipt protection.
       throw insertError(502, {error:'IDEMPOTENCY_RECEIPT_INVALID', message:'The write succeeded, but retry protection could not be confirmed. Do not retry it.', outcome:'committed', write_committed:true});
     }
     payload.idempotency = insertReceipt(payload.idempotency);
@@ -553,7 +553,7 @@ async function createWithReceipt(table, values, extra, eligible) {
 function creatorCapability(grant, secret, table) {
   const capability = {grant};
   Object.defineProperty(capability, 'secret', {value:secret, enumerable:false, writable:false, configurable:false});
-
+  // The creator link: the platform landing page, with everything in the fragment (never sent to a server).
   const route = location.pathname + location.search + location.hash;
   Object.defineProperty(capability, 'url', {value:location.origin + '/__sw/creator#' + grant + '.' + secret + '.' + table + '.' + b64url(route), enumerable:false, writable:false, configurable:false});
   Object.defineProperty(capability, 'toJSON', {value:() => ({grant}), enumerable:false, writable:false, configurable:false});

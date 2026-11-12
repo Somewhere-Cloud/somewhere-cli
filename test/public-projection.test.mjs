@@ -12,3 +12,11 @@ test('projection removes comments and generated tracking markers without changin
   assert.equal(module.value, 7);
   assert.match(module.declaration, /interface Example/);
 });
+
+test('projection preserves tagged raw strings and template boundaries', async () => {
+  const text = 'export const pattern = String.raw`\\s+\\n`;\nexport const code = `// comment\\nconst value = 1;`;';
+  const result = publicProjection(text);
+  const module = await import('data:text/javascript;base64,' + Buffer.from(result).toString('base64'));
+  assert.equal(module.pattern, String.raw`\s+\n`);
+  assert.match(module.code, /const value = 1/);
+});

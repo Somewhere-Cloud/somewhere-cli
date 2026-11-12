@@ -68,7 +68,9 @@ function runner() {
               diagnostics(info).screenshot = path;
             }
           }
-          await context.close(); } catch { failures.push('Browser context cleanup failed'); }
+        } catch { failures.push('Failure screenshot capture failed'); } finally {
+          try { await context.close(); } catch { failures.push('Browser context cleanup failed'); }
+        }
         const ids = [...new Set([...owned.map(identity => identity.user.id), ...partialIds])];
         if (ids.length) {
           try {

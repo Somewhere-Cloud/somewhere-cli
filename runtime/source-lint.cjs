@@ -3402,11 +3402,7 @@ function buildPlatformContext(env, request, runtimeFetch = fetch, outboundFetch 
       // toward a developer key that is wrong for per-user calls and is itself
       // rejected from a browser context. State what the caller can actually do.
       const err = new Error(
-        "This " + (req.method || "POST").toUpperCase() + " was authenticated by a session cookie, "
-        + "so it must include an Origin header naming the site it came from. Browsers always send one. "
-        + "A non-browser client (a script, an agent, or a server-side caller) must either send that same "
-        + "Origin header explicitly, or stop sending the session cookie and pass the user token in an "
-        + "Authorization: Bearer header instead, which is not origin-checked."
+        'Send an Origin header equal to the app URL on cookie-authenticated POST/PATCH/DELETE from scripts. Browsers send it automatically.'
       );
       err.code = 'ORIGIN_REQUIRED';
       err.status = 400;
@@ -16582,6 +16578,9 @@ function __sw_dataPublicResult(sw, env, payload) {
   return payload;
 }
 function __sw_dataFail(status, code, message) {
+  if (status === 400 && (code === 'DATA_INPUT_INVALID' || code === 'DATA_OPERATION_INVALID')) {
+    message += ' Required fields: contract, table, operation. Get contract from browser_data.contract_digest in somewhere api GET /v1/db/access-map?project_id=<id>.';
+  }
   const error = new Error(message);
   error.status = status; error.code = code; error.__sw_expose = true;
   throw error;
@@ -16646,7 +16645,7 @@ function __sw_dataOrigin(request) {
   // This endpoint is browser-facing even for public/visitor tables. Require
   // exact same-origin POSTs independently of whether a session was supplied.
   const origin = request.headers.get('origin');
-  if (!origin) __sw_dataFail(400, 'ORIGIN_REQUIRED', 'Data requests require the app Origin header.');
+  if (!origin) __sw_dataFail(400, 'ORIGIN_REQUIRED', 'Send an Origin header equal to the app URL on cookie-authenticated POST/PATCH/DELETE from scripts.');
   if (origin !== new URL(request.url).origin) {
     __sw_dataFail(403, 'DATA_ORIGIN_FORBIDDEN', 'Data requests must come from this app origin.');
   }
@@ -16769,6 +16768,9 @@ async function __sw_handleDeclaredData(request, sw, env) {
   const input = await __sw_dataReadBody(request);
   __sw_dataObject(input, 'Request');
   const operation = input.operation;
+  if (typeof input.contract !== 'string' || typeof input.table !== 'string' || typeof operation !== 'string') {
+    __sw_dataFail(400, 'DATA_INPUT_INVALID', 'The data request body is missing required string fields.');
+  }
   const extras = operation === 'list' ? ['limit', 'after', 'where', 'can']
     : operation === 'relation_list' ? ['relation', 'parent_id', 'limit', 'after', 'where', 'link']
     : operation === 'aggregate' ? ['count', 'sum', 'avg', 'min', 'max', 'groupBy', 'where', 'having', 'order', 'limit']
@@ -17085,7 +17087,7 @@ async function __sw_handleDeclaredFiles(request, sw, env, fetcher) {
     input = { operation: 'download', collection: collection, id: id };
   } else if (request.method === 'POST' && url.pathname === '/__sw/files') {
     const origin = request.headers.get('origin');
-    if (!origin) __sw_dataFail(400, 'ORIGIN_REQUIRED', 'File requests require the app Origin header.');
+    if (!origin) __sw_dataFail(400, 'ORIGIN_REQUIRED', 'Send an Origin header equal to the app URL on cookie-authenticated POST/PATCH/DELETE from scripts.');
     if (origin !== url.origin) __sw_dataFail(403, 'FILES_ORIGIN_FORBIDDEN', 'File requests must come from this app origin.');
     input = await __sw_dataReadBody(request);
     if (!input || typeof input !== 'object' || Array.isArray(input)) __sw_dataFail(400, 'FILES_INPUT_INVALID', 'Send a JSON object.');
@@ -17687,7 +17689,7 @@ async function __sw_handlePushDoor(request, sw, env) {
   }
   if (request.method !== 'POST') __sw_dataFail(405, 'METHOD_NOT_ALLOWED', 'Use POST /__sw/push.');
   const origin = request.headers.get('origin');
-  if (!origin) __sw_dataFail(400, 'ORIGIN_REQUIRED', 'Push requests require the app Origin header.');
+  if (!origin) __sw_dataFail(400, 'ORIGIN_REQUIRED', 'Send an Origin header equal to the app URL on cookie-authenticated POST/PATCH/DELETE from scripts.');
   if (origin !== url.origin) __sw_dataFail(403, 'PUSH_ORIGIN_FORBIDDEN', 'Push requests must come from this app origin.');
   const input = await __sw_dataReadBody(request);
   if (!input || typeof input !== 'object' || Array.isArray(input)) __sw_dataFail(400, 'PUSH_INPUT_INVALID', 'Send a JSON object.');
@@ -18357,7 +18359,7 @@ async function __sw_handleRoomsDoor(request, sw) {
   }
   if (request.method !== 'POST') __sw_dataFail(405, 'METHOD_NOT_ALLOWED', 'Use POST /__sw/rooms/ticket.');
   const origin = request.headers.get('origin');
-  if (!origin) __sw_dataFail(400, 'ORIGIN_REQUIRED', 'Room requests require the app Origin header.');
+  if (!origin) __sw_dataFail(400, 'ORIGIN_REQUIRED', 'Send an Origin header equal to the app URL on cookie-authenticated POST/PATCH/DELETE from scripts.');
   if (origin !== url.origin) __sw_dataFail(403, 'ROOM_ORIGIN_FORBIDDEN', 'Room requests must come from this app origin.');
   const input = await __sw_dataReadBody(request);
   if (!input || typeof input !== 'object' || Array.isArray(input)) __sw_dataFail(400, 'VALIDATION_ERROR', 'Send { table, id }.');

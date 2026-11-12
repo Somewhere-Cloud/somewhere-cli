@@ -25,27 +25,52 @@ var __copyProps = (to, from, except, desc) => {
 };
 var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__getProtoOf(mod)) : {}, __copyProps(isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target, mod));
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
-var SENSITIVE_PARAMS, SENSITIVE_PARAM_NAMES;
-var init_log_sanitize = __esm({
-    "worker/src/utils/log-sanitize.ts"() {
+function createConsoleDiagnostics() {
+    function sanitizeMessage(input) {
+        return input.slice(0, 8192).replace(/https?:\/\/[^\s<>"')]+/gi, (url) => url.replace(/(https?:\/\/)[^/@\s]+@/gi, "$1<redacted>@").split(/[?#]/, 1)[0]).replace(/(["']?(?:password|code|token|key|secret|signature|access_token|refresh_token|authorization|cookie)["']?\s*:\s*)(?:"[^"]*"|'[^']*'|[^\s,}]+)/gi, "$1<redacted>").replace(/\b(?:Cookie|Set-Cookie)\s*[:=]\s*[^\r\n]+/gi, "Cookie: <redacted>").replace(/\bBearer\s+[^\s,;'"<>]+/gi, "Bearer <redacted>").replace(/\b(?:token|code|key|secret|password|signature|access_token|refresh_token|session|sid|sessionid)\s*=\s*(?:"[^"]*"|'[^']*'|[^\s&;,]+)/gi, (match) => match.slice(0, match.indexOf("=") + 1) + "<redacted>").replace(/[A-Z0-9.!#$%&'*+\/=?^_`{|}~-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, "<email>").replace(/\b[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b/g, "<redacted>").replace(/\b(?:smt_|(?:sk|pk)[_-])[A-Za-z0-9_-]+/g, "<redacted>").replace(/[A-Za-z0-9+/_-]{32,}={0,2}/g, "<redacted>").slice(0, 300);
+    }
+    function safeError(value) {
+        try {
+            const record2 = Object.create(null);
+            if (value && typeof value === "object") {
+                let current = value;
+                for (let depth = 0; current && depth < 6; depth++, current = Object.getPrototypeOf(current)) {
+                    for (const key of ["name", "message", "status", "code", "stack"]) {
+                        if (Object.hasOwn(record2, key))
+                            continue;
+                        const descriptor = Object.getOwnPropertyDescriptor(current, key);
+                        if (descriptor)
+                            record2[key] = "value" in descriptor ? descriptor.value : "[Getter]";
+                    }
+                }
+            }
+            const name = typeof record2.name === "string" ? sanitizeMessage(record2.name).slice(0, 80) : "Error";
+            const message = typeof record2.message === "string" ? record2.message : typeof value === "string" ? value : "Unknown error";
+            const status = typeof record2.status === "number" && Number.isInteger(record2.status) && record2.status >= 100 && record2.status <= 599 ? record2.status : 0;
+            const failure = /Network connection lost/i.test(message) ? "connection_lost" : /DEADLINE|timed? ?out/i.test(message) ? "deadline_exceeded" : /object.*reset|reset.*object/i.test(message) ? "object_reset" : /no such column/i.test(message) ? "missing_column" : /no such table/i.test(message) ? "missing_table" : /SQLITE_CONSTRAINT|constraint failed/i.test(message) ? "constraint" : /overload|too many requests/i.test(message) ? "overloaded" : "unclassified";
+            const code = typeof record2.code === "string" && /^[A-Z][A-Z0-9_]{0,63}$/.test(record2.code) ? sanitizeMessage(record2.code) : void 0;
+            const frames = typeof record2.stack === "string" ? record2.stack.split("\n").slice(1).flatMap((line) => {
+                const match = line.match(/([^\s()]+?):(\d+)(?::\d+)?\)?$/);
+                if (!match)
+                    return [];
+                const file = match[1].split(/[\\/]/).pop() ?? "";
+                return [sanitizeMessage(file) + ":" + match[2]];
+            }).slice(0, 2) : [];
+            return name + " message=" + JSON.stringify(sanitizeMessage(message)) + " status=" + status + (code ? " code=" + code : "") + " class=" + failure + (frames.length ? " frames=" + frames.join(",") : "");
+        }
+        catch {
+            return "Error class=uninspectable";
+        }
+    }
+    return { sanitizeMessage, safeError };
+}
+var diagnostics, sanitizeConsoleMessage, safeConsoleError;
+var init_console_privacy = __esm({
+    "worker/src/utils/console-privacy.ts"() {
         "use strict";
-        SENSITIVE_PARAMS = [
-            "access_token",
-            "refresh_token",
-            "code",
-            "state",
-            "creator_secret",
-            "secret",
-            "signature",
-            "api_key",
-            "apikey",
-            "token",
-            "key",
-            "sig",
-            "dsn",
-            "password"
-        ];
-        SENSITIVE_PARAM_NAMES = new Set(SENSITIVE_PARAMS);
+        diagnostics = createConsoleDiagnostics();
+        sanitizeConsoleMessage = diagnostics.sanitizeMessage;
+        safeConsoleError = diagnostics.safeError;
     }
 });
 var require_declared_data_contract = __commonJS({
@@ -4563,8 +4588,8 @@ var require_consumer_contract = __commonJS({
     "worker/containers/compile/consumer-contract.cjs"(exports2, module2) {
         "use strict";
         var CONSUMER_CONTRACT2 = Object.freeze({
-            version: 6,
-            digest: "8318cd690fc6072c5429b9c64791ead8c4af99058b37b7e83d038dda97308832"
+            version: 8,
+            digest: "bd4347b462f02a15962801ba7ac69c5482e589d4081593d9570e196410694cf7"
         });
         var MEMBERSHIPS = "memberships: table({ id: id(), team_id: text(), member_id: text() }, { scope: owner(), client: { read: true } }),";
         var SHARES = "shares: table({ id: id(), grantee_id: text() }, { scope: owner(), client: { read: true, create: ['grantee_id'], delete: true }, unique: [['user_id', 'grantee_id']] }),";
@@ -5349,8 +5374,11 @@ var ROLE_DOMAIN_MAP_JS = `
         }
         return true;
       }`;
+init_console_privacy();
+init_console_privacy();
+init_console_privacy();
+init_console_privacy();
 var COMPILE_UNAVAILABLE_REALERT_MS = 60 * 60 * 1e3;
-init_log_sanitize();
 var SAFE_SCOPE_IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*$/;
 var GROUP_ROLE_NAME = /^[a-z][a-z0-9_]{0,63}$/;
 function validGroupRoles(value) {

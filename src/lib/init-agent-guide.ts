@@ -39,8 +39,8 @@ async function useNotesData() {
 
 
 Use serverOnly() and endpoint checks only when a required rule cannot be expressed
-by the declared scopes: compare the rule's identities/relationships with owner,
-member and parent; a custom application-assigned role needs an explicit server check.
+by the declared scopes: compare the required identities and relationships with
+the supported owner, membership, parent and role policies before choosing the fallback.
 Built-in groups and email-domain roles require VERIFIED email. If the app must
 work before verification, use its own membership/role table and server checks.
 Never grant privilege solely because an unverified address claims a domain.

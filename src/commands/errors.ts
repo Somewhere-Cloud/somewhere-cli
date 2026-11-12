@@ -122,9 +122,7 @@ export function registerErrors(program: Command) {
         const status = r.status_code ?? 0;
         const statusStr = status >= 500 ? red(String(status)) : status >= 400 ? yellow(String(status)) : String(status || '—');
         const where = terminalSafe(`${r.method ? `${r.method} ` : ''}${r.endpoint ?? '—'}`);
-        const what = r.error_code && r.error_code !== 'FUNCTION_ERROR'
-          ? `${terminalSafe(r.error_code)}: ${truncate(terminalSafe(r.error_message))}`
-          : truncate(terminalSafe(r.error_message));
+        const what = formatErrorDetail(r.error_code, r.error_message);
         // A 401 your own handler returned is your auth gate working. Calling it
         // an exception is what made this view fill with normal traffic on any
         // app with a login.
@@ -144,6 +142,17 @@ export function registerErrors(program: Command) {
       console.log(dim(`\n  Returned rows: ${counts}${diagnosticCount} — ${teal('somewhere logs --level error')} for full detail.`));
       if (disconnected) console.log(dim(`  ${disconnectedNotice}`));
     });
+}
+
+export function formatErrorDetail(code: string | null | undefined, message: string | null | undefined): string {
+  const help: Record<string, string> = {
+    ORIGIN_REQUIRED: 'Send an Origin header equal to the app URL on cookie-authenticated POST/PATCH/DELETE from scripts.',
+    RATE_LIMIT_UNAVAILABLE: 'Temporary platform condition: request not admitted. Retry it; do not remove rateLimit.',
+    AUTH_ERROR: 'Authentication request failed.',
+  };
+  const detail = message && message !== code ? message : (code && help[code]) || message;
+  const text = truncate(terminalSafe(detail), 300);
+  return code && code !== 'FUNCTION_ERROR' && code !== detail ? `${terminalSafe(code)}: ${text}` : text;
 }
 
 function truncate(s: string | null | undefined, max = 80): string {

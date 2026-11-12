@@ -913,7 +913,7 @@ export function Grid({ min = 220, gap: g = 4, children }: { min?: number; gap?: 
 }
 
 interface PageHeaderProps {
-  title: string;
+  title: ReactNode;
   eyebrow?: ReactNode;
   description?: ReactNode;
   /** The page's primary action (one Button) and at most one secondary. */
@@ -1377,7 +1377,7 @@ export function Grid({ min = 220, gap: g = 4, children }: { min?: number; gap?: 
 }
 
 interface PageHeaderProps {
-  title: string;
+  title: ReactNode;
   eyebrow?: ReactNode;
   description?: ReactNode;
   /** The page's primary action (one Button) and at most one secondary. */

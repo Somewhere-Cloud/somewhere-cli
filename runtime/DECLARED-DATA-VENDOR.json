@@ -6,7 +6,7 @@
     "shared/d1-session.ts": "2ae29b74bba68016c86d25fa2a58f8c2fce4aca8fe57fafc253d380c47a3c0ab",
     "shared/types/placeholder-identity.ts": "089a46e2474a21193d3611eddd9c94b6bbe62441b3039ed80fc8499bada447ca",
     "worker/containers/compile/checker-contract.cjs": "3a8355b9477d89d00bca47cf74032c3b3c6458941cf5c57ddae9e2228b51915d",
-    "worker/containers/compile/consumer-contract.cjs": "bc8f00cf7428bd82cd42a5916a011102920730fc3565640b5b77f039a25c824c",
+    "worker/containers/compile/consumer-contract.cjs": "e76505a4ef8155123cffb61853e23dd66d34137ec777f22457e3440b549fb405",
     "worker/containers/compile/declared-data-contract.cjs": "47ab54cbf6fb20b77e00b2f06e0d283733ee1f3774459f2a6f82c77042c1c93a",
     "worker/containers/compile/generated-declarations-render.cjs": "7ffdb34645cc9eccac6eba39dc86b646a41c4de8a1a038d2b5b46f42df9f1157",
     "worker/containers/compile/generated-declarations.cjs": "6e9902e054c5c784fd9b3c3fafc1869e79954100a45014e1132247cd82833ec4",
@@ -57,5 +57,5 @@
     "worker/src/utils/telegram-attempt-receipts.ts": "a9ba55ae71f63ada44a105f1ceae04b0491bda0d6e77e5762db2dbecdd2981dd",
     "worker/src/utils/telegram.ts": "dfbc9e756b44b445b3c3504c90a1094a94e6f9853ff9c0e0a84fba0e8c4518da"
   },
-  "sha256": "a3601e32a6d4ec1891d7a578e1a3d79bf702facad4d31649e7331b8461f8fada"
+  "sha256": "3728e85d47ff56425e147895e697e4e3fe4ab3ea4ba993f19d6583a3928fe6d9"
 }

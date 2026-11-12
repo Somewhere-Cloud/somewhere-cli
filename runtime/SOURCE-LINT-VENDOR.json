@@ -66,7 +66,7 @@
     "worker/src/runtime/inbox.ts": "ace614a3e25f21c05f19c89526d564dc678f2b6131993963ef29e1ef1a53c154",
     "worker/src/runtime/jobs.ts": "eeb96f356cdb51dcc72517d43f1d83d461127f2537c4b970bebba70d313979aa",
     "worker/src/runtime/live-bridge.ts": "2909c5d38625b3ea9d21a10906fe7a503644c9d69f521701fd1cfbed38ea7fd5",
-    "worker/src/runtime/live-client.ts": "39b6722d564e655b9273e6276688b6b612c455d7984dcf78a43431a7fd0d3aca",
+    "worker/src/runtime/live-client.ts": "ea04138b4394af4c42ae4eab7c303752a78bf5e2d40fc6e21cda3d25bf93f2f4",
     "worker/src/runtime/logs.ts": "0a28e0c3770bcda51a1daa4efdc6af9324568197cf0b3730ee609b376019b265",
     "worker/src/runtime/managed-intent-wire.ts": "f983c34732c20f98a17cdd2a8087b46dd313f37e1d1ad5fb6771cc6f2a40a6a9",
     "worker/src/runtime/notifications.ts": "52360bfd5a14d5e588ce00bc2db623da510f9e9fc57b1275d1ea85a2b6117396",
@@ -79,7 +79,7 @@
     "worker/src/runtime/queue.ts": "8f0bdda9bb857125d42cfbe0a4a50561daca56cc929f17bc91e1d4ba151cc998",
     "worker/src/runtime/rate-limit.ts": "a63481a2144a46f39228b3e22b2c18df6e4f02d3ae4fac928cd2ee708cc1d1c8",
     "worker/src/runtime/render.ts": "cbb484f18e410d26fcc87db259e1d10a1b18308405256b6c1a26afc2985707ed",
-    "worker/src/runtime/rooms-client.ts": "c9af172a9f1386c654abc4e30610eed3f0a122b2781556ea3cdfa5735b7e0926",
+    "worker/src/runtime/rooms-client.ts": "b057aadecdff768d16e54f079c127a894d4a1ba51edfe4298a5060ab30bb6313",
     "worker/src/runtime/rooms.ts": "081fecc37d0dcf09ee9f25ccf6060a29ade7b273e21225d962c74b9dd004904f",
     "worker/src/runtime/runtime-console-capture.ts": "db26d6b10dd811fe01ca43405a8a8a6209fb46befae13e2bb1354baeed824fdd",
     "worker/src/runtime/runtime-log-lifecycle.ts": "2019cb8c7c828528c64efbd0150875acb728c552ee4f3a6dbed75c2b836f97fa",
@@ -88,7 +88,7 @@
     "worker/src/runtime/storage.ts": "15c7953b994497c7883b774f79ae93bae96e16373a0826cc733d21005de22ad7",
     "worker/src/runtime/tasks.ts": "75efa2e3083853bfba1dc49745ede8865ddd218b84d568a00da2dbd669f9ab23",
     "worker/src/runtime/verify-signup.ts": "dcac46b4581794fe875e3f85e3d93a2253b470f60a3c7fcee68543d8be8a6fa1",
-    "worker/src/runtime/version.ts": "2cafb059376c6c3f6937fd8bb58eb60eeb2a6f482d032f37db119d7ec80f47fa",
+    "worker/src/runtime/version.ts": "23c41a315eabe0c9b4d099ef65729ff73d2217f0ba97f3981c5035a27f9b8474",
     "worker/src/runtime/visitor-session.generated.ts": "f788a0c4efe22b18c313d8433150931d48a5f872e3bd98549d94138a5b0dfe5d",
     "worker/src/runtime/web.ts": "269590d44ffa6239bb6e79999b58ba42435c230f045daea52bf73d09519afb0e",
     "worker/src/security/browser-secret-scan.ts": "31ebc9dd94eed4d0a9a6b67b3b1e2505d4f7812c557c90337e034c1e3994c039",
@@ -161,6 +161,6 @@
     "worker/src/utils/telegram.ts": "dfbc9e756b44b445b3c3504c90a1094a94e6f9853ff9c0e0a84fba0e8c4518da",
     "worker/src/vendor/neondatabase-serverless/source.generated.ts": "96a3c18fde7d8888fdb53a4d7cd0721c238a234521d2084d1e66868a8df8e69c"
   },
-  "sha256": "e80dc821dd9ebbff91fc1b2c2f3207a29259f66d51f1c8b8ec0a44db3c2c2fe0",
+  "sha256": "a9942d5c202b93227f3c0579e3fdd7b930bb68af9bd56211ee5ca41ee02a8874",
   "fixtures_sha256": "908827d1430f4af5a83cae59ed476abc51dc9648757eac0089fe6e6db95f66c5"
 }

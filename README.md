@@ -1,6 +1,6 @@
 # @somewhere-cloud/cli
 
-CLI for [Somewhere Cloud](https://somewhere.cloud). Like `gh` for GitHub, `vercel` for Vercel.
+Deploy and manage apps on [Somewhere Cloud](https://somewhere.cloud) from your shell.
 
 ## Install
 
@@ -25,10 +25,10 @@ installs `cli`, the name `npx @somewhere-cloud/cli` resolves to; use
 
 ```bash
 somewhere login          # Optional: OAuth in browser, stores API key (init/deploy work without it)
-somewhere init           # Create project, write .somewhere.json
+somewhere init           # Write a starter; signed-in runs also create and link a project
 somewhere dev            # Frontend hot reload on localhost; API calls go to your deployed project
 somewhere deploy         # Deploy current directory
-somewhere logs           # Stream logs
+somewhere logs --follow  # Stream logs
 somewhere open           # Open in browser
 ```
 
@@ -40,12 +40,12 @@ For optional after-edit checking, explicitly run `somewhere hooks install --host
 
 | Command | What it does |
 |---|---|
-| `somewhere login` | Authenticate via browser (Google OAuth) |
+| `somewhere login` | Authenticate using a device code |
 | `somewhere auth login` | Alias of `somewhere login` |
 | `somewhere auth roles grant <user> <role>` | Give an app user an app role declared in `db/schema.ts` `appRoles` (user = sign-up address or app user id); `revoke` and `list` alongside |
 | `somewhere logout` | Clear stored credentials |
-| `somewhere whoami` | Show current user, plan, project count |
-| `somewhere init` | Create project + write `.somewhere.json` |
+| `somewhere whoami` | Show current user and project count |
+| `somewhere init` | Write a starter; signed-in runs also create and link a project |
 | `somewhere init --link --project <id> --template auth` | Scaffold an empty directory and link an existing project; non-empty directories are link-only |
 | `somewhere projects` | List all projects with status |
 | `somewhere project create <name>` | Create a new project |
@@ -54,7 +54,7 @@ For optional after-edit checking, explicitly run `somewhere hooks install --host
 | `somewhere dev` | Frontend hot reload on localhost with your project's own Vite; API requests go to your deployed project |
 | `somewhere preview` | Run your whole app on the platform — every save goes to a private URL, and production is untouched until you promote |
 | `somewhere deploy` | Deploy current directory to linked project |
-| `somewhere deploy --dry-run` | Preview the deploy diff without shipping |
+| `somewhere deploy --dry-run` | Upload source to compute the deploy diff without publishing |
 | `somewhere deploy --scope functions` | Deploy backend only (leave the site untouched) |
 | `somewhere deploy --force` | Intentionally overwrite remote changes made since this machine last deployed |
 | `somewhere git connect [owner/repo]` | Install/authorize the GitHub App if needed, deploy repository HEAD, then deploy every push |
@@ -69,7 +69,7 @@ For optional after-edit checking, explicitly run `somewhere hooks install --host
 | `somewhere errors` | Show the most recent exceptions (endpoint, status, error, time) — the curated error view |
 | `somewhere rollback` | Revert production to the previous deployed version |
 | `somewhere env list` | Show environment variables |
-| `somewhere env set KEY value` | Set an env var |
+| `somewhere env set KEY --stdin` | Read an env value from stdin |
 | `somewhere env delete KEY` | Delete an env var |
 | `somewhere env pull` | Write a local `.env` listing the keys the project expects (values blank — secrets never leave the platform) |
 | `somewhere status` | Show project + workspace status |
@@ -87,9 +87,14 @@ Short alias: `sw` works everywhere `somewhere` does.
 
 ## Auth flow
 
-`somewhere login` opens your browser, you sign in with Google, the platform redirects back to a local server with your API key. The key is stored in `~/.somewhere/config.json` (mode 600).
+`somewhere login` starts device-code sign-in: open the displayed page and
+approve the code. Use `--browser-callback` for Google sign-in with a localhost
+callback. Credentials are saved in `~/.somewhere/config.json` with mode 600.
 
-The CLI configures every MCP host (Claude Code, Cursor, Codex) to use the **stdio bridge** (`somewhere mcp`), not a baked-in token. The bridge re-reads `~/.somewhere/config.json` on every launch, so a later `somewhere login` (which rotates your key) never leaves a stale token behind — no manual config editing, ever. If your stored key is a refreshable cli-pair key, the CLI also swaps in a fresh access key automatically on expiry, so a long-running agent session never logs itself out.
+MCP connections are optional: `somewhere mcp install <host>` configures the
+stdio bridge (`somewhere mcp`). The bridge reads the saved credentials when it
+starts. Refreshable credentials can renew automatically; if renewal fails,
+follow the reported sign-in instructions.
 
 ## Init flow
 
@@ -139,7 +144,7 @@ deploys but does not undeploy the current site.
 |---|---|
 | `--scope functions` | Deploy only the backend functions; leave the site untouched |
 | `--scope static` | Deploy only the site; leave functions untouched |
-| `--dry-run` | Show what would change (added / modified / removed) without deploying |
+| `--dry-run` | Upload source and show what would change without publishing |
 | `--replace-functions` | Drop deployed functions not present locally. A full deploy already does this and names each removed function; use it with `--scope functions`, which otherwise keeps them |
 | `--project <id>` | Deploy to a specific project instead of the linked one |
 | `--force` | Overwrite remote changes even when this machine has an older deployed version |
@@ -211,29 +216,49 @@ does not, the command says so and names the plans that do (see
 https://somewhere.cloud/pricing). `somewhere dev` and deploying work on every
 plan.
 
-## Client-side code: use the SDK
+## Browser data and auth
 
-The CLI deploys and manages projects. For **client-side code** (browser / Node app talking to your backend), install the SDK — a familiar `{ data, error }` client:
+The default starter includes cookie-based sign-in. Add private notes with
+`somewhere init --features auth,private-data` in an empty directory. Its
+`db/schema.ts` declares the note fields, permitted browser operations and
+`owner()` access rule. The generated client applies that rule on the server;
+browser code sends no developer key or user filter.
 
-```bash
-npm i @somewhere-cloud/sdk
+```ts
+import { data } from 'somewhere:data';
+
+const page = await data.notes.list({ limit: 20 });
+const created = await data.notes.create({ title: 'First note', body: '' });
+if (created.data) {
+  await data.notes.update(created.data.id, { title: 'Updated note' });
+  await data.notes.delete(created.data.id);
+}
 ```
 
-```js
-import { createClient } from '@somewhere-cloud/sdk';
-const db = createClient(URL, KEY);
-const { data, error } = await db.from('todos').select('*');
+`page.data` holds the rows and `page.has_more` indicates another page. Available
+methods and fields come from your schema. Failed operations throw; handle errors
+in your application's UI.
+
+For auth, use the starter's shared client from `src/services/auth.ts`:
+
+```ts
+import { auth } from './services/auth';
+
+await auth.signIn({ email: 'person@example.com', password: 'your password' });
+// The starter handles sign-in errors and any required email-code step.
+await auth.signOut();
 ```
 
-Inside deployed functions you use the `sw` runtime directly (`sw.db.query(...)`, `sw.auth`, `sw.email`, …) — no SDK needed there.
+That service creates one `createSomewhereAuth()` instance from
+`@somewhere-cloud/sdk/auth`. The starter mounts `somewhereAuth` from
+`@somewhere-cloud/sdk/server` at `api/auth/[...path].ts`. Sessions use same-origin
+httpOnly cookies; app code does not store a developer key. Keep the starter's
+pending, error and email-code UI when building your own forms.
 
-## What the CLI does NOT do
-
-- No hosting or running production code (the platform does that)
-- No build step before deploy — **deploy raw source; the platform compiles it.** `somewhere dev` serves the frontend with your project's Vite for hot reload only
-- No application AI calls (the `advisor` command only exposes the platform-help expert)
-- No workspace management (dashboard)
-- No billing (dashboard)
+Use same-origin `fetch('/api/your-function')` for your application functions.
+Server functions use the supplied `sw` runtime for trusted data access and must
+check the caller's authority. The minimal starter demonstrates a public,
+read-only `/api/greeting` function; it does not grant browser database access.
 
 ## Requirements
 

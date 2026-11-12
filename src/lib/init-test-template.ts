@@ -32,7 +32,11 @@ test('owners can read only their own notes', async ({ newUser }) => {
   const own = await data(owner.request, 'notes', { operation: 'get', id: row.id });
   expect(own.status()).toBe(200);
   expect((await own.json()).data.title).toBe(title);
-  const list = await data(outsider.request, 'notes', { operation: 'list', where: { title } });
+  const updatedTitle = title + '-owner';
+  const updated = await data(owner.request, 'notes', { operation: 'update', id: row.id, values: { title: updatedTitle } });
+  expect(updated.status()).toBe(200);
+  expect((await (await data(owner.request, 'notes', { operation: 'get', id: row.id })).json()).data.title).toBe(updatedTitle);
+  const list = await data(outsider.request, 'notes', { operation: 'list', where: { title: updatedTitle } });
   expect(list.status()).toBe(200);
   expect((await list.json()).data, 'another user must not see the owner row').toEqual([]);
   // Hidden rows read as not there (200, data null); prove absence and a refused write.
@@ -42,7 +46,7 @@ test('owners can read only their own notes', async ({ newUser }) => {
   await expectRefused(await data(outsider.request, 'notes', { operation: 'update', id: row.id, values: { title: 'changed' } }), 404, 'DATA_NOT_FOUND');
   const unchanged = await data(owner.request, 'notes', { operation: 'get', id: row.id });
   expect(unchanged.status()).toBe(200);
-  expect((await unchanged.json()).data.title).toBe(title);
+  expect((await unchanged.json()).data.title).toBe(updatedTitle);
 });
 `;
 export function starterTests(privateData = false): InitScaffoldFile[] {

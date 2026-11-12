@@ -4,7 +4,7 @@ import type { APIRequestContext, APIResponse, BrowserContext, Locator, Page, Tes
 import { ApiClient } from './client.js';
 import { getToken, loadProjectConfig } from './config.js';
 import { buildStorageState, createTestIdentities, expiryOf, productionOrigin, type IssuedIdentity } from './test-identities.js';
-import { diagnostics, rememberSecrets, scrub, timed } from './test-diagnostics.js';
+import { diagnostics, rememberSecrets, scrub, safeError, timed } from './test-diagnostics.js';
 import type { TestInfo } from '@playwright/test';
 import type { DataRequest } from '../testing.js';
 
@@ -24,7 +24,7 @@ function runner() {
     _evidence: [async ({}, use, info) => {
       try { await use(); } finally {
         const report = diagnostics(info);
-        await info.attach('somewhere-diagnostics', { body: Buffer.from(JSON.stringify({ ...report, title: scrub(info.title), errors: info.errors.map(error => scrub(error.message ?? 'Test failed').split('\n').find(line => line.trim()) ?? 'Test failed'), secretAudit: 'issued values scrubbed before reporting' })), contentType: 'application/json' });
+        await info.attach('somewhere-diagnostics', { body: Buffer.from(JSON.stringify({ ...report, title: scrub(info.title), errors: info.errors.map(error => safeError(error.message ?? 'Test failed')), secretAudit: 'issued values scrubbed before reporting' })), contentType: 'application/json' });
       }
     }, { auto: true }],
     newUser: async ({ browser }, use, info) => {
@@ -61,6 +61,7 @@ function runner() {
       } finally {
         const failures: string[] = [];
         for (const context of contexts) try {
+          rememberSecrets(...(await context.cookies()).map(cookie => cookie.value));
           if (info.status !== info.expectedStatus) {
             const page = context.pages()[0];
             if (page && !/auth|login|signup|reset/i.test(new URL(page.url()).pathname)) {
@@ -94,7 +95,7 @@ function runner() {
       const context = await browser.newContext({ baseURL: origin, extraHTTPHeaders: { Origin: origin } });
       constrain(context.request, origin, info);
       digests.set(context.request, map.browser_data.contract_digest);
-      try { await use(context.request); } finally { await context.close(); }
+      try { await use(context.request); } finally { rememberSecrets(...(await context.cookies()).map(cookie => cookie.value)); await context.close(); }
     },
   });
   loaded = { test, expect: pw.expect };
@@ -112,6 +113,7 @@ function constrain(client: APIRequestContext, origin: string, info: TestInfo): v
       if (headers.has('Authorization')) throw new Error('Fixture clients do not accept Authorization headers');
       headers.set('Origin', origin);
       const response = await timed(info, 'app requests', () => original(url.href, { ...options, headers: Object.fromEntries(headers), maxRedirects: 0 }));
+      rememberSecrets(...(await client.storageState()).cookies.map(cookie => cookie.value));
       let code = 'none';
       if (response.status() >= 400) {
         try { const body = await response.json() as { error?: unknown }; if (typeof body.error === 'string' && /^[A-Z_]+$/.test(body.error)) code = body.error; } catch {}

@@ -1,3 +1,4 @@
+import { testAddressOrder } from '../lib/test-connectivity.js';
 import { Command } from 'commander';
 import { createRequire } from 'node:module';
 import { join, dirname } from 'node:path';
@@ -31,6 +32,9 @@ export function registerTest(program: Command): void {
       const client = new ApiClient(getToken());
       const urls = await client.call<{ prod_fallback: string }>('GET', `/projects/${encodeURIComponent(id)}/urls`);
       const { origin } = productionOrigin(urls.prod_fallback);
+      const ipv4First = await testAddressOrder(origin);
+      if (ipv4First) process.stderr.write('IPv6 is not reachable from this machine; using IPv4\n');
+      const runnerEnv = { ...process.env, ...(ipv4First ? { NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --dns-result-order=ipv4first` } : {}) };
       const dir = join(root, '.somewhere', 'tests');
       ensurePrivateDir(dir);
       const ignorePath = join(root, '.gitignore');
@@ -64,7 +68,7 @@ export function registerTest(program: Command): void {
       if (file) args.push(file);
       if (opts.grep) args.push('--grep', opts.grep);
       if (opts.failed) args.push('--last-failed');
-      const result = spawnSync(process.execPath, args, { stdio: 'inherit', env: { ...process.env, SW_TEST_ORIGIN: origin, SW_TEST_BROWSER_LAUNCH_MS: String(browserLaunchMs), SW_TEST_BROWSER: `${channel ?? 'chromium'} ${version}`, SW_TEST_SUBSET: String(subset), SW_TEST_JSON: String(Boolean(opts.json)), SW_TEST_RESULTS: join(dir, 'results.json') } });
+      const result = spawnSync(process.execPath, args, { stdio: 'inherit', env: { ...runnerEnv, SW_TEST_ORIGIN: origin, SW_TEST_BROWSER_LAUNCH_MS: String(browserLaunchMs), SW_TEST_BROWSER: `${channel ?? 'chromium'} ${version}`, SW_TEST_SUBSET: String(subset), SW_TEST_JSON: String(Boolean(opts.json)), SW_TEST_RESULTS: join(dir, 'results.json') } });
       // Playwright may create raw error-context text; retain only screenshots and rerun state.
       const cleanArtifacts = (path: string): void => {
         if (!existsSync(path)) return;

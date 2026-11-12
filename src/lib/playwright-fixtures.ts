@@ -33,7 +33,8 @@ function runner() {
       const client = new ApiClient(getToken());
       const urls = await timed(info, 'target lookup', () => client.call<{ prod_fallback: string }>('GET', `/projects/${encodeURIComponent(projectId)}/urls`));
       const { origin, host } = productionOrigin(urls.prod_fallback);
-      const map = await timed(info, 'access map', () => client.call<{ browser_data: { contract_digest: string | null } }>('GET', '/db/access-map', undefined, { project_id: projectId }));
+      const map = await timed(info, 'access map', () => client.call<{ release: { id: string }; browser_data: { contract_digest: string | null } }>('GET', '/db/access-map', undefined, { project_id: projectId }));
+      diagnostics(info).release = map.release.id;
       const owned: IssuedIdentity[] = [];
       const contexts: BrowserContext[] = [];
       const partialIds: string[] = [];
@@ -88,7 +89,8 @@ function runner() {
       const client = new ApiClient(getToken());
       const urls = await timed(info, 'target lookup', () => client.call<{ prod_fallback: string }>('GET', `/projects/${encodeURIComponent(projectId)}/urls`));
       const { origin } = productionOrigin(urls.prod_fallback);
-      const map = await timed(info, 'access map', () => client.call<{ browser_data: { contract_digest: string | null } }>('GET', '/db/access-map', undefined, { project_id: projectId }));
+      const map = await timed(info, 'access map', () => client.call<{ release: { id: string }; browser_data: { contract_digest: string | null } }>('GET', '/db/access-map', undefined, { project_id: projectId }));
+      diagnostics(info).release = map.release.id;
       const context = await browser.newContext({ baseURL: origin, extraHTTPHeaders: { Origin: origin } });
       constrain(context.request, origin, info);
       digests.set(context.request, map.browser_data.contract_digest);

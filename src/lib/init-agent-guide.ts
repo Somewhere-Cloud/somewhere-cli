@@ -17,7 +17,7 @@ After edits: \`somewhere typecheck\` and focused local/browser tests. Publish:
 1. \`somewhere deploy\` (do not build first; type errors stop upload; override: \`somewhere deploy --allow-type-errors\`). Deploy
    checks compilation, schema and secrets; \`somewhere deploy-check\` runs them without publishing
    (diagnosis, review, \`--run /api/x\`).
-2. Run \`somewhere verify\` on the final journey (\`--flow flow.json\`); rerun after fixes. Sign test users up
+2. Run \`somewhere test\` (project tests against production), then \`somewhere verify\` on the final journey (\`--flow flow.json\`); rerun after fixes. Sign test users up
    in-app at \`*.test.somewhere.site\`; more: \`actors\` + \`journey\` (\`somewhere docs browser\`).
 3. Inspect: \`somewhere browser\`; diagnose: \`somewhere logs --tail 10\`, \`somewhere errors\`.
 4. Test mail: \`somewhere email test-inbox <addr>\` includes \`verification_code\`.
@@ -124,14 +124,7 @@ export const SKILLS_POINTER = `Skills: \`${SKILLS_DIR}/\` — `
   + skillNames(BUNDLED_SKILLS_PACK).map((name) => `\`${name}\``).join(', ')
   + '. Read the skill that matches the task. `somewhere skills status` inspects the installed pack; `somewhere skills update` updates unmodified files.';
 
-/** One line pointing agents at the declared-access recipes: in
- *  the testing lane's experiment all three agents given it moved from
- *  serverOnly() plus hand-written checks to declared access. Kept outside
- *  AGENT_WORKFLOW, which is a byte mirror of the platform's agent workflow. */
-export const DECLARED_ACCESS_POINTER = 'Access rules: before choosing `serverOnly()` plus hand-written checks, read the declared-access recipes: '
-  + 'teams, creator-or-owner and parent rows in `somewhere docs sw.db --section owner-or-member-and-parent-access`; '
-  + 'bookings and help desks in `somewhere docs sw.db --section provider-or-booker-and-owner-or-staff-recipes`; '
-  + 'sharing your own rows with specific people (read-only sharing, co-authors) in `somewhere docs declared-data --section per-owner-sharing`.';
+export const DECLARED_ACCESS_POINTER = '';
 
 /** One line telling agents the app's data and code can leave:
  *  an evaluating agent concluded the platform had no exits. Kept outside

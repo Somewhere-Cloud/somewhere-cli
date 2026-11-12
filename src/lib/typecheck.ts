@@ -370,7 +370,10 @@ export function parseTscOutput(output: string): TypeError[] {
     const m = re.exec(line.trim());
     if (!m) {
       const last = errors[errors.length - 1];
-      if (last && /^\s/.test(line)) last.message = explainPageLimit(last.message, line);
+      if (last && /^\s/.test(line)) {
+        last.message = explainPageLimit(last.message, line);
+        for (const hint of diagnosticHints(line)) if (!last.message.includes(hint)) last.message += `\n${hint}`;
+      }
       continue;
     }
     errors.push({
@@ -415,7 +418,7 @@ export function runTypecheck(
   // Contract drift is advisory; code diagnostics determine success.
   const contract = platformContractVerdict(options.apiBase ?? API_BASE_URL);
   const withContract = (result: TypecheckResult): TypecheckResult => ({ ...result, contract,
-    errors: result.errors.map(error => ({ ...error, message: [error.message, ...diagnosticHints(`${error.code} ${error.message}`)].join('\n') })),
+    errors: result.errors.map(error => ({ ...error, message: [error.message, ...diagnosticHints(`${error.code} ${error.message}`).filter(hint => !error.message.includes(hint))].join('\n') })),
   });
   let declaredData: LocalDeclaredData | undefined;
   try { declaredData = prepareDeclaredData(projectDir); }

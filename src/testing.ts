@@ -66,3 +66,6 @@ export function waitForApp(page: BrowserPage, state: 'ready' | 'signed-in' | 'si
   const selector = state === 'ready' ? '[data-app-state="signed-in"], [data-app-state="signed-out"]' : '[data-app-state="' + state + '"]';
   return page.locator(selector).waitFor({ state: 'visible' });
 }
+
+// Lazy project-local Playwright resolution keeps UserSession dependency-free.
+export { test, expect, expectRefused, data, ready, type TestUser } from './lib/playwright-fixtures.js';

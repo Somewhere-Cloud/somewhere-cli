@@ -67,6 +67,7 @@
     "undici"
   ],
   "devDependencies": {
+    "@playwright/test": "^1.65.0",
     "@types/node": "^22.19.21",
     "@types/prompts": "^2.4.0",
     "@types/semver": "^7.5.8",
@@ -78,5 +79,15 @@
       "import": "./dist/testing.js"
     },
     "./package.json": "./package.json"
-  }
+  },
+  "bundleDependencies": [
+    "@modelcontextprotocol/sdk",
+    "chokidar",
+    "commander",
+    "prompts",
+    "semver",
+    "sigstore",
+    "tar",
+    "undici"
+  ]
 }

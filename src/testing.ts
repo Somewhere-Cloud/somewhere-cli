@@ -26,7 +26,7 @@ export class UserSession {
   }
 }
 export type DataRequest =
-  | { operation: 'list'; limit?: number; after?: string; where?: Record<string, unknown> }
+  | { operation: 'list'; limit?: number; after?: string | number; where?: Record<string, unknown> }
   | { operation: 'get' | 'delete'; id: string | number }
   | { operation: 'create'; values: Record<string, unknown> }
   | { operation: 'update'; id: string | number; values: Record<string, unknown> };

@@ -221,7 +221,7 @@ export async function createTestIdentities(client: ApiClient, projectId: string,
     try { issued.push(parseIssued(entry)); } catch (cause) { problems.push(cause instanceof Error ? cause.message : String(cause)); }
   }
   if (problems.length || issued.length !== count) {
-    throw Object.assign(new Error(problems[0] ?? `The platform returned ${issued.length} of ${count} test identities.`), { issued, receivedAt, partial: true });
+    throw Object.assign(new Error(problems[0] ?? `The platform returned ${issued.length} of ${count} test identities.`), { issued, receivedAt, partial: true, createdIds: entries.flatMap(entry => { const user = (entry as { user?: { id?: unknown } })?.user; return typeof user?.id === 'string' ? [user.id] : []; }) });
   }
   return { issued, receivedAt };
 }

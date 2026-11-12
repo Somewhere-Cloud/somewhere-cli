@@ -18,7 +18,7 @@ export function registerTypecheck(program: Command) {
     .command('typecheck [dir]')
     .description(
       'Check a source project with `tsc --noEmit`. ' +
-        'Reports TypeScript errors with file:line before deploy and exits 1 when there are any; `somewhere deploy` itself does not stop on type errors. ' +
+        'Reports TypeScript errors with file:line before deploy and exits 1 when there are any; `somewhere deploy` stops on type errors unless --allow-type-errors is passed. ' +
         'Requires a local tsconfig.json; add one for a new app, or run `somewhere pull` for an existing deployed app. ' +
         'It never installs the project\'s dependencies: if the project declares type packages that are not installed, it says so and stops; run npm install first. ' +
         'Without TypeScript in the project it fetches TypeScript with npx (network; npm caches it) and says so on stderr. Every run stops after SOMEWHERE_TYPECHECK_TIMEOUT_MS (default 300000). ' +
@@ -151,7 +151,7 @@ export function reportTypecheck(result: TypecheckResult): void {
   const undefinedSymbols = result.errors.filter((e) => e.code === 'TS2304');
   const n = result.errors.length;
   error(
-    `${bold(String(n))} type error${n === 1 ? '' : 's'} ${dim(`(via ${result.via} tsc)`)} — exit 1. \`somewhere deploy\` does not stop on type errors; it ships them.`,
+    `${bold(String(n))} type error${n === 1 ? '' : 's'} ${dim(`(via ${result.via} tsc)`)} — exit 1. \`somewhere deploy\` stops before upload; override with --allow-type-errors.`,
   );
   if (undefinedSymbols.length) {
     warn(

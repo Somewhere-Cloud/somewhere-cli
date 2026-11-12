@@ -14,7 +14,7 @@ Account operations, test inbox and cron need login.
 Core API shapes below cover a typical app; read deeper topics when needed.
 
 After edits: \`somewhere typecheck\` and focused local/browser tests. Publish:
-1. \`somewhere deploy\` (do not build first). Deploy
+1. \`somewhere deploy\` (do not build first; type errors stop upload; override: \`somewhere deploy --allow-type-errors\`). Deploy
    checks compilation, schema and secrets; \`somewhere deploy-check\` runs them without publishing
    (diagnosis, review, \`--run /api/x\`).
 2. Run \`somewhere verify\` on the final journey (\`--flow flow.json\`); rerun after fixes. Sign test users up

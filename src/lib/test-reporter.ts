@@ -26,7 +26,7 @@ export default class TestReporter implements Reporter {
     const skipped = this.entries.filter(entry => entry.status === 'skipped').length;
     const expectedFailures = this.entries.filter(entry => entry.status === 'failed' && entry.outcome === 'expected').length;
     const failed = this.entries.filter(entry => entry.outcome === 'unexpected').length;
-    const releases = new Set(this.entries.map(entry => entry.release).filter(Boolean));
+    const releases = new Set([process.env.SW_TEST_RELEASE, ...this.entries.map(entry => entry.release)].filter(Boolean));
     const projectId = loadProjectConfig()?.project_id;
     if (projectId && releases.size) {
       try {

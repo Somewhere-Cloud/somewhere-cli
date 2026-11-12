@@ -1,9 +1,10 @@
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import type { APIRequestContext, APIResponse, BrowserContext, Locator, Page, TestType, PlaywrightTestArgs, PlaywrightTestOptions, PlaywrightWorkerArgs, PlaywrightWorkerOptions } from '@playwright/test';
+import { fixtureTestTarget } from './test-target.js';
 import { ApiClient } from './client.js';
 import { getToken, loadProjectConfig } from './config.js';
-import { buildStorageState, createTestIdentities, expiryOf, productionOrigin, type IssuedIdentity } from './test-identities.js';
+import { buildStorageState, createTestIdentities, expiryOf, type IssuedIdentity } from './test-identities.js';
 import { diagnostics, rememberSecrets, scrub, safeError, timed } from './test-diagnostics.js';
 import type { TestInfo } from '@playwright/test';
 import type { DataRequest } from '../testing.js';
@@ -31,10 +32,9 @@ function runner() {
       const projectId = loadProjectConfig()?.project_id;
       if (!projectId) throw new Error('Run somewhere test from a linked project folder.');
       const client = new ApiClient(getToken());
-      const urls = await timed(info, 'target lookup', () => client.call<{ prod_fallback: string }>('GET', `/projects/${encodeURIComponent(projectId)}/urls`));
-      const { origin, host } = productionOrigin(urls.prod_fallback);
-      const map = await timed(info, 'access map', () => client.call<{ release: { id: string }; browser_data: { contract_digest: string | null } }>('GET', '/db/access-map', undefined, { project_id: projectId }));
-      diagnostics(info).release = map.release.id;
+      const target = await timed(info, 'target snapshot', () => fixtureTestTarget(client, projectId));
+      const { origin, host } = target;
+      diagnostics(info).release = target.releaseId;
       const owned: IssuedIdentity[] = [];
       const contexts: BrowserContext[] = [];
       const partialIds: string[] = [];
@@ -53,7 +53,7 @@ function runner() {
           const context = await browser.newContext({ baseURL: origin, extraHTTPHeaders: { Origin: origin }, storageState: buildStorageState(origin, host, issued, expiryOf(issued, created.receivedAt)) });
           contexts.push(context);
           constrain(context.request, origin, info);
-          digests.set(context.request, map.browser_data.contract_digest);
+          digests.set(context.request, target.contractDigest);
           const page = await timed(info, 'page creation', () => context.newPage());
           page.on('load', () => { void page.evaluate<number>("performance.getEntriesByType('navigation')[0]?.duration ?? 0").then(ms => { diagnostics(info).timings['page load'] = ms; }).catch(() => {}); });
           return { id: issued.user.id, email: issued.user.email, page, request: context.request };
@@ -88,13 +88,12 @@ function runner() {
       const projectId = loadProjectConfig()?.project_id;
       if (!projectId) throw new Error('Run from a linked project folder.');
       const client = new ApiClient(getToken());
-      const urls = await timed(info, 'target lookup', () => client.call<{ prod_fallback: string }>('GET', `/projects/${encodeURIComponent(projectId)}/urls`));
-      const { origin } = productionOrigin(urls.prod_fallback);
-      const map = await timed(info, 'access map', () => client.call<{ release: { id: string }; browser_data: { contract_digest: string | null } }>('GET', '/db/access-map', undefined, { project_id: projectId }));
-      diagnostics(info).release = map.release.id;
+      const target = await timed(info, 'target snapshot', () => fixtureTestTarget(client, projectId));
+      const { origin } = target;
+      diagnostics(info).release = target.releaseId;
       const context = await browser.newContext({ baseURL: origin, extraHTTPHeaders: { Origin: origin } });
       constrain(context.request, origin, info);
-      digests.set(context.request, map.browser_data.contract_digest);
+      digests.set(context.request, target.contractDigest);
       try { await use(context.request); } finally { rememberSecrets(...(await context.cookies()).map(cookie => cookie.value)); await context.close(); }
     },
   });

@@ -20,6 +20,7 @@ export async function timed<T>(info: TestInfo, name: string, work: () => Promise
 
 export function safeError(value: string): string {
   const clean = scrub(value);
+  if (['Timeout', 'Module resolution failed', 'Syntax error', 'Assertion failed', 'Focused test forbidden', 'Test or setup failed'].includes(clean)) return clean;
   const category = /Timeout|timed out/i.test(clean) ? 'Timeout' : /Cannot find module|Cannot resolve|module not found/i.test(clean) ? 'Module resolution failed' : /SyntaxError|Unexpected token/i.test(clean) ? 'Syntax error' : /expect\(|AssertionError|Expected:/i.test(clean) ? 'Assertion failed' : /test.only/i.test(clean) ? 'Focused test forbidden' : 'Test or setup failed';
   return category;
 }

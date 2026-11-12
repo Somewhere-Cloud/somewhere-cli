@@ -10,6 +10,5 @@ export async function testAddressOrder(origin: string): Promise<boolean> {
     socket.once('error', () => finish(false));
   });
   const [ipv6, ipv4] = await Promise.all([probe(6), probe(4)]);
-  if (!ipv6 && !ipv4) throw new Error(`cannot reach ${url.hostname}`);
   return !ipv6 && ipv4;
 }

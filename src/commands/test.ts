@@ -1,3 +1,4 @@
+import { loadTestTarget } from '../lib/test-target.js';
 import { testAddressOrder } from '../lib/test-connectivity.js';
 import { Command } from 'commander';
 import { createRequire } from 'node:module';
@@ -8,7 +9,7 @@ import { appendFileSync, existsSync, readFileSync, readdirSync, rmSync } from 'n
 import { createHash } from 'node:crypto';
 import { ApiClient } from '../lib/client.js';
 import { cliConfigDir, getToken, loadProjectConfig } from '../lib/config.js';
-import { productionOrigin, ensurePrivateDir, writePrivateFile } from '../lib/test-identities.js';
+import { ensurePrivateDir, writePrivateFile } from '../lib/test-identities.js';
 
 export function registerTest(program: Command): void {
   program.command('test [file]')
@@ -30,11 +31,9 @@ export function registerTest(program: Command): void {
       const id = loadProjectConfig()?.project_id;
       if (!id) throw new Error('Run somewhere test from a linked project folder');
       const client = new ApiClient(getToken());
-      const urls = await client.call<{ prod_fallback: string }>('GET', `/projects/${encodeURIComponent(id)}/urls`);
-      const { origin } = productionOrigin(urls.prod_fallback);
-      const ipv4First = await testAddressOrder(origin);
-      if (ipv4First) process.stderr.write('IPv6 is not reachable from this machine; using IPv4\n');
-      const runnerEnv = { ...process.env, ...(ipv4First ? { NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --dns-result-order=ipv4first` } : {}) };
+      const target = await loadTestTarget(client, id);
+      const { origin } = target;
+      const addressOrder = testAddressOrder(origin);
       const dir = join(root, '.somewhere', 'tests');
       ensurePrivateDir(dir);
       const ignorePath = join(root, '.gitignore');
@@ -56,6 +55,9 @@ export function registerTest(program: Command): void {
       const version = browser.version();
       const browserLaunchMs = performance.now() - launchStart;
       await browser.close();
+      const ipv4First = await addressOrder;
+      if (ipv4First) process.stderr.write('IPv6 did not answer within 300 ms; using IPv4 first\n');
+      const runnerEnv = { ...process.env, ...(ipv4First ? { NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --dns-result-order=ipv4first` } : {}) }; 
       const subset = Boolean(file || opts.grep || opts.failed);
       const config = join(dir, 'runner.config.cjs');
       const artifacts = join(dir, createHash('sha256').update(id + origin).digest('hex').slice(0, 16));
@@ -68,7 +70,7 @@ export function registerTest(program: Command): void {
       if (file) args.push(file);
       if (opts.grep) args.push('--grep', opts.grep);
       if (opts.failed) args.push('--last-failed');
-      const result = spawnSync(process.execPath, args, { stdio: 'inherit', env: { ...runnerEnv, SW_TEST_ORIGIN: origin, SW_TEST_BROWSER_LAUNCH_MS: String(browserLaunchMs), SW_TEST_BROWSER: `${channel ?? 'chromium'} ${version}`, SW_TEST_SUBSET: String(subset), SW_TEST_JSON: String(Boolean(opts.json)), SW_TEST_RESULTS: join(dir, 'results.json') } });
+      const result = spawnSync(process.execPath, args, { stdio: 'inherit', env: { ...runnerEnv, SW_TEST_TARGET: JSON.stringify(target), SW_TEST_RELEASE: target.releaseId, SW_TEST_ORIGIN: origin, SW_TEST_BROWSER_LAUNCH_MS: String(browserLaunchMs), SW_TEST_BROWSER: `${channel ?? 'chromium'} ${version}`, SW_TEST_SUBSET: String(subset), SW_TEST_JSON: String(Boolean(opts.json)), SW_TEST_RESULTS: join(dir, 'results.json') } });
       // Playwright may create raw error-context text; retain only screenshots and rerun state.
       const cleanArtifacts = (path: string): void => {
         if (!existsSync(path)) return;

@@ -103,6 +103,12 @@ var require_declared_data_contract = __commonJS({
       if (result.some((field) => typeof field !== "string" || !columns.has(field)) || new Set(result).size !== result.length) fail(name);
       return result.sort();
     }
+    function memberRestriction(w, label) {
+      if (w === void 0) return void 0;
+      record2(w, label);
+      if (Object.keys(w).sort().join() !== "c,o,v" || typeof w.c !== "string" || !identifier.test(w.c) || !Array.isArray(w.v) || !w.v.length || w.v.some((v, i) => typeof v !== "string" || i > 0 && w.v[i - 1] >= v) || !Array.isArray(w.o) || JSON.stringify(w.o) !== JSON.stringify(["read", "create", "update", "delete"].filter((op) => w.o.includes(op)))) fail(label);
+      return { c: w.c, v: [...w.v], o: [...w.o] };
+    }
     function policy(value, label, edges = 0) {
       record2(value, label);
       const keys = Object.keys(value).sort().join(",");
@@ -110,11 +116,12 @@ var require_declared_data_contract = __commonJS({
       if (value.k === "m" && keys === "k,m") {
         record2(value.m, label + ".member");
         const { g, m, u, mg, o, og } = value.m;
-        const memberKeys = Object.keys(value.m).sort().join(",");
+        const w = memberRestriction(value.m.w, label);
+        const memberKeys = Object.keys(value.m).filter((k) => k !== "w").sort().join(",");
         const grant = memberKeys === "g,m,mg,o,og,u" && og === true && Array.isArray(g) && Array.isArray(mg) && g[0] === "user_id" && mg[0] === "user_id" && (g.length === 1 || g.length === 2 && g[1] !== "user_id" && mg[1] !== "user_id" && mg[1] !== u) && u !== "user_id" && (JSON.stringify(o) === '["read"]' || JSON.stringify(o) === '["read","update"]');
         if (!["g,m,mg,u", "g,m,mg,o,u"].includes(memberKeys) && !grant || !identifier.test(m) || !identifier.test(u) || !Array.isArray(g) || !g.length || !Array.isArray(mg) || g.length !== mg.length || [...g, ...mg].some((field) => typeof field !== "string" || !identifier.test(field)) || o !== void 0 && (!Array.isArray(o) || JSON.stringify(o) !== JSON.stringify(["read", "create", "update", "delete"].filter((operation) => o.includes(operation))) || !o.includes("read") && (o.includes("update") || o.includes("delete")))) fail(label);
         const normalizedOperations = o?.length === 4 ? void 0 : o;
-        return { k: "m", m: { g: [...g], m, u, mg: [...mg], ...normalizedOperations !== void 0 ? { o: [...normalizedOperations] } : {}, ...og ? { og: true } : {} } };
+        return { k: "m", m: { g: [...g], m, u, mg: [...mg], ...w ? { w } : {}, ...normalizedOperations !== void 0 ? { o: [...normalizedOperations] } : {}, ...og ? { og: true } : {} } };
       }
       if (value.k === "a" && (keys === "k,p" || keys === "k,p,reads" && edges === 0) && Array.isArray(value.p) && value.p.length === 2) {
         const left = policy(value.p[0], label), right = policy(value.p[1], label);
@@ -272,13 +279,14 @@ var require_declared_data_contract = __commonJS({
         if (intent === "member") {
           record2(table.member, `${name}.member`);
           const { g, m, u, mg, o } = table.member;
+          const w = memberRestriction(table.member.w, `${name}.member.where`);
           if (typeof m !== "string" || typeof u !== "string" || !identifier.test(m) || !identifier.test(u) || !Array.isArray(mg) || mg.some((field) => typeof field !== "string" || !identifier.test(field))) fail(`${name}.member`);
           fields(g, seen, `${name}.member.g`);
           if (g.length !== mg.length || new Set(mg).size !== mg.length) fail(`${name}.member`);
           if ((update || []).some((field) => g.includes(field))) fail(`${name} membership writes`);
           if (o !== void 0 && (!Array.isArray(o) || JSON.stringify(o) !== JSON.stringify(["read", "create", "update", "delete"].filter((operation) => o.includes(operation))) || !o.includes("read") && (o.includes("update") || o.includes("delete")))) fail(`${name}.member operations`);
           const normalizedOperations = o?.length === 4 ? void 0 : o;
-          member = { g: [...g], m, u, mg: [...mg], ...normalizedOperations !== void 0 ? { o: [...normalizedOperations] } : {} };
+          member = { g: [...g], m, u, mg: [...mg], ...w ? { w } : {}, ...normalizedOperations !== void 0 ? { o: [...normalizedOperations] } : {} };
         }
         const normalizedPolicy = intent === "policy" ? policy(table.policy, `${name}.policy`) : null;
         if (normalizedPolicy && !["a", "n", "p", "g", "r"].includes(normalizedPolicy.k)) fail(`${name}.policy root`);
@@ -1510,7 +1518,12 @@ interface SomewhereAuthModerationRevoked { revoked_sessions: number; revoked_ref
 // pages ordered by (created_at, id), limit 1-200 (default 50). Banned and
 // agent accounts are not listed; absent ids are omitted.
 interface SomewhereAuthDirectoryUser { id: string; email: string; display_name: string | null; email_verified: boolean; created_at: number | null }
+interface SomewhereServerRoleChanges { user_id: string; results: Array<{ user_id: string; role: string; revoked: boolean } | { user_id: string; role: string; granted_by: string; grant_source: 'platform_admin' | 'delegation' | 'email_domain'; created_at: number; created: boolean }> }
 interface SomewhereRuntimeAuthServer {
+  /** Deployed production functions only. Validate the caller before assigning roles. */
+  setRoles(userId: string, changes: { add?: readonly string[]; remove?: readonly string[] }): Promise<SomewhereServerRoleChanges>;
+  grantRole(userId: string, role: string): Promise<SomewhereServerRoleChanges>;
+  revokeRole(userId: string, role: string): Promise<SomewhereServerRoleChanges>;
   listUsers(options?: { ids: readonly string[]; emails?: never; limit?: never; cursor?: never } | { emails: readonly string[]; ids?: never; limit?: never; cursor?: never } | { ids?: never; emails?: never; limit?: number; cursor?: string }): Promise<{ users: SomewhereAuthDirectoryUser[]; next_cursor: string | null }>;
 }
 interface SomewhereRuntimeAuthModeration {
@@ -4256,7 +4269,7 @@ var require_schema_types = __commonJS({
   }
 }
 `;
-    var signatures = `function schema(tables: Record<string, SomewhereSchemaDeclaration.Table | SomewhereSchemaDeclaration.TableMarker>, options?: { search?: SomewhereSchemaDeclaration.OwnerScope; files?: Record<string, SomewhereSchemaDeclaration.FileCollection>; groups?: { roles?: string[]; adminGrantableRoles?: string[] }; appRoles?: Record<string, { grantableBy?: string[] }>; payments?: Record<string, SomewhereSchemaDeclaration.PaymentBinding>; jobs?: Record<string, SomewhereSchemaDeclaration.JobBinding>; serviceRoles?: Record<string, SomewhereSchemaDeclaration.ServiceRole> }): unknown;
+    var signatures = `function schema(tables: Record<string, SomewhereSchemaDeclaration.Table | SomewhereSchemaDeclaration.TableMarker>, options?: { search?: SomewhereSchemaDeclaration.OwnerScope; files?: Record<string, SomewhereSchemaDeclaration.FileCollection>; groups?: { roles?: string[]; adminGrantableRoles?: string[] }; appRoles?: Record<string, { grantableBy?: string[]; emailDomain?: string; assignedBy?: 'server' }>; payments?: Record<string, SomewhereSchemaDeclaration.PaymentBinding>; jobs?: Record<string, SomewhereSchemaDeclaration.JobBinding>; serviceRoles?: Record<string, SomewhereSchemaDeclaration.ServiceRole> }): unknown;
 function table<Columns extends Record<string, SomewhereSchemaDeclaration.Column | SomewhereSchemaDeclaration.ColumnMarker>>(columns: Columns, options?: SomewhereSchemaDeclaration.TableOptions<Extract<keyof Columns, string>>): SomewhereSchemaDeclaration.Table;
 function id(options?: { uuid?: boolean }): SomewhereSchemaDeclaration.Column;
 function text(options?: SomewhereSchemaDeclaration.ColumnOptions<string>): SomewhereSchemaDeclaration.Column;
@@ -4270,7 +4283,7 @@ function blob(options?: SomewhereSchemaDeclaration.ColumnOptions<never>): Somewh
 function owner(options?: { column?: string; visitors?: boolean; read?: string[] }): SomewhereSchemaDeclaration.OwnerScope;
 function shared(): SomewhereSchemaDeclaration.Scope;
 function serverOnly(): SomewhereSchemaDeclaration.Scope;
-function member(options: { group: string | string[]; membership: string; member_user: string; member_group: string | string[]; operations?: Array<'read' | 'create' | 'update' | 'delete' | 'upload' | 'replace'>; read?: string[] }): SomewhereSchemaDeclaration.MemberScope;
+function member(options: { group: string | string[]; membership: string; member_user: string; member_group: string | string[]; where?: Record<string, string | string[]>; operations?: Array<'read' | 'create' | 'update' | 'delete' | 'upload' | 'replace'>; read?: string[] }): SomewhereSchemaDeclaration.MemberScope;
 function files(options: SomewhereSchemaDeclaration.FileCollectionOptions): SomewhereSchemaDeclaration.FileCollection;
 function hasMany(table: string, foreignKey: string): SomewhereSchemaDeclaration.Relation;
 function belongsTo(table: string, foreignKey: string): SomewhereSchemaDeclaration.Relation;
@@ -4278,7 +4291,8 @@ function removed(): SomewhereSchemaDeclaration.ColumnMarker;
 function removedTable(): SomewhereSchemaDeclaration.TableMarker;
 function exported(): SomewhereSchemaDeclaration.TableMarker;
 `;
-    var policySignatures = `function grant(options: { table: string; grantee: string; row?: string; operations: readonly ['read'] | readonly ['read', 'update']; read?: string[] }): SomewhereSchemaDeclaration.GrantScope;
+    var policySignatures = `function anyOf(owner: SomewhereSchemaDeclaration.OwnerScope, ordinary: SomewhereSchemaDeclaration.MemberScope, restricted: SomewhereSchemaDeclaration.MemberScope): SomewhereSchemaDeclaration.AnyOfScope;
+function grant(options: { table: string; grantee: string; row?: string; operations: readonly ['read'] | readonly ['read', 'update']; read?: string[] }): SomewhereSchemaDeclaration.GrantScope;
 function anyOf(owner: SomewhereSchemaDeclaration.OwnerScope, other: SomewhereSchemaDeclaration.GrantScope | SomewhereSchemaDeclaration.MemberScope | SomewhereSchemaDeclaration.GroupScope | SomewhereSchemaDeclaration.AppRoleScope): SomewhereSchemaDeclaration.AnyOfScope;
 function anyOf(other: SomewhereSchemaDeclaration.GrantScope | SomewhereSchemaDeclaration.MemberScope | SomewhereSchemaDeclaration.GroupScope | SomewhereSchemaDeclaration.AppRoleScope, owner: SomewhereSchemaDeclaration.OwnerScope): SomewhereSchemaDeclaration.AnyOfScope;
 function allOf(gate: SomewhereSchemaDeclaration.MemberScope | SomewhereSchemaDeclaration.GroupScope | SomewhereSchemaDeclaration.AppRoleScope, who: SomewhereSchemaDeclaration.OwnerScope | SomewhereSchemaDeclaration.AnyOfScope): SomewhereSchemaDeclaration.Scope;
@@ -4353,6 +4367,8 @@ var require_checker_contract = __commonJS({
     }
     function diagnosticMessage(code, message) {
       const number = diagnosticNumber(code);
+      if (number === 2554 && /Expected 4 arguments, but got 2/.test(message)) return message + "\nHint: If assigning an app role from server code, use sw.auth.server.setRoles(userId, { add: [role] }); sw.groups.appRoles.grant requires a request and acts as its signed-in caller.";
+      if (message.includes("updateUser") || message.includes("appRoles")) return message + "\nHint: Assign declared server roles with sw.auth.server.setRoles(userId, { add: [role], remove: [] }); updateUser does not assign app roles. sw.groups.appRoles.grant acts as a signed-in caller.";
       if ((number === 2322 || number === 2345) && message.includes("'string[]'") && /readonly \(\s*["'][^"']+["'](?:\s*\|\s*["'][^"']+["'])*\s*\)\[\]/.test(message)) {
         return message + "\nHint: For a fixed list, declare the array with `as const` so its values stay literal. For dynamic values, validate and narrow them to the allowed values; do not cast arbitrary strings.";
       }
@@ -5183,7 +5199,9 @@ function exactKeys(value, keys) {
 function validBakedMemberScope(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const member = value;
-  const memberKeys = Object.keys(member).sort().join(",");
+  const memberKeys = Object.keys(member).filter((key) => key !== "w").sort().join(",");
+  const w = member.w;
+  if (w !== void 0 && (!w || Object.keys(w).sort().join() !== "c,o,v" || typeof w.c !== "string" || !SAFE_SCOPE_IDENTIFIER.test(w.c) || !Array.isArray(w.v) || !w.v.length || w.v.some((v, i) => typeof v !== "string" || i > 0 && w.v[i - 1] >= v) || !Array.isArray(w.o) || JSON.stringify(w.o) !== JSON.stringify(["read", "create", "update", "delete"].filter((op) => w.o.includes(op))))) return false;
   const ident = (candidate) => typeof candidate === "string" && SAFE_SCOPE_IDENTIFIER.test(candidate);
   const operations = member.o;
   const operationOrder = ["read", "create", "update", "delete"];
@@ -5462,7 +5480,7 @@ function bakedMemberFromDeclared(scope, explicitOperations = false) {
     o = operations.length === allowed.length && !explicitOperations ? void 0 : [...operations];
   }
   if (s.ownerGrant !== void 0 && s.ownerGrant !== true) return null;
-  const member = { g, m: s.membership.toLowerCase(), u: s.memberUser.toLowerCase(), mg, ...o !== void 0 ? { o } : {}, ...s.ownerGrant ? { og: true } : {} };
+  const member = { g, m: s.membership.toLowerCase(), u: s.memberUser.toLowerCase(), mg, ...s.restriction ? { w: { c: s.restriction.column.toLowerCase(), v: [...s.restriction.values], o: [...s.restriction.operations ?? []] } } : {}, ...o !== void 0 ? { o } : {}, ...s.ownerGrant ? { og: true } : {} };
   return validBakedMemberScope(member) ? member : null;
 }
 
@@ -5544,6 +5562,7 @@ function validateDeclaredMemberships(tables, tableByName, knownColumns, errors) 
   };
   for (const t of tables) {
     for (const sc of memberPolicies(t.scope)) {
+      if (sc.operations && !sc.operations.includes("read") && (sc.operations.includes("update") || sc.operations.includes("delete"))) errors.push("member mutations must include read; use anyOf(owner(), member({ operations: [read, create, update], ... }), member({ where: { role: owner }, operations: [delete], ... })) for operation-specific restrictions.");
       const own = knownColumns(t);
       for (const g of sc.group) {
         if (!own.has(g)) {
@@ -5560,6 +5579,7 @@ function validateDeclaredMemberships(tables, tableByName, knownColumns, errors) 
         continue;
       }
       const membershipCols = knownColumns(membershipTable);
+      if (sc.restriction && !membershipTable.columns.some((c) => c.name === sc.restriction?.column && c.helper === "text")) errors.push(`member where column ${sc.restriction.column} must be a declared text column of ${sc.membership}.`);
       if (sc.ownerGrant) {
         if (membershipTable.scope.kind !== "owner" || membershipTable.scope.column !== "user_id" || membershipTable.scope.visitors) {
           errors.push(`Grant table "${sc.membership}" must use owner() with managed user_id and authenticated owners.`);
@@ -6709,7 +6729,7 @@ function resolveAppRoleScopes(tables, appRoles, errors) {
 
 var EMAIL_DOMAIN = EMAIL_DOMAIN_PATTERN;
 var GROUP_KEYS = ["roles", "adminGrantableRoles"];
-var APP_ROLE_KEYS = ["grantableBy", "emailDomain"];
+var APP_ROLE_KEYS = ["grantableBy", "emailDomain", "assignedBy"];
 function readStringList2(r, fail, ctx) {
   const open = r.peek();
   if (open.kind !== "punct" || open.value !== "[") fail(open.line, `${ctx} must be a list of quoted role names, such as ['viewer'].`);
@@ -6764,7 +6784,11 @@ function readAppRoles(r, fail) {
       if (seen.has(opt.name)) fail(opt.line, `app role "${key.name}" declares ${opt.name} twice.`);
       seen.add(opt.name);
       r.expectPunct(":", `after appRoles.${key.name}.${opt.name}`);
-      if (opt.name === "emailDomain") {
+      if (opt.name === "assignedBy") {
+        const t = r.next();
+        if (t.kind !== "string" || t.value !== "server") fail(t.line, `appRoles.${key.name}.assignedBy must be 'server'.`);
+        role.assignedBy = "server";
+      } else if (opt.name === "emailDomain") {
         const t = r.next();
         if (t.kind !== "string") fail(t.line, `appRoles.${key.name}.emailDomain must be one quoted domain, such as 'example.com'.`);
         if (!EMAIL_DOMAIN.test(t.value)) {
@@ -6793,7 +6817,7 @@ function canonicalRoleVocabulary(groups, appRoles) {
     v: 1,
     groupRoles: sorted2(groups?.roles ?? []),
     adminGrantableGroupRoles: sorted2(groups?.adminGrantableRoles ?? []),
-    appRoles: [...appRoles ?? []].sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0).map((role) => ({ name: role.name, grantableBy: sorted2(role.grantableBy), ...role.emailDomain ? { emailDomain: role.emailDomain } : {} }))
+    appRoles: [...appRoles ?? []].sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0).map((role) => ({ name: role.name, grantableBy: sorted2(role.grantableBy), ...role.emailDomain ? { emailDomain: role.emailDomain } : {}, ...role.assignedBy ? { assignedBy: role.assignedBy } : {} }))
   };
 }
 function validateDeclaredRoles(groups, appRoles) {
@@ -6810,8 +6834,11 @@ function emailDomainRoleErrors(appRoles) {
   const errors = [];
   const byDomain = new Set(appRoles.filter((role) => role.emailDomain !== void 0).map((role) => role.name));
   for (const role of appRoles) {
+    if (role.assignedBy !== void 0 && role.assignedBy !== "server") errors.push(`appRoles.${role.name}.assignedBy must be 'server'.`);
+    if (role.assignedBy && role.emailDomain) errors.push(`appRoles.${role.name} cannot combine assignedBy and emailDomain.`);
     if (role.emailDomain !== void 0 && !EMAIL_DOMAIN.test(role.emailDomain)) errors.push(`appRoles.${role.name}.emailDomain is not one lowercase domain.`);
     for (const grantor of role.grantableBy) {
+      if (appRoles.some((source) => source.name === grantor && source.assignedBy)) errors.push(`appRoles.${role.name}.grantableBy cannot name server-assigned role "${grantor}".`);
       if (byDomain.has(grantor)) {
         errors.push(`appRoles.${role.name}.grantableBy names "${grantor}", which is held by email domain. A role held by email domain cannot grant other roles; list a role that is granted explicitly.`);
       }
@@ -7395,9 +7422,6 @@ function readMemberOperations(r, tableName) {
     }
   }
   const normalized = MEMBER_OPERATIONS.filter((operation) => seen.has(operation));
-  if (!seen.has("read") && (seen.has("update") || seen.has("delete"))) {
-    throw new SchemaTsError(`member({ operations }) on table "${tableName}" must include 'read' when it includes 'update' or 'delete', because mutations return the affected row.`);
-  }
   return normalized.length === MEMBER_OPERATIONS.length ? void 0 : normalized;
 }
 function readMemberScope(r, tableName, scopeLine) {
@@ -7407,6 +7431,7 @@ function readMemberScope(r, tableName, scopeLine) {
   let memberUser = null;
   let memberGroup = null;
   let operations, operationsSeen = false;
+  let selector;
   let read;
   while (!r.tryPunct("}")) {
     const key = r.readKey(`for a member() option of table "${tableName}"`);
@@ -7423,6 +7448,29 @@ function readMemberScope(r, tableName, scopeLine) {
       if (operationsSeen) throw new SchemaTsError(`line ${key.line}: member() on table "${tableName}" declares operations more than once.`);
       operationsSeen = true;
       operations = readMemberOperations(r, tableName);
+    } else if (key.name === "where") {
+      if (selector) throw new SchemaTsError("member() declares where more than once.");
+      r.expectPunct("{", "opening member where");
+      const column = r.readKey("member where column").name;
+      validateMemberColumns([column], "where", tableName, key.line);
+      r.expectPunct(":", "after member where column");
+      let value;
+      if (r.tryPunct("[")) {
+        const list = [];
+        while (!r.tryPunct("]")) {
+          list.push(r.readLiteral("member where value"));
+          if (!r.tryPunct(",")) {
+            r.expectPunct("]", "closing member where list");
+            break;
+          }
+        }
+        value = list;
+      } else value = r.readLiteral("member where literal");
+      const values = typeof value === "string" ? [value] : value;
+      if (!Array.isArray(values) || !values.length || values.some((v) => typeof v !== "string")) throw new SchemaTsError("member where needs one text column and a nonempty string literal or list.");
+      r.tryPunct(",");
+      r.expectPunct("}", "member where accepts exactly one column");
+      selector = { column, values: [...new Set(values)].sort() };
     } else if (key.name === "read") {
       if (read) throw new SchemaTsError(`line ${key.line}: member() on table "${tableName}" declares read more than once.`);
       read = readBranchReadColumns(r, `member({ read }) on table "${tableName}"`);
@@ -7458,7 +7506,7 @@ function readMemberScope(r, tableName, scopeLine) {
       `line ${scopeLine}: member() on table "${tableName}" has a ${group.length}-column group but a ${memberGroup.length}-column member_group. The group key must have the same number of columns on both sides.`
     );
   }
-  const node = { kind: "member", group, membership, memberUser, memberGroup, ...operations !== void 0 ? { operations } : {}, ...read ? { read } : {} };
+  const node = { kind: "member", group, membership, memberUser, memberGroup, ...selector ? { restriction: { ...selector, operations: operations ?? [...MEMBER_OPERATIONS] } } : {}, ...operations !== void 0 ? { operations } : {}, ...read ? { read } : {} };
   if (operationsSeen) explicitMemberOperations.add(node);
   return node;
 }
@@ -7542,8 +7590,21 @@ function readAnyOfScope(r, tableName, line) {
   r.expectPunct("(", 'after "anyOf"');
   const firstPolicy = readAnyOfBranch(r, tableName, "first");
   r.expectPunct(",", `between the two policies in anyOf() on table "${tableName}"`);
-  const secondPolicy = readAnyOfBranch(r, tableName, "second");
-  r.tryPunct(",");
+  let secondPolicy = readAnyOfBranch(r, tableName, "second");
+  if (r.tryPunct(",") && !(r.peek().kind === "punct" && r.peek().value === ")")) {
+    const third = readAnyOfBranch(r, tableName, "second");
+    if (secondPolicy.kind !== "member" || third.kind !== "member" || firstPolicy.kind !== "owner") throw new SchemaTsError("Three-branch anyOf accepts owner and two same-relation member branches only.");
+    const a = secondPolicy, b = third;
+    if (JSON.stringify([a.group, a.membership, a.memberUser, a.memberGroup]) !== JSON.stringify([b.group, b.membership, b.memberUser, b.memberGroup])) throw new SchemaTsError("Two member branches over different membership relations are not supported.");
+    if (!!a.restriction === !!b.restriction) throw new SchemaTsError("Two member branches need exactly one restricted branch; more than one restricted branch is not supported.");
+    if (a.read || b.read) throw new SchemaTsError("Two member branches cannot declare separate read projections.");
+    const restricted = a.restriction ? a : b, ordinary = a.restriction ? b : a;
+    const ordinaryOps = ordinary.operations ?? [...MEMBER_OPERATIONS];
+    const combined = MEMBER_OPERATIONS.filter((op) => ordinaryOps.includes(op) || (restricted.operations ?? MEMBER_OPERATIONS).includes(op));
+    const narrow = restricted.restriction;
+    secondPolicy = { ...a, operations: combined, restriction: { ...narrow, operations: narrow.operations.filter((op) => !ordinaryOps.includes(op)) } };
+    r.tryPunct(",");
+  }
   r.expectPunct(")", "closing anyOf()");
   const owners = [firstPolicy, secondPolicy].filter((p) => p.kind === "owner");
   if (owners.length !== 1) throw new SchemaTsError(`line ${line}: ${ANY_OF_FORMS}`);

@@ -491,9 +491,9 @@ function insertError(status, payload) {
   if (receipt) error.idempotency = receipt;
   return error;
 }
-// One logical request's outcome across its explicit retries (one value per request handle). A later
-// refusal, or this client's local retry horizon, describes only that attempt: it never erases an
-// earlier committed result, and after an unknown attempt it never proves the write absent.
+
+
+
 function requestOutcome() {
   let known = null;
   return {
@@ -513,14 +513,14 @@ function requestOutcome() {
   };
 }
 async function createWithReceipt(table, values, extra, eligible) {
-  // create takes only values: the retry key is a private random nonce this client allocates,
-  // never a caller choice. Anything more refuses before the network.
+
+
   if (extra.length !== 0) throw new DataError(400, {error:'DATA_INPUT_INVALID', message:'create takes only the values to insert. Nothing was sent.'});
   if (!eligible) return invoke(table, 'create', {values});
-  // 128 random bits as 32 lowercase hex characters: the platform's exact client key format.
+
   const key = Array.from(crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2,'0')).join('');
   const createdAt = Date.now();
-  // Serialize once: retries never observe later caller mutations or re-run toJSON.
+
   const body = JSON.stringify({values, contract, table, operation:'create', idempotency_key:key});
   let handle;
   const attach = target => { Object.defineProperty(target, 'request', {value:handle, enumerable:false, writable:false, configurable:false}); return target; };
@@ -538,7 +538,7 @@ async function createWithReceipt(table, values, extra, eligible) {
     catch (_) { throw attach(insertError(response.status, {error:'INVALID_DATA_RESPONSE', message:'The write response could not be read. Retry this request with its original key.', outcome:'unknown'})); }
     if (!response.ok) throw attach(insertError(response.status, payload));
     if (!payload || typeof payload !== 'object' || Array.isArray(payload) || !insertReceipt(payload.idempotency)) {
-      // A successful old/malformed response cannot establish receipt protection.
+
       throw insertError(502, {error:'IDEMPOTENCY_RECEIPT_INVALID', message:'The write succeeded, but retry protection could not be confirmed. Do not retry it.', outcome:'committed', write_committed:true});
     }
     payload.idempotency = insertReceipt(payload.idempotency);
@@ -553,7 +553,7 @@ async function createWithReceipt(table, values, extra, eligible) {
 function creatorCapability(grant, secret, table) {
   const capability = {grant};
   Object.defineProperty(capability, 'secret', {value:secret, enumerable:false, writable:false, configurable:false});
-  // The creator link: the platform landing page, with everything in the fragment (never sent to a server).
+
   const route = location.pathname + location.search + location.hash;
   Object.defineProperty(capability, 'url', {value:location.origin + '/__sw/creator#' + grant + '.' + secret + '.' + table + '.' + b64url(route), enumerable:false, writable:false, configurable:false});
   Object.defineProperty(capability, 'toJSON', {value:() => ({grant}), enumerable:false, writable:false, configurable:false});
@@ -1112,28 +1112,28 @@ interface SomewhereDbReadOptions {
   include?: readonly string[] | null;
   has?: Readonly<Record<string, SomewhereDbWhere>> | null;
 }
-// Row hints on a caller read asked for { can: true }: what this signed-in caller may change now (the
-// write still enforces) and whether this caller created the row. The owner column itself is never sent.
+
+
 interface SomewhereDbRowHints {
   readonly can: { readonly update: boolean; readonly delete: boolean };
   readonly mine: boolean;
 }
 interface SomewhereDbCountOptions { where?: SomewhereDbWhere | null }
 interface SomewhereDbPlainInsertOptions { onConflict?: 'ignore' | 'update' | null }
-// idempotencyKey: an explicit key (16-128 of A-Z a-z 0-9 - _) for a single plain insert by a
-// signed-in user or visitor on a table keyed by id() with no blob() column. Any other insert
-// given a key refuses before anything runs. Eligible inserts without one get a fresh key.
+
+
+
 interface SomewhereDbInsertOptions extends SomewhereDbPlainInsertOptions { idempotencyKey?: string }
-// A caller upsert runs under the table's declared rule: 'update' also needs update on the conflicting
-// row, so a declared table whose rule never grants update (or a per-row shares table) takes 'ignore'
-// only. A key never combines with onConflict.
+
+
+
 type SomewhereDbConflict<T extends string> = __SomewhereDeclared<T, 'conflict', 'ignore' | 'update'>;
 type SomewhereDbCallerInsertOptions<T extends string> =
   | { onConflict?: SomewhereDbConflict<T> | null; idempotencyKey?: never }
   | { onConflict?: null; idempotencyKey?: string };
 interface SomewhereDbReceipt { readonly replayed: boolean; readonly created_at: number; readonly result_until: number; readonly refuse_until: number }
-// Process-local: retry() repeats this exact request with the same key under the current
-// context's authority, until eight days after createdAt. It never runs by itself.
+
+
 interface SomewhereDbInsertRequest<R> { readonly key: string; readonly createdAt: number; retry(): Promise<R> }
 type SomewhereDbValues = Readonly<Record<string, __SomewhereJson>>;
 type SomewhereDbIncrement = Readonly<Record<string, number>>;
@@ -1144,22 +1144,22 @@ type SomewhereDbUpdate = {
   | { set?: never; increment: SomewhereDbIncrement }
 );
 interface SomewhereDbRemove { where?: SomewhereDbWhere | null }
-// One closed-batch step per declared table, checked like the matching single call
-// (insert values, update set/increment). With no declared tables every name and
-// value stays accepted, as before. Insert and Set pick caller or server identity.
+
+
+
 type __SomewhereDbIntentFor<T extends string, Insert extends 'insert' | 'serverInsert', Set extends 'set' | 'serverSet'> =
   | { op: 'insert'; table: T; values: __SomewhereDeclared<T, Insert, SomewhereDbValues>; options?: (Insert extends 'insert' ? { onConflict?: SomewhereDbConflict<T> | null } : SomewhereDbPlainInsertOptions) | null }
   | ({ op: 'update'; table: T } & SomewhereDbUpdateFor<T, Set>)
   | { op: 'remove'; table: T; where?: SomewhereDbWhere | null };
-// sw.db.server.tx: server authority may name row identity (owner column, shared authorship).
+
 type SomewhereDbWriteIntent = { [T in SomewhereDbTable]: __SomewhereDbIntentFor<T, 'serverInsert', 'serverSet'> }[SomewhereDbTable];
-// sw.db.tx: the platform composes row identity from the verified user, as sw.db.insert does.
+
 type SomewhereDbCallerWriteIntent = { [T in SomewhereDbTable]: __SomewhereDbIntentFor<T, 'insert', 'set'> }[SomewhereDbTable];
-// db/schema.ts's tables, one entry each, generated beside this declaration
-// (declaredTablesDeclaration). With no declared tables it stays empty: any
-// table name is accepted and rows are Record<string, unknown>. Once tables are
-// declared, structured calls accept only their names and rows carry the
-// declared types. Raw SQL rows are never typed from it.
+
+
+
+
+
 interface SomewhereDeclaredTables {}
 type SomewhereDbTable = [keyof SomewhereDeclaredTables] extends [never] ? string : Extract<keyof SomewhereDeclaredTables, string>;
 type __SomewhereDeclared<T extends string, K extends string, Fallback> = T extends keyof SomewhereDeclaredTables
@@ -1169,8 +1169,8 @@ type SomewhereDbRow<T extends string> = __SomewhereDeclared<T, 'row', Record<str
 type SomewhereDbColumn<T extends string> = Extract<keyof SomewhereDbRow<T>, string>;
 type SomewhereDbRelations<T extends string> = __SomewhereDeclared<T, 'relations', Record<string, unknown>>;
 type SomewhereDbRelationName<T extends string> = Extract<keyof SomewhereDbRelations<T>, string>;
-// A column list narrows the rows to those columns; each included relation adds
-// its related rows under its name.
+
+
 type SomewhereDbReadRow<T extends string, C, I> = T extends keyof SomewhereDeclaredTables
   ? Pick<SomewhereDbRow<T>, Extract<C extends readonly (infer K)[] ? K : never, keyof SomewhereDbRow<T>>>
     & Pick<SomewhereDbRelations<T>, Extract<I extends readonly (infer K)[] ? K : never, keyof SomewhereDbRelations<T>>>
@@ -1182,7 +1182,7 @@ type SomewhereDbReadOptionsFor<T extends string, C, I> = Omit<SomewhereDbReadOpt
 type SomewhereDbIncrementFor<T extends string> = T extends keyof SomewhereDeclaredTables
   ? { readonly [K in __SomewhereDeclared<T, 'numeric', never>]?: number }
   : SomewhereDbIncrement;
-// A caller write never names row identity; server authority may ('serverSet').
+
 type SomewhereDbUpdateFor<T extends string, Set extends 'set' | 'serverSet'> = {
   where?: SomewhereDbWhere | null;
 } & (
@@ -1190,9 +1190,9 @@ type SomewhereDbUpdateFor<T extends string, Set extends 'set' | 'serverSet'> = {
   | { set?: never; increment: SomewhereDbIncrementFor<T> }
 );
 interface SomewhereDbResult<Row = Record<string, unknown>> {
-  // Composed results return db/schema.ts's declared types, as the browser data
-  // client does: boolean columns as true/false, json columns as their value,
-  // blob columns as byte arrays. Raw query/batch rows are exactly as stored.
+
+
+
   data: Row[];
   error: null;
   count: number;
@@ -1202,8 +1202,8 @@ interface SomewhereDbResult<Row = Record<string, unknown>> {
     | { delivery: 'queued' }
     | { delivery: 'resync_required'; reason: string };
 }
-// A keyed insert's result (whether an insert is keyed is decided at run time): the receipt
-// bounds, and a non-enumerable request handle. A replay carries the original values.
+
+
 interface SomewhereDbInsertResult<Row = Record<string, unknown>> extends SomewhereDbResult<Row> {
   idempotency?: SomewhereDbReceipt;
   readonly request?: SomewhereDbInsertRequest<SomewhereDbInsertResult<Row>>;
@@ -1223,21 +1223,21 @@ interface SomewhereServerDb {
   from<T extends SomewhereDbTable, const C extends readonly SomewhereDbColumn<T>[] = readonly SomewhereDbColumn<T>[], const I extends readonly SomewhereDbRelationName<T>[] = []>(
     table: T, options?: SomewhereDbReadOptionsFor<T, C, I> | null): Promise<SomewhereDbResult<SomewhereDbReadRow<T, C, I>>>;
   count(table: SomewhereDbTable, options?: SomewhereDbCountOptions | null): Promise<{ data: number; error: null }>;
-  // Server authority names row identity (owner column or shared authorship) explicitly on insert.
+
   insert<T extends SomewhereDbTable>(table: T, values: __SomewhereDeclared<T, 'serverInsert', SomewhereDbValues>, options?: SomewhereDbPlainInsertOptions | null): Promise<SomewhereDbResult<SomewhereDbRow<T>>>;
   update<T extends SomewhereDbTable>(table: T, spec: SomewhereDbUpdateFor<T, 'serverSet'>): Promise<SomewhereDbResult<SomewhereDbRow<T>>>;
   remove<T extends SomewhereDbTable>(table: T, spec?: SomewhereDbRemove | null): Promise<SomewhereDbResult<SomewhereDbRow<T>>>;
-  // Closed atomic batch, 1-100 intents checked before execution. No callback,
-  // reads, SQL, or caller-supplied authority. A lost acknowledgement can have
-  // an unknown outcome; a rejection never promises rollback or safe replay.
+
+
+
   tx(intents: readonly SomewhereDbWriteIntent[]): Promise<SomewhereDbResult[]>;
 }
 interface SomewhereCallerDb extends Omit<SomewhereServerDb, 'from' | 'count' | 'insert' | 'update' | 'tx'> {
-  // The platform composes row identity from the verified user.
+
   insert<T extends SomewhereDbTable>(table: T, values: __SomewhereDeclared<T, 'insert', SomewhereDbValues>, options?: SomewhereDbCallerInsertOptions<T> | null): Promise<SomewhereDbInsertResult<SomewhereDbRow<T>>>;
   update<T extends SomewhereDbTable>(table: T, spec: SomewhereDbUpdateFor<T, 'set'>): Promise<SomewhereDbResult<SomewhereDbRow<T>>>;
   tx(intents: readonly SomewhereDbCallerWriteIntent[]): Promise<SomewhereDbResult[]>;
-  // can: true (signed-in callers only; never with asServer): each row also carries the row hints.
+
   from<T extends SomewhereDbTable, const C extends readonly SomewhereDbColumn<T>[] = readonly SomewhereDbColumn<T>[], const I extends readonly SomewhereDbRelationName<T>[] = []>(
     table: T, options: SomewhereDbReadOptionsFor<T, C, I> & { can: true; asServer?: never }): Promise<SomewhereDbResult<SomewhereDbReadRow<T, C, I> & SomewhereDbRowHints>>;
   from<T extends SomewhereDbTable, const C extends readonly SomewhereDbColumn<T>[] = readonly SomewhereDbColumn<T>[], const I extends readonly SomewhereDbRelationName<T>[] = []>(
@@ -1270,36 +1270,36 @@ interface SomewhereRuntimeAuth {
   setSessionCookies(access: string, refresh: string): void;
   readonly mfa: SomewhereRuntimeAuthMfa;
 }
-// Every binding the runtime exports to a deployed function, typed from the
-// runtime implementation and the routes behind it (runtime-types.test.mjs holds
-// the declaration to the runtime's own context builder). Tombstones that always
-// throw stay off the type so their failure moves to typecheck.
+
+
+
+
 interface SomewhereRuntimeContext {
   readonly db: SomewhereCallerDb;
   readonly auth: SomewhereRuntimeAuth;
   readonly project_id: string;
   readonly subdomain: string;
   readonly tier: string;
-  // The project's environment variables (set with somewhere env).
+
   readonly env: Readonly<Record<string, string>>;
   readonly request_id: string;
   readonly trace: { readonly id: string | null; readonly span_id: string | null };
-  // Route parameters from a dynamic file name such as api/rounds/[id].ts.
+
   readonly params: Readonly<Record<string, string>>;
-  // Legacy aliases of this same object.
+
   readonly sw: SomewhereRuntimeContext;
   readonly ctx: SomewhereRuntimeContext;
 }
-// Shared by every namespace: a JSON object whose fields are unknown until narrowed.
+
 type SomewhereJsonObject = { [key: string]: unknown };
-// ---- sw.db extras: aggregate, live, scope, tables, caller raw options ----
-// sw.db.migrate / sw.db.dump / sw.db.onchange are deliberately undeclared: they always throw in a deployed function.
+
+
 type __SomewhereDbHavingOperators = { eq: string | number | boolean; ne: string | number | boolean; lt: string | number | boolean; lte: string | number | boolean; gt: string | number | boolean; gte: string | number | boolean };
 type SomewhereDbHavingCondition = {
   [K in keyof __SomewhereDbHavingOperators]: Pick<__SomewhereDbHavingOperators, K>
     & Partial<Record<Exclude<keyof __SomewhereDbHavingOperators, K>, never>>
 }[keyof __SomewhereDbHavingOperators];
-// At least one of count/sum/avg/min/max; count takes no column, the others name one column.
+
 type SomewhereDbAggregateMeasures = {
   count?: true | null; sum?: string | null; avg?: string | null; min?: string | null; max?: string | null;
 } & ({ count: true } | { sum: string } | { avg: string } | { min: string } | { max: string });
@@ -1307,15 +1307,15 @@ type SomewhereDbAggregateOptions = SomewhereDbAggregateMeasures & {
   groupBy?: readonly string[] | null;
   where?: SomewhereDbWhere | null;
   has?: Readonly<Record<string, SomewhereDbWhere>> | null;
-  // Keys are this call's result keys: count, sum_<col>, avg_<col>, min_<col>, max_<col>.
+
   having?: Readonly<Record<string, SomewhereDbHavingCondition | readonly SomewhereDbHavingCondition[]>> | null;
-  // May name only a groupBy column or a result key.
+
   order?: SomewhereDbOrder | null;
   limit?: number | null;
 };
-// A declared table names only its own columns: sum/avg its numeric ones,
-// min/max/groupBy any but json/blob, and its rows hold scalars, as the browser
-// data client's aggregate does.
+
+
+
 type SomewhereDbAggregateOptionsFor<T extends string> = SomewhereDbAggregateOptions & {
   sum?: __SomewhereDeclared<T, 'numeric', string> | null;
   avg?: __SomewhereDeclared<T, 'numeric', string> | null;
@@ -1327,13 +1327,13 @@ type SomewhereDbAggregateRow<T extends string> = T extends keyof SomewhereDeclar
   ? Record<string, number | string | boolean | null>
   : Record<string, unknown>;
 interface SomewhereDbAggregateResult<Row = Record<string, unknown>> {
-  // Always an array of group rows (exactly one when ungrouped): grouped columns plus composed result keys.
+
   data: Row[];
   error: null;
-  // Number of rows (groups) returned; the COUNT(*) value lives in each row under "count".
+
   count: number;
 }
-// Legacy raw-SQL annotations: accepted and ignored, they confer no authority. { user } throws.
+
 interface SomewhereDbRawCallerOptions { unscoped?: true | null; asServer?: true | null; user?: never }
 type SomewhereDbLiveState =
   | { name: string; state: 'ready'; release_id?: string; fingerprint: string; subscribe_url: string; expires_at: number }
@@ -1366,7 +1366,7 @@ type SomewhereDbScopeDeclareResult =
     scope_activation: SomewhereDbScopeActivation;
     scope_warnings: { code: string; message: string }[];
   }
-  // Saved, but activates only on the next deploy or publish.
+
   | { saved: true; activates_on: 'next_deploy_or_publish' };
 interface SomewhereDbScopeApi {
   (table: string, options: SomewhereDbScopeDeclaration): Promise<SomewhereDbScopeDeclareResult>;
@@ -1386,8 +1386,8 @@ interface SomewhereCallerDb {
   readonly scope: SomewhereDbScopeApi;
 }
 
-// ---- sw.postgres: the @neondatabase/serverless 1.1.0 neon() callable for the attached database ----
-// Unattached projects get the same shape; every call throws POSTGRES_NOT_ATTACHED.
+
+
 type __SomewherePostgresRows<ArrayMode extends boolean> = ArrayMode extends true ? unknown[][] : Record<string, unknown>[];
 interface SomewherePostgresFullResults<ArrayMode extends boolean> {
   fields: { name: string; tableID: number; columnID: number; dataTypeID: number; dataTypeSize: number; dataTypeModifier: number; format: string }[];
@@ -1412,7 +1412,7 @@ interface SomewherePostgresTransactionOptions<ArrayMode extends boolean, FullRes
   readOnly?: boolean;
   deferrable?: boolean;
 }
-// A pending driver query: awaitable, and accepted by transaction([...]) because it carries its queryData.
+
 interface SomewherePostgresQuery<T> extends Promise<T> { readonly queryData: unknown }
 interface SomewherePostgresUnsafeRawSql { sql: string }
 interface SomewherePostgresInTransaction {
@@ -1425,23 +1425,23 @@ interface SomewhereRuntimePostgres {
   query<ArrayMode extends boolean = false, FullResults extends boolean = false>(
     text: string, params?: readonly unknown[], options?: SomewherePostgresQueryOptions<ArrayMode, FullResults>,
   ): SomewherePostgresQuery<__SomewherePostgresResult<ArrayMode, FullResults>>;
-  // Embeds a trusted raw SQL fragment inside a tagged template; never pass user input.
+
   unsafe(rawSql: string): SomewherePostgresUnsafeRawSql;
-  // Non-interactive: the statement list is fixed before the call and applied atomically.
+
   transaction<ArrayMode extends boolean = false, FullResults extends boolean = false>(
     queries: readonly SomewherePostgresQuery<unknown>[] | ((sql: SomewherePostgresInTransaction) => readonly SomewherePostgresQuery<unknown>[]),
     options?: SomewherePostgresTransactionOptions<ArrayMode, FullResults>,
   ): Promise<__SomewherePostgresResult<ArrayMode, FullResults>[]>;
 }
 interface SomewhereRuntimeContext { readonly postgres: SomewhereRuntimePostgres }
-// ---- sw.auth (worker/src/runtime/auth.ts) + sw.crypto (worker/src/runtime/crypto.ts) ----
+
 type SomewhereAuthRole = 'user' | 'admin';
-// The user a sign-in route returns (signup/login/OTP/OAuth/MFA challenge).
+
 interface SomewhereAuthSignedInUser extends SomewhereAuthUser {
   role: string;
   display_name: string | null;
 }
-// The verified profile /v1/auth/me returns; fromRequest/requireUser return it (plus enrichFrom columns; platform fields win).
+
 interface SomewhereAuthProfileUser extends SomewhereAuthUser {
   role: SomewhereAuthRole;
   display_name: string | null;
@@ -1475,10 +1475,10 @@ interface SomewhereAuthMfaRequired {
 }
 type SomewhereAuthLoginResult = SomewhereAuthIssuedSession | SomewhereAuthMfaRequired;
 interface SomewhereAuthOtpSession extends SomewhereAuthIssuedSession {
-  // The redirect_uri passed to signInWithOtp, or null. For an invitation
-  // link: the invite's redirect_uri with ?invite_id=<id> added.
+
+
   redirect_uri: string | null;
-  // Present when the verified token was an invitation.
+
   invite_id?: string;
 }
 type SomewhereAuthInviteStatus = 'pending' | 'accepted' | 'revoked' | 'expired';
@@ -1487,7 +1487,7 @@ interface SomewhereAuthInvite {
   email: string;
   status: SomewhereAuthInviteStatus;
   redirect_uri: string;
-  // Server-side only; never in the email or the link.
+
   data: SomewhereJsonObject | null;
   expires_at: number;
   created_at: number;
@@ -1497,11 +1497,11 @@ interface SomewhereAuthInvite {
 }
 interface SomewhereAuthInviteOptions {
   email: string;
-  // A path in the app such as '/join', or an allowed absolute URL.
+
   redirect_uri: string;
-  // At most 4096 bytes of JSON.
+
   data?: SomewhereJsonObject;
-  // Seconds, 900 to 2592000; default 604800 (7 days).
+
   expires_in?: number;
 }
 interface SomewhereAuthInviteSent {
@@ -1552,7 +1552,7 @@ type SomewhereAuthVerificationSent =
   | { sent: boolean; code_created: false; pending: true; code: 'EMAIL_SEND_PENDING'; message: string };
 interface SomewhereAuthProfileUpdate {
   display_name?: string | null;
-  // Replaces the stored metadata blob (JSON, max 16 KB); null clears it.
+
   metadata?: __SomewhereJson;
   email?: never;
 }
@@ -1578,22 +1578,22 @@ interface SomewhereAuthEmailChange {
   expires_in_seconds?: number;
 }
 type SomewhereAuthEmailChangeStarted = { email_change: SomewhereAuthEmailChange } & SomewhereJsonObject;
-// Options for fromRequest / requireUser: optional enrichment join and an explicitly forwarded app-user token.
+
 interface SomewhereAuthRequestOptions {
   enrichFrom?: string;
   fields?: readonly string[];
   on?: string;
-  // A platform-issued app-user access token string; never an identity value.
+
   forwardedToken?: string | null;
 }
 interface SomewhereAuthRequireOptions extends SomewhereAuthRequestOptions { role?: 'admin' }
 interface SomewhereAuthAnonSession { id: string; isAnon: true; expiresAt: number }
 interface SomewhereAuthModerationRevoked { revoked_sessions: number; revoked_refresh_tokens: number }
-// The app's own users under explicit server authority (deployed production
-// functions; not row-bound jobs). Check the caller first: this is not a
-// browser user list. ids: exact lookup (max 200, no limit/cursor); otherwise
-// pages ordered by (created_at, id), limit 1-200 (default 50). Banned and
-// agent accounts are not listed; absent ids are omitted.
+
+
+
+
+
 interface SomewhereAuthDirectoryUser { id: string; email: string; display_name: string | null; email_verified: boolean; created_at: number | null }
 interface SomewhereRuntimeAuthServer {
   listUsers(options?: { ids: readonly string[]; emails?: never; limit?: never; cursor?: never } | { emails: readonly string[]; ids?: never; limit?: never; cursor?: never } | { ids?: never; emails?: never; limit?: number; cursor?: string }): Promise<{ users: SomewhereAuthDirectoryUser[]; next_cursor: string | null }>;
@@ -1609,7 +1609,7 @@ interface SomewhereRuntimeAuthModeration {
     user: { id: string; email: string; role: SomewhereAuthRole };
   }>;
 }
-// Email sign-in codes. Authenticator-app activation (reauthenticate*) answers 501 AUTH_FEATURE_UNAVAILABLE.
+
 type SomewhereMfaDelivery = 'sent' | 'pending' | 'unknown';
 interface SomewhereMfaCodeSent { challenge_id: string; delivery: SomewhereMfaDelivery; expires_in: number }
 type SomewhereMfaRecovery =
@@ -1627,7 +1627,7 @@ interface SomewhereRuntimeAuthMfa {
   cancelRecovery(options: { token: string }): Promise<{ outcome: 'cancelled' | 'already_closed' | 'completed'; message: string }>;
   reauthenticate(options: { token: string; enrollment_id: string; method: 'password' | 'email'; password?: string }): Promise<never>;
   verifyReauthentication(options: { token: string; enrollment_id: string; challenge_id: string; code: string }): Promise<never>;
-  // The same steps for the request's own session (cookie or Bearer). Turning codes on or off ends no session.
+
   enrollWithCookie(req: Request): Promise<SomewhereMfaCodeSent | { enrolled: true; method: 'email' }>;
   verifyWithCookie(req: Request, options: { challenge_id: string; code: string }): Promise<{ enrolled: true; method: 'email' }>;
   unenrollWithCookie(req: Request, options: { password: string }): Promise<SomewhereMfaCodeSent | { enrolled: false }>;
@@ -1641,11 +1641,11 @@ interface SomewhereRuntimeAuth {
   logout(options: SomewhereAuthLogoutOptions): Promise<{ logged_out: true }>;
   refresh(options: { refresh_token: string }): Promise<SomewhereAuthRefreshed>;
   refreshSession(req: Request): Promise<SomewhereAuthRefreshedSession>;
-  // Verifies an app-user access token; throws on an invalid/expired token (no null result).
+
   me(token: string, options?: { refreshToken?: string | null; noCache?: boolean } | null): Promise<{ user: SomewhereAuthProfileUser }>;
-  // Resolves the signed-in user from cookie or Bearer (or options.forwardedToken); null when absent/rejected.
+
   fromRequest(req: Request | null, options?: SomewhereAuthRequestOptions | null): Promise<SomewhereAuthProfileUser | null>;
-  // Throws 401 AUTH_REQUIRED when signed out; role 'admin' throws 403 FORBIDDEN for non-admins.
+
   requireUser(req: Request | null, options?: SomewhereAuthRequireOptions | null): Promise<SomewhereAuthProfileUser>;
   requireRole(req: Request | null, role: 'admin', options?: SomewhereAuthRequestOptions | null): Promise<SomewhereAuthProfileUser>;
   forgot(options: { email: string }): Promise<SomewhereAuthMessage>;
@@ -1655,22 +1655,22 @@ interface SomewhereRuntimeAuth {
   verifyEmail(token: string, options: { code: string }): Promise<{ verified: true }>;
   updatePassword(token: string, options: { new_password: string; current_password?: string }): Promise<{ updated: true }>;
   updateProfile(token: string, options: SomewhereAuthProfileUpdate): Promise<{ user: SomewhereAuthUpdatedUser }>;
-  // Email change is verify-gated: sends a code, never writes the address immediately.
+
   updateProfile(token: string, options: SomewhereAuthEmailChangeRequest): Promise<SomewhereAuthEmailChangeStarted>;
   updateProfileWithCookie(req: Request, options: SomewhereAuthProfileUpdate): Promise<{ user: SomewhereAuthUpdatedUser }>;
   updateProfileWithCookie(req: Request, options: SomewhereAuthEmailChangeRequest): Promise<{ email_change: SomewhereAuthEmailChange }>;
-  // Email change steps for the request's own session: change_id is email_change.id, code the 6-digit emailed code.
+
   verifyEmailChangeCurrentWithCookie(req: Request, options: { change_id: string; code: string }): Promise<SomewhereAuthVerificationSent>;
   verifyEmailChangeWithCookie(req: Request, options: { change_id: string; code: string }): Promise<{ changed: true; email: string }>;
-  // Email verification for the request's own session (cookie or Bearer); no token in app code.
+
   requestEmailVerificationWithCookie(req: Request): Promise<SomewhereAuthVerificationSent>;
   verifyEmailWithCookie(req: Request, options: { code: string }): Promise<{ verified: true }>;
   deleteUser(token: string): Promise<{ deleted: true }>;
-  // Password change and account deletion end every session of the account; these clear the cookies.
+
   updatePasswordWithCookie(req: Request, options: { new_password: string; current_password?: string }): Promise<{ updated: true }>;
   deleteUserWithCookie(req: Request): Promise<{ deleted: true }>;
-  // Start Google/GitHub/Discord sign-in from a server handler: stages this attempt's HttpOnly
-  // verifier cookie on the response and resolves the provider start URL (only its challenge travels).
+
+
   oauthStart(provider: 'google' | 'github' | 'discord', options: { redirect_uri: string }): Promise<string>;
   /** @deprecated Always throws OAUTH_START_REQUIRES_BINDING: sign-in is bound to the browser that starts it. Use: Response.redirect(await sw.auth.oauthStart('google', { redirect_uri }), 302). The parameter stays assignable so apps on older SDK types still typecheck. */
   googleUrl(options: { redirect_uri: string }): never;
@@ -1678,12 +1678,12 @@ interface SomewhereRuntimeAuth {
   githubUrl(options: { redirect_uri: string }): never;
   /** @deprecated Always throws OAUTH_START_REQUIRES_BINDING: sign-in is bound to the browser that starts it. Use: Response.redirect(await sw.auth.oauthStart('discord', { redirect_uri }), 302). The parameter stays assignable so apps on older SDK types still typecheck. */
   discordUrl(options: { redirect_uri: string }): never;
-  // Exchanges take the callback's ?code= and its public ?attempt= (which selects this browser's attempt cookie).
+
   googleExchange(options: { code: string; attempt: string; redirect_uri?: string }): Promise<SomewhereAuthGoogleSession>;
   githubExchange(options: { code: string; attempt: string }): Promise<SomewhereAuthOAuthSession>;
   discordExchange(options: { code: string; attempt: string }): Promise<SomewhereAuthOAuthSession>;
-  // Reads ?code and ?attempt, exchanges with that attempt's oauthStart verifier from this request,
-  // stages the session cookies, clears that attempt, returns a 302 to redirectTo (default '/').
+
+
   googleCallbackWithCookie(req: Request, redirectTo?: string): Promise<Response>;
   githubCallbackWithCookie(req: Request, redirectTo?: string): Promise<Response>;
   discordCallbackWithCookie(req: Request, redirectTo?: string): Promise<Response>;
@@ -1694,33 +1694,33 @@ interface SomewhereRuntimeAuth {
   logoutWithCookie(req: Request): Promise<{ ok: true }>;
   signInWithOtp(options: { email: string; redirect_uri?: string }): Promise<SomewhereAuthOtpSent>;
   verifyOtp(options: { token: string }): Promise<SomewhereAuthOtpSession>;
-  // One invite email; the link signs the invitee in as the invited address.
+
   invite(options: SomewhereAuthInviteOptions): Promise<SomewhereAuthInviteSent>;
   listInvites(options?: { status?: SomewhereAuthInviteStatus; email?: string; limit?: number }): Promise<SomewhereAuthInvite[]>;
   getInvite(id: string): Promise<SomewhereAuthInvite | null>;
   revokeInvite(id: string): Promise<SomewhereAuthInvite>;
-  // The accepted invite, only for the signed-in account that accepted it;
-  // otherwise throws INVITE_NOT_ACCEPTED_BY_YOU (403) or AUTH_REQUIRED (401).
+
+
   getAcceptedInvite(req: Request, id: string): Promise<SomewhereAuthInvite>;
   anonSession(): Promise<SomewhereAuthAnonSession>;
   readonly moderation: SomewhereRuntimeAuthModeration;
   readonly server: SomewhereRuntimeAuthServer;
 }
 interface SomewhereRuntimeCrypto {
-  // Lowercase hex HMAC-SHA256 of message keyed by secret.
+
   hmacSha256Hex(message: string, secret: string): Promise<string>;
   timingSafeEqual(a: string, b: string): boolean;
   readonly bcrypt: {
-    // Verify-only; there is no hashing surface.
+
     verify(password: string, hash: string): Promise<boolean>;
   };
 }
 interface SomewhereRuntimeContext { readonly crypto: SomewhereRuntimeCrypto }
-// ---- sw.payments / sw.quote / sw.connect / sw.billing / sw.calendar ----
+
 type SomewherePaymentsEnv = 'dev' | 'prod';
 type SomewherePaymentsStripeMode = 'test' | 'live';
 
-// Quote input (sw.quote / sw.payments.quote). Amounts are integer cents.
+
 type SomewhereQuoteFeeKind = 'flat' | 'per_night' | 'per_guest' | 'per_guest_per_night';
 interface SomewhereQuoteRateCalendarEntry { start?: string; end?: string; amount?: number; label?: string; weekdays?: readonly number[] }
 interface SomewhereQuoteBaseRate {
@@ -1755,19 +1755,19 @@ interface SomewhereQuoteResource {
   tax?: SomewhereQuoteTaxSpec;
   deposit?: number | SomewhereQuoteDepositSpec;
 }
-// Date-only 'YYYY-MM-DD' values, 1 to 366 nights.
+
 type SomewhereQuoteRange = { start?: string; end?: string; from?: string; to?: string } | readonly [string, string];
 interface SomewhereQuoteOptions {
   env?: SomewherePaymentsEnv;
   guests?: number;
   promo?: string;
-  // Required when resource.tax.stripe is true; fields follow Stripe Tax calculation params.
+
   tax?: { customer_details?: SomewhereJsonObject; ship_from_details?: SomewhereJsonObject; tax_date?: number };
   booking?: {
     id?: string;
     external_id?: string;
     externalId?: string;
-    // Derived from the signed-in app user; a different or subjectless value is refused.
+
     app_user_id?: string;
     appUserId?: string;
     metadata?: SomewhereJsonObject;
@@ -1801,7 +1801,7 @@ interface SomewhereQuoteResult {
 }
 type SomewhereQuoteFunction = (resource: SomewhereQuoteResource, range: SomewhereQuoteRange, opts?: SomewhereQuoteOptions | null) => Promise<SomewhereQuoteResult>;
 
-// Payments
+
 interface SomewherePaymentsOnboardOptions { return_url?: string; refresh_url?: string; mode?: SomewherePaymentsStripeMode; env?: SomewherePaymentsEnv }
 interface SomewherePaymentsOnboardResult {
   account_id: string;
@@ -1810,7 +1810,7 @@ interface SomewherePaymentsOnboardResult {
   expires_at: string | null;
   mode: SomewherePaymentsStripeMode;
   test_only: boolean;
-  // Present on test-mode onboarding only.
+
   charges_enabled?: boolean;
   checkout_ready?: boolean;
   platform_fee_percent: number;
@@ -1838,7 +1838,7 @@ interface SomewherePaymentsCheckoutOptions {
   quote_id?: string;
   booking_id?: string;
   calendar_hold_token?: string;
-  // Catalog plan slug (sw.billing); resolves its stripe_price_id when line_items is empty.
+
   plan?: string;
   success_url: string;
   cancel_url: string;
@@ -1946,9 +1946,9 @@ interface SomewherePaymentsTransactionsResult {
   next_cursor: string | null;
   stripe_mode: SomewherePaymentsStripeMode;
 }
-// Where the billing portal sends the customer back. Required: the platform
-// refuses a portal request without one (400), and checks it against the
-// project's allowed origins. Either spelling works; return_url wins if both are given.
+
+
+
 type SomewherePaymentsPortalReturnUrl =
   | { return_url: string; returnUrl?: string }
   | { return_url?: string; returnUrl: string };
@@ -1957,7 +1957,7 @@ type SomewherePaymentsPortalOptions = { env?: SomewherePaymentsEnv }
   & ({ customer_id: string; customerId?: string } | { customer_id?: string; customerId: string });
 type SomewherePaymentsPortalForUserOptions = { env?: SomewherePaymentsEnv } & SomewherePaymentsPortalReturnUrl;
 interface SomewherePaymentsPortalResult { url: string; stripe_mode: SomewherePaymentsStripeMode }
-// The signed-in user's own plan subscription; no user, customer or subscription argument.
+
 interface SomewherePaymentsSubscriptionForUserOptions { env?: SomewherePaymentsEnv }
 interface SomewherePaymentsUserSubscription {
   subscription_id: string;
@@ -1973,7 +1973,7 @@ interface SomewherePaymentsCancelForUserResult {
   subscription_id: string;
   status: string;
   cancel_at_period_end: boolean;
-  // Null when already canceled: the stored grant does not keep the provider's cancellation time.
+
   canceled_at: string | null;
   current_period_end: string | null;
   stripe_mode: SomewherePaymentsStripeMode;
@@ -1992,7 +1992,7 @@ interface SomewherePaymentsEvent {
   livemode: boolean;
   received_at: string;
 }
-// next_cursor is an epoch-ms number; pass it back as before.
+
 interface SomewherePaymentsEventsResult { events: SomewherePaymentsEvent[]; next_cursor: number | null }
 interface SomewhereRuntimePayments {
   onboard(opts?: SomewherePaymentsOnboardOptions | null): Promise<SomewherePaymentsOnboardResult>;
@@ -2000,22 +2000,22 @@ interface SomewhereRuntimePayments {
   status(opts?: { refresh?: boolean } | null): Promise<SomewherePaymentsStatus>;
   checkout(opts: SomewherePaymentsRowCheckoutOptions): Promise<SomewherePaymentsRowCheckoutResult>;
   checkout(opts: SomewherePaymentsCheckoutOptions): Promise<SomewherePaymentsCheckoutResult>;
-  // The app user is the request's verified principal; no user id argument.
+
   checkoutForUser(opts: SomewherePaymentsCheckoutForUserOptions): Promise<SomewherePaymentsCheckoutResult>;
   dashboardLink(): Promise<{ url: string }>;
   refund(opts: SomewherePaymentsRefundOptions): Promise<SomewherePaymentsRefundResult>;
   cancelSubscription(opts: SomewherePaymentsCancelSubscriptionOptions): Promise<SomewherePaymentsCancelSubscriptionResult>;
   transactions(opts?: SomewherePaymentsTransactionsOptions | null): Promise<SomewherePaymentsTransactionsResult>;
   portal(opts: SomewherePaymentsPortalOptions): Promise<SomewherePaymentsPortalResult>;
-  // The app user is the request's verified principal; no user id argument.
+
   portalForUser(opts: SomewherePaymentsPortalForUserOptions): Promise<SomewherePaymentsPortalResult>;
-  // The signed-in user's own plan subscription for this project and env; refuses NO_SUBSCRIPTION.
+
   subscriptionForUser(opts?: SomewherePaymentsSubscriptionForUserOptions | null): Promise<SomewherePaymentsUserSubscription>;
   cancelForUser(opts?: SomewherePaymentsCancelForUserOptions | null): Promise<SomewherePaymentsCancelForUserResult>;
   events(opts?: SomewherePaymentsEventsOptions | null): Promise<SomewherePaymentsEventsResult>;
 }
 
-// Connect (read-only link to a creator's existing Stripe account)
+
 interface SomewhereConnectStripeStatus {
   connected: boolean;
   account_id: string | null;
@@ -2051,7 +2051,7 @@ interface SomewhereRuntimeConnectStripe {
 }
 interface SomewhereRuntimeConnect { readonly stripe: SomewhereRuntimeConnectStripe }
 
-// Billing (plan catalog + entitlements for the app's own users)
+
 interface SomewhereBillingPlanFeatureInput { feature: string; limit?: number | null }
 interface SomewhereBillingPlanInput {
   slug: string;
@@ -2084,12 +2084,12 @@ interface SomewhereBillingEntitlements { plan: string; plan_defined: boolean; fe
 interface SomewhereRuntimeBilling {
   definePlans(plans: readonly SomewhereBillingPlanInput[]): Promise<SomewhereBillingDefinePlansResult>;
   plans(): Promise<{ plans: SomewhereBillingPlan[] }>;
-  // Subject is the request's verified principal; takes only the feature slug.
+
   has(feature: string): Promise<boolean>;
   entitlements(): Promise<SomewhereBillingEntitlements>;
 }
 
-// Calendar. Instants are epoch ms or ISO strings with an explicit Z/offset.
+
 type SomewhereCalendarInstant = string | number;
 interface SomewhereCalendarRange { start: SomewhereCalendarInstant; end: SomewhereCalendarInstant; timezone: string }
 interface SomewhereCalendarReadRange { start: SomewhereCalendarInstant; end: SomewhereCalendarInstant }
@@ -2120,7 +2120,7 @@ interface SomewhereCalendarReservation {
 interface SomewhereCalendarHoldOptions {
   resource: string;
   range: SomewhereCalendarRange;
-  // ttl and ttl_seconds are seconds; ttl_ms wins when set. Default 35 min, max 24 h.
+
   ttl?: number;
   ttl_seconds?: number;
   ttl_ms?: number;
@@ -2139,14 +2139,14 @@ type SomewhereCalendarCancelRefund =
   | { status: 'not_due'; amount: 0; currency: string };
 interface SomewhereCalendarCancelResult { canceled: boolean; reservation: SomewhereCalendarReservation; refund: SomewhereCalendarCancelRefund | null }
 type SomewhereCalendarRebookOptions = __SomewhereCalendarIdRef & ({ new_range: SomewhereCalendarRebookRange } | { range: SomewhereCalendarRebookRange });
-// Each field is optional; null clears it.
+
 interface SomewhereCalendarPolicyInput {
   min_stay_nights?: number | null;
   max_stay_nights?: number | null;
   advance_notice_hours?: number | null;
   bookable_from?: SomewhereCalendarInstant | null;
   turnaround_hours?: number | null;
-  // Seats per exact [start, end) class slot. Omitted or null: one reservation per overlapping range.
+
   capacity?: number | null;
 }
 type SomewhereCalendarSetPolicyOptions = { resource: string } & ({ policy: SomewhereCalendarPolicyInput } | (SomewhereCalendarPolicyInput & { policy?: never }));
@@ -2173,14 +2173,14 @@ interface SomewhereCalendarAvailabilityResult {
     expires_at: number | null;
   }[];
   free: { start_ms: number; end_ms: number }[];
-  // null for an exclusive resource.
+
   capacity: number | null;
-  // Existing class slots overlapping the range (full ones included); not a schedule.
+
   slots: { start_ms: number; end_ms: number; capacity: number; reserved: number; remaining: number }[];
 }
 interface SomewhereCalendarListExtras {
   range?: SomewhereCalendarReadRange | null;
-  // Defaults to the active statuses (hold, pending_payment, confirmed).
+
   statuses?: SomewhereCalendarReservationStatus | readonly SomewhereCalendarReservationStatus[] | null;
   limit?: number | null;
   cursor?: string | null;
@@ -2221,14 +2221,14 @@ interface SomewhereRuntimeCalendar {
 interface SomewhereRuntimeContext {
   readonly payments: SomewhereRuntimePayments;
   readonly connect: SomewhereRuntimeConnect;
-  // Same operation as sw.payments.quote.
+
   readonly quote: SomewhereQuoteFunction;
   readonly billing: SomewhereRuntimeBilling;
   readonly calendar: SomewhereRuntimeCalendar;
 }
-// ---- files + utilities: sw.fs, sw.search, sw.image, sw.render, sw.web, sw.fetch, sw.rateLimit, sw.logs, sw.analytics
 
-// Body shape a platform route returns when it refuses a request.
+
+
 interface SomewhereFsErrorEnvelope {
   ok: false;
   error: string;
@@ -2247,7 +2247,7 @@ interface SomewhereFsWriteOptions {
   content_type?: string;
   visibility?: SomewhereFsVisibility;
   public?: boolean;
-  // Refuse with FS_VERSION_CONFLICT when the file's current version differs.
+
   ifMatch?: number | string | null;
   if_match?: number | string | null;
 }
@@ -2258,7 +2258,7 @@ interface SomewhereFsWriteData {
   version: number;
   content_revision: string;
 }
-// write resolves with the full route envelope; read fields off .data.
+
 interface SomewhereFsWriteResult { ok: true; data: SomewhereFsWriteData }
 interface SomewhereFsReadLinesOptions { lines: string | readonly [number, number] }
 interface SomewhereFsReadOptions { lines?: string | readonly [number, number] | null }
@@ -2272,7 +2272,7 @@ interface SomewhereFsReadLinesResult {
   content_revision: string | null;
 }
 interface SomewhereFsDeleteData { deleted: number; type: 'file' | 'directory'; path: string }
-// delete does not throw on a refused request; it resolves with the error body.
+
 type SomewhereFsDeleteResult = { ok: true; data: SomewhereFsDeleteData } | SomewhereFsErrorEnvelope;
 interface SomewhereFsMoveOptions { overwrite?: boolean }
 interface SomewhereFsMoveResult { from: string; to: string }
@@ -2367,8 +2367,8 @@ interface SomewhereFsUploadFromRequestOptions {
 type SomewhereFsUploadFromRequestResult =
   | { url: string; path: string; size: number; contentType: string; visibility: 'public' }
   | { url: string | null; path: string; size: number; contentType: string; visibility: 'private' };
-// Shared by sw.fs (acting user derived from the request) and sw.fs.server (project-wide).
-// The project-wide scanners diff/glob/search exist only on sw.fs.dev in run_code.
+
+
 interface SomewhereFsView {
   read(path: string, options: SomewhereFsReadLinesOptions): Promise<SomewhereFsReadLinesResult>;
   read(path: string, options?: { lines?: null } | null): Promise<Response>;
@@ -2386,14 +2386,14 @@ interface SomewhereFsView {
   signedUrl(path: string, options?: SomewhereFsSignedUrlOptions | null): Promise<SomewhereFsSignedUrlResult>;
   public_url(path: string, options?: SomewhereFsPublicUrlOptions | null): Promise<SomewhereFsPublicUrlResult>;
   publicUrl(path: string, options?: SomewhereFsPublicUrlOptions | null): Promise<SomewhereFsPublicUrlResult>;
-  // null resets ownership to the project. On sw.fs.server, { collection, group? }
-  // adopts an existing file under that collection's folder into the collection.
+
+
   setOwner(path: string, user: string | { readonly id: string } | null, options?: { collection: string; group?: string | number } | null): Promise<SomewhereFsSetOwnerResult>;
   uploadFromRequest(req: Request, options: SomewhereFsUploadFromRequestOptions): Promise<SomewhereFsUploadFromRequestResult>;
 }
 interface SomewhereRuntimeFs extends SomewhereFsView { readonly server: SomewhereFsView }
 
-// ---- sw.search
+
 interface SomewhereSearchManagedAddResult { path: string; version: number; chunks: number; searchable: true }
 interface SomewhereSearchManagedHit {
   content: string;
@@ -2418,7 +2418,7 @@ interface SomewhereSearchHit {
   score: number;
   content: string;
   metadata: SomewhereJsonObject | null;
-  // snippet/signals are present in hybrid and lexical mode.
+
   snippet?: string;
   signals?: { semantic?: number; lexical?: number };
 }
@@ -2430,19 +2430,19 @@ interface SomewhereSearchQueryResult {
 interface SomewhereSearchRemoveOptions { index: string; ids: readonly string[] }
 interface SomewhereSearchRemoveResult { index: string; removed: number; item_count: number }
 interface SomewhereRuntimeSearch {
-  // Managed file search: indexes a file owned by the signed-in user.
+
   add(path: string): Promise<SomewhereSearchManagedAddResult>;
   createIndex(name: string): Promise<SomewhereSearchIndexInfo>;
   listIndexes(): Promise<{ indexes: SomewhereSearchIndexInfo[] }>;
   deleteIndex(name: string): Promise<{ name: string; deleted: true }>;
   upsert(options: SomewhereSearchUpsertOptions): Promise<SomewhereSearchUpsertResult>;
-  // String form searches the signed-in user's managed files; object form queries a named index.
+
   query(query: string): Promise<SomewhereSearchManagedQueryResult>;
   query(options: SomewhereSearchQueryOptions): Promise<SomewhereSearchQueryResult>;
   remove(options: SomewhereSearchRemoveOptions): Promise<SomewhereSearchRemoveResult>;
 }
 
-// ---- sw.image
+
 interface SomewhereImageResizeOptions {
   width?: number;
   height?: number;
@@ -2464,11 +2464,11 @@ interface SomewhereImageResizeOptions {
   border?: string;
 }
 interface SomewhereRuntimeImage {
-  // Synchronous: returns the transform URL string; throws on an empty source.
+
   resize(source: string, options?: SomewhereImageResizeOptions | null): string;
 }
 
-// ---- sw.render
+
 type __SomewhereRenderTarget = { url: string; html?: string } | { url?: string; html: string };
 type SomewhereRenderScreenshotOptions = __SomewhereRenderTarget & {
   width?: number;
@@ -2476,7 +2476,7 @@ type SomewhereRenderScreenshotOptions = __SomewhereRenderTarget & {
   format?: 'png' | 'jpeg' | 'webp';
   quality?: number;
   full_page?: boolean;
-  // CSS selector to wait for before capture.
+
   wait_for?: string;
   local_storage?: Readonly<Record<string, string>>;
   cookies?: readonly { name: string; value: string }[];
@@ -2490,7 +2490,7 @@ type SomewhereRenderPdfOptions = __SomewhereRenderTarget & {
 };
 interface SomewhereRenderStoredResult { storage_path: string; size_bytes: number; content_type: string }
 interface SomewhereRuntimeRender {
-  // With storage: writes to project files and returns its path; without: the raw image Response.
+
   screenshot(options: SomewhereRenderScreenshotOptions & { storage: string }): Promise<SomewhereRenderStoredResult>;
   screenshot(options: SomewhereRenderScreenshotOptions & { storage?: null }): Promise<Response>;
   screenshot(options: SomewhereRenderScreenshotOptions & { storage?: string | null }): Promise<Response | SomewhereRenderStoredResult>;
@@ -2499,12 +2499,12 @@ interface SomewhereRuntimeRender {
   pdf(options: SomewhereRenderPdfOptions & { storage?: string | null }): Promise<Response | SomewhereRenderStoredResult>;
 }
 
-// ---- sw.web
+
 type SomewhereWebScrapeFormat = 'markdown' | 'html' | 'rawHtml' | 'links' | 'screenshot';
 interface SomewhereWebScrapeOptions {
   formats?: readonly SomewhereWebScrapeFormat[];
   only_main?: boolean;
-  // Milliseconds to let the page settle (max 30000).
+
   wait_for?: number;
 }
 interface SomewhereWebScrapeResult {
@@ -2517,7 +2517,7 @@ interface SomewhereWebScrapeResult {
   html?: string;
   raw_html?: string;
   links?: string[];
-  // Inline data: URL when small, otherwise a short-lived scratch link.
+
   screenshot?: string | { scratch_url: string; expires_at: string };
   challenge_detected?: true;
 }
@@ -2534,15 +2534,15 @@ interface SomewhereRuntimeWeb {
   search(query: string, options?: SomewhereWebSearchOptions | null): Promise<SomewhereWebSearchResult>;
 }
 
-// ---- sw.rateLimit
+
 interface SomewhereRateLimitResult {
   allowed: boolean;
   remaining: number;
-  // Epoch seconds when the window rolls over.
+
   reset: number;
   limit: number;
   window_seconds: number;
-  // false only in a preview check, where the limit is not counted.
+
   evaluated?: false;
   retry_after?: number;
   error?: string;
@@ -2552,7 +2552,7 @@ interface SomewhereRuntimeRateLimit {
   check(key: string, max: number, windowSeconds: number): Promise<SomewhereRateLimitResult>;
 }
 
-// ---- sw.logs
+
 type SomewhereLogLevel = 'debug' | 'info' | 'warn' | 'error';
 type SomewhereLogSource = 'server' | 'client' | 'job' | 'cron' | 'queue' | 'system' | 'function' | 'oauth';
 interface SomewhereLogsTailOptions {
@@ -2561,7 +2561,7 @@ interface SomewhereLogsTailOptions {
   source?: SomewhereLogSource;
   search?: string;
   trace_id?: string;
-  // ISO timestamp or epoch milliseconds.
+
   since?: string | number;
 }
 interface SomewhereLogEntry {
@@ -2609,17 +2609,17 @@ type SomewhereTraceResult =
       };
     };
 interface SomewhereRuntimeLogs {
-  // Each write resolves with the platform's raw acceptance Response; throws when refused.
+
   debug(message: string, data?: unknown): Promise<Response>;
   info(message: string, data?: unknown): Promise<Response>;
   warn(message: string, data?: unknown): Promise<Response>;
   error(message: string, data?: unknown): Promise<Response>;
   tail(options?: SomewhereLogsTailOptions | null): Promise<SomewhereLogEntry[]>;
-  // Omit the id to read the current request's trace.
+
   trace(traceId?: string | null): Promise<SomewhereTraceResult>;
 }
 
-// ---- sw.analytics
+
 interface SomewhereAnalyticsTrackOptions {
   properties?: Readonly<Record<string, unknown>> | null;
   page?: string | null;
@@ -2637,7 +2637,7 @@ interface SomewhereAnalyticsQueryOptions {
   limit?: number;
 }
 interface SomewhereAnalyticsQueryResult {
-  // Row columns depend on group_by (bucket/event/user_id + count, or raw events).
+
   rows: SomewhereJsonObject[];
   count: number;
   group_by: 'hour' | 'day' | 'event' | 'user' | null;
@@ -2659,7 +2659,7 @@ interface SomewhereRuntimeContext {
   readonly logs: SomewhereRuntimeLogs;
   readonly analytics: SomewhereRuntimeAnalytics;
 }
-// ---- sw.ai ----
+
 type SomewhereAiProvider = 'anthropic' | 'openai' | 'xai' | 'workers-ai' | 'deepseek' | 'deepinfra';
 interface SomewhereAiInputBlock { type: string; [key: string]: unknown }
 /** Native Anthropic image input. Encode file bytes without a data: URL prefix. */
@@ -2680,7 +2680,7 @@ interface SomewhereAiMessage {
   role: 'user' | 'assistant' | 'system';
   content: string | readonly SomewhereAiInputBlock[];
 }
-// Normalized content block: text, tool_use (id/name/input) or a provider-native block.
+
 interface SomewhereAiContentBlock {
   type: string;
   text?: string;
@@ -2709,7 +2709,7 @@ interface SomewhereAiChatOptions {
   tools?: readonly SomewhereAiToolDefinition[];
   tool_choice?: string | SomewhereJsonObject;
   response_schema?: SomewhereJsonObject;
-  // true returns the raw SSE body (anthropic only; not with conversation_id/response_schema).
+
   stream?: boolean;
   conversation_id?: string;
   compaction?: SomewhereAiCompaction;
@@ -2730,7 +2730,7 @@ interface SomewhereAiChatResult {
   fallback_used?: boolean;
   fallback_provider?: string | null;
   service_tier?: 'standard' | 'flex' | null;
-  // Non-enumerable: readable directly, dropped by spread / JSON.stringify.
+
   cost: SomewhereAiCost;
   conversation_id?: string;
   conversation_subject_type?: string | null;
@@ -2798,13 +2798,13 @@ interface SomewhereAiConversationFork {
 }
 interface SomewhereAiConversationsAccessor {
   list(options?: { limit?: number }): Promise<{ conversations: SomewhereAiConversationSummary[] }>;
-  // include: 'summarized' also returns messages already folded into the summary.
+
   get(id: string, options?: { include?: string }): Promise<SomewhereAiConversation>;
   delete(id: string): Promise<{ deleted: boolean; conversation_id: string }>;
   fork(sourceId: string, newId: string, options?: { upToMessageId?: number }): Promise<SomewhereAiConversationFork>;
 }
 interface SomewhereAiConversations extends SomewhereAiConversationsAccessor {
-  // Developer capability: another end-user's conversations, without a signed-in request.
+
   forUser(userId: string): SomewhereAiConversationsAccessor;
 }
 interface SomewhereAiScoped {
@@ -2821,7 +2821,7 @@ interface SomewhereAiUserMemoryCompactOptions {
   model?: string;
   maxTokens?: number;
 }
-// Subject is the request's verified user; every call requires a signed-in user.
+
 interface SomewhereAiUserMemory {
   get(): Promise<SomewhereJsonObject>;
   update(patch: SomewhereJsonObject): Promise<SomewhereJsonObject>;
@@ -2859,19 +2859,19 @@ interface SomewhereAiTtsOptions {
   model?: string;
   voice?: string;
   lang?: string;
-  // Set: the audio is saved to this file path and a JSON envelope returns; unset: raw audio Response.
+
   storage?: string;
 }
 interface SomewhereAiTtsStored extends __SomewhereAiStoredFile { duration_seconds_estimate: number }
 interface SomewhereAiGenerateImageOptions {
   prompt: string;
   model?: string;
-  // Accepted and ignored: the model selects the provider.
+
   provider?: SomewhereAiProvider;
   width?: number;
   height?: number;
   steps?: number;
-  // gpt-image-2.5-flare only; refused on other models.
+
   quality?: 'low' | 'medium' | 'high';
   background?: 'auto' | 'opaque' | 'transparent';
   storage?: string;
@@ -2885,7 +2885,7 @@ interface SomewhereAiRemoveBackgroundOptions { image_url: string; model?: string
 type SomewhereAiEmbeddingsOptions = {
   model?: string;
   dimensions?: number;
-  // Accepted and ignored: the model selects the provider.
+
   provider?: SomewhereAiProvider;
 } & (
   | { text: string | readonly string[]; input?: never }
@@ -2907,8 +2907,8 @@ interface SomewhereAiModerationResult {
   model: string;
   provider: string;
 }
-// sw.ai.evaluate: typed decisions. Probabilities are model output, not
-// calibrated guarantees; choose thresholds from labelled cases.
+
+
 type SomewhereAiEvaluateQuestion =
   | { type: 'noul'; instructions: string | SomewhereJsonObject | readonly unknown[]; criteria?: { true?: unknown; false?: unknown } }
   | { type: 'choice'; instructions: string | SomewhereJsonObject | readonly unknown[]; criteria: Record<string, unknown> }
@@ -2920,7 +2920,7 @@ type SomewhereAiEvaluateOptions<Q extends Record<string, SomewhereAiEvaluateQues
   state: string | SomewhereJsonObject | readonly unknown[];
   questions: Q;
 } & (
-  // Text routes to jev and images to clef-flash when model is omitted; jev reads text only.
+
   | { model: 'jev'; images?: never }
   | { model?: 'clef-flash'; images?: readonly SomewhereAiEvaluateImage[] }
 );
@@ -2966,7 +2966,7 @@ interface SomewhereAiCatalog {
 interface SomewhereRuntimeAi {
   readonly chat: __SomewhereAiChatFn;
   readonly complete: __SomewhereAiChatFn;
-  // Runs the sw.agent loop; executeTools is required and maxIterations defaults to 5.
+
   chatWithTools(options: SomewhereAiChatWithToolsOptions): Promise<SomewhereAgentRunResult>;
   readonly conversations: SomewhereAiConversations;
   readonly userMemory: SomewhereAiUserMemory;
@@ -2979,7 +2979,7 @@ interface SomewhereRuntimeAi {
   generateImage(options: SomewhereAiGenerateImageOptions & { storage: string }): Promise<SomewhereAiGenerateImageStored>;
   generateImage(options: SomewhereAiGenerateImageOptions & { storage?: undefined }): Promise<Response>;
   generateImage(options: SomewhereAiGenerateImageOptions): Promise<SomewhereAiGenerateImageStored | Response>;
-  // Managed background removal is retired: every call rejects with VALIDATION_ERROR.
+
   removeBackground(options: SomewhereAiRemoveBackgroundOptions): Promise<never>;
   embeddings(options: SomewhereAiEmbeddingsOptions): Promise<SomewhereAiEmbeddingsResult>;
   moderate(text: string): Promise<SomewhereAiModerationResult>;
@@ -2987,14 +2987,14 @@ interface SomewhereRuntimeAi {
   catalog(): Promise<SomewhereAiCatalog>;
 }
 
-// ---- sw.agent ----
+
 interface SomewhereAgentToolContext { agentId: string | null; turn: number; toolCallId: string }
 type SomewhereAgentToolExecute = (input: SomewhereJsonObject, context: SomewhereAgentToolContext) => unknown;
 interface SomewhereAgentKeyedTool {
   description?: string;
   inputSchema?: SomewhereJsonObject;
   input_schema?: SomewhereJsonObject;
-  // Required unless options.executeTools is supplied.
+
   execute?: SomewhereAgentToolExecute;
 }
 interface SomewhereAgentTool extends SomewhereAgentKeyedTool { name: string }
@@ -3017,7 +3017,7 @@ interface SomewhereAgentStep {
   duration_ms: number;
   completion_reason: string;
   on_step?: unknown;
-  // Non-enumerable; null while the step's cost is pending.
+
   readonly cost_cents: number | null;
 }
 interface SomewhereAgentPrepareStepContext {
@@ -3052,7 +3052,7 @@ interface SomewhereAgentOnStepEvent {
 }
 type __SomewhereMaybePromise<T> = T | Promise<T>;
 interface SomewhereAgentOptions extends Omit<SomewhereAiChatOptions, 'messages' | 'tools' | 'stream'> {
-  // One input source is required: a non-empty messages array, prompt, or input.
+
   messages?: readonly SomewhereAiMessage[];
   prompt?: string;
   input?: string;
@@ -3061,7 +3061,7 @@ interface SomewhereAgentOptions extends Omit<SomewhereAiChatOptions, 'messages' 
   maxTokens?: number;
   tools?: readonly SomewhereAgentTool[] | Readonly<Record<string, SomewhereAgentKeyedTool>>;
   executeTools?: (calls: SomewhereAgentToolCall[]) => __SomewhereMaybePromise<readonly SomewhereAgentToolResultRow[]>;
-  // Integer 1-20; first defined of maxSteps, maxIterations, maxTurns wins (default 8).
+
   maxSteps?: number;
   maxIterations?: number;
   maxTurns?: number;
@@ -3081,17 +3081,17 @@ interface SomewhereAgentRunResult extends Omit<SomewhereAiChatResult, 'cost'> {
   total_input_tokens: number;
   total_output_tokens: number;
   completion_reason: string;
-  // Non-enumerable: readable directly, dropped by spread / JSON.stringify.
+
   readonly steps: SomewhereAgentStep[];
   readonly total_cost_cents: number | null;
 }
-// Returned instead when this invocation is the platform's signed step callback; return it from the handler.
+
 interface SomewhereAgentStepCheckpoint {
   __sw_agent_turn: true;
   state: SomewhereJsonObject;
   done: boolean;
-  // Present only when the run stopped at its budget and the platform's signed callback reads terminal budget
-  // envelopes; the platform then records the run as failed with this code. Otherwise the budget stop throws.
+
+
   error?: { code: 'AI_SPEND_CAP_EXCEEDED' | 'AI_COST_PENDING'; message: string };
   agent_id?: never;
   status?: never;
@@ -3138,7 +3138,7 @@ interface SomewhereAgentCancelResult {
   owner_subject_id: string | null;
 }
 interface SomewhereRuntimeAgent {
-  // Durable compatibility form: same as start() but reports max_turns.
+
   (options: SomewhereAgentDurableOptions): Promise<SomewhereAgentLegacyStartResult>;
   run(options: SomewhereAgentOptions): Promise<SomewhereAgentRunResult>;
   start(options: SomewhereAgentDurableOptions): Promise<SomewhereAgentStartResult>;
@@ -3147,22 +3147,22 @@ interface SomewhereRuntimeAgent {
 }
 
 interface SomewhereRuntimeContext { readonly ai: SomewhereRuntimeAi; readonly agent: SomewhereRuntimeAgent }
-// \u2500\u2500 sw.email / sw.contacts \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+
 type SomewhereEmailStatus =
   | 'claimed' | 'pending' | 'sent' | 'delivered' | 'opened' | 'clicked'
   | 'bounced' | 'complained' | 'suppressed' | 'preference_blocked'
   | 'delivery_unknown' | 'failed' | 'captured';
 type SomewhereEmailTopic = 'project-updates' | 'milestones' | 'announcements' | 'founder-notes';
-// At least one of html / text is required.
+
 type __SomewhereEmailBody = { html: string; text?: string } | { text: string; html?: string };
 type SomewhereEmailSendOptions = {
-  // One recipient address.
+
   to: string;
   subject: string;
-  // Omit for the platform-managed sender; otherwise a verified sender domain on this project.
+
   from?: string;
   reply_to?: string;
-  // 'marketing' requires a topic.
+
   category?: 'transactional' | 'marketing';
   subtype?: string;
   topic?: SomewhereEmailTopic;
@@ -3178,9 +3178,9 @@ type SomewhereEmailSendOptions = {
 interface SomewhereEmailSendResult {
   id: string;
   message_id: string;
-  // Absent on a captured (test inbox) send.
+
   tracking_id?: string;
-  // A new send is 'sent' | 'pending' | 'captured'; a duplicate replays the stored state.
+
   status: SomewhereEmailStatus;
   duplicate?: true;
   sender?: { from: string; mode: 'platform_managed'; note: string };
@@ -3215,7 +3215,7 @@ interface SomewhereEmailHistoryMessage {
   env_slot: string;
 }
 interface SomewhereEmailStatusResult {
-  // The stored message row (id, status, recipients, ...).
+
   message: SomewhereJsonObject;
   events: SomewhereJsonObject[];
 }
@@ -3249,7 +3249,7 @@ interface SomewhereRuntimeEmail {
   status(id: string): Promise<SomewhereEmailStatusResult>;
   checkSuppression(address: string): Promise<SomewhereEmailSuppression>;
   bounces(options?: { days?: number; limit?: number } | null): Promise<{ bounces: SomewhereEmailBounce[]; window_days: number; limit: number }>;
-  // Reads only this project's <anything>@<subdomain>.test.somewhere.site test inbox.
+
   inbox(address: string, options?: { limit?: number } | null): Promise<{ address: string; messages: SomewhereEmailTestInboxMessage[]; limit: number }>;
 }
 interface SomewhereEmailContactProperties {
@@ -3258,7 +3258,7 @@ interface SomewhereEmailContactProperties {
   unsubscribed?: boolean;
   app_user_id?: string;
   source?: string;
-  // Reserved: the platform binds this; sending it is a VALIDATION_ERROR.
+
   platform_user_id?: never;
   [key: string]: unknown;
 }
@@ -3278,9 +3278,9 @@ interface SomewhereRuntimeContacts {
   list(options?: { limit?: number; offset?: number } | null): Promise<{ contacts: SomewhereEmailContact[] }>;
 }
 
-// \u2500\u2500 sw.inbox \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+
 type SomewhereInboxOwnershipStatus = 'app_user' | 'project_owner' | 'legacy_project';
-// At least one of body / text / html is required (body is an alias of text).
+
 type __SomewhereInboxBody =
   | { body: string; text?: string; html?: string }
   | { text: string; body?: string; html?: string }
@@ -3299,7 +3299,7 @@ interface SomewhereInboxAddressCreated {
   kind: 'admin' | 'app';
   ownership_status: 'app_user' | 'project_owner';
   webhook_url: string | null;
-  // Returned once, only when webhook_url was set.
+
   webhook_secret: string | null;
   forward?: SomewhereJsonObject;
   created_at: string;
@@ -3354,7 +3354,7 @@ interface SomewhereInboxMessage extends SomewhereInboxMessageSummary {
   references_header: string | null;
   attachments: SomewhereInboxAttachmentMeta[];
   raw_url: string;
-  // Present only with include_html: true.
+
   html_preview?: string | null;
 }
 interface SomewhereInboxSendPending {
@@ -3409,7 +3409,7 @@ interface SomewhereInboxRule {
 }
 interface SomewhereInboxRules {
   list(options?: { address_id?: string } | null): Promise<{ rules: SomewhereInboxRule[] }>;
-  // Omit address_id for a project-wide rule (sw.inbox.project only).
+
   create(rule: { pattern: string; action: 'allow' | 'deny'; address_id?: string }): Promise<SomewhereInboxRule & { project_id: string }>;
   delete(id: string): Promise<{ id: string; deleted: true }>;
 }
@@ -3420,7 +3420,7 @@ interface SomewhereInboxClient {
   deleteAddress(id: string): Promise<{ id: string; deleted: true }>;
   list(options?: SomewhereInboxListOptions | null): Promise<{ messages: SomewhereInboxMessageSummary[]; count: number }>;
   get(id: string, options?: { include_html?: boolean } | null): Promise<SomewhereInboxMessage>;
-  // Raw RFC-822 bytes; the Response carries X-Somewhere-Ownership-Status.
+
   raw(id: string): Promise<Response>;
   attachment(id: string, index: number): Promise<Response>;
   markRead(id: string, read?: boolean): Promise<{ id: string; read: boolean; ownership_status: SomewhereInboxOwnershipStatus; read_at: string | null }>;
@@ -3437,7 +3437,7 @@ interface SomewhereInboxGrant {
   granted_by: string;
   created_at: string;
 }
-// Trusted project-scope inbox: createAddress makes admin mailboxes; owner-only grants/migration.
+
 interface SomewhereRuntimeProjectInbox extends SomewhereInboxClient {
   assignLegacyOwner(addressId: string, appUserId: string): Promise<{ id: string; ownership_status: 'app_user'; migrated_message_count: number; migration_id: string }>;
   readonly grants: {
@@ -3446,21 +3446,21 @@ interface SomewhereRuntimeProjectInbox extends SomewhereInboxClient {
     delete(addressId: string, collaboratorUserId: string): Promise<{ address_id: string; collaborator_user_id: string; deleted: true }>;
   };
 }
-// Scoped to the request's verified app user; createAddress makes app mailboxes.
+
 interface SomewhereRuntimeInbox extends SomewhereInboxClient {
   readonly project: SomewhereRuntimeProjectInbox;
 }
 
-// \u2500\u2500 sw.notifications \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+
 type SomewhereNotificationsChannel = 'bell' | 'push' | 'email';
 interface SomewhereNotificationsSendOptions {
   title?: string;
   body?: string;
   url?: string | null;
-  // Recipient address; required for the email channel.
+
   email?: string;
   from?: string;
-  // Default ['bell', 'push'].
+
   channels?: readonly SomewhereNotificationsChannel[];
 }
 interface SomewhereNotificationsChannelFailure { ok: false; error: string; code?: string }
@@ -3474,11 +3474,11 @@ interface SomewhereNotification {
   title: string | null;
   body: string | null;
   url: string | null;
-  // 0 or 1.
+
   read: number;
   created_at: number;
 }
-// list / unreadCount / markRead / markAllRead act on the request's verified user (AUTH_REQUIRED otherwise).
+
 interface SomewhereRuntimeNotifications {
   send(userId: string, options: SomewhereNotificationsSendOptions): Promise<SomewhereNotificationsSendResult>;
   list(options?: { limit?: number; unread_only?: boolean } | null): Promise<{ notifications: SomewhereNotification[]; count: number }>;
@@ -3487,17 +3487,17 @@ interface SomewhereRuntimeNotifications {
   markAllRead(): Promise<{ ok: true; changes: number }>;
 }
 
-// \u2500\u2500 sw.push \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+
 interface SomewherePushSendOptions {
-  // Required: a string or any JSON-serializable value.
+
   payload: string | number | boolean | object;
-  // Exactly one target; a missing, null or empty one is refused.
+
   user_id?: string;
   userId?: string;
   endpoint?: string;
   subscription_id?: string;
   subscriptionId?: string;
-  // 'developer': devices registered with developer credentials. 'all': every device.
+
   audience?: 'developer' | 'all';
   ttl?: number;
 }
@@ -3516,11 +3516,11 @@ interface SomewherePushDeviceResult {
 }
 interface SomewherePushSendResult {
   sent: number; failed: number; gone: number; captured: number; recipients: number;
-  // false: the notifications went out but their history was not recorded.
+
   history_recorded: boolean;
   devices: SomewherePushDeviceResult[];
 }
-// The object PushManager.subscribe() returns, or its toJSON().
+
 interface SomewherePushBrowserSubscription {
   endpoint: string;
   keys: { p256dh: string; auth: string };
@@ -3530,7 +3530,7 @@ interface SomewherePushSubscribeResult {
   created: boolean; reassigned?: boolean;
 }
 interface SomewherePushDevice {
-  // 'legacy': stored before owners were verified; no send reaches it until it re-registers.
+
   id: string; user_id: string | null; owner: 'app_user' | 'developer' | 'legacy';
   platform: SomewherePushPlatform; device_label: string | null; endpoint_host: string | null;
   created_at: string; updated_at: string | null;
@@ -3539,7 +3539,7 @@ interface SomewherePushDelivery {
   id: string; subscription_id: string; user_id: string | null; platform: SomewherePushPlatform;
   device_label: string | null; endpoint_host: string | null; outcome: SomewherePushDeliveryOutcome;
   http_status: number | null; error: string | null; title: string | null; url: string | null;
-  // Present on test-inbox deliveries only.
+
   payload?: unknown;
   created_at: string;
 }
@@ -3552,7 +3552,7 @@ interface SomewherePushHistoryOptions {
 }
 interface SomewhereRuntimePush {
   vapidPublicKey(): Promise<{ vapid_public_key: string }>;
-  // Registers a device for the signed-in user of this request (AUTH_REQUIRED without one).
+
   subscribe(
     subscription: SomewherePushBrowserSubscription | { toJSON(): SomewherePushBrowserSubscription } | { test: true },
     options?: { label?: string },
@@ -3563,8 +3563,8 @@ interface SomewhereRuntimePush {
   deliveries(options?: SomewherePushHistoryOptions): Promise<{ deliveries: SomewherePushDelivery[] }>;
 }
 
-// The push browser helper. The compiler maps this specifier to
-// the same-origin /__sw/push/client.js the project origin serves.
+
+
 declare module 'somewhere:push' {
   export interface PushDeviceResult {
     endpoint?: string; id: string; platform: 'web' | 'test'; owner: 'app_user' | 'developer';
@@ -3578,8 +3578,8 @@ declare module 'somewhere:push' {
   export function listenToPush(handler: (message: PushMessage) => void): () => void;
 }
 
-// The rooms browser module (/__sw/rooms/client.js), typed under this
-// specifier. Plain browser scripts import the absolute path directly.
+
+
 declare module 'somewhere:rooms' {
   export interface RoomPerson { id: string; user: string | null; me: boolean; info: Record<string, unknown> | null }
   export type RoomStatus = 'connecting' | 'open' | 'reconnecting' | 'closed';
@@ -3596,17 +3596,17 @@ declare module 'somewhere:rooms' {
     on(event: 'message', handler: (data: unknown, from: string) => void): () => void;
     on(event: 'status', handler: (status: RoomStatus) => void): () => void;
     on(event: 'timer_failed', handler: () => void): () => void;
-    // Rooms without a referee: merge top-level keys (null deletes one).
+
     set(patch: Record<string, unknown>): Promise<Record<string, unknown>>;
-    // Rooms with a referee: resolves with the state after the referee accepts.
+
     act(action: unknown): Promise<Record<string, unknown>>;
-    // A throwaway message to everyone else; false when not connected.
+
     send(data: unknown): boolean;
     leave(): void;
   }
   export function joinRoom(table: string, id: string | number): Promise<Room>;
-  // A live list declared with sw.rooms.live: load re-calls your function,
-  // render gets its data array and the whole result. Returns stop().
+
+
   export function watchLive<Row = Record<string, unknown>>(
     load: () => Promise<{ data: Row[]; live?: unknown }> | { data: Row[]; live?: unknown },
     render: (rows: Row[], result: { data: Row[]; live?: unknown }) => void,
@@ -3614,19 +3614,19 @@ declare module 'somewhere:rooms' {
   ): () => void;
 }
 
-// \u2500\u2500 sw.queue / sw.jobs \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+
 interface SomewhereQueuePushOptions {
-  // A project-relative /api path or an https:// URL.
+
   handler: string;
   payload?: unknown;
-  // Max 43200 (12 hours).
+
   delay_seconds?: number;
   idempotency_key?: string;
   queue_name?: string;
 }
 interface SomewhereRuntimeQueue {
   push(options: SomewhereQueuePushOptions): Promise<{ message_id: string; status: 'pending' | 'queued'; deduped?: true }>;
-  // Same check as sw.jobs.verifyInvocation.
+
   verifyInvocation(req: Request): Promise<boolean>;
 }
 interface SomewhereJobsCreateOptions {
@@ -3635,14 +3635,14 @@ interface SomewhereJobsCreateOptions {
   webhook_url?: string;
   timeout_seconds?: number;
   priority?: 'normal' | 'low';
-  // Generated per call when omitted.
+
   idempotency_key?: string;
-  // Earliest start: an ISO-8601 time with an explicit offset, e.g. '2026-10-05T09:00:00Z'. Must be in the future.
+
   run_at?: string;
   agent?: { messages: readonly unknown[]; max_steps?: number; max_turns?: number; deployment_version?: string };
-  // Row-bound job: acts for the signed-in user on ONE row of a job binding declared in db/schema.ts, with only that
-  // binding's operations, until its deadline. id is the row's id(): a string for a random text key, or a whole number for id({ uuid: false }).
-  // Created only from that user's own request (not from another job); not combined with agent.
+
+
+
   row?: { binding: string; id: number | string };
 }
 interface SomewhereJobsRecovery {
@@ -3653,13 +3653,13 @@ interface SomewhereJobsRecovery {
 }
 interface SomewhereJobsCreateResult {
   job_id: string;
-  // 'indeterminate' means read recovery before retrying.
+
   status: string;
   duplicate: boolean;
   recovery: SomewhereJobsRecovery | null;
   ownership_status?: 'app_user' | 'project_owner';
   owner_subject_id?: string | null;
-  // ISO time when run_at was given; status is 'scheduled' until then.
+
   run_at?: string | null;
 }
 interface SomewhereJob {
@@ -3699,15 +3699,15 @@ interface SomewhereJobsCancelResult {
 interface SomewhereRuntimeJobs {
   create(options: SomewhereJobsCreateOptions): Promise<SomewhereJobsCreateResult>;
   status(jobId: string): Promise<SomewhereJob>;
-  // Cancels queued work. An ordinary handler already running finishes; its side effects remain.
+
   cancel(jobId: string): Promise<SomewhereJobsCancelResult>;
-  // True only for a platform-signed job/queue/cron delivery; never throws.
+
   verifyInvocation(req: Request): Promise<boolean>;
 }
 
-// \u2500\u2500 sw.cron \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+
 interface SomewhereCronCreateOptions {
-  // 5-field cron expression, evaluated in timezone (UTC by default).
+
   schedule: string;
   handler: string;
   timezone?: string;
@@ -3747,7 +3747,7 @@ interface SomewhereRuntimeCron {
   delete(id: string): Promise<{ deleted: true; cron_id: string }>;
 }
 
-// \u2500\u2500 sw.tasks \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+
 type SomewhereTaskStatus = 'backlog' | 'open' | 'in_progress' | 'blocked' | 'needs_review' | 'done' | 'archived';
 type SomewhereTaskPriority = 'low' | 'normal' | 'high' | 'urgent';
 type SomewhereTaskHealth = 'on_track' | 'at_risk' | 'off_track';
@@ -3790,7 +3790,7 @@ interface SomewhereTaskComment {
   created_at: number;
   [key: string]: unknown;
 }
-// Full view: the task plus comments, activity, relationships and closure guidance.
+
 interface SomewhereTaskDetail extends SomewhereTask {
   project_id: string;
   comments?: SomewhereTaskComment[];
@@ -3815,7 +3815,7 @@ interface SomewhereTaskCreateOptions {
   due_at?: number | null;
   area?: string;
   parent_id?: string;
-  // sw.fs paths.
+
   attachments?: string | readonly string[] | null;
   template?: string;
 }
@@ -3837,10 +3837,10 @@ interface SomewhereTaskUpdateOptions {
   waiting_on?: 'human' | 'product_decision' | 'external' | null;
   attachments?: string | readonly string[] | null;
   append_attachments?: string | readonly string[];
-  // Positive deploy version number; mutually exclusive with shipped_in.
+
   deployment_version?: number;
   deployment_project_id?: string;
-  // Persisted as a comment; include it when closing a task.
+
   resolution_note?: string;
   comment?: string;
   guidance_review?: { content_revision: string; note?: string };
@@ -3941,9 +3941,9 @@ interface SomewhereTaskOverview {
 }
 interface SomewhereRuntimeTasks {
   overview(options?: { area?: string; section?: 'direction' | 'practice' | 'priorities' | 'active' | 'blocked' | 'shipped'; cursor?: string }): Promise<SomewhereTaskOverview>;
-  // The created task, or only its id when the read-back was unavailable.
+
   create(task: SomewhereTaskCreateOptions): Promise<SomewhereTask | { id: string }>;
-  // parent_id: 'null' lists only top-level tasks.
+
   list(options: SomewhereTaskListOptions & { view: 'board' }): Promise<SomewhereTaskBoardItem[]>;
   list(options?: SomewhereTaskListOptions | null): Promise<SomewhereTaskListItem[]>;
   listPage(options: SomewhereTaskListOptions & { view: 'board' }): Promise<{ data: SomewhereTaskBoardItem[]; page: SomewhereTaskPage }>;
@@ -3958,12 +3958,12 @@ interface SomewhereRuntimeTasks {
   comment(id: string, body: string, author?: string): Promise<{ id: string; task_id: string; author: string; actor: string; body: string; created_at: number; edited_at: null }>;
   readonly settings: {
     get(): Promise<SomewhereTaskSettings>;
-    // webhook_secret is returned once, when a webhook_url is first set.
+
     update(settings: { webhook_url?: string | null; notify_email?: string | null }): Promise<SomewhereTaskSettings & { webhook_secret: string | null }>;
   };
 }
 
-// \u2500\u2500 sw.rooms \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+
 type SomewhereRoomWho = { user: string } | { visitor: string } | { anonymous: true } | 'server';
 interface SomewhereRoomEvent {
   type: 'join' | 'leave' | 'action' | 'timer';
@@ -3983,8 +3983,8 @@ interface SomewhereRoomOps {
 interface SomewhereRuntimeRooms extends SomewhereRoomOps {
   readonly server: SomewhereRoomOps;
   event(req: Request): Promise<SomewhereRoomEvent>;
-  // A live list: read must be the exact sw.db.from(...) result (or its promise) this release
-  // declares under name. Return it from a function; the browser follows it with watchLive.
+
+
   live<Row>(name: string, read: SomewhereDbResult<Row> | PromiseLike<SomewhereDbResult<Row>>): Promise<SomewhereDbLiveResult<Row>>;
 }
 
@@ -4005,11 +4005,11 @@ type ServerFunction<Contract extends { input: unknown; output: unknown }> =
   (req: __SomewhereTypedRequest<Contract["input"]>, sw: SomewhereRuntimeContext) =>
     Contract["output"] | Promise<Contract["output"]>;
 
-// Outbound WebSocket client: fetch(url, { headers: { Upgrade: 'websocket' } })
-// returns the upgraded socket on the response (null on any other response),
-// and the function calls accept() before using it. The runtime fetch wrapper
-// and the pinned egress transport both hand that response through
-// (worker/src/runtime/fetch.ts, routes/code-egress.ts). Merged into lib.dom.
+
+
+
+
+
 interface Response { readonly webSocket: WebSocket | null }
 interface WebSocket { accept(): void }
 `;

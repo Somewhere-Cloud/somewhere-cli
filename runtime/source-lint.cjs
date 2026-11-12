@@ -536,9 +536,9 @@ function insertError(status, payload) {
   if (receipt) error.idempotency = receipt;
   return error;
 }
-// One logical request's outcome across its explicit retries (one value per request handle). A later
-// refusal, or this client's local retry horizon, describes only that attempt: it never erases an
-// earlier committed result, and after an unknown attempt it never proves the write absent.
+
+
+
 function requestOutcome() {
   let known = null;
   return {
@@ -558,14 +558,14 @@ function requestOutcome() {
   };
 }
 async function createWithReceipt(table, values, extra, eligible) {
-  // create takes only values: the retry key is a private random nonce this client allocates,
-  // never a caller choice. Anything more refuses before the network.
+
+
   if (extra.length !== 0) throw new DataError(400, {error:'DATA_INPUT_INVALID', message:'create takes only the values to insert. Nothing was sent.'});
   if (!eligible) return invoke(table, 'create', {values});
-  // 128 random bits as 32 lowercase hex characters: the platform's exact client key format.
+
   const key = Array.from(crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2,'0')).join('');
   const createdAt = Date.now();
-  // Serialize once: retries never observe later caller mutations or re-run toJSON.
+
   const body = JSON.stringify({values, contract, table, operation:'create', idempotency_key:key});
   let handle;
   const attach = target => { Object.defineProperty(target, 'request', {value:handle, enumerable:false, writable:false, configurable:false}); return target; };
@@ -583,7 +583,7 @@ async function createWithReceipt(table, values, extra, eligible) {
     catch (_) { throw attach(insertError(response.status, {error:'INVALID_DATA_RESPONSE', message:'The write response could not be read. Retry this request with its original key.', outcome:'unknown'})); }
     if (!response.ok) throw attach(insertError(response.status, payload));
     if (!payload || typeof payload !== 'object' || Array.isArray(payload) || !insertReceipt(payload.idempotency)) {
-      // A successful old/malformed response cannot establish receipt protection.
+
       throw insertError(502, {error:'IDEMPOTENCY_RECEIPT_INVALID', message:'The write succeeded, but retry protection could not be confirmed. Do not retry it.', outcome:'committed', write_committed:true});
     }
     payload.idempotency = insertReceipt(payload.idempotency);
@@ -598,7 +598,7 @@ async function createWithReceipt(table, values, extra, eligible) {
 function creatorCapability(grant, secret, table) {
   const capability = {grant};
   Object.defineProperty(capability, 'secret', {value:secret, enumerable:false, writable:false, configurable:false});
-  // The creator link: the platform landing page, with everything in the fragment (never sent to a server).
+
   const route = location.pathname + location.search + location.hash;
   Object.defineProperty(capability, 'url', {value:location.origin + '/__sw/creator#' + grant + '.' + secret + '.' + table + '.' + b64url(route), enumerable:false, writable:false, configurable:false});
   Object.defineProperty(capability, 'toJSON', {value:() => ({grant}), enumerable:false, writable:false, configurable:false});
@@ -1389,7 +1389,7 @@ var NATIVE_CAPTURE_STATEMENT = `    try { __sw_captureNativeRuntime(env); } catc
     }
 `;
 var BINDING_META_BEFORE_CAPTURE = `    // Reserved candidate proof: checked against this request's own bindings, before configuration,
-    // telemetry or customer imports, and never seeding the isolate's captured transport.
+
     if (__sw_nativePathname(new __sw_nativeURL(__sw_nativeRequestURL(request))) === '/__sw/native-binding-meta') {
       const __sw_pb = env && env.${NATIVE_RUNTIME_SERVICE_BINDING}, __sw_pm = env && env.${MANAGED_RUNTIME_SERVICE_BINDING};
       if (!__sw_pb || typeof __sw_pb.fetch !== 'function' || !__sw_pm || typeof __sw_pm.fetch !== 'function' || env.PROJECT_ID !== __sw_nativeRuntimeProject || env.PROJECT_ENV !== 'prod'
@@ -1404,8 +1404,8 @@ var RETAINED_PREFIX = "_sw_retained__";
 var RETENTION_DAYS = 30;
 var RETENTION_MS = RETENTION_DAYS * 24 * 3600 * 1e3;
 var RETIRED_TABLE_JS = `      // A read of a table retired with removedTable(): name
-      // the table, its retention date, and how to restore it. Mirrors
-      // utils/db-schema-deploy/retired-table.ts.
+
+
       function __sw_retiredTableAt(names, table) {
         const prefix = '${RETAINED_PREFIX}' + String(table).toLowerCase() + '__';
         let latest = null;
@@ -1449,8 +1449,8 @@ var RETIRED_TABLE_JS = `      // A read of a table retired with removedTable(): 
 var DATABASE_FULL_PATTERN = /SQLITE_FULL|database or disk is full|database is full|at maximum size|exceeds the maximum database size|database size limit (?:has been )?(?:reached|exceeded)/i;
 var DATABASE_FULL_MESSAGE = "The database could not complete this write because its storage is full. Database storage and the account allowance are shown under Usage in the dashboard.";
 var DB_TYPED_ERRORS_JS = `      // The REST bridge's refusal as the caller sees it. A typed envelope
-      // { error, message } becomes that code and message; anything else keeps
-      // the fallback code and never pastes a JSON body into the message.
+
+
       function __sw_restEnvelopeError(what, response, body, text, fallbackCode) {
         const code = body && typeof body.error === 'string' ? body.error : null;
         const message = body && typeof body.message === 'string' ? body.message : '';
@@ -1466,10 +1466,10 @@ var DB_TYPED_ERRORS_JS = `      // The REST bridge's refusal as the caller sees 
         err.code = fallbackCode;
         return err;
       }
-      // Strip engine/infra labels from a raw database error so the developer
-      // sees the actionable cause ("UNIQUE constraint failed: users.email")
-      // without the provider noise ("D1_ERROR", "SQLITE_CONSTRAINT_UNIQUE").
-      // No D1/SQLite/Cloudflare term survives (rule 8 \u2014 product language only).
+
+
+
+
       function __sw_productizeDbMessage(msg) {
         return String(msg)
           .replace(/D1_ERROR:?/gi, '')
@@ -1481,10 +1481,10 @@ var DB_TYPED_ERRORS_JS = `      // The REST bridge's refusal as the caller sees 
           .replace(/^[\\s:;.,]+|[\\s:;.,]+$/g, '')
           .trim();
       }
-      // A write a unique or primary-key rule refused: the caller's own duplicate,
-      // nothing applied. One shape on every bridge (binding, the REST query and
-      // batch fallbacks, the managed endpoint): code, status and the browser
-      // contract's message. Uncaught, it stays the opaque function error.
+
+
+
+
       function __sw_dataConflict(err) {
         const conflict = new Error('A record with these values already exists.');
         conflict.code = 'DATA_CONFLICT';
@@ -1493,24 +1493,24 @@ var DB_TYPED_ERRORS_JS = `      // The REST bridge's refusal as the caller sees 
         conflict.original = err;
         return conflict;
       }
-      // A reply that does not prove the write was refused never becomes a conflict.
+
       function __sw_outcomeUnproven(code) {
         return typeof code === 'string' && /OUTCOME_UNKNOWN|COMMITTED/.test(code);
       }
       function __sw_decorateError(label, sqlPreview, err) {
         const msg = (err && err.message) || String(err);
-        // The platform already classified this refusal (platform-data/transport.ts uniqueConflict).
+
         if (err && err.code === 'DATA_CONFLICT') return __sw_dataConflict(err);
         let sizeCode = null;
         let sizeMessage = null;
         if (${DATABASE_FULL_PATTERN}.test(msg)) {
-          // The database is at its per-project ceiling: the platform API's code
-          // and message (utils/database-full.ts), interpolated at build time.
+
+
           sizeCode = 'DATABASE_FULL';
           sizeMessage = ${JSON.stringify(DATABASE_FULL_MESSAGE)};
         } else if (/string or blob too big|row (?:is )?too big|serialized RPC arguments or return values are limited/i.test(msg)) {
-          // Includes a value over the transport's ~32 MiB serialization limit,
-          // the same oversized value refused before the engine sees it.
+
+
           sizeCode = 'DATABASE_VALUE_TOO_LARGE';
           sizeMessage = 'A string, binary value, or resulting row exceeds the database size limit. Store large files with sw.fs or split the record.';
         } else if (/statement too long/i.test(msg)) {
@@ -1528,12 +1528,12 @@ var DB_TYPED_ERRORS_JS = `      // The REST bridge's refusal as the caller sees 
           sized.original = err;
           return sized;
         }
-        // sw.db.tx's guarded insert: the database refused the whole batch
-        // because one row targets a group the caller cannot write to.
+
+
         const guard = msg.match(/SW_(MEMBERSHIP_REQUIRED|POLICY_AUTHORITY_REQUIRED)/);
         if (guard) {
-          // A single write raises it too: a per-row share's guard (query-sql.ts grantRow) or a parent()
-          // move only a grant() would allow.
+
+
           const refused = new Error(label !== 'sw.db.tx' && guard[1] === 'POLICY_AUTHORITY_REQUIRED'
             ? label + ': the access policy of this table does not permit this change by the signed-in user. Nothing was written.'
             : label !== 'sw.db.tx'
@@ -1552,29 +1552,29 @@ var DB_TYPED_ERRORS_JS = `      // The REST bridge's refusal as the caller sees 
         if (m) {
           const ident = m[1] || 'unknown';
           console.warn('[SW_SCHEMA_DRIFT] ' + label + ' \u2014 ' + ident + ' missing \u2014 ' + snippet);
-          // Productize the raw cause before it reaches the developer \u2014 the
-          // native binding / provider passthrough prefixes "D1_ERROR:" /
-          // "SQLITE_*" onto the "no such column/table" text. The
-          // DB_QUERY_ERROR branch below already strips those; do the same
-          // here so the SCHEMA_DRIFT message stays product-language only.
+
+
+
+
+
           const detail = __sw_productizeDbMessage(msg) || 'a referenced column or table does not exist';
           const better = new Error('Schema drift: ' + detail + '. Your code references "' + ident + '" but the database schema does not. Add the missing table/column with db_migrate (a restore point is taken automatically), then declare its access intent with db_scope_set.');
           better.code = 'SCHEMA_DRIFT';
           better.original = err;
           return better;
         }
-        // The engine's own wording of the same refusal (binding, or a platform
-        // CONSTRAINT_VIOLATION relayed by the REST fallback).
+
+
         if (!__sw_outcomeUnproven(err && err.code)
           && /\\b(?:UNIQUE|PRIMARY KEY) constraint failed\\b|\\bSQLITE_CONSTRAINT_(?:UNIQUE|PRIMARYKEY)\\b/i.test(msg)) {
           console.error('[SW_DB_CONFLICT] ' + label + ' \u2014 ' + msg + ' \u2014 ' + snippet);
           return __sw_dataConflict(err);
         }
-        // Any OTHER database error: the native binding / provider passthrough
-        // surfaces raw strings like "D1_ERROR: ... : SQLITE_CONSTRAINT" that
-        // leak the engine and read as noise. Rewrite to product language, but
-        // FAIL LOUD: log the real cause server-side (Logs tab) and keep
-        // .original \u2014 never swallow it.
+
+
+
+
+
         if (/D1_ERROR|SQLITE/i.test(msg)) {
           console.error('[SW_DB_ERROR] ' + label + ' \u2014 ' + msg + ' \u2014 ' + snippet);
           const detail = __sw_productizeDbMessage(msg);
@@ -1589,53 +1589,53 @@ var DB_TYPED_ERRORS_JS = `      // The REST bridge's refusal as the caller sees 
         }
         return err;
       }
-      // \u2500\u2500 A committed write, then a failed read \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
-      // Within one request, a write the database CONFIRMED is a fact; a later
-      // read that fails must not come back as a generic failure that reads as
-      // "nothing happened" \u2014 the caller would replay the write. The ledger is
-      // per request: this closure (and every function object in it) is built
-      // per request, like __sw_dbSessionState. It records only confirmed
-      // writes: an unknown outcome (DB_BATCH_OUTCOME_UNKNOWN, a lost reply) is
-      // never counted, and nothing is replayed or fabricated.
+
+
+
+
+
+
+
+
       function __sw_writeLedger() {
         if (!__sw_writeLedger.s) __sw_writeLedger.s = { confirmedWrites: 0 };
         return __sw_writeLedger.s;
       }
       function __sw_sqlWrites(sql) {
         const text = __sw_stripStringsAndComments(String(sql));
-        // WITH writes are deliberately unclassified; exact CTE classification
-        // is outside this ledger's conservative first-statement scope.
+
+
         return /^\\s*(INSERT|UPDATE|DELETE|REPLACE)\\b/i.test(text);
       }
-      // A read is a statement that provably cannot write: SELECT, or WITH with
-      // no write verb anywhere. Anything else (DDL, PRAGMA, unknown) is not.
+
+
       function __sw_sqlIsRead(sql) {
         const text = String(sql);
         return /^\\s*SELECT\\b/i.test(text) || (/^\\s*WITH\\b/i.test(text) && !/\\b(INSERT|UPDATE|DELETE|REPLACE)\\b/i.test(text));
       }
-      // Called only after the database answered successfully for every
-      // statement in sqls (one statement, or one atomic batch).
+
+
       function __sw_noteConfirmedWrites(sqls) {
         if (sqls.some(__sw_sqlWrites)) __sw_writeLedger().confirmedWrites++;
       }
-      // Failures that say nothing about the query itself (overload, transport,
-      // the generic wrapper, an unready connection) become
-      // DB_COMMITTED_READ_FAILED. A typed, query-specific error (SCHEMA_DRIFT,
-      // size limits, a retired table, a managed-mode refusal) keeps its own
-      // code and remedy, but still carries the fact of the earlier saved write.
-      // (A function, not a binding: this fragment sits after the closure's return.)
+
+
+
+
+
+
       function __sw_genericReadFailure(code) {
         return code === null || code === 'DB_QUERY_ERROR' || code === 'DB_QUERY_FAILED' ||
           code === 'DB_BATCH_FAILED' || code === 'DB_CONNECTION_NOT_READY' || code === 'DB_UNAVAILABLE';
       }
-      // prior_write_committed describes a write the database confirmed EARLIER
-      // in this request, not the read that failed. Only an all-read failure
-      // after a confirmed write is marked; a failed or unknown write never is.
+
+
+
       function __sw_committedReadFailure(sqls, err) {
         return __sw_committedKnownReadFailure(sqls.length > 0 && sqls.every(__sw_sqlIsRead), err);
       }
-      // The structured transport already knows the operation kind; it never
-      // constructs SQL merely to record an earlier confirmed write.
+
+
       function __sw_committedKnownReadFailure(isRead, err) {
         if (__sw_writeLedger().confirmedWrites === 0 || !isRead) return err;
         if (!__sw_genericReadFailure(err && typeof err.code === 'string' ? err.code : null)) {
@@ -1765,7 +1765,7 @@ function __sw_consoleValue(value, depth, seen) {
   finally { seen.delete(value); }
 }
 function __sw_consoleRowCost(scope, entry) {
-  // Reserve a full row's metadata, including escaped stored JSON, before admission.
+
   return __sw_consoleBytes({kind:'app_log', id:'x'.repeat(36), user_id:'x'.repeat(64),
     project_id:scope.projectId, level:entry.level, message:entry.message,
     data:__sw_consoleStringify(entry.data), source:'runtime_console', created_at:999999999999999,
@@ -1806,7 +1806,7 @@ for (const level of ['log','info','warn','error','debug']) {
     return result;
   };
 }
-// Framework helpers use this lexical facade; customer modules retain global console.
+
 const console = Object.freeze(Object.fromEntries(['log','info','warn','error','debug'].map(function (level) {
   return [level, function () {
     const scope = __sw_consoleStore.getStore();
@@ -1838,7 +1838,7 @@ function __sw_createConsoleScope(env, request) {
         try {
         if (scope.entries.length && scope.sink) {
           const entries = scope.entries; scope.entries = [];
-          // This observer and the sink run after capture has closed, without altering the handler outcome.
+
           const flush = Promise.resolve().then(function () {
             return __sw_consoleStore.exit(function () { return scope.sink(entries); });
           });
@@ -1856,14 +1856,14 @@ var RUNTIME_LOG_LIFECYCLE_JS = String.raw `
 function drainPendingBackground(platformCtx, ctx) {
   const pending = (platformCtx && platformCtx.__sw_pendingBackground) || [];
   for (const promise of pending) ctx.waitUntil(Promise.resolve(promise));
-  // A success response's trace post waits (bounded) for this same work, so its
-  // platform calls reach the trace. Kept on the trace, a
-  // draft-safe object, so no new context name is read.
+
+
+
   const trace = platformCtx && platformCtx.__sw_trace;
   if (trace && typeof trace === 'object') trace.background = pending.slice();
   pending.length = 0;
-  // Every pending promise is on waitUntil now, so a sink that waited for the
-  // response can start without the request ending under it.
+
+
   const release = platformCtx && platformCtx.__sw_releaseAfterResponse;
   if (typeof release === 'function') release();
 }
@@ -1876,10 +1876,10 @@ const __sw_hotPull = { snapshot: null, inflight: null };
 function __sw_hotConfigFresh(readAt, at) {
   return Number.isSafeInteger(readAt) && at - readAt >= 0 && at - readAt < 5000;
 }
-// One GET over the project-pinned binding. Returns { readAt, values } for a valid, fresh reply;
-// 'stale' for a reply that is VALID but whose read_at is already outside the freshness window at
-// receipt (the platform served a near-expiry cache hit and the hop crossed the boundary); null for
-// anything else (invalid, non-200, non-JSON, oversize, thrown, no binding, no attestation).
+
+
+
+
 async function __sw_hotConfigGet(env) {
   if (typeof __sw_nativeRuntimeFetch !== 'function' || !__sw_nativeRuntimeFetch) return null;
   const attestation = env.SW_EXECUTION_ATTESTATION;
@@ -1901,10 +1901,10 @@ async function __sw_hotConfigGet(env) {
   if (!__sw_hotConfigFresh(body.read_at, Date.now())) return 'stale';
   return { readAt: body.read_at, values: values };
 }
-// A valid-but-stale reply gets exactly ONE more GET: by then the platform's own cache for that
-// snapshot has aged past the same 5 s bound, so the second answer comes from a fresh read (a new
-// read_at) or fails closed again. The freshness rule itself is never relaxed, no age is reset, and
-// the stale reply is never used; two stale answers in a row mean this request fails closed.
+
+
+
+
 async function __sw_hotConfigPullOnce(env) {
   const first = await __sw_hotConfigGet(env);
   if (first !== 'stale') return first;
@@ -1968,48 +1968,48 @@ var APP_MCP_CONTEXT_JS = `
   }
 `;
 var CONTEXT_HEAD_JS = `// \u2500\u2500 Primordial freeze (, opinionated-not-greenfield) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
-// The structured-query guard, the cookie jars, and the identity path all rely
-// on core JavaScript built-ins behaving as specified. Customer/npm code in the
-// same bundle could monkey-patch those built-ins to sabotage the platform's own
-// guard. Rather than chase every intrinsic the guard touches (a leaky allowlist
-// every review round re-broke), we FREEZE the core intrinsic prototypes and
-// namespace objects HERE \u2014 at the very top of the platform bundle, before any
-// (lazy) customer module evaluates. After this, a reassignment like
-// JSON.parse = ... or Array.prototype.push = ... is a no-op in sloppy mode and
-// throws in strict; either way the platform guard is untouched. Freezing the
-// prototypes also blocks Object.prototype pollution. Monkey-patching core
-// built-ins is a rare practice (a handful of old polyfill packages);
-// modern code never needs it and it is explicitly UNSUPPORTED. We freeze only
-// what the guard depends on (Reflect/Date are deliberately NOT frozen \u2014
-// reflect-metadata / decorator libraries add to Reflect, and the guard no longer
-// routes through Reflect). NB: this file is emitted as a template literal \u2014 no
-// backticks, no unescaped dollar-brace.
-//
-// SHADOW-SAFE SEAL. Object.freeze() turns every inherited method
-// into a NON-WRITABLE data property, and strict-mode [[Set]] refuses to create
-// an own property when it finds a non-writable data property of that name
-// ANYWHERE up the prototype chain. So a plain "obj.toString = fn" \u2014 the object
-// is the customer's own, the write is to the customer's own object \u2014 threw
-// instead of shadowing, and any package that shadows an inherited name while it
-// initializes died at first module load (zod sets toString on a plain object,
-// lodash sets bind on its own function; both 500'd after a green deploy).
-// Immutability of the prototype does NOT require that: what the guard needs is
-// that a [[Set]] whose RECEIVER is the prototype itself be refused, and that the
-// prototype gain no new properties. So the two prototypes packages actually
-// shadow (Object.prototype, Function.prototype) are sealed with accessors
-// instead: the getter returns the original value, so identity is unchanged
-// (Object.prototype.hasOwnProperty === the real one) and every attack below
-// still fails; the setter refuses when the receiver IS the prototype and
-// otherwise does what ordinary [[Set]] would have done \u2014 define an own property
-// on the receiver. The accessors are non-configurable and the prototype is
-// non-extensible, so Object.isFrozen() still reports true and pollution stays
-// blocked. Array/String/RegExp/Map prototypes stay HARD frozen. That is a
-// SCOPE decision, not a claim about what packages do: the reported failures
-// needed exactly these two prototypes, and accessorizing Array.prototype has a
-// large measured cost on array iteration platform-wide \u2014 run
-// worker/scripts/test-npm-prototype-shadowing.mjs --bench for the current
-// numbers. A package that shadows a method on an array/regexp/map INSTANCE
-// still fails at load; a fixture pins that so widening the scope is deliberate.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 function __sw_shadowAccessor(proto, key, value, enumerable) {
   return {
     get: function () { return value; },
@@ -2042,11 +2042,11 @@ function __sw_shadowAccessor(proto, key, value, enumerable) {
       if (!d) continue;
       try {
         if (!('value' in d)) {
-          // Already an accessor (__proto__, caller, arguments) \u2014 pin it.
+
           if (d.configurable) Object.defineProperty(proto, key, { configurable: false });
         } else if (!d.writable || !d.configurable) {
-          // Non-writable inherited data properties already blocked shadowing in
-          // stock JavaScript; the seal must not become MORE permissive.
+
+
           Object.defineProperty(proto, key, { writable: false, configurable: false });
         } else {
           Object.defineProperty(proto, key, __sw_shadowAccessor(proto, key, d.value, d.enumerable));
@@ -2056,40 +2056,40 @@ function __sw_shadowAccessor(proto, key, value, enumerable) {
     try { Object.preventExtensions(proto); } catch (_) { /* already non-extensible */ }
   }
 })();
-// sw.auth.me identity memoization bounds. The cache itself is REQUEST-LOCAL
-// (declared inside buildPlatformContext) \u2014 identity is an authority input,
-// and a process-wide cache let a credential revoked server-side keep scoped
-// authority inside a warm isolate for up to the TTL (sol MED-2, 2026-08-02).
-// No identity crosses requests; every new request re-verifies against the
-// platform. TTL still applies within a long-running request: the smaller of
-// 60s or (jwt.exp - now - 5s), so a near-expiry token is never returned past
-// its real expiry even mid-request.
+
+
+
+
+
+
+
+
 const __sw_AUTH_ME_TTL_MS = 60_000;
 const __sw_AUTH_ME_MAX = 256;
-// sw.rateLimit's per-instance record of the counter's last answer for each
-// key in its current window. A throttle, not authority; keyed by project too.
-// UNCONFIRMED_MAX bounds the requests one instance admits before the counter
-// has recorded them.
-// Query-observation deltas shared by every request this instance serves, one
-// buffer per project. The first query in a window schedules ONE
-// flush, QUERY_OBS_WINDOW_MS after its response, in that request's waitUntil;
-// later requests only add to the counters. Before, every DB-touching request
-// sent its own POST /v1/db/query-observations: a platform crossing, a key
-// read and an upsert on the same hot rows per request. Counters are summed,
-// never sampled: shape metadata only, as before.
+
+
+
+
+
+
+
+
+
+
+
 const __sw_queryObsShared = new Map();
 const __sw_QUERY_OBS_WINDOW_MS = 5_000;
 const __sw_rateLimitWindows = new Map();
 const __sw_RATE_LIMIT_WINDOWS_MAX = 1024;
 const __sw_RATE_LIMIT_UNCONFIRMED_MAX = 4;
 
-// Thin intrinsic aliases used by the scope/intent/jar/identity decision path.
-// The primordial freeze above makes the core built-ins immutable, so these
-// call the intrinsics DIRECTLY \u2014 no per-method capture / Reflect.apply
-// scaffolding chasing individual mutations. They stay as named helpers for
-// readability. __sw_objCreateNull() keeps the null-prototype jars (H1
-// defense-in-depth): even with Object.prototype frozen against pollution, a
-// jar that inherits nothing is the clearest statement of intent.
+
+
+
+
+
+
+
 function __sw_lower(s) { return String(s).toLowerCase(); }
 function __sw_reMatch(re, s) { return re.test(s); }
 function __sw_own(obj, key) { return Object.prototype.hasOwnProperty.call(obj, key); }
@@ -2099,23 +2099,23 @@ function __sw_assign(...args) { return Object.assign(...args); }
 function __sw_keys(o) { return Object.keys(o); }
 function __sw_arrayIsArray(x) { return Array.isArray(x); }
 
-// Array traversal for the decision path. The aliases above
-// are safe because their intrinsic is unreachable: String.prototype and JSON
-// are frozen, Object.prototype.hasOwnProperty is a sealed accessor over the
-// original. Array is different \u2014 the hazard was never that Array.prototype.map
-// could be REPLACED (it cannot; Array.prototype is hard frozen) but that the
-// decision path wrote caller.map(fn), and a caller array carrying its OWN map
-// is called instead. Object.defineProperty(arr, 'map', ...) always worked; the
-// freeze only ever blocked the "=" form. At db-render-ir the callback IS
-// __sw_structQuote, the one identifier chokepoint, so an own map meant
-// unquoted caller strings in the SELECT list.
-// These read only length and indices, look up NO method on the caller's array,
-// and return a platform-owned array. They deliberately do not Reflect.apply a
-// captured Array.prototype.map/slice: both allocate through ArraySpeciesCreate,
-// which reads constructor/@@species off the CALLER's array, so even the
-// captured method would hand the result to a caller-chosen constructor.
-// Use these wherever the array may be caller-supplied; a platform-built array
-// (one this file or the compiler allocated) may use .map directly.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 function __sw_arrayMap(arr, fn) {
   const n = arr.length >>> 0;
   const out = [];
@@ -2134,16 +2134,16 @@ function __sw_cacheDelete(m, k) { return m.delete(k); }
 function __sw_cacheKeys(m) { return m.keys(); }
 function __sw_cacheSize(m) { return m.size; }
 
-// SIGNED SIGN-IN AUTHORITY RECEIPTS (founder P0 2026-10-19; worker utils/auth-receipt.ts).
-// /v1/auth/me may return a receipt the API signed for THIS project: it binds
-// the token hash, the exact response body hash, the session, and the window
-// [iat = when the ORIGINAL authoritative read started, exp = min(iat + 60 s,
-// token exp)]. Verified once with the project's PUBLIC key (bundle binding
-// PROJECT_AUTH_RECEIPT_KEY), it lets later requests in this isolate skip the
-// /me crossing until exp. Nothing extends exp; a missing/invalid/expired
-// receipt simply means "ask /me". The store and the crypto it relies on are
-// captured here, before any customer module loads, and are unreachable from
-// customer code.
+
+
+
+
+
+
+
+
+
+
 const __sw_receiptSubtle = (globalThis.crypto && globalThis.crypto.subtle) ? {
   importKey: globalThis.crypto.subtle.importKey.bind(globalThis.crypto.subtle),
   verify: globalThis.crypto.subtle.verify.bind(globalThis.crypto.subtle),
@@ -2223,20 +2223,20 @@ function __sw_rememberAuthReceipt(th, entry) {
   __sw_cacheSet(__sw_authReceipts, th, entry);
 }
 
-// Per-isolate marker for database latency messaging. buildPlatformContext runs
-// once per request, so this must stay at module scope: only the first database
-// query after a runtime cold start should receive the first-touch label.
+
+
+
 let __sw_hasCompletedDbQuery = false;
 
-// \u2500\u2500 W3C trace context, runtime side \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
-// A deployed function is the ROOT of the trace for the request it serves.
-// Every platform call it makes carries \`traceparent\`, so the platform's own
-// span for that call lands as a CHILD of the operation that made it \u2014 which is
-// what turns N unrelated HTTP requests into one ordered waterfall.
-//
-// Every function here is best-effort. Tracing must never throw into a
-// customer's request: each entry point is wrapped, and on any failure the
-// request proceeds untraced rather than failing.
+
+
+
+
+
+
+
+
+
 const __sw_TRACEPARENT_RE = /^([0-9a-f]{2})-([0-9a-f]{32})-([0-9a-f]{16})-([0-9a-f]{2})$/;
 const __sw_MAX_CLIENT_SPANS = 200;
 
@@ -2262,21 +2262,21 @@ function __sw_parseTraceparent(raw) {
   return { traceId: m[2], parentSpanId: m[3], sampled: (parseInt(m[4], 16) & 1) === 1 };
 }
 
-// Collapse a platform API path to the sw.* operation a developer wrote.
-// '/v1/db/query' -> 'sw.db.query'; '/v1/fs/<project>/stat/<path>' -> 'sw.fs.stat'.
-// Ids are dropped so the waterfall groups by operation instead of exploding
-// into one distinct name per row.
-//
-// NAMES CARRY NO CUSTOMER CONTENT. A stored span name or
-// Server-Timing metric must come from a fixed vocabulary: /v1/fs/ paths embed
-// the customer's own file path, so they are named from the reserved operation
-// segment or the HTTP method, never from a path segment; anything that is not
-// a platform /v1/ path is 'platform.call', never the path itself.
-// sw.rooms -> its platform-private door half (the browser ticket door). Module
-// scope: customer modules cannot name it, and nothing is stored on sw.
+
+
+
+
+
+
+
+
+
+
+
+
 const __sw_roomsDoor = new WeakMap();
-// sw.db namespace -> its live-list declare (sw.rooms.live delegates to it): the
-// composed-read brands live in the db closure. Module scope, never on sw.
+
+
 const __sw_liveDoor = new WeakMap();
 const __sw_FS_OPS = { move: 1, copy: 1, restore: 1, stat: 1, versions: 1, diff: 1, glob: 1, search: 1, replace: 1, sign: 1, 'public-url': 1, visibility: 1 };
 const __sw_FS_METHOD_OPS = { GET: 'sw.fs.get', HEAD: 'sw.fs.get', PUT: 'sw.fs.write', DELETE: 'sw.fs.delete', POST: 'sw.fs.post' };
@@ -2287,8 +2287,8 @@ function __sw_traceOpName(path, method) {
     if (clean === '/v1/fs' || clean.indexOf('/v1/fs/') === 0) {
       const fsSegs = clean.slice(7).split('/');
       if (fsSegs[0] === 'upload-url') return 'sw.fs.upload_url';
-      // fsSegs[0] is the project; the next segment is either a reserved
-      // operation or the start of the customer's file path.
+
+
       if (Object.prototype.hasOwnProperty.call(__sw_FS_OPS, fsSegs[1] || '')) return 'sw.fs.' + fsSegs[1].replace(/-/g, '_');
       return __sw_FS_METHOD_OPS[String(method || 'GET').toUpperCase()] || 'sw.fs.call';
     }
@@ -2309,29 +2309,29 @@ function __sw_initTrace(request) {
   try {
     const inbound = __sw_parseTraceparent(request.headers.get('traceparent'));
     return {
-      // The trace id is SERVER-minted for every request: it is the key that logs
-      // --trace, errors and support packets look up, so a caller-supplied traceparent must never
-      // merge its request into another one's. An inbound trace id is kept only as callerTraceId,
-      // recorded on the root span as a link, and its sampling flag is not inherited.
+
+
+
+
       traceId: __sw_randHex(16),
       spanId: __sw_randHex(8),
       parentSpanId: null,
       callerTraceId: inbound ? inbound.traceId : null,
-      // "No opinion": the platform applies TRACE_SAMPLE_RATE deterministically on the trace id, on
-      // its own hops and when these spans are posted to /v1/traces.
+
+
       sampled: true,
       tracestate: __sw_traceHeader(request, 'tracestate', 512),
       baggage: __sw_traceHeader(request, 'baggage', 8192),
       spans: [],
       dropped: 0,
-      // Platform calls started but not yet settled. A call cut
-      // off by its caller's deadline settles only after the response, so its
-      // span used to miss the trace. An error response reports these; a
-      // success response's post waits (bounded) for them.
+
+
+
+
       open: [],
-      // After-response bookkeeping (function-trace-source.ts reportTrace):
-      // when the response was built, the request's drained background work,
-      // a settle notifier for the bounded wait, and whether the post has gone.
+
+
+
       respondedAt: 0,
       background: null,
       onSettle: null,
@@ -2353,7 +2353,7 @@ function __sw_traceHeader(request, name, maxLength) {
 function __sw_traceRecord(trace, span) {
   if (!trace || trace.posted) return;
   if (trace.spans.length >= __sw_MAX_CLIENT_SPANS) { trace.dropped += 1; return; }
-  // Settled after the response was built: work the caller no longer waits for.
+
   if (trace.respondedAt) span.attributes = Object.assign({}, span.attributes, { 'sw.after_response': true });
   trace.spans.push(span);
 }
@@ -2368,8 +2368,8 @@ function __sw_traceSettle(trace, entry) {
   if (!trace || !Array.isArray(trace.open)) return;
   const i = trace.open.indexOf(entry);
   if (i >= 0) trace.open.splice(i, 1);
-  // The caller records the settled span right after this, in the same turn;
-  // the waiter re-checks one microtask later so that span is already in.
+
+
   if (typeof trace.onSettle === 'function') trace.onSettle();
 }
 
@@ -2379,16 +2379,16 @@ function __sw_b64urlDecode(s) {
   return atob(s);
 }
 
-// Pre-flight: parse the JWT shape and check exp. Throws an AUTH_ERROR
-// for malformed / expired tokens so we never even attempt the network
-// call for obviously-bad input.
-// Pull a named cookie out of a Cookie header. Returns the raw value
-// (URL-decoded) or null. Used by sw.auth.fromRequest + anonSession so
-// every demo doesn't reinvent cookie parsing.
+
+
+
+
+
+
 function __sw_readCookie(header, name) {
   if (!header || typeof header !== 'string') return null;
-  // Split first so template-literal escaping cannot change separator parsing
-  // in the emitted runtime. Exact key comparison also rejects prefix names.
+
+
   for (const part of header.split(';')) {
     const eq = part.indexOf('=');
     if (eq < 0 || part.slice(0, eq).trim() !== name) continue;
@@ -2408,8 +2408,8 @@ function __sw_cookieHeaderHasName(header, name) {
   return false;
 }
 
-// Pull a Bearer token out of an Authorization header. Returns the raw
-// JWT or null. Used by fromRequest as the fall-back to cookie auth.
+
+
 function __sw_readBearer(header) {
   if (!header || typeof header !== 'string') return null;
   const m = header.match(/^bearer\\s+(.+)$/i);
@@ -2429,10 +2429,10 @@ function __sw_preflightJwt(token) {
   return pre;
 }
 
-// Same shape parser as __sw_preflightJwt but does NOT throw on expiry \u2014
-// it returns { expired: true } instead so the header-based auto-refresh
-// flow can decide whether to send the request to the platform with
-// X-Refresh-Token attached.
+
+
+
+
 function __sw_preflightJwtAllowExpired(token) {
   if (typeof token !== 'string' || !token) {
     const err = new Error('sw.auth.me: token is required');
@@ -2461,15 +2461,15 @@ function __sw_preflightJwtAllowExpired(token) {
   return { sig: parts[2], expSec, expired: expSec > 0 && expSec <= now };
 }
 
-// devFsEnabled is set BY THE CALLER \u2014 the run_code harness passes true at its
-// own entrypoint (a separate, developer-authenticated worker); the function
-// bundle (fetch handlers, and the cron/queue/job invocations delivered to them
-// over HTTP) never passes it. sol round 6: the project/developer file view
-// (sw.fs.dev) is CONSTRUCTED at the entrypoint that is structurally allowed to
-// have it, never derived afterward from anything the request carries. A request
-// cannot forge its way into being a run_code invocation, so there is no signal
-// to replay. Customer code only ever receives the built sw object; it never
-// reaches buildPlatformContext, so it cannot set this flag.
+
+
+
+
+
+
+
+
+
 function buildPlatformContext(env, request, runtimeFetch = fetch, outboundFetch = runtimeFetch, devFsEnabled = false, existingTrace = null, consoleScope = null, verifySignupAuthority = null) {
   const console = (consoleScope && consoleScope.nativeConsole) || globalThis.console;
   const __sw_runtimeFetch = runtimeFetch;
@@ -2490,9 +2490,9 @@ function buildPlatformContext(env, request, runtimeFetch = fetch, outboundFetch 
   const tenantDomain = env.TENANT_DOMAIN || platformDomain;
   const platformBase = env.PLATFORM_API_BASE || ('https://api.' + platformDomain);
   const apiKey = env.PROJECT_API_KEY;
-  // A durable sw.agent callback re-enters the customer's own route. Preserve
-  // a private clone before user code consumes req.body so the agent runtime
-  // can verify and read the signed checkpoint independently.
+
+
+
   const __sw_internalInvocationRequest = request.headers.get('X-Somewhere-Signature')
       && request.headers.get('X-Somewhere-Invocation-Timestamp')
       && (request.headers.get('X-Somewhere-Job-Id') || request.headers.get('X-Somewhere-Message-Id'))
@@ -2503,12 +2503,12 @@ function buildPlatformContext(env, request, runtimeFetch = fetch, outboundFetch 
     ? __sw_internalInvocationRequest.clone()
     : null;
 
-  // Root trace for this invocation. Adopted from the caller when one was
-  // propagated in (a browser or an upstream service that speaks W3C trace
-  // context), otherwise minted here.
+
+
+
   const __sw_trace = existingTrace || __sw_initTrace(request);
-  // Private request-local performance detail. The web edge strips caller
-  // copies of this marker and sets it only after platform-admin auth.
+
+
   const __sw_serverTiming = request.headers.get('X-Sw-Server-Timing') === '1'
     ? { entries: [], dbCalls: 0, dbCrossings: 0, rateLimitCalls: 0, startupMs: null, placementNoted: false }
     : null;
@@ -2523,18 +2523,18 @@ function buildPlatformContext(env, request, runtimeFetch = fetch, outboundFetch 
     if (!/^[a-z0-9_]+$/.test(name) || !/^[a-z0-9_]+$/.test(description)) return;
     __sw_serverTiming.entries.push({ name: name, description: description });
   }
-  // WHERE A STATEMENT ACTUALLY WENT, said once per request.
-  // The per-statement number is the same 30-40 ms whether one statement runs
-  // or thirty, so the question is never "what did we add" but "how far away is
-  // the database and which transport reached it". sw_db_via names the transport (the binding,
-  // or the platform data plane), sw_db_edge the colo the function ran in, and
-  // sw_db_home where the database answered from. Same-value edge and home mean
-  // the residue is ours; different values mean it is distance, and no amount
-  // of hop removal touches it. Trusted marker only \u2014 never a customer surface,
-  // and the platform's own names never appear (rule 8).
-  // The location that received the caller's request. A dispatched worker has no
-  // request.cf, so the web edge forwards it as X-Sw-Edge-Colo (caller copies
-  // stripped there); request.cf wins where it exists.
+
+
+
+
+
+
+
+
+
+
+
+
   function __sw_edgeColo() {
     const cf = request && request.cf && typeof request.cf.colo === 'string' ? request.cf.colo : '';
     const forwarded = request && request.headers ? request.headers.get('X-Sw-Edge-Colo') || '' : '';
@@ -2554,9 +2554,9 @@ function buildPlatformContext(env, request, runtimeFetch = fetch, outboundFetch 
     if (colo) __sw_timingNote('sw_db_edge', clean(colo));
     const home = timing.databaseColo || timing.databaseRegion;
     if (home) __sw_timingNote('sw_db_home', clean(home));
-    // sw_db_home is WHERE. Which COPY answered is per-statement and lives on
-    // sw_db_<n>_copy in __sw_recordDbTiming \u2014 the two are deliberately not
-    // merged, because a mixed request has one home and two answers.
+
+
+
   }
   function __sw_recordDbTiming(timing, totalMs) {
     if (!__sw_serverTiming) return;
@@ -2567,23 +2567,23 @@ function buildPlatformContext(env, request, runtimeFetch = fetch, outboundFetch 
     __sw_timingPush(metric + '_total', totalMs);
     __sw_timingPush(metric + '_roundtrip', Math.max(0, totalMs - executionMs));
     __sw_timingPush(metric + '_execution', executionMs);
-    // WHICH COPY answered THIS statement, from the provider rather than from
-    // the latency. sw_db_home above already says WHERE the
-    // database answered from, once per request; this says primary-or-replica
-    // per call, because one request can legitimately be mixed \u2014 an authority
-    // check pinned to the primary followed by a declared read that a replica
-    // may serve \u2014 and a single per-request note would hide exactly that.
-    // Emitted only when the provider said; local development omits the field.
+
+
+
+
+
+
+
     if (typeof timing.servedByPrimary === 'boolean') {
       __sw_timingNote(metric + '_copy', timing.servedByPrimary ? 'primary' : 'replica');
     }
   }
-  // ONE SPAN PER ACTUAL DATABASE CROSSING, as distinct from one per sw.db call.
-  // The two used to be the same number; automatic read coalescing
-  // (db-coalesce.ts) makes them differ, and the difference IS the win, so it
-  // has to be visible: sw_dbx_<n>_statements says how many of the request's
-  // sw_db_<n> calls that one crossing carried. Only emitted for a crossing that
-  // carried more than one statement \u2014 a lone read is already its own sw_db_<n>.
+
+
+
+
+
+
   function __sw_recordDbCrossing(totalMs, statementCount, timing) {
     if (!__sw_serverTiming) return;
     __sw_noteDbPlacement(timing);
@@ -2595,13 +2595,13 @@ function buildPlatformContext(env, request, runtimeFetch = fetch, outboundFetch 
     __sw_timingPush(metric + '_statements', statementCount);
   }
 
-  // ONE NAMED SPAN PER PLATFORM CALL. The rate-limit check used
-  // to be the only instrumented one, so every other platform round trip a
-  // request makes \u2014 identity verification, live registration, usage writes \u2014
-  // was invisible and read as unexplained handler time. The metric name comes
-  // from the traced operation name, which already drops uuid/hex/numeric path
-  // segments, and anything that is not plain [a-z0-9_] after that collapses to
-  // the generic name rather than riding into a response header.
+
+
+
+
+
+
+
   let __sw_platformCalls = 0;
   function __sw_recordPlatformCall(path, startedAt, response, prepMs, fetchMs) {
     if (!__sw_serverTiming) return;
@@ -2619,17 +2619,17 @@ function buildPlatformContext(env, request, runtimeFetch = fetch, outboundFetch 
       metric = 'sw_call_' + op + '_' + __sw_platformCalls;
     }
     __sw_timingPush(metric, totalMs);
-    // Caller-local boundaries only: preparation precedes the binding/fetch await.
-    // The fetch span includes provider scheduling and response crossing, not body drain.
+
+
     if (Number.isFinite(prepMs)) __sw_timingPush(metric + '_prep', prepMs);
     if (Number.isFinite(fetchMs)) __sw_timingPush(metric + '_fetch', fetchMs);
-    // SPLIT THE HOP FROM THE WORK. The span above is the whole
-    // call as this function experienced it. The platform reports back what it
-    // spent on the same call, and how much of that was its own database, so
-    // <metric> - <metric>_upstream is the crossing between the two workers and
-    // <metric>_upstream - <metric>_upstream_db is platform work in front of it.
-    // A platform that does not report (older release, error path) simply emits
-    // no sub-span \u2014 never a fabricated one.
+
+
+
+
+
+
+
     __sw_recordUpstreamTiming(metric, response);
   }
   function __sw_upstreamMetric(header, name) {
@@ -2653,21 +2653,21 @@ function buildPlatformContext(env, request, runtimeFetch = fetch, outboundFetch 
     const upstreamDbMs = __sw_upstreamMetric(header, 'sw_up_db');
     if (upstreamMs !== null) __sw_timingPush(metric + '_upstream', upstreamMs);
     if (upstreamDbMs !== null) __sw_timingPush(metric + '_upstream_db', upstreamDbMs);
-    // The project database call split (fixed names): time inside the provider call and
-    // the engine time the provider reported. Absent unless every call reported both.
+
+
     const upstreamDbCallMs = __sw_upstreamMetric(header, 'sw_up_db_call');
     const upstreamDbSqlMs = __sw_upstreamMetric(header, 'sw_up_db_sql');
     if (upstreamDbCallMs !== null && upstreamDbSqlMs !== null) {
       __sw_timingPush(metric + '_upstream_db_call', upstreamDbCallMs);
       __sw_timingPush(metric + '_upstream_db_sql', upstreamDbSqlMs);
     }
-    // Named control-plane lookup stages. sw_up and sw_up_db are
-    // read by exact name above, so anything the platform newly reports is
-    // silently dropped here unless it is carried deliberately \u2014 which is why
-    // these are forwarded rather than assumed to arrive. Same gate as the two
-    // above and nothing of its own: the platform emits these only to a runtime
-    // credential that asked, and this function runs only on a response that
-    // actually carried the header.
+
+
+
+
+
+
+
     const LOOKUP = 'sw_up_lookup_';
     const parts = String(header).split(',');
     for (let i = 0; i < parts.length; i++) {
@@ -2676,9 +2676,9 @@ function buildPlatformContext(env, request, runtimeFetch = fetch, outboundFetch 
       const semi = segment.indexOf(';');
       if (semi === -1) continue;
       const stage = segment.slice(LOOKUP.length, semi);
-      // Stage names are ours, but this parses a header: anything that is not
-      // the shape we emit is skipped rather than echoed into our own metric
-      // names.
+
+
+
       if (!/^[a-z0-9_]+$/.test(stage)) continue;
       const value = __sw_upstreamMetric(header, LOOKUP + stage);
       if (value !== null) __sw_timingPush(metric + '_lookup_' + stage, value);
@@ -2705,8 +2705,8 @@ function buildPlatformContext(env, request, runtimeFetch = fetch, outboundFetch 
     }
     finally { if (mutation) { state.pending--; state.envelope = null; } }
   }
-  // Cancellation stops waiting; a request already sent may still complete.
-  // Nothing is retried, and cancelled preparation never starts a request.
+
+
   function __sw_platformBound(signal, work, state) {
     if (!signal) return work();
     function cancelled() {
@@ -2745,35 +2745,35 @@ function buildPlatformContext(env, request, runtimeFetch = fetch, outboundFetch 
     if (path === '/v1/db/query' || path === '/v1/db/batch' || path === '/v1/db/raw-read') {
       __sw_enforceAmbientCookieCsrf();
     }
-    // One child span per platform call, measured caller-side so it includes
-    // the network hop the platform's own server span cannot see.
+
+
     const __sw_spanId = __sw_trace ? __sw_randHex(8) : null;
     const __sw_spanStart = Date.now();
-    // Inside a job or cron delivery every platform call names its job, so the
-    // platform refuses it once that job has ended (middleware/job-invocation-fence.ts).
+
+
     const __sw_jobMarker = opts.__swFenceExempt ? null : await __sw_platformBound(opts.signal, function () { return __sw_jobInvocationMarker(); }, opts.__sw_deadlineState);
     const headers = {
       ...(opts.headers || {}),
       ...(__sw_jobMarker || {}),
       'Authorization': 'Bearer ' + apiKey,
-      // Ask the platform for the upstream half of this hop. The marker is set
-      // only when this request already carries the edge's trusted one, so it
-      // cannot be reached by customer code or by a caller-supplied header.
+
+
+
       ...(__sw_serverTiming ? { 'X-Sw-Server-Timing': '1' } : {}),
       ...(__sw_trace ? {
         traceparent: '00-' + __sw_trace.traceId + '-' + __sw_spanId + '-' + (__sw_trace.sampled ? '01' : '00'),
         ...(__sw_trace.tracestate ? { tracestate: __sw_trace.tracestate } : {}),
         ...(__sw_trace.baggage ? { baggage: __sw_trace.baggage } : {}),
       } : {}),
-      //  \u2014 tell the platform which execution slot this bundle is
-      // running in (prod vs dev), so the REST-fallback data path (/v1/db/query,
-      // /v1/db/batch) and the direct \`dev --local\` client select the DEV data
-      // slot instead of silently defaulting to prod. The slot is baked into the
-      // bundle at deploy/run time as PROJECT_ENV (see function-bundle.ts /
-      // code-bundle.ts); 'dev' for legacy/local tools, 'draft' for an exact
-      // session candidate, and 'prod' for the promoted production bundle. The server only DIVERTS off prod when the
-      // project is enrolled in DEV_SLOT_ENFORCE_PROJECTS, so an unenrolled
-      // project sees this header but its binding is unchanged.
+
+
+
+
+
+
+
+
+
       'X-Sw-Env-Slot': projectEnv,
       ...(isDraftExecution ? {
         'X-Sw-Draft-Id': draftId,
@@ -2808,9 +2808,9 @@ function buildPlatformContext(env, request, runtimeFetch = fetch, outboundFetch 
     } catch (err) {
       if (__sw_serverTiming) __sw_fetchMs = Date.now() - __sw_fetchStart;
       __sw_traceSettle(__sw_trace, __sw_openEntry);
-      // A transport failure is exactly the operation an agent came to find,
-      // so it is recorded \u2014 then rethrown UNCHANGED. Tracing observes; it
-      // never swallows, retries, or reshapes the caller's error.
+
+
+
       if (__sw_trace) {
         __sw_traceRecord(__sw_trace, {
           span_id: __sw_spanId,
@@ -2849,13 +2849,13 @@ function buildPlatformContext(env, request, runtimeFetch = fetch, outboundFetch 
 
   function __sw_platformError(r, data) {
     const code = (data && (data.code || data.error)) || 'PLATFORM_ERROR';
-    // A 402 INSUFFICIENT_BALANCE or PAID_API_NOT_ACTIVATED is the same
-    // error an app's end user can trigger, and apps routinely echo
-    // err.message to end users. Never surface the owner-framed billing
-    // prose (or the owner dashboard URL) \u2014 keep the real code/status on
-    // the error object for the developer's own logging (sw.logs /
-    // console.error), but the message stays neutral (,
-    // ).
+
+
+
+
+
+
+
     const msg = (r.status === 402 && (code === 'INSUFFICIENT_BALANCE' || code === 'PAID_API_NOT_ACTIVATED' || code === 'PAID_AI_DISABLED'))
       ? 'This AI feature is temporarily unavailable; a later request can succeed.'
       : ((data && data.message) || ('Platform call failed: ' + r.status));
@@ -2876,10 +2876,10 @@ function buildPlatformContext(env, request, runtimeFetch = fetch, outboundFetch 
     return data.data;
   }
 
-  // fs paths accept both '/avatars/x.png' and 'avatars/x.png' \u2014 code ported
-  // from Supabase storage never uses the leading slash. A missing slash used
-  // to glue the path onto the projectId in the URL ('/v1/fs/<id>avatars/\u2026')
-  // \u2192 malformed route \u2192 opaque "fs.write failed: 403".
+
+
+
+
   function __sw_fsPath(path) {
     if (typeof path !== 'string' || path.length === 0) {
       throw new Error('sw.fs: path must be a non-empty string (got ' + (path === '' ? 'an empty string' : typeof path) + ')');
@@ -2887,69 +2887,69 @@ function buildPlatformContext(env, request, runtimeFetch = fetch, outboundFetch 
     return path.startsWith('/') ? path : '/' + path;
   }
 
-  // Header-based auto-refresh stash. When sw.auth.fromRequest or
-  // sw.auth.me sees a paired X-Refresh-Token on the inbound request
-  // and the platform mints a new pair (returned via X-New-Access-Token
-  // / X-New-Refresh-Token on the /v1/auth/me response), we park the
-  // new pair here. The function shim (generateIndexModule) reads this
-  // after the user handler returns. Header sessions receive these headers;
-  // cookie sessions receive only HttpOnly cookies.
+
+
+
+
+
+
+
   const __sw_pendingRefresh = { access: null, refresh: null, cookieMode: false };
 
-  // D1 Sessions read-your-writes (platform read-session.ts): the signed read-session envelope this
-  // REQUEST may continue from. Seeded from the caller's echo (the generated data client sends back
-  // the one it last received), replaced by managed responses only under the causal rules in
-  // db-managed.ts, and returned on this function's response. Per request, never per isolate:
-  // another isolate may hold a newer write for the same user. Opaque here; the platform verifies it,
-  // and it grants nothing.
+
+
+
+
+
+
   function __sw_readSessionShape(value) {
     return typeof value === 'string' && value.length <= 1024 && /^swrs1.[A-Za-z0-9_-]+.[A-Za-z0-9_-]+$/.test(value) ? value : null;
   }
   const __sw_readSession = {
     envelope: isDraftExecution || !request.headers || typeof request.headers.get !== 'function' ? null : __sw_readSessionShape(request.headers.get('X-Sw-Read-Session')),
     writesInFlight: 0, writesStarted: 0, overlapped: false,
-    // True once a managed response in THIS request issued the envelope; only then is it returned
-    // (a request that only read public data never echoes a caller's envelope into a cacheable reply).
+
+
     issued: false,
   };
-  // A platform call that may write and returns no envelope (intake, creator, links): the rest of
-  // this request keeps no envelope (sticky), so no later read can start at a bookmark taken before
-  // that write committed. Managed writes of any authority are tracked in db-managed.ts.
+
+
+
   function __sw_readSessionVoid() { __sw_readSession.envelope = null; __sw_readSession.overlapped = true; __sw_readSession.writesStarted++; }
 
-  // REQUEST-LOCAL identity memoization for sw.auth.me \u2014 keyed by the JWT
-  // signature segment. The map dies with the request, so a revoked credential
-  // can never resolve from a previous request's verification (sol MED-2).
+
+
+
   const __sw_authMeCache = new Map();
-  // REQUEST-LOCAL single-flight for sw.auth.me \u2014 keyed by the JWT signature.
-  // The TTL cache above is SKIPPED on the expired+refresh path, so without this
-  // a request that resolves the principal twice (sw.auth.requireUser AND the
-  // sw.db scoped-query resolver) fired TWO independent /v1/auth/me calls \u2014 i.e.
-  // TWO auto-refreshes of the SAME refresh token. Against single-use rotation
-  // the second read as reuse and revoked the whole session. This
-  // map holds the in-flight/settled me() PROMISE per signature so every lookup
-  // in one request \u2014 cached path or refresh path \u2014 shares ONE verification.
+
+
+
+
+
+
+
+
   const __sw_authMeInflight = new Map();
 
-  // Private best-effort control-plane work started after a customer operation
-  // has already succeeded. The generated request shim transfers every promise
-  // to executionCtx.waitUntil before returning the response, so accounting can
-  // finish without adding latency to (or changing) the committed DB result.
+
+
+
+
   const __sw_pendingBackground = [];
 
-  // METERING WAITS FOR THE RESPONSE. Work that only records
-  // what already happened has no reason to compete with the statements it is
-  // recording: a 32-statement read issued eighteen accounting calls WHILE the
-  // reads were in flight, each its own crossing off the same isolate, because
-  // the buffer flushed on a 20 ms timer. So a deferred sink waits on this gate
-  // instead of on a clock. The shim releases it after the response is built
-  // and after every pending promise is already on waitUntil, so the work still
-  // completes \u2014 it just completes behind the answer rather than beside it.
-  //
-  // The gate is released exactly once. A path that returns without draining
-  // would otherwise strand its sink, so the release is unconditional in the
-  // shim's finally-equivalent, and a sink that is never scheduled costs
-  // nothing.
+
+
+
+
+
+
+
+
+
+
+
+
+
   let __sw_releaseAfterResponse = null;
   const __sw_afterResponse = new Promise(function (resolve) { __sw_releaseAfterResponse = resolve; });
   if (consoleScope && consoleScope.nativeConsole && !isDraftExecution) {
@@ -2957,10 +2957,10 @@ function buildPlatformContext(env, request, runtimeFetch = fetch, outboundFetch 
       await __sw_afterResponse;
       const controller = new AbortController();
       const timeout = setTimeout(function () { controller.abort(); }, 5000);
-      // An ingest-marked bundle (; ) sends this buffer to the trusted executor's
-      // isolated ingest (published log allowance, telemetry store); otherwise to the legacy API route, unchanged.
-      // One post per flush and no second attempt: entries not queued are reported once on the native console
-      // (not captured, so no feedback loop), and the customer's response is unaffected.
+
+
+
+
       const ingest = typeof __sw_telemetryIngestActive === 'function' && __sw_telemetryIngestActive(env);
       try {
         const response = await platformFetch(ingest ? '/v1/executor/telemetry/console' : '/v1/logs/console', {
@@ -2994,12 +2994,12 @@ function buildPlatformContext(env, request, runtimeFetch = fetch, outboundFetch 
   }
 
 
-  // sw.rateLimit's round trip and its per-instance record; the decision
-  // itself lives in the sw.rateLimit fragment.
-  // The platform's counter: one increment, answered with the count it reached.
+
+
+
   async function __sw_rateLimitAsk(key, max, windowSeconds) {
-    // Rate-limit checks stop waiting after five seconds.
-    // An unconfirmed increment is never retried.
+
+
     const controller = new AbortController();
     const timer = setTimeout(function () { controller.abort(); }, 5000);
     try {
@@ -3031,9 +3031,9 @@ function buildPlatformContext(env, request, runtimeFetch = fetch, outboundFetch 
     } finally { clearTimeout(timer); }
   }
 
-  // Remember what the platform answered for this key's window. A refusal
-  // that is not the window's own count (key cardinality) is not remembered:
-  // the next request asks again.
+
+
+
   function __sw_rateLimitRecord(localKey, answer, max) {
     if (!answer || answer.error || typeof answer.reset !== 'number') return;
     let state = __sw_cacheGet(__sw_rateLimitWindows, localKey);
@@ -3056,9 +3056,9 @@ function buildPlatformContext(env, request, runtimeFetch = fetch, outboundFetch 
     if (answer.allowed === false) state.spent = true;
   }
 
-  // Record, after the response, a request this instance admitted on its own
-  // knowledge. A failure is not retried: the window is marked unknown, so the
-  // next request asks the platform first and fails closed if it is down.
+
+
+
   async function __sw_rateLimitConfirm(state, key, max, windowSeconds) {
     let answer;
     try {
@@ -3077,12 +3077,12 @@ function buildPlatformContext(env, request, runtimeFetch = fetch, outboundFetch 
     if (answer.reset === state.reset) __sw_rateLimitAbsorb(state, answer, max);
   }
 
-  // httpOnly cookie sessions (sw.auth.*WithCookie, ). Auth cookies
-  // produced during the handler are parked here; the shim attaches them as
-  // Set-Cookie on the outbound Response post-handler (Option B \u2014 invisible, the
-  // dev never touches headers). The cookie persists 30d; the access JWT inside
-  // expires ~15min and fromRequest auto-refreshes it from the refresh cookie,
-  // re-issuing fresh cookies \u2014 so the browser stays logged in across restarts.
+
+
+
+
+
+
   const __sw_pendingCookies = [];
   const __SW_COOKIE_MAX_AGE = 60 * 60 * 24 * 30; // 30 days
   let __sw_legacyAuthCookiesExpired = false;
@@ -3094,10 +3094,10 @@ function buildPlatformContext(env, request, runtimeFetch = fetch, outboundFetch 
     if (__sw_legacyAuthCookiesExpired) return;
     __sw_legacyAuthCookiesExpired = true;
 
-    // Hard cutover: these names are never authority inputs again. Drain the
-    // old host-only scope and, on the shared tenant domain, the attacker-
-    // writable parent scope. The request is still unauthenticated unless a
-    // browser-enforced __Host- credential is independently present.
+
+
+
+
     __sw_pendingCookies.push(__sw_authCookie('token', '', 0));
     __sw_pendingCookies.push(__sw_authCookie('auth_token', '', 0));
     __sw_pendingCookies.push(__sw_authCookie('session', '', 0));
@@ -3134,7 +3134,7 @@ function buildPlatformContext(env, request, runtimeFetch = fetch, outboundFetch 
   }
   function __sw_setAuthCookies(access, refresh) {
     __sw_pendingRefresh.cookieMode = true;
-    // __Host- is browser-enforced: Secure + Path=/ + no Domain attribute.
+
     __sw_pendingCookies.push(__sw_authCookie('__Host-token', access, __SW_COOKIE_MAX_AGE));
     __sw_pendingCookies.push(__sw_authCookie('__Host-sw_refresh_token', refresh, __SW_COOKIE_MAX_AGE));
     try {
@@ -3149,14 +3149,14 @@ function buildPlatformContext(env, request, runtimeFetch = fetch, outboundFetch 
     __sw_expireLegacyAuthCookies(requestUrl || (request && request.url));
   }
 
-  // Expected-failure marking for the cookie helpers. The
-  // routing shim's catch-all turns every uncaught throw into an opaque 500
-  // FUNCTION_ERROR \u2014 right for real bugs, wrong for "wrong password": the
-  // doc'd cookie snippet has no try/catch, so every expected auth failure
-  // surfaced as a 500 (and fed the 5xx-based uptime alerting). An error
-  // flagged here carries a customer-safe message from the platform auth
-  // API; the shim returns it as a structured 4xx with the real code +
-  // message instead. Platform 5xx and anything unflagged stay opaque.
+
+
+
+
+
+
+
+
   function __sw_markExpected(err) {
     if (err && typeof err.status === 'number' && err.status >= 400 && err.status < 500) {
       err.__sw_expose = true;
@@ -3164,15 +3164,15 @@ function buildPlatformContext(env, request, runtimeFetch = fetch, outboundFetch 
     return err;
   }
 
-  // Arg-shape forgiveness for the cookie helpers: every other
-  // sw.auth method takes one options object, so agents naturally pass one
-  // here too \u2014 and req is never read by these helpers. Accepted shapes:
-  //   (req, email, password)      \u2014 documented positional form
-  //   (req, email, password, { display_name? })
-  //   (req, { email, password, display_name? })
-  //   ({ email, password, display_name? })       \u2014 req omitted
-  // Anything else throws a 400 VALIDATION_ERROR naming the supported shapes,
-  // surfaced as a structured 4xx via __sw_expose (never INTERNAL_ERROR/500).
+
+
+
+
+
+
+
+
+
   function __sw_cookieCreds(method, req, email, password, extra) {
     let opts = null;
     if (email !== null && typeof email === 'object') {
@@ -3226,11 +3226,11 @@ function buildPlatformContext(env, request, runtimeFetch = fetch, outboundFetch 
     throw err;
   }
 
-  // Response contract (, A-F05): a sign-in/profile success MUST
-  // carry a user object \u2014 the cookie helpers wrap it as { user }. An upstream
-  // success body without one is a platform fault; throwing here (instead of
-  // returning a bare object or null) removes the ambiguous 200-with-null
-  // success state the usability audit caught.
+
+
+
+
+
   function __sw_requireAuthUser(method, d) {
     if (d && d.user && typeof d.user === 'object' && !__sw_arrayIsArray(d.user)) {
       const user = __sw_assign({}, d.user);
@@ -3250,10 +3250,10 @@ function buildPlatformContext(env, request, runtimeFetch = fetch, outboundFetch 
     return { user: user, access: access, refresh: refresh };
   }
 
-  // Password login has two success states. A complete session can become
-  // cookies; an MFA ticket cannot. Validate the whole discriminated response
-  // before visitor promotion or cookie staging so malformed/mixed responses
-  // fail closed without leaving authenticated state behind.
+
+
+
+
   function __sw_requireCookieLoginResult(method, d) {
     if (!d || typeof d !== 'object' || __sw_arrayIsArray(d)) {
       return __sw_malformedAuthResponse(method, 'was not an object');
@@ -3270,12 +3270,12 @@ function buildPlatformContext(env, request, runtimeFetch = fetch, outboundFetch 
     return { kind: 'session', ...__sw_requireCompleteAuthSession(method, d) };
   }
 
-  // An OAuth callback whose exchange answered with the MFA challenge
-  // neither stages cookies nor redirects as if signed in: it
-  // answers the browser with the challenge as no-store JSON, the same
-  // { mfa_required, mfa_token } password sign-in gives, and the app finishes
-  // with sw.auth.mfa.challengeWithCookie({ mfa_token, code }). Null when there
-  // is no challenge; a mixed or invalid challenge fails closed as malformed.
+
+
+
+
+
+
   function __sw_callbackMfaChallenge(method, d) {
     if (!d || typeof d !== 'object' || __sw_arrayIsArray(d)) return null;
     if (!__sw_own(d, 'mfa_required') && !__sw_own(d, 'mfa_token')) return null;
@@ -3290,22 +3290,22 @@ function buildPlatformContext(env, request, runtimeFetch = fetch, outboundFetch 
     });
   }
 
-  // Cross-origin gate for cookie sessions (, ,
-  // ). SameSite=Lax does not isolate sibling projects under the
-  // shared .tech or .site project domains, so cookie auth must independently
-  // enforce the browser origin boundary.
-  //   - Writes (POST/PUT/PATCH/DELETE): require and are checked against
-  //     Origin (CSRF). Referer is never accepted in place of Origin.
-  //   - Reads (GET/HEAD): checked only when an explicit CORS Origin header
-  //     is present (credentialed cross-origin fetch). Top-level navigations
-  //     carry no Origin and stay allowed \u2014 that's exactly what Lax intends \u2014
-  //     and their Referer legitimately names the previous, often foreign,
-  //     page, so Referer is ignored for reads.
-  //   - Unsafe cookie-auth writes missing Origin return ORIGIN_REQUIRED.
-  //   - Cross-origin source mismatches return a typed 403. An internal marker
-  //     from the web edge preserves exact currently authorized origins;
-  //     inbound spoofed markers are stripped before customer dispatch.
-  //   - Same-origin requests and Bearer-header auth are unaffected.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
   function __sw_isUnsafeCookieMethod(method) {
     method = (method || 'GET').toUpperCase();
     return method === 'POST' || method === 'PUT' || method === 'PATCH' || method === 'DELETE';
@@ -3327,9 +3327,9 @@ function buildPlatformContext(env, request, runtimeFetch = fetch, outboundFetch 
     }
     let srcUrl, reqUrl;
     try {
-      // 'null' (opaque origin: sandboxed iframe, data: page) fails to parse
-      // and is rejected \u2014 a same-site sandboxed page still sends the cookie
-      // under Lax, so it must never authenticate.
+
+
+
       srcUrl = new URL(src);
       reqUrl = new URL(req.url);
     } catch (_) {
@@ -3353,8 +3353,8 @@ function buildPlatformContext(env, request, runtimeFetch = fetch, outboundFetch 
     })) {
       return { wouldBlock: true, reason: 'platform_sibling', source: src, sourceHost: srcHost, requestHost: reqHost };
     }
-    // Customer parent/subdomain relationships are not origin authority.
-    // Exact server-derived or configured origins arrive via the edge marker.
+
+
     return { wouldBlock: true, reason: 'cross_site', source: src, sourceHost: srcHost, requestHost: reqHost };
   }
 
@@ -3389,10 +3389,10 @@ function buildPlatformContext(env, request, runtimeFetch = fetch, outboundFetch 
 
   function __sw_enforceCookieCsrf(req) {
     if (__sw_cookieOriginRequired(req)) {
-      // Name the header AND both remedies. The old copy pointed only at
-      // "API-key authenticated requests", which sends a non-browser caller
-      // toward a developer key that is wrong for per-user calls and is itself
-      // rejected from a browser context. State what the caller can actually do.
+
+
+
+
       const err = new Error(
         "This " + (req.method || "POST").toUpperCase() + " was authenticated by a session cookie, "
         + "so it must include an Origin header naming the site it came from. Browsers always send one. "
@@ -3413,35 +3413,35 @@ function buildPlatformContext(env, request, runtimeFetch = fetch, outboundFetch 
     throw __sw_markExpected(err);
   }
 
-  // THE verified request identity. Assigned by the sw.auth
-  // namespace; resolves the same way sw.auth.fromRequest does and returns
-  // { user, id, role } \u2014 id/role captured from the verification result before
-  // any object reaches customer code. sw.db calls it lazily with this
-  // context's own \`request\`, so a structured query on a user-owned table is
-  // scoped by the platform, never by anything the handler passes in.
+
+
+
+
+
+
   let __sw_authResolveRequest = null;
-  // The same identity spine under an intent-named handle. Runtime v2 surfaces
-  // call this with (request, { forwardedToken }) to accept the
-  // second credential transport; it verifies identically to the request-
-  // attached path. Assigned by the sw.auth namespace alongside the resolver.
+
+
+
+
   let __sw_authVerifyPrincipal = null;
-  // Assigned by auth: async signed identity from the immutable cookie snapshot.
+
   let __sw_resolveVisitorIdentity = null;
-  // Assigned by auth: the signed visitor session the request ALREADY carries,
-  // read from that same snapshot with no ledger crossing and no issuance.
+
+
   let __sw_peekVisitorIdentity = null;
-  // Assigned by auth: split storage's current visitor cookie value (the
-  // snapshot's, or one the platform issued this request), for the managed wrapper.
+
+
   let __sw_visitorSessionToken = null;
   let __sw_visitorClaimPrimary = false;
 
-  // Runtime v2 (, sol P0-3): SNAPSHOT the auth-bearing request state
-  // ONCE, synchronously, before any customer code can touch the Request object.
-  // Authority is derived from this frozen snapshot \u2014 never re-read from the
-  // customer-visible (mutable) Request \u2014 so overriding req.headers.get to null
-  // can no longer downgrade a scoped end-user to the trusted-project principal.
-  // sw.auth.fromRequest(req) with an EXPLICIT request is unchanged (the caller
-  // chose that request); only the context's own closed-over identity snapshots.
+
+
+
+
+
+
+
   const __sw_authHeaderSnapshot = (function () {
     const names = ['cookie', 'authorization', 'origin', 'referer',
       'x-no-auto-refresh', 'x-refresh-token', 'sec-fetch-site',
@@ -3478,8 +3478,8 @@ function buildPlatformContext(env, request, runtimeFetch = fetch, outboundFetch 
       }
     }
   }
-  // A prepared statement's executing methods wait for the job gate (no-op
-  // outside job deliveries); bind() keeps the guard on the bound statement.
+
+
   function __sw_guardStatement(statement, write) {
     if (!__sw_jobDelivery || !statement || typeof statement !== 'object') return statement;
     return new Proxy(statement, {
@@ -3499,8 +3499,8 @@ function buildPlatformContext(env, request, runtimeFetch = fetch, outboundFetch 
       },
     });
   }
-  // A D1 session opened with withSession() prepares and batches on its own
-  // object, so it carries the same guard as the binding.
+
+
   function __sw_guardDbHandle(handle) {
     return new Proxy(handle, {
       get(target, property) {
@@ -3532,7 +3532,7 @@ function buildPlatformContext(env, request, runtimeFetch = fetch, outboundFetch 
   const __sw_nativeRawDb = env.PROJECT_RAW_DB;
   if (__sw_nativeProjectDb || __sw_nativeRawDb) {
     const __sw_guardedProjectDb = __sw_nativeProjectDb ? __sw_guardDbHandle(__sw_nativeProjectDb) : __sw_nativeProjectDb;
-    // The split layout's separate raw SQL database carries the same guard.
+
     const __sw_guardedRawDb = __sw_nativeRawDb ? __sw_guardDbHandle(__sw_nativeRawDb) : __sw_nativeRawDb;
     env = new Proxy(env, {
       get(target, property) {
@@ -3542,25 +3542,25 @@ function buildPlatformContext(env, request, runtimeFetch = fetch, outboundFetch 
       },
     });
   }
-  // Project-runtime authority is an ACTUAL credential on the immutable
-  // inbound request, not the absence of an app-user credential. This exact
-  // comparison is available only inside the generated closure: customer code
-  // cannot read PROJECT_API_KEY or set this result. Surfaces with an explicit
-  // trusted project path can also select it structurally.
+
+
+
+
+
   function __sw_hasRuntimeProjectAuthority() {
     const authorization = __sw_authSnapshotRequest.headers.get('authorization');
     return typeof apiKey === 'string' && apiKey.length > 0
       && authorization === 'Bearer ' + apiKey;
   }
 
-  // Runtime v2 (sol P0-3): resolve the request's VERIFIED principal ONCE,
-  // through the identity chokepoint (__sw_authVerifyPrincipal \u2014 the seven
-  // checks), against the immutable snapshot, and memoize. Every derive helper
-  // reads THIS one resolution. Never a second verification: it funnels through
-  // the request-local single-flight me(). This resolves USER identity for
-  // user-owned ops \u2014 it does NOT decide sw.fs.dev, which is constructed only at
-  // the run_code entrypoint (devFsEnabled) and is absent in every HTTP-reached
-  // context, never keyed on anything the request carries (sol round 6).
+
+
+
+
+
+
+
+
   let __sw_identityPromise = null;
   let __sw_verifiedSubjectProof = null;
 
@@ -3602,8 +3602,8 @@ function buildPlatformContext(env, request, runtimeFetch = fetch, outboundFetch 
       }),
     });
   }
-  // Only canonical verification answers count; valid:false is a refusal; a
-  // mismatching source/invocation or incomplete subject is unknown.
+
+
   function __sw_classifyVerification(data, fields) {
     if (!data || typeof data !== 'object' || typeof data.valid !== 'boolean') return 'unknown';
     if (data.valid === false) return 'invalid';
@@ -3631,10 +3631,10 @@ function buildPlatformContext(env, request, runtimeFetch = fetch, outboundFetch 
         const state = __sw_classifyVerification(data, __sw_signedDelivery);
         return state === 'valid' ? { state, data } : { state };
       }, function (error) {
-        // Validation refusals and FORBIDDEN responses are final; FORBIDDEN
-        // also covers restricted runtime keys. Other credential, plan, project, rate-limit
-        // and other 4xx, a 5xx, a transport failure or an unreadable delivery
-        // body leave it unknown. Either way it is final here.
+
+
+
+
         const refused = Boolean(error) && ((error.status === 400 && error.code === 'VALIDATION_ERROR')
           || (error.status === 403 && error.code === 'FORBIDDEN'));
         return { state: refused ? 'invalid' : 'unknown', error };
@@ -3670,14 +3670,14 @@ function buildPlatformContext(env, request, runtimeFetch = fetch, outboundFetch 
       err.status = 409;
       throw __sw_markExpected(err);
     }
-    // No per-write platform round trip (founder build mode, infrastructure-first,
-    // 2026-10-19): native writes check only the local deadline above. A cancel or a
-    // later attempt is not seen by native writes; platform calls stay fenced
-    // pre-route. 'write' is kept for the callers' shape.
+
+
+
+
     void write;
   }
-  // Statements that can change data. Anything that is not plainly a read
-  // (SELECT / EXPLAIN) counts as a write, including WITH, which can wrap one.
+
+
   function __sw_nativeSqlWrites(sql) {
     return !/^\\s*(SELECT|EXPLAIN)\\b/i.test(typeof sql === 'string' ? sql : '');
   }
@@ -3731,12 +3731,12 @@ function buildPlatformContext(env, request, runtimeFetch = fetch, outboundFetch 
   }
   function __sw_resolveIdentityOnce() {
     if (!__sw_identityPromise) {
-      // A signed delivery's authority is its verified signature, ahead of any
-      // cookie or bearer the request also carries.
+
+
       __sw_identityPromise = __sw_signedDelivery ? __sw_signedPrincipal() : Promise.resolve().then(function () {
         return __sw_authVerifyPrincipal ? __sw_authVerifyPrincipal(__sw_authSnapshotRequest) : null;
       }).catch(function (error) {
-        // An identity that could not be adjudicated is never "no user".
+
         if (error && error.code === 'AUTH_VERIFY_UNAVAILABLE') throw error;
         return null;
       });
@@ -3760,11 +3760,11 @@ function buildPlatformContext(env, request, runtimeFetch = fetch, outboundFetch 
     const proofHeaders = appToken
       ? { 'X-App-Token': appToken }
       : (__sw_verifiedSubjectProof ? { [__sw_signedDelivery && __sw_signedDelivery.source === 'mcp' ? 'X-Somewhere-Mcp-Proof' : 'X-Somewhere-Subject-Proof']: __sw_verifiedSubjectProof } : null);
-    // Direct managed executor (founder build mode): forward the signed auth receipt this
-    // isolate already verified for this EXACT token, while it is unexpired, so the platform
-    // need not re-read the subject. Never for a refreshed or pending token (it has its own
-    // authority), never from anything the request carried, and the platform trusts it only
-    // on this runtime channel. No receipt: the platform reads the subject fresh, as before.
+
+
+
+
+
     if (appToken && appToken !== __sw_pendingRefresh.access && __sw_receiptSubtle) {
       try {
         const held = __sw_cacheGet(__sw_authReceipts, await __sw_receiptSha(appToken));
@@ -3784,10 +3784,10 @@ function buildPlatformContext(env, request, runtimeFetch = fetch, outboundFetch 
     };
   }
 
-  // The ONE "derive the acting subject" helper every user-owned surface routes
-  // through \u2014 the parsimonious core, not a per-method guard. Resolves the
-  // verified principal FROM THE SNAPSHOT, or fails closed with a typed
-  // AUTH_REQUIRED before any side effect. No surface accepts a caller-supplied id.
+
+
+
+
   async function __sw_requireSubject(label) {
     const p = await __sw_resolveIdentityOnce();
     if (!p || !p.id) {
@@ -3798,9 +3798,9 @@ function buildPlatformContext(env, request, runtimeFetch = fetch, outboundFetch 
     }
     return p.id;
   }
-  // The nullable form \u2014 the acting subject or null, no throw. For surfaces
-  // whose "no verified user" branch is a legitimate server/developer path
-  // (e.g. sw.fs.read of a project-owned asset), NOT a widening of user scope.
+
+
+
   async function __sw_optionalSubject() {
     const p = await __sw_resolveIdentityOnce();
     return p && p.id ? p.id : null;
@@ -3812,158 +3812,155 @@ function buildPlatformContext(env, request, runtimeFetch = fetch, outboundFetch 
     tier: env.TIER || 'free',
     env: (env.USER_ENV ? JSON.parse(env.USER_ENV) : {}),
     request_id: request.headers.get('cf-ray') || crypto.randomUUID(),
-    // sw.trace \u2014 the correlation handle for THIS invocation.
-    // Return \`sw.trace.id\` in an error response, log it, or put it in a
-    // support message, and the whole ordered operation tree for the request
-    // is one call away. Read-only; setting it does nothing.
+
+
+
+
     trace: __sw_trace
       ? Object.freeze({ id: __sw_trace.traceId, span_id: __sw_trace.spanId })
       : Object.freeze({ id: null, span_id: null }),
-    // Read by the request shim after the handler returns, to ship the
-    // waterfall. Never touched by customer code.
+
+
     __sw_trace,
     __sw_serverTiming,
-    // The routing shim attaches the already-validated match before context
-    // construction. Copy it here so the draft-safe view can be frozen before
-    // customer code receives it.
+
+
+
     params: request.params || {},
-    // Exposed under a name the user code is told never to touch. The
-    // shim reads it post-handler. Lives on the same object so user
-    // handlers can't accidentally return a fresh ctx without it.
+
+
+
     __sw_pendingRefresh,
     __sw_pendingCookies,
     __sw_readSession,
     __sw_nativeConsole: consoleScope && consoleScope.nativeConsole,
     __sw_pendingBackground,
-    // Read by the request shim once the response exists; see the gate above.
+
     __sw_afterResponse,
     __sw_releaseAfterResponse,
 
-    // sw.crypto \u2014 small crypto helpers for deployed functions.
-    //
-    //   hmacSha256Hex(message, secret) \u2192 lowercase hex HMAC-SHA256. Verify
-    //     inbound webhook signatures: auth/db/inbox webhooks sign the string
-    //     "<t>.<body>" with your webhook secret and send it as the header
-    //     X-Somewhere-Signature: t=<t>,v1=<hex>.
-    //   timingSafeEqual(a, b) \u2192 constant-time string compare; use it to
-    //     compare your computed signature against the request's so a timing
-    //     side-channel can't leak how many bytes matched.
-    //   bcrypt.verify(password, hash) \u2192 VERIFY-ONLY check against a bcrypt
-    //     hash imported from another provider (Supabase / Clerk / Firebase /
-    //     a self-hosted app) so users sign in with their existing password,
-    //     no reset. There is deliberately NO bcrypt *hashing* surface \u2014 the
-    //     platform mints bcrypt. If these are your sw.auth
-    //     app_users you don't even need this: POST /v1/auth/import + the
-    //     login path verifies their existing bcrypt hashes. One verify
-    //     is ~10-50ms CPU; don't loop it.`;
-var FETCH_JS = `    /** @deprecated Use the wrapped global fetch directly. */
-    fetch: __sw_outboundFetch,
-`;
-var CRYPTO_JS = `    crypto: {
-      hmacSha256Hex: async function (message, secret) {
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+var FETCH_JS = `;
+fetch: __sw_outboundFetch,
+    `;
+
+
+var CRYPTO_JS = `;
+crypto: {
+    hmacSha256Hex: async function (message, secret) {
         const enc = new TextEncoder();
-        const key = await crypto.subtle.importKey(
-          'raw',
-          enc.encode(String(secret)),
-          { name: 'HMAC', hash: 'SHA-256' },
-          false,
-          ['sign'],
-        );
+        const key = await crypto.subtle.importKey('raw', enc.encode(String(secret)), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
         const sig = await crypto.subtle.sign('HMAC', key, enc.encode(String(message)));
         return Array.from(new Uint8Array(sig))
-          .map(function (b) { return b.toString(16).padStart(2, '0'); })
-          .join('');
-      },
-      timingSafeEqual: function (a, b) {
+            .map(function (b) { return b.toString(16).padStart(2, '0'); })
+            .join('');
+    }
+    timingSafeEqual: function (a, b) {
         a = String(a);
         b = String(b);
-        if (a.length !== b.length) return false;
+        if (a.length !== b.length)
+            return false;
         let mismatch = 0;
-        for (let i = 0; i < a.length; i++) mismatch |= a.charCodeAt(i) ^ b.charCodeAt(i);
+        for (let i = 0; i < a.length; i++)
+            mismatch |= a.charCodeAt(i) ^ b.charCodeAt(i);
         return mismatch === 0;
-      },
-      bcrypt: {
+    }
+    bcrypt: {
         verify: async function (password, hash) {
-          const d = await platformJSON('/v1/auth/bcrypt-verify', {
-            method: 'POST',
-            body: JSON.stringify({ password: password, hash: hash }),
-          });
-          return !!(d && d.valid === true);
-        },
-      },
-    },
-`;
-var CODE_RUN_RELEASE_HEADER = "X-Sw-Code-Run-Release";
-function managedIntentFromIR(ir, schema) {
-    if (ir.table.kind !== "project")
-        throw new Error("Managed queries require a declared project table.");
-    const predicates = {
-        leaf(p) {
-            switch (p.op) {
-                case "in":
-                    return { op: p.op, column: p.column, values: [...p.values] };
-                case "is_null":
-                case "not_null":
-                    return { op: p.op, column: p.column };
-                case "contains":
-                case "starts_with":
-                case "ends_with":
-                    return { op: p.op, column: p.column, value: p.value };
-                case "eq":
-                case "ne":
-                case "gt":
-                case "gte":
-                case "lt":
-                case "lte":
-                case "like":
-                    return { op: p.op, column: p.column, value: p.value };
-            }
-        },
-        parse(p) {
-            return p.op === "or" ? { op: p.op, predicates: p.predicates.map(predicates.leaf) } : predicates.leaf(p);
+            const d = await platformJSON('/v1/auth/bcrypt-verify', {
+                method: 'POST',
+                body: JSON.stringify({ password: password, hash: hash }),
+            });
+            return !!(d && d.valid === true);
         }
-    };
-    const out = { kind: ir.kind, table: ir.table.name };
-    if (ir.kind !== "insert")
-        out.where = ir.where.map(predicates.parse);
-    if (ir.columns)
-        out.columns = [...ir.columns];
-    if (ir.order)
-        out.order = ir.order.map((o) => ({ column: o.column, dir: o.dir }));
-    if (ir.limit !== void 0)
-        out.limit = ir.limit;
-    if (ir.offset !== void 0)
-        out.offset = ir.offset;
-    if (ir.include)
-        out.include = ir.include.map((r) => r.name);
-    if (ir.relationWhere)
-        out.relationWhere = ir.relationWhere.map((r) => ({ name: r.name, where: r.where.map(predicates.leaf) }));
-    if (ir.can)
-        out.can = true;
-    if (ir.aggregates)
-        out.aggregates = ir.aggregates.map((a) => ({ fn: a.fn, ...a.column !== void 0 ? { column: a.column } : {} }));
-    if (ir.groupBy)
-        out.groupBy = [...ir.groupBy];
-    if (ir.having)
-        out.having = ir.having.map((h) => ({ op: h.op, alias: h.alias, value: h.value }));
-    if (ir.values)
-        out.values = ir.values.map((entry) => {
-            const column = schema[ir.table.name]?.columns.find((c) => c.n === entry.column.toLowerCase());
-            let value = entry.value;
-            if (column?.t === "json" && typeof value === "string")
-                value = JSON.parse(value);
-            if (column?.t === "boolean" && (value === 0 || value === 1))
-                value = value === 1;
-            return { column: entry.column, value };
-        });
-    if (ir.increments)
-        out.increments = ir.increments.map((v) => ({ column: v.column, delta: v.delta }));
-    if (ir.onConflict !== void 0)
-        out.onConflict = ir.onConflict;
-    return out;
+    }
 }
-var MANAGED_INTENT_WIRE_SOURCE = `(${managedIntentFromIR.toString()})`;
-var SQL_TOKEN_PATTERN = /\s+|--[^\r\n]*|\/\*[\s\S]*?(?:\*\/|$)|[xX]'(?:[^']*)'|'(?:''|[^'])*'|"(?:""|[^"])*"|`(?:``|[^`])*`|\[[^\]]*\]|0[xX][0-9a-fA-F]+|(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?|[A-Za-z_\u0080-￿][A-Za-z0-9_$\u0080-￿]*|[\s\S]/g;
+`;
+
+
+var CODE_RUN_RELEASE_HEADER = "X-Sw-Code-Run-Release";
+
+
+function managedIntentFromIR(ir, schema) {
+  if (ir.table.kind !== "project") throw new Error("Managed queries require a declared project table.");
+  const predicates = {
+    leaf(p) {
+      switch (p.op) {
+        case "in":
+          return { op: p.op, column: p.column, values: [...p.values] };
+        case "is_null":
+        case "not_null":
+          return { op: p.op, column: p.column };
+        case "contains":
+        case "starts_with":
+        case "ends_with":
+          return { op: p.op, column: p.column, value: p.value };
+        case "eq":
+        case "ne":
+        case "gt":
+        case "gte":
+        case "lt":
+        case "lte":
+        case "like":
+          return { op: p.op, column: p.column, value: p.value };
+      }
+    },
+    parse(p) {
+      return p.op === "or" ? { op: p.op, predicates: p.predicates.map(predicates.leaf) } : predicates.leaf(p);
+    }
+  };
+  const out = { kind: ir.kind, table: ir.table.name };
+  if (ir.kind !== "insert") out.where = ir.where.map(predicates.parse);
+  if (ir.columns) out.columns = [...ir.columns];
+  if (ir.order) out.order = ir.order.map((o) => ({ column: o.column, dir: o.dir }));
+  if (ir.limit !== void 0) out.limit = ir.limit;
+  if (ir.offset !== void 0) out.offset = ir.offset;
+  if (ir.include) out.include = ir.include.map((r) => r.name);
+  if (ir.relationWhere) out.relationWhere = ir.relationWhere.map((r) => ({ name: r.name, where: r.where.map(predicates.leaf) }));
+  if (ir.can) out.can = true;
+  if (ir.aggregates) out.aggregates = ir.aggregates.map((a) => ({ fn: a.fn, ...a.column !== void 0 ? { column: a.column } : {} }));
+  if (ir.groupBy) out.groupBy = [...ir.groupBy];
+  if (ir.having) out.having = ir.having.map((h) => ({ op: h.op, alias: h.alias, value: h.value }));
+  if (ir.values) out.values = ir.values.map((entry) => {
+    const column = schema[ir.table.name]?.columns.find((c) => c.n === entry.column.toLowerCase());
+    let value = entry.value;
+    if (column?.t === "json" && typeof value === "string") value = JSON.parse(value);
+    if (column?.t === "boolean" && (value === 0 || value === 1)) value = value === 1;
+    return { column: entry.column, value };
+  });
+  if (ir.increments) out.increments = ir.increments.map((v) => ({ column: v.column, delta: v.delta }));
+  if (ir.onConflict !== void 0) out.onConflict = ir.onConflict;
+  return out;
+}
+var MANAGED_INTENT_WIRE_SOURCE = `($, { managedIntentFromIR, : .toString() }) `;
+
+
+var SQL_TOKEN_PATTERN = /\s+|--[^\r\n]*|\/\*[\s\S]*?(?:\*\/|$)|[xX]'(?:[^']*)'|'(?:''|[^'])*'|"(?:""|[^"])*"|`(`` | [ ^ `])*` | , [[ ^ ]] * ] | 0[xX][0 - 9], a - fA - F, + | ( ?  : ), d + ( ?  : ), d * ) ?  |  : ;
+d + ;
+( ?  : [eE][+-] ?  : );
+d + ;
+ | [A - Za - z_, u0080 - ][A - Za - z0 - 9];
+$;
+u0080 - ;
+ *  | [s, S] / g;
 var SQL_BLOB_START = /^[xX]'/;
 var SQL_WORD_START = /^[A-Za-z_\u0080-￿]/;
 var READ_FIRST_KEYWORDS = ["SELECT", "WITH", "VALUES"];
@@ -3975,7 +3972,7 @@ var PLATFORM_DATA_DOOR_SOURCE = `const KEYS = ['project_id', 'plane', 'environme
 const VARS = { project_id: 'SW_DOOR_PROJECT_ID', plane: 'SW_DOOR_PLANE', environment: 'SW_DOOR_ENVIRONMENT', draft_id: 'SW_DOOR_DRAFT_ID', database_id: 'SW_DOOR_DATABASE_ID' };
 const reply = (status, body) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } });
 const encoder = new TextEncoder();
-// The platform's SQLite tokenizer (utils/sql-tokens.ts), embedded verbatim.
+
 const TOKEN = new RegExp(${JSON.stringify(SQL_TOKEN_PATTERN.source)}, 'g');
 function stacked(sql) {
   let afterSemicolon = false;
@@ -3987,8 +3984,8 @@ function stacked(sql) {
   }
   return false;
 }
-// The platform's read-only classifier (read-only.ts isReadOnlyStatement) over the
-// same tokens, with its kind rules and keyword sets embedded verbatim.
+
+
 const BLOB_START = new RegExp(${JSON.stringify(SQL_BLOB_START.source)});
 const WORD_START = new RegExp(${JSON.stringify(SQL_WORD_START.source)});
 const READ_FIRST = new Set(${JSON.stringify(READ_FIRST_KEYWORDS)});
@@ -4010,21 +4007,21 @@ function validStatement(s) {
   if (!Array.isArray(params) || params.length > ${PLATFORM_DATA_DOOR_LIMITS.params}) return false;
   return params.every((v) => v === null || typeof v === 'string' || (typeof v === 'number' && Number.isFinite(v)));
 }
-// Opcodes that only a durable write emits. A table or index write needs an
-// OpenWrite cursor (the same signal d1.ts statementsOpenWriteCursor uses);
-// reads' sorters, DISTINCT/UNION/IN temp b-trees and CTE materialisation use
-// ephemeral cursors, which never OpenWrite. The rest are schema or virtual-table writes.
-// SetCookie (PRAGMA user_version / schema_version writes), Vacuum, IncrVacuum and
-// JournalMode change the database file without opening a table write cursor.
+
+
+
+
+
+
 const WRITE_OPCODES = new Set(['OpenWrite', 'VUpdate', 'VCreate', 'VDestroy', 'CreateBtree', 'Destroy', 'Clear', 'DropTable', 'DropIndex', 'DropTrigger', 'ParseSchema',
   'SetCookie', 'Vacuum', 'IncrVacuum', 'JournalMode']);
 async function writesDatabase(db, s) {
-  // EXPLAIN compiles without executing: SQLite's own parser decides.
+
   const program = await db.prepare('EXPLAIN ' + s.sql).bind(...(s.params || [])).all();
   return (program.results || []).some((row) => WRITE_OPCODES.has(Array.isArray(row) ? row[1] : row && row.opcode));
 }
 function validBookmark(value) {
-  // A provider position, never a constraint word such as first-unconstrained.
+
   return typeof value === 'string' && value.length > 0 && value.length <= 256 && /^[A-Za-z0-9_.:-]+$/.test(value) && !value.startsWith('first-');
 }
 function validSession(value) {
@@ -4053,13 +4050,13 @@ export default {
     for (const key of KEYS) {
       const expected = env[VARS[key]] ? env[VARS[key]] : null;
       const presented = body.identity[key] === undefined ? null : body.identity[key];
-      // Only draft_id may be empty; a door missing any other identity refuses everything.
+
       if ((expected === null && key !== 'draft_id') || presented !== expected) {
         return reply(403, { ok: false, code: 'DOOR_IDENTITY_MISMATCH' });
       }
     }
     if (!env.DB || typeof env.DB.prepare !== 'function') return reply(503, { ok: false, code: 'DOOR_UNBOUND' });
-    // Private numeric diagnostics only; clock/recording failures never affect SQL.
+
     const timing = {};
     const clock = () => { try { return Date.now(); } catch { return null; } };
     async function measure(key, run) {
@@ -4074,11 +4071,11 @@ export default {
       }
     }
     const respond = (status, body) => reply(status, { ...body, timing });
-    // A compiled managed select whose every statement the canonical classifier accepts
-    // skips the EXPLAIN round trip; any other read, or any doubt, compiles first.
+
+
     const compiledSelect = body.read_check === 'compiled_select' && body.statements.every((s) => readOnlyByTokens(s.sql));
-    // A read session covers exactly one compiled select, so no EXPLAIN runs outside it, and it is
-    // never claimed on a binding without the Sessions API. Requests without a session are unchanged.
+
+
     if (body.session !== undefined && (!compiledSelect || body.statements.length !== 1)) return reply(400, { ok: false, code: 'BAD_REQUEST' });
     if (body.session !== undefined && typeof env.DB.withSession !== 'function') return reply(503, { ok: false, code: 'DOOR_SESSION_UNSUPPORTED' });
     if (body.access === 'read' && !compiledSelect) {
@@ -4091,12 +4088,12 @@ export default {
         });
         if (writes) return respond(400, { ok: false, code: 'READ_ONLY_REQUIRED' });
       } catch (error) {
-        // Not compilable: nothing ran; report it as the statement failing.
+
         return respond(200, { ok: false, code: 'STATEMENT_FAILED', message: String((error && error.message) || error).slice(0, 500) });
       }
     }
-    // A read session (bounded replica pilot): a primary observation or an exact bookmark,
-    // never unconstrained. Without one the statements run on the binding as before.
+
+
     const session = body.session !== undefined ? env.DB.withSession(body.session) : null;
     const db = session || env.DB;
     let executed;
@@ -4111,8 +4108,8 @@ export default {
     }
     const results = executed.map((r) => ({ results: Array.isArray(r && r.results) ? r.results : [], meta: (r && r.meta) || {} }));
     if (results.some((r) => unsafeInteger(r.results))) return respond(200, { ok: false, code: 'UNSAFE_INTEGER', executed: true });
-    // D1 has already materialised the whole result in memory: this bounds what
-    // the door RETURNS, it does not stream or truncate the execution.
+
+
     let bookmark = null;
     try { bookmark = session && typeof session.getBookmark === 'function' ? session.getBookmark() : null; } catch { bookmark = null; }
     const payload = JSON.stringify({ ok: true, revision: env.SW_DOOR_REVISION || null, results,
@@ -4120,7 +4117,7 @@ export default {
     const payloadBytes = encoder.encode(payload).byteLength;
     if (payloadBytes > ${PLATFORM_DATA_RESPONSE_MAX_BYTES}) return respond(200, { ok: false, code: 'RESPONSE_TOO_LARGE', executed: true });
     const timingSuffix = ',"timing":' + JSON.stringify(timing) + '}';
-    // Do not turn a formerly valid result at the byte cap into a diagnostic failure.
+
     const responsePayload = payloadBytes + timingSuffix.length - 1 <= ${PLATFORM_DATA_RESPONSE_MAX_BYTES}
       ? payload.slice(0, -1) + timingSuffix : payload;
     return new Response(responsePayload, { status: 200, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } });
@@ -4257,9 +4254,9 @@ var DB_ROW_LINKS_JS = `
         }
         return body.data;
       }
-      // Anonymous creation (creator-insert.ts): no user, no visitor, never retried here. The relay keeps
-      // the platform's outcome (known refusal, committed, unknown) and receipt exactly as the keyed
-      // insert relay does; a lost or unreadable answer is an unknown write, never a refusal.
+
+
+
       async function __sw_creatorPost(payload, clientIp) {
         if (!__sw_usesManagedEndpoint() || !env.SW_EXECUTION_ATTESTATION || isDraftExecution) __sw_linkUnavailable();
         const headers = await __sw_runtimeSubjectHeaders('X-Somewhere-Managed-Authority', 'none', true);
@@ -4300,9 +4297,9 @@ var DB_ROW_LINKS_JS = `
         }
         return { row: data.data[0], grant: data.grant, idempotency: receipt };
       }
-      // The creator door's platform call (creator-*.ts): a creator session only in X-Sw-Creator, the
-      // signed-in user from THIS request only for claim, never retried. Platform refusals keep their
-      // code and outcome; a lost or unreadable answer is unknown, never a refusal.
+
+
+
       async function __sw_creatorDoorPost(payload, session, clientIp, asUser) {
         if (!__sw_usesManagedEndpoint() || !env.SW_EXECUTION_ATTESTATION || isDraftExecution) __sw_linkUnavailable();
         const headers = await __sw_runtimeSubjectHeaders('X-Somewhere-Managed-Authority', 'none', !asUser);
@@ -4394,7 +4391,7 @@ var DB_INTAKE_JS = `
           e.outcome = 'committed'; e.write_committed = true; e.__sw_expose = true;
           throw e;
         }
-        // Only the acknowledgement and its receipt: nothing else the platform sent is passed on.
+
         return { accepted: true, idempotency: receipt };
       }
       const __sw_clientIntakeApi = Object.freeze({
@@ -4407,8 +4404,8 @@ var DB_MANAGED_JS = `
       const __sw_managedIntent = ${MANAGED_INTENT_WIRE_SOURCE};
       const __sw_managedReply = ${BOUNDED_REPLY_READER_SOURCE}(${PLATFORM_DATA_RESPONSE_MAX_BYTES});
       function __sw_usesManagedEndpoint() { return env.SW_DB_LAYOUT === 'split'; }
-      // A keyed insert's receipt exactly as the platform issues it (24 h result, eight-day refusal),
-      // or null: anything else is never taken as protection.
+
+
       function __sw_managedReceipt(r) {
         if (!r || typeof r !== 'object' || __sw_arrayIsArray(r)
           || __sw_keys(r).sort().join(',') !== 'created_at,refuse_until,replayed,result_until' || typeof r.replayed !== 'boolean') return null;
@@ -4425,10 +4422,10 @@ var DB_MANAGED_JS = `
         const keyed = idempotencyKey !== undefined;
         if (keyed && (transaction || prepared.length !== 1 || prepared[0].ir.kind !== 'insert' || (keyScope !== 'runtime' && keyScope !== 'client'))) __sw_structThrow403('IDEMPOTENCY_UNSUPPORTED', 'Only a single insert takes an idempotency key. Nothing ran.');
         if (!env.SW_EXECUTION_ATTESTATION && !env.SW_CODE_RUN_RELEASE) __sw_structThrow403('MANAGED_EXECUTION_INVALID', 'Deploy this app before using its separate managed database.');
-        // Each operation's authority is the one the runtime composed for it,
-        // never inferred from a missing user. Distinct authorities have
-        // distinct platform adapters; a signed delivery or visitor never
-        // becomes a user or server, and an atomic call is never split.
+
+
+
+
         const authorities = [], kinds = [];
         for (const p of prepared) {
           const mode = p.ir.scope.mode;
@@ -4444,33 +4441,33 @@ var DB_MANAGED_JS = `
         if (codeRun && (env.SW_EXECUTION_ATTESTATION || env.PROJECT_ENV !== 'prod'
           || __sw_signedDelivery || authorities.length !== 1 || authorities[0] !== 'server'))
           __sw_structThrow403('MANAGED_AUTHORITY_UNAVAILABLE', 'run_code managed operations require explicit server authority in production.');
-        // A signed delivery (job, cron, queue, agent callback) is decided by its
-        // ONE shared platform verification, never by headers: an unverified one
-        // refuses before dispatch; a verified row-bound job stays user-only
-        // (its persisted grant); a verified ordinary job, cron or queue \u2014 project
-        // or app-user owned \u2014 keeps explicit server authority only, sent with no
-        // subject at all. Anything but an explicit row_bound:false is bound.
+
+
+
+
+
+
         if (__sw_signedDelivery && authorities.some(function (kind) { return kind !== 'user'; })) {
           const verified = await __sw_verifySignedDelivery();
           if (verified.state !== 'valid') throw __sw_signedAuthorityError(verified.state);
           if (verified.data.row_bound !== false || authorities.length !== 1 || authorities[0] !== 'server')
             __sw_structThrow403('MANAGED_AUTHORITY_UNAVAILABLE', 'A row-bound job cannot use server, public or visitor authority.');
         }
-        // A signed-in user's transaction may carry the server steps it composed
-        // (sw.db.server / server_only) as ONE atomic batch: it goes to the user
-        // adapter, which verifies the user for every user step and compiles the
-        // flagged steps under server authority. No other mixture exists.
+
+
+
+
         const mixed = transaction && authorities.length === 2 && authorities.includes('user') && authorities.includes('server');
         if (authorities.length !== 1 && !mixed) __sw_structThrow403('MANAGED_MIXED_AUTHORITY_UNSUPPORTED', 'This transaction mixes access modes that cannot run together on the separate managed database. Nothing ran.');
         const authority = mixed ? 'user' : authorities[0];
-        // A visitor (own rows, or a public read's visitor branch) carries only
-        // the browser's visitor session for the platform to verify; never a user.
+
+
         const asVisitor = authority === 'visitor' || authority === 'public' && prepared.some(function (p) { return __sw_structVisitorFor(p.principalId); });
         const headers = generatedRead ? {
           'X-Somewhere-Managed-Authority': 'app_user',
           'X-Somewhere-Acting-Subject': generatedRead.selector, 'X-App-Token': generatedRead.token,
         } : await __sw_runtimeSubjectHeaders('X-Somewhere-Managed-Authority', 'none', authority === 'server' || asVisitor || authority === 'link');
-        // A link session carries only its own proof; the platform verifies it in the statement.
+
         if (authority === 'link') {
           const link = prepared[0].ir.scope.link;
           if (!link || prepared.some(function (p) { return p.ir.scope.link.grant !== link.grant || p.ir.scope.link.token !== link.token; })) __sw_linkUnavailable();
@@ -4492,19 +4489,19 @@ var DB_MANAGED_JS = `
           const intent = __sw_managedIntent(p.ir, SCHEMA);
           return mixed && kinds[i] === 'server' ? { authority: 'server', query: intent } : intent;
         });
-        // A keyed insert is the closed version 2 envelope: a platform that knows only version 1
-        // refuses it before running anything, instead of writing it unprotected.
+
+
         const payload = transaction ? { v: 1, transaction: intents } : keyed ? { v: 2, key_scope: keyScope, query: intents[0] } : { v: 1, query: intents[0] };
         const writes = prepared.some(function (p) { return p.mutation !== null; });
-        // Read-your-writes (context-head __sw_readSession). A signed-in user call carries the
-        // request's envelope; only a user write returns a new one. Causal rules, per request:
-        //  - a write that overlapped another write keeps none, and the request keeps none after;
-        //  - any write without an envelope (another authority, a failure) voids it;
-        //  - a read's re-signed envelope is kept only if no write started while it ran.
+
+
+
+
+
         const rs = __sw_readSession;
         const sessioned = authority === 'user';
-        // A read with no envelope sends the primary marker: a fresh primary observation (always
-        // correct) that returns one, so later reads of this request can continue at its bookmark.
+
+
         if (sessioned && !rs.overlapped && (rs.envelope || !writes)) headers['X-Sw-Read-Session'] = rs.envelope || 'primary';
         const writesBefore = rs.writesStarted;
         if (writes) {
@@ -4533,16 +4530,16 @@ var DB_MANAGED_JS = `
             const e = new Error(body.message);
             e.code = body.error; e.status = reply.status; e.retry = false; e.retryable = false; e.__sw_expose = true;
             e.outcome = body.outcome;
-            // Read-only overload: retry metadata only, never a retry here. Eligible only when this
-            // call sent no write and the platform marked an overloaded read that did not run.
-            // A read after a write this request already saved stays non-retryable (__sw_committedKnownReadFailure).
+
+
+
             if (!writes && __sw_writeLedger().confirmedWrites === 0 && body.retry === true && body.error === 'DB_UNAVAILABLE'
               && body.outcome === 'failed' && body.write_committed !== true) {
               e.retry = true; e.retryable = true;
               if (typeof body.retry_after_ms === 'number' && body.retry_after_ms >= 0 && body.retry_after_ms <= 60000) e.retry_after_ms = body.retry_after_ms;
             }
             if (body.write_committed === true) { e.write_committed = true; __sw_writeLedger().confirmedWrites++; }
-            // An already-committed keyed operation names its receipt when the platform read it.
+
             const receipt = keyed ? __sw_managedReceipt(body.idempotency) : null;
             if (receipt) e.idempotency = receipt;
             throw e;
@@ -4555,7 +4552,7 @@ var DB_MANAGED_JS = `
           })) throw unconfirmed();
           if (writes) __sw_writeLedger().confirmedWrites++;
           if (keyed) {
-            // The write is confirmed, but without an exact receipt it is not a protected outcome.
+
             const receipt = __sw_managedReceipt(answer[0].idempotency);
             if (!receipt) {
               const e = new Error('The write committed, but its retry protection could not be confirmed; a repeat could apply it twice.');
@@ -4600,13 +4597,13 @@ var DB_STRUCTURED_EXECUTION_JS = `      async function __sw_structExec(label, ir
           __sw_emitQueryEvent(ir, Date.now() - __sw_t0, 0, false, err && err.code);
           throw err;
         }
-        // Writes project their affected row through a fidelity-guarded
-        // RETURNING list. Resolved AFTER the render above so a
-        // rejected call still reaches zero transport, and re-rendered rather
-        // than patched \u2014 the renderer is a pure function, so the second pass
-        // produces the same statement with the guarded projection and the
-        // identical bound params. Reads never take this path: same call, same
-        // SQL, same params as before.
+
+
+
+
+
+
+
         if (ir.kind === 'insert' || ir.kind === 'update' || ir.kind === 'delete') {
           const returning = await __sw_structReturningColumns(label, ir.table.name);
           if (returning) rendered = __sw_renderIR(ir, principalId, returning);
@@ -4624,50 +4621,50 @@ var DB_STRUCTURED_EXECUTION_JS = `      async function __sw_structExec(label, ir
         }
         const rows = r.results || [];
         __sw_emitQueryEvent(ir, Date.now() - __sw_t0, mutation ? ((r.meta && r.meta.changes) || rows.length) : rows.length, true, null);
-        // Member-scoped insert is guarded (INSERT \u2026 WHERE EXISTS membership).
-        // Zero rows back means the EXISTS was false: the verified user does not
-        // belong to the group this row targets. Surface it as an explicit 403
-        // BEFORE any realtime publish \u2014 the row never landed.
-        // A per-row share names a row its creator does not own (query-sql.ts grantRow guard).
+
+
+
+
+
         if (ir.kind === 'insert' && (ir.scope.mode === 'user' || ir.scope.mode === 'server') && ir.scope.grantRow && ir.onConflict === undefined && rows.length === 0) {
           __sw_structThrow403('POLICY_AUTHORITY_REQUIRED', ir.scope.mode === 'server'
             ? 'sw.db.server.insert on "' + ir.table.name + '": a share can name only a "' + ir.scope.grantRow.t + '" row its user_id owns.'
             : 'sw.db.insert on "' + ir.table.name + '": a share can name only a "' + ir.scope.grantRow.t + '" row the signed-in user owns.');
         }
-        // An upsert's refusals raise inside the statement (query-sql.ts); its empty result is an ignored conflict.
+
         if (ir.kind === 'insert' && (ir.scope.mode === 'member' || ir.scope.mode === 'policy') && ir.onConflict === undefined && rows.length === 0) {
           __sw_structThrow403(ir.scope.mode === 'policy' ? 'POLICY_AUTHORITY_REQUIRED' : 'MEMBERSHIP_REQUIRED',
             ir.scope.mode === 'policy' ? 'sw.db.insert on "' + ir.table.name + '": the proposed row is outside your declared private policy.'
               : 'sw.db.insert on "' + ir.table.name + '": you can only add rows to a group you belong to, and the signed-in user is not a member of the group named in this row. Add the user to the group first, or write to a group they belong to.');
         }
         if (ir.kind === 'count') {
-          // count() returns exactly { data, error } \u2014 data holds the scalar
-          // aggregate. NO .count key: elsewhere in the builder .count means ROWS
-          // RETURNED, so re-using it for the aggregate would overload a word
-          // that already has a meaning. No last_row_id/changes noise either.
+
+
+
+
           const n = rows.length ? Number(rows[0].count) : 0;
           return { data: Number.isFinite(n) ? n : 0, error: null };
         }
         if (ir.kind === 'aggregate') {
-          // ALWAYS an array of group rows, even ungrouped (then exactly one
-          // row). One predictable shape beats a scalar that becomes a list the
-          // moment a groupBy is added. Each row holds the grouped columns plus
-          // this call's platform-composed aggregate keys. No last_row_id or
-          // changes: nothing was written. The count key here keeps its builder-wide
-          // meaning \u2014 ROWS RETURNED, i.e. groups \u2014 which is why the COUNT(*)
-          // aggregate lives inside each row under its own key.
+
+
+
+
+
+
+
           return { data: __sw_structDecodeRows(ir, rows, false), error: null, count: rows.length };
         }
         let liveDelivery = null;
         if (mutation) {
-          // The structured path KNOWS the table + op \u2014 record size directly,
-          // never round-tripping through the SQL parser.
+
+
           __sw_deferDbSizeObservation(r);
           __sw_publicResultInvalidate(mutation.table);
-          // Invalidation contains no row data and is never an authoritative
-          // delta. A failure cannot undo the committed write; clients repair
-          // through their mandatory function refresh policy.
-          // Only group keys and (user, group) pairs leave the returned rows.
+
+
+
+
           liveDelivery = await __sw_publishStructuredLiveInvalidation(ir, mutation, principalId, __sw_liveGroupEvidenceFor(ir, mutation, rows), __sw_liveOwnersFor(ir, mutation, rows, principalId));
         }
         const result = {
@@ -6208,10 +6205,10 @@ function renderQuerySql(ir, principalId, returning, context) {
 }
 var QUERY_SQL_JS = "      const __sw_renderQuerySql = (" + renderQuerySql.toString() + ");\n";
 var DB_RENDER_IR_JS = `${POLICY_SQL_JS}${QUERY_SQL_JS}      // One write names each column once. Column names are
-      // case-insensitive, an UPDATE applies the LAST of two assignments to the
-      // same column, and authorization reads the FIRST proposed value \u2014 so
-      // { project_id: 1, PROJECT_ID: 3 } could authorize one parent and write
-      // another. Refused before authorization, and again before rendering.
+
+
+
+
       function __sw_structAssertUniqueWriteColumns(entries, api) {
         for (let i = 0; i < entries.length; i++) {
           for (let j = 0; j < i; j++) {
@@ -6222,11 +6219,11 @@ var DB_RENDER_IR_JS = `${POLICY_SQL_JS}${QUERY_SQL_JS}      // One write names e
         }
       }
 
-      // insert values / update set \u2192 ordered [{ column, value }] entries (the
-      // one IR value shape, mirrors src/types/query-ir.ts IRValue). Runs the
-      // bindable check (null allowed); the column identifier is validated once at
-      // render. Ordered entries \u2014 never a plain object keyed by caller input \u2014 so
-      // a column named __proto__/constructor is inert, not a pollution vector.
+
+
+
+
+
       function __sw_structCompileValues(values, api) {
         if (values === undefined || values === null || typeof values !== 'object' || __sw_arrayIsArray(values)) {
           __sw_structThrow(api + ': values must be a plain object of { column: value }.');
@@ -6236,11 +6233,11 @@ var DB_RENDER_IR_JS = `${POLICY_SQL_JS}${QUERY_SQL_JS}      // One write names e
         for (let i = 0; i < cols.length; i++) {
           const v = values[cols[i]];
           if (v !== null && typeof v === 'object') {
-            // Object/array values are judged AFTER the table resolves
-            //: on a managed json column the platform
-            // serializes them; anywhere else __sw_structEnforceSchema
-            // throws the exact message this check always threw. Functions,
-            // symbols, undefined still die right here as before.
+
+
+
+
+
             out.push({ column: cols[i], value: v });
             continue;
           }
@@ -6251,14 +6248,14 @@ var DB_RENDER_IR_JS = `${POLICY_SQL_JS}${QUERY_SQL_JS}      // One write names e
         return out;
       }
 
-      // Release-pinned logical->physical table map. A managed
-      // table whose access scope changed is forked: the old, proven-empty table
-      // keeps the declared name and is write-sealed, and this release's rows
-      // live under a generated name. Resolution says WHERE rows live and never
-      // WHO may read them \u2014 every scope predicate below is still composed from
-      // the LOGICAL name's baked intent, exactly as before.
-      // Absent for every project that never forked, so the rendered SQL is then
-      // byte-identical to a render from before this existed.
+
+
+
+
+
+
+
+
       var __sw_tablePhysical;
       function __sw_physicalMap() {
         if (__sw_tablePhysical === undefined) {
@@ -6324,7 +6321,7 @@ var DB_GENERATED_OWNER_READ_JS = `      function __sw_registerGeneratedOwnerRead
             || typeof payload.sub !== 'string' || !payload.sub || payload.sub.length > 200
             || typeof payload.exp !== 'number' || !__sw_generatedOwnerFinite(payload.exp)
             || payload.exp - __sw_generatedOwnerNow() / 1000 < ${APP_ACCESS_SELECTION_MARGIN_SECONDS}) return null;
-          // A private header selector, never a principal/auth memo or live brand.
+
           const selected = { token: token, selector: payload.sub };
           return function (options) { return __sw_structFrom(table, options, undefined, selected); };
         });
@@ -6353,22 +6350,22 @@ var DB_PUBLIC_READ_JS = DB_GENERATED_OWNER_READ_JS + `      function __sw_shared
         const publicRead = declaredPublic && declaredPublic.table === table ? declaredPublic : null;
         const decided = await __sw_structResolveScope(table, 'from', server ? true : opts.asServer, !!publicRead,
           !publicRead || publicRead.identity === 'visitor', !!generatedRead);
-        //  \u2014 report what this read RESOLVED to, not what it asked
-        // for. A null private scope with no principal is the one shape whose
-        // rendered predicate carries no identity at all (db-render-ir.ts ORs a
-        // private branch in whenever one exists), so it is the one shape whose
-        // answer the next anonymous reader may share. Every other resolution \u2014
-        // signed-in, visitor, member, server \u2014 records the opposite and, as
-        // one of these per request is enough, refuses the marker for all of
-        // them. The verdict is inert outside the generated data handler, which
-        // is the only caller that reads it back.
+
+
+
+
+
+
+
+
+
         if (!generatedRead && typeof __sw_declaredPublicReadNote !== 'undefined') {
           __sw_declaredPublicReadNote(__sw_dbNamespace,
             !wantsCan && !!publicRead && !decided.scope && decided.principalId === undefined, table);
         }
-        // Row capability hints ( item 7): for a signed-in caller only. Each entry is the
-        // scope sw.db.update / sw.db.remove would resolve for this same caller on this table (null
-        // when that operation is refused before any SQL), so the hint renders the write's own rule.
+
+
+
         let can, canPrincipal;
         if (wantsCan) {
           const refuse = function () {
@@ -6385,8 +6382,8 @@ var DB_PUBLIC_READ_JS = DB_GENERATED_OWNER_READ_JS + `      function __sw_shared
             }
           };
           const forUpdate = await writeScope('update'), forDelete = await writeScope('remove');
-          // The hint principal is the caller the writes would act as. A shared table's read has
-          // no principal of its own (it is unscoped), so it is taken from the write resolution.
+
+
           canPrincipal = decided.principalId !== undefined ? decided.principalId
             : forUpdate && forUpdate.principalId !== undefined ? forUpdate.principalId
             : forDelete && forDelete.principalId !== undefined ? forDelete.principalId : undefined;
@@ -6396,15 +6393,15 @@ var DB_PUBLIC_READ_JS = DB_GENERATED_OWNER_READ_JS + `      function __sw_shared
           }
           if (canPrincipal === undefined) refuse();
           const sameCaller = function (resolved) { return resolved && resolved.principalId === canPrincipal ? resolved.scope : null; };
-          // mine: the column that records who created a row \u2014 the owner column, or a
-          // shared table's author column \u2014 when the table has one. The hint renders it as a boolean.
+
+
           const creatorShape = __sw_structManagedShape(table);
           const creatorColumn = __sw_structResolveOwnerColumn(table) || (creatorShape && creatorShape.author) || null;
           can = { update: sameCaller(forUpdate), delete: sameCaller(forDelete), mine: creatorColumn ? { mode: 'user', ownerColumn: creatorColumn } : null };
         }
-        // Composed joins: resolve declared relations. Both absent \u2192
-        // ir.include / ir.relationWhere stay unset and the IR (and its shape
-        // fingerprint) is byte-identical to a pre-join single-table read (rule 9).
+
+
+
         const includeCompiled = generatedRead ? [] : await __sw_structCompileInclude(table, opts.include, columns, server ? true : opts.asServer);
         const hasCompiled = generatedRead ? [] : await __sw_structCompileHas(table, opts.has, server ? true : opts.asServer, 'from');
         const includeRefs = includeCompiled.map(function (entry) { return entry.ref; });
@@ -6425,15 +6422,15 @@ var DB_PUBLIC_READ_JS = DB_GENERATED_OWNER_READ_JS + `      function __sw_shared
         if (relationWhere.length) ir.relationWhere = relationWhere;
         if (can) ir.can = can;
         __sw_structEnforceSchema('from', ir);
-        // An unscoped root (a shared table) renders no identity of its own; the hints bind the caller.
+
         const result = await __sw_structExec('sw.db.from', ir, can && joinPrincipalId === undefined ? canPrincipal : joinPrincipalId, null, generatedRead);
         if (includeRefs.length && !__sw_usesManagedEndpoint()) await __sw_structAttachIncludes(result, includeRefs, joinPrincipalId);
         if (can) __sw_structAttachCan(result);
         return result;
       }
 
-      // The renderer returns the hints as internal 0/1 columns; each row instead carries
-      // can: { update, delete } and mine, and the internal columns never reach the caller.
+
+
       function __sw_structAttachCan(result) {
         const rows = result && __sw_arrayIsArray(result.data) ? result.data : [];
         for (let i = 0; i < rows.length; i++) {
@@ -6447,21 +6444,21 @@ var DB_PUBLIC_READ_JS = DB_GENERATED_OWNER_READ_JS + `      function __sw_shared
         }
       }
 
-      // \u2500\u2500 Public-result invalidation \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
-      // Fired after a DECLARED write COMMITS, from the one post-commit seam
-      // that already exists, so an edit or a withdrawal reaches the next
-      // anonymous reader instead of waiting out the edge's window. The window
-      // is the fallback for a purge that never lands, never the mechanism.
-      //
-      // Only a table the schema declares publicly readable has any cached
-      // result to drop, so nothing else signals. The purge is best-effort and
-      // rides the response: a committed write is successful whatever happens
-      // to a cache, and delaying the writer on a control-plane call would be
-      // paying for someone else's read.
-      //
-      // Raw SQL writes are NOT covered and cannot be: the platform never
-      // parses SQL it did not compose, so it does not know what a raw
-      // statement touched. Those fall back to the window.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
       function __sw_publicResultInvalidate(table) {
         if (isDraftExecution || !env.SW_RELEASE_ID) return;
         const shape = __sw_structManagedShape(table);
@@ -6480,15 +6477,15 @@ var DB_PUBLIC_READ_JS = DB_GENERATED_OWNER_READ_JS + `      function __sw_shared
 
 `;
 var DB_AGGREGATE_JS = `      // The result key for one aggregate. Composed from the closed function name
-      // and the validated column, NEVER from caller-supplied text \u2014 so a caller
-      // cannot name a key, only ask for a function of a column.
+
+
       function __sw_structAggregateAlias(fn, column) {
         return fn === 'count' ? 'count' : fn + '_' + __sw_lower(column);
       }
-      // The aggregate request -> IR aggregates. Order is the declaration order of
-      // __SW_STRUCT_AGG so two calls asking for the same set produce the same IR
-      // (and therefore the same shape fingerprint) regardless of key order in the
-      // caller's object literal.
+
+
+
+
       function __sw_structCompileAggregates(opts) {
         const out = [];
         const fns = __sw_keys(__SW_STRUCT_AGG);
@@ -6512,8 +6509,8 @@ var DB_AGGREGATE_JS = `      // The result key for one aggregate. Composed from 
       function __sw_structCompileGroupBy(groupBy) {
         if (groupBy === undefined || groupBy === null) return [];
         if (!__sw_arrayIsArray(groupBy)) __sw_structThrow('sw.db.aggregate: groupBy must be an array of column names.');
-        // A bounded key: grouping is meant to summarize, and an unbounded group
-        // key is a full-table projection wearing an aggregate's clothes.
+
+
         if (groupBy.length > 4) __sw_structThrow('sw.db.aggregate: groupBy accepts at most 4 columns.');
         const out = [];
         const seen = __sw_objCreateNull();
@@ -6527,10 +6524,10 @@ var DB_AGGREGATE_JS = `      // The result key for one aggregate. Composed from 
         }
         return out;
       }
-      // HAVING filters the composed GROUPS by an aggregate OUTPUT, so its keys
-      // are aliases from this same call \u2014 not columns. Only the ordering
-      // operators apply: an aggregate is a single number, so in / like / null
-      // have no meaning here and are refused rather than silently ignored.
+
+
+
+
       function __sw_structCompileHaving(having, aggregates) {
         if (having === undefined || having === null) return [];
         if (typeof having !== 'object' || __sw_arrayIsArray(having)) __sw_structThrow('sw.db.aggregate: having must be an object of { aggregateName: condition }.');
@@ -6539,15 +6536,15 @@ var DB_AGGREGATE_JS = `      // The result key for one aggregate. Composed from 
         const names = __sw_keys(having);
         const out = [];
         for (let i = 0; i < names.length; i++) {
-          // Aliases are composed lowercase, and SQL identifiers are
-          // case-insensitive, so match the caller's key the same way order does
-          // \u2014 and carry the canonical alias forward, never the caller's casing.
+
+
+
           const alias = __sw_lower(names[i]);
           if (!known[alias]) {
             __sw_structThrow('sw.db.aggregate: having["' + names[i] + '"] does not name an aggregate in this call. Filter one of: ' + __sw_arrayMap(aggregates, function (a) { return a.alias; }).join(', ') + '.');
           }
-          // The VALUE is still read under the caller's own key; only the alias
-          // recorded on the IR is canonicalized.
+
+
           const asked = having[names[i]];
           const conditions = __sw_arrayIsArray(asked) ? asked : [asked];
           for (let j = 0; j < conditions.length; j++) {
@@ -6567,16 +6564,16 @@ var DB_AGGREGATE_JS = `      // The result key for one aggregate. Composed from 
         }
         return out;
       }
-      // An aggregate result has exactly two kinds of column: a grouped column
-      // and an aggregate output. Ordering by anything else would name a column
-      // that is not in the result \u2014 SQLite would accept some of those and
-      // silently pick an arbitrary row's value, so refuse instead.
-      //
-      // Every reachable name is therefore one the platform already lowercased (a
-      // groupBy entry or a composed alias), so the caller's casing is NORMALIZED
-      // here rather than carried into the IR. Without that, the renderer would
-      // look an aggregate alias up under the caller's spelling, miss it, and
-      // quote it as a column that does not exist.
+
+
+
+
+
+
+
+
+
+
       function __sw_structNormalizeAggregateOrder(order, groupBy, aggregates) {
         if (!order) return;
         const allowed = __sw_objCreateNull();
@@ -6590,13 +6587,13 @@ var DB_AGGREGATE_JS = `      // The result key for one aggregate. Composed from 
           order[i].column = lc;
         }
       }
-      // Schema validation for the aggregate columns, on the SAME declared shape
-      // every other verb reads. Two distinct refusals, both of them "fail loudly
-      // rather than answer wrongly":
-      //   - sum/avg over a non-numeric column: SQLite would return 0 for a text
-      //     column instead of erroring, which is a wrong answer, not a failure.
-      //   - grouping or aggregating a json/blob column: those are stored
-      //     serialized, so comparing them as group keys is meaningless.
+
+
+
+
+
+
+
       function __sw_structEnforceAggregateSchema(ir) {
         const table = ir.table.name;
         const shape = __sw_structManagedShape(table);
@@ -6636,10 +6633,10 @@ var DB_AGGREGATE_JS = `      // The result key for one aggregate. Composed from 
           'sw.db.aggregate');
         const aggregates = __sw_structCompileAggregates(opts);
         const groupBy = __sw_structCompileGroupBy(opts.groupBy);
-        // A grouped column and an aggregate output share one result row, so a
-        // collision would make one of them unreadable. The platform composed the
-        // alias, so renaming it silently would hide which value you got \u2014
-        // refuse and let the caller rename their column or drop the aggregate.
+
+
+
+
         for (let i = 0; i < aggregates.length; i++) {
           for (let j = 0; j < groupBy.length; j++) {
             if (groupBy[j] === aggregates[i].alias) {
@@ -6650,33 +6647,33 @@ var DB_AGGREGATE_JS = `      // The result key for one aggregate. Composed from 
         const having = __sw_structCompileHaving(opts.having, aggregates);
         const order = __sw_structCompileOrder(opts.order);
         __sw_structNormalizeAggregateOrder(order, groupBy, aggregates);
-        // Declared public read composes for an aggregate exactly as it does for
-        // a select: the renderer's public branch is (privateScope OR the
-        // declared publication predicate), and it lands in the same WHERE. So an
-        // aggregate over a published catalog summarizes exactly the rows a
-        // published select would have returned \u2014 no more, and no less, which is
-        // what stops the browser client offering a method that only works when
-        // signed in.
+
+
+
+
+
+
+
         const declaredPublic = !server && typeof __sw_declaredPublicReadGet !== 'undefined'
           ? __sw_declaredPublicReadGet(__sw_dbNamespace) : null;
         const publicRead = declaredPublic && declaredPublic.table === table ? declaredPublic : null;
         const decided = await __sw_structResolveScope(table, 'aggregate', server ? true : opts.asServer, !!publicRead,
           !publicRead || publicRead.identity === 'visitor');
-        //  \u2014 an aggregate is a READ, so it owes the public-result
-        // tally the same note sw.db.from makes, on the same condition (a null
-        // private scope with no principal is the one resolution whose rendered
-        // predicate carries no identity). Without it an aggregate's rows would
-        // be rows nothing reported on: a request that listed publicly and then
-        // aggregated under an owner scope would still look like a pure public
-        // answer and could be shared with the next anonymous reader.
+
+
+
+
+
+
+
         if (typeof __sw_declaredPublicReadNote !== 'undefined') {
           __sw_declaredPublicReadNote(__sw_dbNamespace,
             !!publicRead && !decided.scope && decided.principalId === undefined, table);
         }
-        // Relation filters compose exactly as they do on from(): each one is an
-        // EXISTS carrying the related table's OWN scope predicate, so joining
-        // cannot widen what either scope alone allows \u2014 and because it lands in
-        // the WHERE, the aggregate summarizes only rows that survived BOTH.
+
+
+
+
         const hasCompiled = await __sw_structCompileHas(table, opts.has, server ? true : opts.asServer, 'aggregate');
         const relationWhere = __sw_arrayMap(hasCompiled, function (entry) { return entry.ref; });
         const principalId = __sw_structJoinPrincipal(decided, [], hasCompiled);
@@ -6694,10 +6691,10 @@ var DB_AGGREGATE_JS = `      // The result key for one aggregate. Composed from 
         if (order && order.length) ir.order = order;
         if (opts.limit !== undefined) ir.limit = __sw_structIntOpt(opts.limit, 'limit');
         if (relationWhere.length) ir.relationWhere = relationWhere;
-        // The ordinary where/order/column checks, then the aggregate-specific
-        // ones. order is deliberately cleared for the shared pass: it names
-        // aliases as well as columns, and __sw_structAssertAggregateOrder above
-        // has already proven every entry is one or the other.
+
+
+
+
         const sharedIr = __sw_assign({}, ir);
         sharedIr.order = undefined;
         __sw_structEnforceSchema('aggregate', sharedIr);
@@ -6706,18 +6703,18 @@ var DB_AGGREGATE_JS = `      // The result key for one aggregate. Composed from 
       }
 `;
 var DB_RELATIONS_JS = `      // \u2500\u2500 Composed joins \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
-      // THE SCOPE-COMPOSITION INVARIANT: a relation key shapes the relationship;
-      // it is NEVER trusted for access. Every participating table independently
-      // carries its own owner or membership predicate for the verified caller.
-      // Resolve a relation CHILD's own scope via the standalone resolver \u2014 its
-      // access posture cannot drift from its single-table posture.
+
+
+
+
+
       async function __sw_structResolveRelationScope(rel, asServer, verb) {
         const decided = await __sw_structResolveScope(rel.table, verb, asServer);
         if (decided.scope.mode === 'server') __sw_structRequireServerDeclaration(rel.table);
         return decided;
       }
-      // Validate a relation predicate's columns against the RELATED table's
-      // managed shape (unmanaged \u2192 no column list, same as a single-table read).
+
+
       function __sw_structAssertRelationPredicateColumns(verb, childTable, preds) {
         const shape = __sw_structManagedShape(childTable);
         if (!shape) return;
@@ -6745,10 +6742,10 @@ var DB_RELATIONS_JS = `      // \u2500\u2500 Composed joins \u2500\u2500\u2500\u
             principalId: decided.principalId,
           });
         }
-        // Stitching reads ONE key off each root row \u2014 root.parentKey for
-        // hasMany, root.fk for belongsTo \u2014 so that column must be in the
-        // projected columns. Require it explicitly rather than silently widening
-        // the projection (which would change the returned row shape).
+
+
+
+
         if (out.length && columns) {
           for (let i = 0; i < out.length; i++) {
             const rootKey = __sw_structRelationRootKey(out[i].ref);
@@ -6759,10 +6756,10 @@ var DB_RELATIONS_JS = `      // \u2500\u2500 Composed joins \u2500\u2500\u2500\u
         }
         return out;
       }
-      // The relation's key columns, named from the ROOT row's point of view and
-      // the RELATED row's point of view. One function so the include stitcher,
-      // the column requirement above, and the child IR can never disagree about
-      // which side holds which key.
+
+
+
+
       function __sw_structRelationRootKey(rel) { return rel.kind === 'belongsTo' ? rel.fk : rel.parentKey; }
       function __sw_structRelationRelatedKey(rel) { return rel.kind === 'belongsTo' ? rel.parentKey : rel.fk; }
       function __sw_structRelationNotDeclared(verb, rootTable, name) {
@@ -6777,9 +6774,9 @@ var DB_RELATIONS_JS = `      // \u2500\u2500 Composed joins \u2500\u2500\u2500\u
           const name = keys[i];
           const rel = __sw_structResolveRelation(rootTable, name);
           if (!rel) __sw_structThrow403('RELATION_NOT_DECLARED', __sw_structRelationNotDeclared(verb, rootTable, name));
-          // The value is the related-row WHERE (same grammar). Quantifier is
-          // implicitly 'some' (EXISTS \u22651 matching row); none/every are not in
-          // this slice.
+
+
+
           const childPreds = __sw_structCompileWhere(hasOpt[name], false);
           __sw_structAssertRelationPredicateColumns(verb, rel.table, childPreds);
           const decided = await __sw_structResolveRelationScope(rel, asServer, verb);
@@ -6790,12 +6787,12 @@ var DB_RELATIONS_JS = `      // \u2500\u2500 Composed joins \u2500\u2500\u2500\u
         }
         return out;
       }
-      // A join can have an unscoped root and an owner()-scoped child. In that
-      // shape the root has no principal of its own, so keep the principal the
-      // CHILD resolver verified instead of accidentally binding undefined.
-      // Multiple owner() participants must resolve to the exact same request
-      // principal; the request-local identity memo makes that true by
-      // construction, and this assertion fails closed if that ever regresses.
+
+
+
+
+
+
       function __sw_structJoinPrincipal(rootDecision, includeCompiled, hasCompiled) {
         let principalId = rootDecision.scope && (rootDecision.scope.mode === 'user' || rootDecision.scope.mode === 'member' || rootDecision.scope.mode === 'policy')
           ? rootDecision.principalId : undefined;
@@ -6811,21 +6808,21 @@ var DB_RELATIONS_JS = `      // \u2500\u2500 Composed joins \u2500\u2500\u2500\u
         }
         return principalId;
       }
-      // Root-plus-related stitch for include: the root rows are already fetched;
-      // for each relation, fetch the related rows INDEPENDENTLY SCOPED (their
-      // owner = principal is composed by the standard renderer, never by the
-      // join key) with <relatedKey> IN (root keys), then attach them by key.
-      // Small reads use one fetch; large key sets use bounded batches. Every
-      // fetch is its own composed IR \u2014 independently rendered, scoped, and
-      // instrumented.
-      //
-      // THE DIRECTION IS A PROJECTION DECISION, NOT AN ACCESS ONE. hasMany reads
-      // root.parentKey and matches related.fk, nesting an ARRAY (possibly empty).
-      // belongsTo reads root.fk and matches related.parentKey, nesting the FLAT
-      // single row or null \u2014 the parent is unique by its primary key. A root row
-      // whose parent the caller may not read gets null, exactly as it gets [] for
-      // hidden children: the related query's own scope decided that, and no root
-      // row is dropped or invented because of it.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
       async function __sw_structAttachIncludes(result, includeRefs, principalId) {
         const rows = (result && result.data) || [];
         for (let r = 0; r < includeRefs.length; r++) {
@@ -6845,11 +6842,11 @@ var DB_RELATIONS_JS = `      // \u2500\u2500 Composed joins \u2500\u2500\u2500\u
           }
           const grouped = __sw_objCreateNull();
           if (ids.length) {
-            // The database accepts at most 100 bound parameters per statement.
-            // An owner()- or member()-scoped related table needs one bind for
-            // its principal, so batch keys at 99. Small includes stay the
-            // ordinary two-query stitch; large includes remain complete instead
-            // of failing at the transport's bind ceiling.
+
+
+
+
+
             const maxKeys = 99;
             for (let start = 0; start < ids.length; start += maxKeys) {
               const childIr = {
@@ -6895,7 +6892,7 @@ var DB_POLICY_HELPERS_JS = `${ROLE_DOMAIN_MAP_JS}
       function __sw_structPolicyMember(value) {
         if (!value || typeof value !== 'object') return false;
         const keys = __sw_keys(value).slice().sort().join(',');
-        // Per-owner grant: g/mg ["user_id"]. Per-row: g ["user_id", key], mg ["user_id", row].
+
         const grant = keys === 'g,m,mg,o,og,u' && value.og === true && __sw_arrayIsArray(value.g) && __sw_arrayIsArray(value.mg)
           && value.g[0] === 'user_id' && value.mg[0] === 'user_id'
           && (value.g.length === 1 || value.g.length === 2 && value.g[1] !== 'user_id' && value.mg[1] !== 'user_id' && value.mg[1] !== value.u)
@@ -6920,7 +6917,7 @@ var DB_POLICY_HELPERS_JS = `${ROLE_DOMAIN_MAP_JS}
         if (value.k === 'o') return __sw_keys(value).slice().sort().join(',') === 'c,k' && __sw_structPolicyIdent(value.c);
         return value.k === 'm' && __sw_keys(value).slice().sort().join(',') === 'k,m' && __sw_structPolicyMember(value.m);
       }
-      // A built-in group leaf, pinned to the release's group-policy generation.
+
       function __sw_structPolicyGroup(value) {
         if (!value || typeof value !== 'object' || value.k !== 'g' || __sw_keys(value).slice().sort().join(',') !== 'c,generation,k,roles') return false;
         if (!__sw_structPolicyIdent(value.c) || typeof value.generation !== 'number' || !Number.isSafeInteger(value.generation) || value.generation < 1) return false;
@@ -6934,9 +6931,9 @@ var DB_POLICY_HELPERS_JS = `${ROLE_DOMAIN_MAP_JS}
         }
         return true;
       }
-      // An app-role leaf, pinned to the release's policy generation. Each
-      // present operation lists declared app roles; a missing one denies. The
-      // release's role -> verified email domain map (d) rides it when baked.
+
+
+
       function __sw_structPolicyRole(value) {
         if (!value || typeof value !== 'object' || value.k !== 'r') return false;
         const leafKeys = __sw_keys(value).slice().sort().join(',');
@@ -6954,8 +6951,8 @@ var DB_POLICY_HELPERS_JS = `${ROLE_DOMAIN_MAP_JS}
         }
         return true;
       }
-      // Per-branch read lists: [owner list | null, other list | null], at the table's
-      // own anyOf only; each list is a non-empty sorted set of lowercase column identifiers.
+
+
       function __sw_structPolicyReads(value) {
         if (!__sw_arrayIsArray(value) || value.length !== 2 || (value[0] === null && value[1] === null)) return false;
         for (let i = 0; i < 2; i++) {
@@ -6968,9 +6965,9 @@ var DB_POLICY_HELPERS_JS = `${ROLE_DOMAIN_MAP_JS}
         }
         return true;
       }
-      // anyOf(owner, member | group | app role); a group or app-role branch is
-      // a pinned leaf, exactly as at the root. root: the table's own rule may
-      // carry per-branch read lists (reads); under allOf or a parent it may not.
+
+
+
       function __sw_structPolicyAny(value, root) {
         if (!value || typeof value !== 'object' || value.k !== 'a') return false;
         const anyKeys = __sw_keys(value).slice().sort().join(',');
@@ -6980,11 +6977,11 @@ var DB_POLICY_HELPERS_JS = `${ROLE_DOMAIN_MAP_JS}
         if (second && second.k === 'm' && second.m && second.m.og && value.p[0].c !== 'user_id') return false;
         return (__sw_structPolicyLeaf(second) && second.k === 'm') || __sw_structPolicyGroup(second) || __sw_structPolicyRole(second);
       }
-      // allOf(gate, who) (AND permissions v1.1): gate is a member() leaf with
-      // explicit operations, a group or an app-role leaf; who is owner() or
-      // anyOf(owner(), X) where X is an app role or the gate's own membership
-      // relation (same group column and generation, or the same member()
-      // relation with the full key and principal mapping).
+
+
+
+
+
       function __sw_structPolicyAllOf(value) {
         if (!value || typeof value !== 'object' || __sw_keys(value).slice().sort().join(',') !== 'g,k,w' || value.k !== 'n') return false;
         const gate = value.g;
@@ -7004,7 +7001,7 @@ var DB_POLICY_HELPERS_JS = `${ROLE_DOMAIN_MAP_JS}
         for (let i = 0; i < x.m.mg.length; i++) if (__sw_lower(x.m.mg[i]) !== __sw_lower(gate.m.mg[i])) return false;
         return true;
       }
-      // A parent chain: at most four edges, each ending in a leaf, anyOf or allOf.
+
       function __sw_structPolicyValid(value, edges) {
         if (!edges && (__sw_structPolicyAny(value, true) || __sw_structPolicyAllOf(value) || __sw_structPolicyGroup(value) || __sw_structPolicyRole(value))) return true;
         const above = edges || 0;
@@ -7018,7 +7015,7 @@ var DB_POLICY_HELPERS_JS = `${ROLE_DOMAIN_MAP_JS}
         if (__sw_structResolveIntent(table) !== 'policy' || !shape || !__sw_own(shape, 'policy') || !__sw_structPolicyValid(shape.policy)) return null;
         return shape.policy;
       }
-      // A per-row grant table (grant({ row })) and the one rule it serves: its shares name rows of t (key k) in c.
+
       let __sw_structGrantRows;
       function __sw_structGrantRowFor(table) {
         if (!__sw_structGrantRows) {
@@ -7050,8 +7047,8 @@ var DB_POLICY_HELPERS_JS = `${ROLE_DOMAIN_MAP_JS}
         if (policy.k === 'm') return __sw_structMemberAllows(policy.m, verb);
         if (policy.k === 'a') return __sw_structPolicyAllows(policy.p[0], verb) || __sw_structPolicyAllows(policy.p[1], verb);
         if (policy.k === 'n') {
-          // Both slots must declare the operation; update/delete also need
-          // read from both (the same caller must be able to read the row).
+
+
           const op = __sw_structPolicyOperation(verb);
           return __sw_structPolicyAllows(policy.g, verb) && __sw_structPolicyAllows(policy.w, verb)
             && (op !== 'update' && op !== 'delete' || __sw_structPolicyAllows(policy.g, 'from') && __sw_structPolicyAllows(policy.w, 'from'));
@@ -7071,23 +7068,23 @@ var DB_POLICY_HELPERS_JS = `${ROLE_DOMAIN_MAP_JS}
         }
         if (policy.k === 'a') {
           __sw_structAssertPolicyWrite(cols, policy.p[0], verb, increments);
-          // Under anyOf a row's group is fixed for its life, like a member key.
+
           if (policy.p[1].k === 'g') {
             for (let i = 0; i < cols.length; i++) if (verb === 'update' && __sw_lower(cols[i].column) === __sw_lower(policy.p[1].c)) {
               __sw_structThrow403('POLICY_GROUP_IMMUTABLE', 'The group of a row in an owner-or-group table cannot be changed.');
             }
             return;
           }
-          // A grant() branch correlates the managed owner (checked above) and, per row, the row's key,
-          // which the shared renderer keeps fixed (query-sql.ts), as the managed compiler does.
+
+
           if (policy.p[1].k === 'm' && policy.p[1].m.og) return;
           __sw_structAssertPolicyWrite(cols, policy.p[1], verb, increments);
           return;
         }
         if (policy.k === 'n') {
-          // allOf: the who slot's owner column is platform-supplied, and the
-          // gate's membership identity (every member() key component, or the
-          // group column) is fixed for the row's life, including increments.
+
+
+
           __sw_structAssertPolicyWrite(cols, policy.w.k === 'a' ? policy.w.p[0] : policy.w, verb, increments);
           if (policy.g.k === 'm') {
             if (verb === 'update') __sw_structAssertNotMemberGroupColumn(cols, policy.g.m, verb);
@@ -7113,9 +7110,9 @@ var DB_POLICY_HELPERS_JS = `${ROLE_DOMAIN_MAP_JS}
       }
       function __sw_structAssertPolicyInsert(cols, policy) {
         if (policy.k === 'n') {
-          // The owner is stamped; the gate must be placed explicitly: every
-          // member() group component, or a nonempty group. An app-role gate
-          // has no placement (its create roles are checked in the statement).
+
+
+
           if (policy.g.k === 'r') return;
           if (policy.g.k === 'g') {
             for (let i = 0; i < cols.length; i++) if (__sw_lower(cols[i].column) === __sw_lower(policy.g.c) && typeof cols[i].value === 'string' && cols[i].value) return;
@@ -7125,16 +7122,16 @@ var DB_POLICY_HELPERS_JS = `${ROLE_DOMAIN_MAP_JS}
           return;
         }
         if (policy.k === 'a') {
-          // The owner is stamped; an app-role branch has no placement, and a
-          // group branch must name the group the row belongs to.
+
+
           if (policy.p[1].k === 'r' || (policy.p[1].k === 'm' && policy.p[1].m.og)) return;
           if (policy.p[1].k === 'g') {
             for (let i = 0; i < cols.length; i++) if (__sw_lower(cols[i].column) === __sw_lower(policy.p[1].c) && typeof cols[i].value === 'string' && cols[i].value) return;
             __sw_structThrow403('POLICY_GROUP_REQUIRED', 'A group-scoped insert must name the group the row belongs to in "' + policy.p[1].c + '".');
           }
-          // Ownership is stamped after placement is authorized. For an
-          // owner-or-member table, the caller must still name every member
-          // group component so the insert can prove that placement atomically.
+
+
+
           __sw_structAssertMemberGroupPresent(cols, policy.p[1].m, 'insert');
           return;
         }
@@ -7142,8 +7139,8 @@ var DB_POLICY_HELPERS_JS = `${ROLE_DOMAIN_MAP_JS}
           for (let i = 0; i < cols.length; i++) if (__sw_lower(cols[i].column) === __sw_lower(policy.c) && typeof cols[i].value === 'string' && cols[i].value) return;
           __sw_structThrow403('POLICY_GROUP_REQUIRED', 'A group-scoped insert must name the group the row belongs to in "' + policy.c + '".');
         }
-        // An app-role table has no identity column to name or stamp; the
-        // create role is checked by the insert predicate.
+
+
         if (policy.k === 'r') return;
         if (policy.k !== 'p') return;
         for (let i = 0; i < cols.length; i++) if (__sw_lower(cols[i].column) === __sw_lower(policy.v) && cols[i].value !== null) return;
@@ -7152,8 +7149,8 @@ var DB_POLICY_HELPERS_JS = `${ROLE_DOMAIN_MAP_JS}
 `;
 var DB_POLICY_RESOLVE_SCOPE_JS = `
         if (__sw_linkAuthority) {
-          // Row links (db-row-links.ts): the whole request runs under its one
-          // link session; the platform composes and proves the scope.
+
+
           if (asServer === true || !__sw_usesManagedEndpoint()) __sw_linkUnavailable();
           return { scope: { mode: 'link', link: { grant: __sw_linkAuthority.grant, token: __sw_linkAuthority.token, root: __sw_linkAuthority.root,
             column: '', digest: '', epoch: 0, write: verb !== 'from' } }, principalId: undefined };
@@ -7200,8 +7197,8 @@ var DB_LIVE_INVALIDATION_JS = `      function __sw_liveInvalidation(table) {
         return Array.from(names);
       }
 
-      // An app-role list's policy: the leaf at the root or ending a parent
-      // chain of at most four edges (the platform re-checks the role).
+
+
       function __sw_liveRoleChain(policy) {
         let current = policy;
         for (let edges = 0; current && current.k === 'p'; edges++) {
@@ -7211,8 +7208,8 @@ var DB_LIVE_INVALIDATION_JS = `      function __sw_liveInvalidation(table) {
         return !!current && current.k === 'r';
       }
 
-      // A list under a group parent: one to four parent edges ending in a
-      // built-in group leaf (the platform resolves the parent's group).
+
+
       function __sw_liveGroupChain(policy) {
         let current = policy;
         let edges = 0;
@@ -7232,9 +7229,9 @@ var DB_LIVE_INVALIDATION_JS = `      function __sw_liveInvalidation(table) {
           return { kind: /^anon_[a-zA-Z0-9_-]{8,}$/.test(id) ? 'visitor' : 'app_user', id: principalId };
         }
         if (ir.scope.mode === 'unscoped') return { kind: 'shared', id: null };
-        // A live group list (member() or a built-in group() leaf at the root)
-        // is followed by a signed-in app user; the group and membership are
-        // checked by the platform at register and subscribe.
+
+
+
         if (ir.scope.mode === 'member' || (ir.scope.mode === 'policy' && ir.scope.policy && (ir.scope.policy.k === 'g' || __sw_liveRoleChain(ir.scope.policy) || __sw_liveGroupChain(ir.scope.policy)))) {
           if (principalId === undefined || principalId === null) return null;
           if (/^anon_[a-zA-Z0-9_-]{8,}$/.test(String(principalId))) return null;
@@ -7243,10 +7240,10 @@ var DB_LIVE_INVALIDATION_JS = `      function __sw_liveInvalidation(table) {
         return null;
       }
 
-      // Live group lists (managed data v2): which groups a write touched, from
-      // its OWN returned rows (plus, for a move, the group its filter pinned),
-      // and which (user, group) memberships a membership-table write touched.
-      // Nothing is guessed: missing evidence is reported as incomplete.
+
+
+
+
       function __sw_liveGroupEvidenceFor(ir, mutation, rows) {
         if (isDraftExecution || !env.SW_RELEASE_ID || !mutation) return null;
         const written = (ir.values || []).concat(ir.increments || []).map(function (item) { return String(item.column).toLowerCase(); });
@@ -7254,9 +7251,9 @@ var DB_LIVE_INVALIDATION_JS = `      function __sw_liveInvalidation(table) {
         if (!candidates.length) return null;
         const op = mutation.op;
         const wanted = String(mutation.table || '').toLowerCase();
-        // rowsGroupColumn: the group column of a group list's rows (member()
-        // or a built-in group() leaf). Built-in memberships are never written
-        // through sw.db; their changes revoke from the group operations.
+
+
+
         let rowsGroupColumn = null, membershipMember = null, roleList = false, parentGroupList = false;
         for (let i = 0; i < candidates.length; i++) {
           const view = __sw_liveViewByName(candidates[i]);
@@ -7270,15 +7267,15 @@ var DB_LIVE_INVALIDATION_JS = `      function __sw_liveInvalidation(table) {
             } else if (dep.scope.mode === 'policy' && dep.scope.policy && dep.scope.policy.k === 'g' && dep.kind === 'rows') {
               rowsGroupColumn = dep.scope.policy.c;
             } else if (dep.scope.mode === 'policy' && dep.scope.policy && __sw_liveGroupChain(dep.scope.policy)) {
-              // A list under a group parent: its resolved old/new groups must
-              // come from the mutation executor's same-batch evidence
-              // (live-group-chain.ts). Until the executor supplies it, this
-              // write's evidence is incomplete: no group is guessed or
-              // broadcast, and subscribers repair on their next refresh.
+
+
+
+
+
               parentGroupList = true;
             } else if (dep.scope.mode === 'policy' && dep.scope.policy && __sw_liveRoleChain(dep.scope.policy)) {
-              // An app-role list (rows or a parent hop): one shared channel,
-              // no per-row evidence needed.
+
+
               roleList = true;
             }
           }
@@ -7306,8 +7303,8 @@ var DB_LIVE_INVALIDATION_JS = `      function __sw_liveInvalidation(table) {
             if (scalar(got.value)) groups.add(got.value); else evidence.complete = false;
           }
           if (op === 'update' && written.indexOf(String(column).toLowerCase()) !== -1) {
-            // A move: the rows show the new group; the old one is the group the
-            // update's own filter pinned, or the evidence is incomplete.
+
+
             const where = ir.where || [];
             let pinned = false;
             for (let i = 0; i < where.length; i++) {
@@ -7327,8 +7324,8 @@ var DB_LIVE_INVALIDATION_JS = `      function __sw_liveInvalidation(table) {
             if (!user.found || !group.found || !scalar(user.value) || !scalar(group.value)) { evidence.complete = false; continue; }
             pairs.push({ user: user.value, group: group.value });
           }
-          // An update may rewrite who or which group: the old pair is not in the
-          // returned rows, so the subscription lifetime bounds that removal.
+
+
           if (op === 'update') evidence.complete = false;
           evidence.memberships = pairs.slice(0, 100);
           if (pairs.length > 100) evidence.complete = false;
@@ -7336,11 +7333,11 @@ var DB_LIVE_INVALIDATION_JS = `      function __sw_liveInvalidation(table) {
         return evidence;
       }
 
-      // Owner lists: the owners (old and new) of the rows a write touched. A
-      // write in the owner's own scope can only touch the writer's rows; any
-      // other write (server, job, another scope) is attributed from its own
-      // returned rows, plus the owner its filter pinned when it moves a row.
-      // Missing evidence is reported, never guessed.
+
+
+
+
+
       function __sw_liveOwnersFor(ir, mutation, rows, principalId) {
         if (!mutation) return null;
         const written = (ir.values || []).concat(ir.increments || []).map(function (item) { return String(item.column).toLowerCase(); });
@@ -7409,8 +7406,8 @@ var DB_LIVE_INVALIDATION_JS = `      function __sw_liveInvalidation(table) {
         const written = (ir.values || []).concat(ir.increments || []).map(function (item) { return String(item.column).toLowerCase(); });
         const candidates = __sw_liveCandidates(entry, mutation.op, written);
         if (!candidates.length) return null;
-        // A group list's table or membership table is attributed by its group
-        // evidence and an owner list by its owners, not by the writer.
+
+
         const subject = __sw_liveSubject(ir, principalId) || (evidence || owned ? { kind: 'shared', id: null } : null);
         if (!subject) return { delivery: 'resync_required', reason: 'LIVE_SCOPE_NOT_SUBSCRIBABLE' };
         const body = {
@@ -7424,8 +7421,8 @@ var DB_LIVE_INVALIDATION_JS = `      function __sw_liveInvalidation(table) {
         if (evidence && evidence.groups) body.groups = evidence.groups;
         if (evidence && evidence.memberships) body.memberships = evidence.memberships;
         if (owned) body.owners = owned.owners;
-        // Bounded retry: three attempts over about a second. The write has
-        // already committed; a final failure is logged and reported, never thrown.
+
+
         let lastReason = 'DELIVERY_UNAVAILABLE';
         for (let attempt = 0; attempt < 3; attempt++) {
           if (attempt > 0) await new Promise(function (resolve) { setTimeout(resolve, attempt * 300); });
@@ -7453,22 +7450,22 @@ var DB_LIVE_INVALIDATION_JS = `      function __sw_liveInvalidation(table) {
 
 `;
 var DB_JS = `    db: (function () {
-      // Two execution paths for sw.db, picked once at function start.
-      //   1. Production prefers the native D1 binding (env.PROJECT_DB).
-      //      Zero HTTP, no auth middleware \u2014 fastest path.
-      //   2. Enrolled dev uses REST through /v1/db/query (+ /v1/db/batch),
-      //      because the API worker owns slot resolution and can resolve the
-      //      fork independently of the baked database id. Flag-off dev retains
-      //      the native-first path. Production falls back to REST only when no
-      //      binding is attached.
-      //
-      // The fallback synthesizes an object that mimics D1's binding
-      // surface \u2014 prepare(sql).bind(...).all() / .batch([...]) \u2014 so
-      // the rest of this module doesn't branch on which path served
-      // the query.
+
+
+
+
+
+
+
+
+
+
+
+
+
       const nativeDraftDbRequired = env.DRAFT_NATIVE_DB_REQUIRED === '1';
-      // An inline handler check never has a database: saying "retry" would
-      // send the caller into a loop that cannot succeed.
+
+
       const inlineCheck = env.DRAFT_INLINE_CHECK === '1';
       function __sw_draftDbUnavailable() {
         const err = new Error(inlineCheck
@@ -7490,14 +7487,14 @@ var DB_JS = `    db: (function () {
       }
       function __sw_makeRestDB(restOpts) {
         restOpts = restOpts || {};
-        // Managed-mode raw path posts to /v1/db/raw-read, backed
-        // by a read-only database capability. Default paths are the normal
-        // write-capable data plane.
+
+
+
         const queryPath = restOpts.queryPath || '/v1/db/query';
         const batchPath = restOpts.batchPath || '/v1/db/batch';
-        // Recognize the two managed-mode capability responses and surface them
-        // as EXPOSED errors the developer sees verbatim, instead of the generic
-        // DB_CONNECTION_NOT_READY the 403/503 branches would otherwise assign.
+
+
+
         function managedCapabilityError(body) {
           const code = body && (body.error || body.code);
           if (code === 'MANAGED_RAW_WRITE_FORBIDDEN') {
@@ -7535,7 +7532,7 @@ var DB_JS = `    db: (function () {
           err.__sw_expose = true;
           return err;
         }
-        // Cloud-preview entitlement refusals retain their typed recovery message.
+
         function planGateError(body) {
           const code = body && (body.error || body.code);
           if (code !== 'CLOUD_DEV_NOT_ENABLED') return null;
@@ -7596,9 +7593,9 @@ var DB_JS = `    db: (function () {
           }
           const j = await r.json();
           const d = (j && j.data) || j || {};
-          // d.rows are row objects (the field name is a CF carry-over;
-          // see worker/src/utils/d1.ts:queryD1 \u2014 results[0] is already
-          // a record). Normalize to D1-binding shape.
+
+
+
           return {
             results: Array.isArray(d.rows) ? d.rows : (Array.isArray(d.results) ? d.results : []),
             meta: {
@@ -7614,10 +7611,10 @@ var DB_JS = `    db: (function () {
           };
         }
         function prepare(sql) {
-          // __sw_sql / __sw_params are read back by batch() so it can
-          // reassemble { sql, params } and send the whole batch to the
-          // atomic /v1/db/batch endpoint. The query path (all/first/run)
-          // is unchanged.
+
+
+
+
           const stmt = {
             __sw_sql: sql,
             __sw_params: [],
@@ -7632,20 +7629,20 @@ var DB_JS = `    db: (function () {
           return stmt;
         }
         async function batch(prepareds) {
-          // The native D1 binding runs .batch([...]) as a single
-          // all-or-nothing transaction. On the REST fallback we MUST
-          // give the same guarantee, so route the whole batch through
-          // the atomic /v1/db/batch endpoint (the atomic batch
-          // coordinator commits every statement or none). NEVER replay
-          // statements one-by-one over /v1/db/query: that silently
-          // drops atomicity and can leave a half-applied batch with no
-          // signal (parity audit: REST-fallback db.batch atomicity).
+
+
+
+
+
+
+
+
           const list = Array.isArray(prepareds) ? prepareds : [];
           const statements = list.map(function (p) {
             return { sql: p && p.__sw_sql, params: (p && p.__sw_params) || [] };
           });
-          // If we cannot assemble an atomic request, fail loudly rather
-          // than degrade to non-atomic sequential execution.
+
+
           if (statements.length === 0 || statements.some(function (s) { return typeof s.sql !== 'string'; })) {
             const err = new Error('sw.db.batch could not be assembled for atomic execution (each statement needs a SQL string). Refusing to run a non-atomic batch.');
             err.code = 'DB_BATCH_NOT_ATOMIC';
@@ -7688,8 +7685,8 @@ var DB_JS = `    db: (function () {
           if ((d.statement_count !== statements.length || results.length !== statements.length || results.some(function (row) {
             return !row || !Array.isArray(row.rows) || !Number.isSafeInteger(row.changes) || row.changes < 0;
           }))) throw __sw_batchOutcomeUnknown();
-          // Normalize each per-statement result to the D1-binding shape
-          // the callers expect: { results, meta: { changes, last_row_id } }.
+
+
           return results.map(function (row) {
             return {
               success: true,
@@ -7706,18 +7703,18 @@ var DB_JS = `    db: (function () {
         return { prepare: prepare, batch: batch };
       }
 
-      // Enrollment is stamped into each dev bundle at deploy/rebake time. Only
-      // an enrolled dev bundle may bypass its baked native PROJECT_DB and ask
-      // the API to resolve the current fork. Unenrolled dev and every prod
-      // bundle retain master's native-first behavior byte-for-byte at runtime.
-      // The native session wrapper is defined in db-session-recovery.ts. It is
-      // hoisted into this closure so this grandfathered file does not regrow.
+
+
+
+
+
+
       var __sw_nativeDb = __sw_sessionedNativeDb(env.PROJECT_DB);
 
       const draftExecution = projectEnv === 'draft';
       const enrolledDev = projectEnv === 'dev' && env.DEV_SLOT_ENFORCED === '1';
-      // Split layout: see db-raw.ts. No managed binding; structured
-      // calls never use SQL (native or REST).
+
+
       const __SW_DB_SPLIT = env.SW_DB_LAYOUT === 'split';
       const __sw_layoutDb = nativeDraftDbRequired
         ? (__sw_nativeDb || __sw_makeUnavailableDraftDB())
@@ -7733,20 +7730,20 @@ var DB_JS = `    db: (function () {
         ? 'rest'
         : (__sw_nativeDb ? 'native' : 'rest');
 
-      // Database write-mode. Canonical project metadata baked
-      // identically onto every slot (NOT inferred from PROJECT_SCHEMA). 'managed'
-      // means managed-table operations use declared APIs by default. Explicit
-      // sw.db.server.query/batch receives the existing read-only raw capability;
-      // ordinary raw SQL is refused locally. Absent reads as 'sql', preserving
-      // the legacy SQL-mode behavior.
+
+
+
+
+
+
       const DB_WRITE_MODE = (env.PROJECT_DB_WRITE_MODE === 'managed') ? 'managed' : 'sql';
 
-      // Table-intent METADATA declared at deploy time (lowercased table name \u2192
-      // owner column / intent). These no longer drive any raw-SQL enforcement:
-      // the raw-SQL rewriter was removed ( \u2014 the platform never
-      // parses or rewrites SQL it did not compose). The maps stay baked because
-      // the structured query builder (step 1) and deploy gates (step 3) consume
-      // them. Declarations are recorded via sw.db.scope / db_scope_set below.
+
+
+
+
+
+
       const SCOPES = (function () {
         try { return env.PROJECT_SCOPES ? __sw_jsonParse(env.PROJECT_SCOPES) : {}; }
         catch (_) { return {}; }
@@ -7757,22 +7754,22 @@ var DB_JS = `    db: (function () {
         catch (_) { return {}; }
       })();
 
-      // Declared column shapes for MANAGED tables \u2014 tables born through
-      // db/schema.ts (Managed Database Slice 4, ). PROJECT_SCHEMA
-      // and its two siblings above are the ONLY env names supplied by the
-      // generated entrypoint's own source rather than a provider binding
-      // (runtime/declared-data.ts): shapes outgrow a binding value cap, and an
-      // artifact's contract must not be mutable out of band. Shape is
-      // lowercased table name -> { columns: [{ n, t, nul, d }] }. Tables with
-      // no declared shape (SQL-world, imported) behave exactly as before.
+
+
+
+
+
+
+
+
       const SCHEMA = (function () {
         try { return env.PROJECT_SCHEMA ? __sw_jsonParse(env.PROJECT_SCHEMA) : {}; }
         catch (_) { return {}; }
       })();
 
-      // Release-pinned, opt-in named views. Absent on every legacy bundle and
-      // on releases with no sw.db.live declaration. This never contains raw
-      // SQL shapes; only the explicit v4 artifact is baked here.
+
+
+
       const LIVE_MANIFEST = (function () {
         try {
           const parsed = env.PROJECT_LIVE_MANIFEST ? __sw_jsonParse(env.PROJECT_LIVE_MANIFEST) : null;
@@ -7781,17 +7778,17 @@ var DB_JS = `    db: (function () {
             : { liveViews: [], invalidation: [] };
         } catch (_) { return { liveViews: [], invalidation: [] }; }
       })();
-      // Closure-private capability registry. Customer code can hold a result
-      // object but cannot mint the WeakMap entry created only after a successful
-      // composed from() execution.
+
+
+
       const __sw_liveReadBrands = new WeakMap();
 
-      // Loud fail for the retired { user } option. sw.db.query
-      // used to REWRITE raw SQL to inject an owner filter when { user } was
-      // passed. That rewriter is gone: platform-proven scoping exists only on
-      // structured queries the platform composes. Throwing here \u2014 instead of
-      // silently running the SQL as written \u2014 is what keeps every existing
-      // scoped call from becoming an unscoped full-table read.
+
+
+
+
+
+
       function __sw_throwRawSqlCannotBePlatformScoped(api) {
         const err = new Error(api + ' does not apply platform scoping to raw SQL. ' +
           'Platform-proven scoping exists only on structured queries the platform composes. ' +
@@ -7804,17 +7801,17 @@ var DB_JS = `    db: (function () {
       }
 
       function ensureBinding() {
-        // Always satisfied now \u2014 DB is either the native binding or
-        // the REST facade. Kept as a no-op so the call sites below
-        // don't have to change. Remove with the next refactor.
+
+
+
       }
 
       function __sw_stripStringsAndComments(sql) {
-        // BLANKS every string-literal and comment character with a SPACE,
-        // one-for-one, so the returned string is the SAME LENGTH as the input
-        // and offsets stay byte-aligned with the original SQL. Used by the
-        // DDL guard (__sw_assertNoDdl) and the mutation detector
-        // (__sw_mutationOf).
+
+
+
+
+
         let out = '', i = 0;
         const n = sql.length;
         while (i < n) {
@@ -7844,16 +7841,16 @@ var DB_JS = `    db: (function () {
       }
 
       function __sw_extractTables(sql) {
-        // Two length-preserving views, built in ONE quote/comment-aware pass:
-        //   scan \u2014 strings, comments AND identifier CONTENTS blanked: keyword
-        //          LOCATION. A keyword inside any quote/identifier/comment can't
-        //          false-match, and an apostrophe inside an identifier ("a'b")
-        //          can't open a fake string that hides a real FROM/INTO.
-        //   read \u2014 strings + comments blanked but identifier delimiters+contents
-        //          kept: reading the table NAME (quoted/qualified forms legible).
-        // Both are the same length so offsets align. Table extraction must
-        // recognize bare, quoted, qualified, and parenthesized references;
-        // ambiguity is refused instead of inferred.
+
+
+
+
+
+
+
+
+
+
         const bq = String.fromCharCode(96);
         const blanks = function (k) { let s = ''; while (s.length < k) s += ' '; return s; };
         let scan = '', read = '';
@@ -7900,23 +7897,23 @@ var DB_JS = `    db: (function () {
           if (!matched) continue;
           let j = i + matched.length;
           while (j < scan.length && /\\s/.test(scan[j])) j++;
-          // UPDATE OR <verb> (ROLLBACK/ABORT/REPLACE/FAIL/IGNORE): the table
-          // follows the conflict clause, not the bare 'OR'. Skip "OR <verb>" so
-          // 'UPDATE OR IGNORE notes' reads 'notes', not 'or'.
+
+
+
           if (matched === 'UPDATE' && __sw_kwAt(up, j, 'OR')) {
             j += 2; while (j < scan.length && /\\s/.test(scan[j])) j++;
             while (j < scan.length && /[A-Za-z]/.test(scan[j])) j++;   // the conflict verb
             while (j < scan.length && /\\s/.test(scan[j])) j++;
           }
-          // Read this table reference, then \u2014 for FROM only \u2014 keep reading
-          // comma-separated tables (pre-ANSI cross join "FROM a, b, c") until the
-          // next clause keyword, so a scoped table can't hide behind a comma.
+
+
+
           while (true) {
-            // Descend wrapping parens that are NOT a subquery: FROM (notes) is a
-            // parenthesized reference to the real table; FROM (SELECT ...) is a
-            // subquery whose own inner FROM the scan matches separately. Count the
-            // wraps entered so the comma-walk below can consume their closers
-            // (else 'FROM (a), notes' stops at the wrap's ')' and misses notes).
+
+
+
+
+
             let wrapOpens = 0;
             while (scan[j] === '(') {
               let q = j + 1; while (q < scan.length && /\\s/.test(scan[q])) q++;
@@ -7945,12 +7942,12 @@ var DB_JS = `    db: (function () {
             }
             if (name) tables.add(name.toLowerCase());
             if (matched !== 'FROM') break;
-            // FROM comma-list continuation. Robustly advance to the NEXT depth-0
-            // comma in the from-region \u2014 regardless of what the current item is
-            // (bareword, (paren), (SELECT\u2026), foo(), a JOIN chain, alias). Stop at
-            // the next top-level clause keyword / ')' that ends the from-region /
-            // ';' / end. Then read the table after the comma. This closes the
-            // comma-after-non-bareword extraction misses (round-7 wf_f9e54887).
+
+
+
+
+
+
             let cd = 0, hitComma = false;
             while (j < scan.length) {
               const ch = scan[j];
@@ -7983,8 +7980,8 @@ var DB_JS = `    db: (function () {
       }
 
 
-      // True iff the uppercase keyword 'word' sits at offset i in 'up' with a
-      // word boundary on both sides.
+
+
       function __sw_kwAt(up, i, word) {
         if (up.substr(i, word.length) !== word) return false;
         const before = up[i - 1];
@@ -8008,12 +8005,12 @@ var DB_JS = `    db: (function () {
 
 
 
-      // Normalize Postgres-style $N placeholders to D1's positional ?
-      // markers. D1's .bind() walks ? left-to-right; left-untouched $N
-      // tokens silently bind in array order, so 'WHERE id = $1 AND a = $2'
-      // with ['x', 'A'] would still bind x\u2192? then A\u2192? \u2014 fine here, but
-      // 'a = $2 WHERE id = $1' would bind 'x' to a and 'A' to id (zero
-      // changes). Reject mixed ?/$N as VALIDATION_ERROR.
+
+
+
+
+
+
       function __sw_normalizePlaceholders(sql, params) {
         const inputParams = params || [];
         let out = '';
@@ -8087,20 +8084,20 @@ var DB_JS = `    db: (function () {
         return { sql: out, params: newParams };
       }
 
-      // Postgres-flavored SQL \u2192 SQLite. Mirrors translateSqlForDialect
-      // in worker/src/utils/sql-translate.ts; kept inline because this
-      // runs inside the customer's deployed function bundle (no imports
-      // available at runtime). Literal- and comment-aware: text inside
-      // '...', "...", -- ..., or /* ... */ is preserved verbatim.
-      // Dialect is hard-coded to 'sqlite' today (every project is on
-      // D1); when a project lands on a Postgres backend the dialect
-      // flips at deploy time and the function becomes a pass-through.
+
+
+
+
+
+
+
+
       const __sw_DIALECT = 'sqlite';
       function __sw_translateForDialect(sqlIn) {
         if (__sw_DIALECT !== 'sqlite') return sqlIn;
-        // Pre-pass: json arrows. The quoted key is syntactically a
-        // SQL literal but semantically part of the operator, so the
-        // literal-aware walker below would skip it. See sql-translate.ts.
+
+
+
         let sql = sqlIn
           .replace(/(\\w+)->>\\s*'([^']+)'/g, "json_extract($1, '$.$2')")
           .replace(/(\\w+)->\\s*'([^']+)'/g, "json_extract($1, '$.$2')");
@@ -8111,9 +8108,9 @@ var DB_JS = `    db: (function () {
           [/\\bILIKE\\b/gi, 'LIKE'],
           [/\\bSERIAL\\b/gi, 'INTEGER'],
           [/\\bBOOLEAN\\b/gi, 'INTEGER'],
-          // NOTE: RETURNING * is intentionally NOT rewritten \u2014 SQLite/D1
-          // support it natively. Rewriting it to RETURNING id silently
-          // dropped every other column and broke id-less tables.
+
+
+
         ];
         let out = '';
         let code = '';
@@ -8176,28 +8173,28 @@ var DB_JS = `    db: (function () {
         return stmt;
       }
 
-      // Query-latency alerting ( item 2, ,
-      // ) +
-      // schema-drift hint ( item 7). Wraps any sw.db execution:
-      // console.warn on queries at or above SW_SLOW_QUERY_MS; "no such column" /
-      // "no such table" says the schema is out of date (a retired table says so) \u2014 a real
-      // missing-column error otherwise blames the deployed code when
-      // the actual fix is db_migrate. The first successful query in a
-      // runtime instance gets a neutral first-touch label because it can
-      // include startup work. Later warnings distinguish provider-reported
-      // SQL-engine duration from all other binding time. The residual is NOT
-      // labelled as SQL execution or as a specific queue: it can include
-      // activation, placement, transport, provider queueing, and binding work.
-      // Logs and the dashboard Logs tab surface the structured timing fields.
+
+
+
+
+
+
+
+
+
+
+
+
+
       const SW_SLOW_QUERY_MS = 100;
-      // Retry-on-backpressure (founder 2026-06-08): a write that gets
-      // "D1 overloaded / queued for too long" or SQLITE_BUSY did NOT commit
-      // (rejected before it ran), so retrying is safe \u2014 no double-write.
-      // Only CLEAR backpressure signals are retried (never a generic error,
-      // so a post-commit network blip can't trigger a double-write). Reads
-      // are idempotent, also safe. Bounded attempts + backoff: absorbs
-      // transient spikes; sustained overload still surfaces after ~1.5s
-      // (correct backpressure, not an infinite hang).
+
+
+
+
+
+
+
+
       function __sw_isRetryable(err) {
         const m = String((err && err.message) || err || '').toLowerCase();
         return m.indexOf('overload') !== -1 ||
@@ -8206,10 +8203,10 @@ var DB_JS = `    db: (function () {
                m.indexOf('database is locked') !== -1 ||
                (m.indexOf('busy') !== -1 && m.indexOf('database') !== -1);
       }
-      // Patience budget ~10s total: gentle early (transient spikes clear in
-      // ms) and progressively patient (absorb sustained overload by WAITING,
-      // not erroring \u2014 Postgres-like graceful degradation, bounded by the
-      // request window so we never hold a connection indefinitely).
+
+
+
+
       const __SW_RETRY_DELAYS = [50, 150, 400, 900, 2000, 3000, 3500];
       function __sw_dbStatementKind(sql) {
         const match = String(sql).match(/^\\s*([A-Za-z]+)/);
@@ -8224,7 +8221,7 @@ var DB_JS = `    db: (function () {
         let engineDurationComplete = list.length > 0;
         let databaseRegion = null;
         let databaseColo = null;
-        // Provider's own answer (served_by_primary), never inferred; null = not reported.
+
         let servedByPrimary = null;
         for (const item of list) {
           const meta = item && item.meta;
@@ -8239,7 +8236,7 @@ var DB_JS = `    db: (function () {
           if (meta && !databaseColo && typeof meta.served_by_colo === 'string') {
             databaseColo = meta.served_by_colo;
           }
-          // Any primary touch in a batch counts as primary-served (the slow hop).
+
           if (meta && typeof meta.served_by_primary === 'boolean' && meta.served_by_primary) {
             servedByPrimary = true;
           } else if (meta && typeof meta.served_by_primary === 'boolean' && servedByPrimary === null) {
@@ -8331,15 +8328,15 @@ var DB_JS = `    db: (function () {
         }
       }
 
-      // Native binding writes do not pass through /v1/db/query, so forward the
-      // provider's post-commit size evidence over the project-bound runtime
-      // credential. The server verifies that credential and the exact baked DB
-      // id, then applies a timestamp + pointer guard. Failures are deliberately
-      // swallowed: a committed customer write remains successful.
+
+
+
+
+
       function __sw_deferDbSizeObservation(out) {
-        // A draft write is committed only to its disposable clone. It must not
-        // update the live project's accounting pointer or emit any other
-        // shared post-commit work.
+
+
+
         if (isDraftExecution) return;
         if (__sw_dbExecutionPath !== 'native' || !env.PROJECT_DB_ID) return;
         const list = Array.isArray(out) ? out : [out];
@@ -8367,11 +8364,11 @@ var DB_JS = `    db: (function () {
       }
 
 ${DB_LIVE_INVALIDATION_JS}      // Detect the (op, table) from a SQL statement. Returns null
-      // for SELECT or anything we can't safely parse. Reuses the
-      // existing strip / detect / extract helpers. For multi-table
-      // mutations (rare in app code, e.g. UPDATE ... FROM joins)
-      // returns the FIRST touched table \u2014 good enough for the v1
-      // event hook; subscribers can dedupe.
+
+
+
+
+
       function __sw_mutationOf(sql) {
         try {
           var stripped = __sw_stripStringsAndComments(sql);
@@ -8383,31 +8380,31 @@ ${DB_LIVE_INVALIDATION_JS}      // Detect the (op, table) from a SQL statement. 
         } catch (_) { return null; }
       }
 
-// Reject DDL statements from inside the function runtime
-      // (, 2026-05-21). A request handler should never
-      // ALTER / DROP / CREATE the schema \u2014 those operations belong to
-      // operator tooling (CLI, MCP db_migrate, dashboard). Without
-      // this guard, a buggy handler that takes SQL from the request
-      // body (or just hard-codes a destructive query) could destroy
-      // the database, and removing sw.db.migrate alone wouldn't help
-      // because sw.db.query / batch also speak raw SQL to the same
-      // D1 binding. Match the FIRST keyword after stripping leading
-      // whitespace + line comments \u2014 captures the common shapes
-      // without false-positive-ing on data queries that happen to
-      // contain "DROP" or "CREATE" in a string literal further in.
+
+
+
+
+
+
+
+
+
+
+
+
       function __sw_assertNoDdl(sql) {
-        // NOTE: this source lives inside the PLATFORM_CONTEXT_JS
-        // template literal. Every backslash in a regex literal must
-        // be doubled here, otherwise the emitted bundle collapses
-        // each escape (e.g. backslash-s becomes plain s) and the
-        // resulting regex stops matching whitespace + word boundary.
-        // Avoid backticks in this comment block \u2014 they would close
-        // the outer template literal.
-        // Strip ALL leading whitespace, line comments (-- ...) AND block
-        // comments (/* ... */) before the DDL-prefix test \u2014 a leading block
-        // comment must not push the DDL keyword off offset 0 and slip the guard
-        // (e.g. "/* */ DROP TABLE x"). Use the shared length-preserving stripper
-        // then trimStart so the keyword is at the front regardless of comment form.
+
+
+
+
+
+
+
+
+
+
+
+
         const cleaned = __sw_stripStringsAndComments(String(sql)).replace(/^\\s+/, '').toUpperCase();
         if (/^(?:ALTER|DROP|CREATE|RENAME|TRUNCATE|PRAGMA|VACUUM|REINDEX|ATTACH|DETACH)\\b/.test(cleaned)) {
           const op = (cleaned.match(/^[A-Z]+/) || ['DDL'])[0];
@@ -8419,27 +8416,27 @@ ${DB_LIVE_INVALIDATION_JS}      // Detect the (op, table) from a SQL statement. 
             'Database tab. Data writes (INSERT, UPDATE, DELETE) are fine from a function.'
           );
           err.code = 'DDL_NOT_ALLOWED_IN_FUNCTION';
-          // Surface the message above as a clean 403 instead of letting the
-          // shim's catch-all flatten it into an opaque 500 FUNCTION_ERROR.
-          // Same treatment as the SCOPE_VIOLATION siblings: this is a
-          // developer mistake with a named recovery path, and hiding it leaves
-          // exactly the unactionable error this text was written to prevent.
-          // Message is product-language only \u2014 no infra leak.
+
+
+
+
+
+
           err.status = 403;
           err.__sw_expose = true;
           throw err;
         }
       }
 
-      // D1's prepared-statement binding accepts a SQL string containing more
-      // than one statement, so prepare() is not a structural single-statement
-      // boundary. Do not deepen the DDL keyword parser to inspect statement 2,
-      // 3, etc. Instead, make the customer runtime contract one statement per
-      // query/batch entry and detect only whether a real statement follows an
-      // unquoted semicolon.
-      //
-      // Enforced unconditionally: there is no env or bundle
-      // switch, so neither a binding nor customer configuration can opt out.
+
+
+
+
+
+
+
+
+
 
       function __sw_hasSqlAfterSemicolon(sql, start) {
         let i = start;
@@ -8467,9 +8464,9 @@ ${DB_LIVE_INVALIDATION_JS}      // Detect the (op, table) from a SQL statement. 
         let i = 0;
         while (i < sql.length) {
           const ch = sql[i];
-          // SQL strings and quoted identifiers all allow their delimiter to be
-          // escaped by doubling it. Semicolons inside them are data, not a
-          // statement boundary.
+
+
+
           if (ch === "'" || ch === '"' || ch.charCodeAt(0) === 96) {
             const quote = ch;
             i++;
@@ -8518,28 +8515,28 @@ ${DB_LIVE_INVALIDATION_JS}      // Detect the (op, table) from a SQL statement. 
         throw err;
       }
 
-      // sw.db.scope(table, opts) \u2014 declare a table as user-scoped IN-BAND,
-      // so a deployed function / run_code setup script can arm per-user row
-      // scoping without minting a developer key and curl-ing /v1/db/scopes
-      // out of band (the gooddog gap). Routes through the SAME POST
-      // /v1/db/scopes the dashboard + MCP use, with the same owner authority:
-      // the runtime key is the project owner's, pinned to THIS project by the
-      // auth middleware, so a scope can only ever be declared on this project.
-      //
-      // A scope declaration is table-intent METADATA: it names
-      // the owner column so the structured query builder and deploy gates can
-      // consume it. It does NOT arm any raw-SQL enforcement \u2014 raw SQL in
-      // server functions runs as written. Declarations are baked into the
-      // bundle's entrypoint as PROJECT_SCOPES; recording one re-bakes it with
-      // the new scope map (utils/scope-activation.ts), so it DOES take effect
-      // on the running deploy \u2014 but a change that would re-posture a query a
-      // released version still runs is refused (SCOPE_CHANGE_BLOCKED_BY_RELEASE,
-      // scope-change-protection.ts). Unlike sw.db.query, failures throw.
-      //
-      //   await sw.db.scope('bookings', { owner_column: 'user_id' })
-      //   await sw.db.scope('audit', { intent: 'shared' })  // intentionally cross-user
-      //   await sw.db.scope.list()                           // all declared scopes
-      //   await sw.db.scope.get('bookings')                  // one scope, or null
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
       async function __sw_scopeDeclare(table, opts) {
         if (typeof table !== 'string' || !table) {
           const err = new Error('sw.db.scope(table, opts): table must be a non-empty string.');
@@ -8572,50 +8569,50 @@ ${DB_LIVE_INVALIDATION_JS}      // Detect the (op, table) from a SQL statement. 
         return null;
       };
 
-      // \u2500\u2500\u2500 Structured query builder ( step 1) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
-      // The platform composes the query; it never parses a string it did not
-      // write. Each verb builds a Query IR (mirrors src/types/query-ir.ts \u2014
-      // the runtime cannot import the TS types), renders parameterized SQL
-      // from it, and executes through the SAME prep/__sw_timedExec plumbing as
-      // sw.db.query. Three single authorities keep the whole surface safe with
-      // no per-case guards: (1) ONE identifier chokepoint \u2014 __sw_structQuote,
-      // called at render (the SQL boundary), so every table/column/order name
-      // that reaches SQL is validated + double-quoted in exactly one place;
-      // (2) ONE operator authority \u2014 __SW_STRUCT_BINOP, a null-prototype map
-      // consulted by both the where-walker (acceptance) and the renderer
-      // (emission), so a polluted-prototype key can never smuggle a SQL
-      // fragment; (3) ONE where-walker that accepts exactly the documented
-      // grammar and rejects everything else. The IR carries values/where/order
-      // as ordered entries \u2014 never a plain object keyed by caller input \u2014 so
-      // reserved JS keys are inert identifiers, not a vector. EVERY value is a
-      // bound ?.
 
-      // THE operator authority. A NULL-PROTOTYPE map, so a
-      // bracket lookup can never resolve an inherited Object.prototype property
-      // (a polluted "pwn"/"toString" key) into a SQL fragment \u2014 the
-      // prototype-pollution injection vector. This ONE map is consulted by BOTH
-      // the where-walker (acceptance) and the renderer (emission): a key is a
-      // valid binary operator iff __SW_STRUCT_BINOP[key] !== undefined, which on
-      // a null-proto object is true only for own keys. Its keys ARE the accepted
-      // binary-operator vocabulary \u2014 no second copy to drift.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
       const __SW_STRUCT_BINOP = __sw_assign(__sw_objCreateNull(), {
         eq: '=', ne: '<>', lt: '<', lte: '<=', gt: '>', gte: '>=', like: 'LIKE',
       });
-      // The full accepted-operator vocabulary, DERIVED from the one authority:
-      // the binary ops (keys above) plus the three structural ops the walker
-      // emits directly (in, is_null, not_null). check-structured-builder-op-coverage
-      // and the step-2 manifest extractor read THIS frozen list from source and
-      // assert set-equality with the matrix's tested ops, so a new operator
-      // cannot ship without a render+scope test.
+
+
+
+
+
+
       const __SW_STRUCT_OPS = Object.freeze(__sw_keys(__SW_STRUCT_BINOP).concat(['in', 'is_null', 'not_null', 'contains', 'starts_with', 'ends_with']));
-      // THE aggregate-function authority, built exactly like
-      // __SW_STRUCT_BINOP and for the same reason: a NULL-PROTOTYPE map, so a
-      // bracket lookup can never resolve an inherited Object.prototype property
-      // into a SQL fragment. Consulted by BOTH the aggregate compiler
-      // (acceptance \u2014 a key is a valid function iff __SW_STRUCT_AGG[key] !==
-      // undefined) and the renderer (emission), so there is one vocabulary with
-      // no second copy to drift. Nothing here takes an argument the caller
-      // authored: the operand is always a validated declared column, or nothing.
+
+
+
+
+
+
+
+
       const __SW_STRUCT_AGG = __sw_assign(__sw_objCreateNull(), {
         count: 'COUNT', sum: 'SUM', avg: 'AVG', min: 'MIN', max: 'MAX',
       });
@@ -8636,13 +8633,13 @@ ${DB_LIVE_INVALIDATION_JS}      // Detect the (op, table) from a SQL statement. 
         throw err;
       }
 
-      // THE identifier chokepoint \u2014 the SINGLE place an identifier is validated,
-      // called at render (the SQL boundary), so each name is validated exactly
-      // once. A name is valid iff it is a string matching the SQL identifier
-      // regex, at most 64 chars. Because the regex forbids the double-quote,
-      // quoting needs no escaping; and because column names never become
-      // plain-object keys (the IR carries ordered entries), reserved JS property
-      // names like __proto__ are inert quoted identifiers, not a vector.
+
+
+
+
+
+
+
       function __sw_structQuote(name) {
         if (typeof name !== 'string' || name.length > 64 || !__sw_reMatch(__SW_STRUCT_IDENT_RE, name)) {
           __sw_structThrow('Invalid identifier: names must be 1-64 characters of letters, digits, and underscores, starting with a letter or underscore. Got: ' + JSON.stringify(String(name).slice(0, 40)));
@@ -8650,9 +8647,9 @@ ${DB_LIVE_INVALIDATION_JS}      // Detect the (op, table) from a SQL statement. 
         return '"' + name + '"';
       }
 
-      // A bindable value is a string, number, or boolean (and null where the
-      // context allows it \u2014 INSERT/UPDATE values may be null, comparison
-      // operands may not). Everything else throws.
+
+
+
       function __sw_structAssertBindable(v, allowNull, ctx) {
         if (v === null) {
           if (allowNull) return;
@@ -8663,21 +8660,21 @@ ${DB_LIVE_INVALIDATION_JS}      // Detect the (op, table) from a SQL statement. 
         __sw_structThrow(ctx + ': values must be a string, number, boolean' + (allowNull ? ', or null' : '') + ' (got ' + t + ').');
       }
 
-      // THE single-condition compiler: one column form \u2192 ONE predicate (or
-      // throws). Accepts exactly: scalar (eq), null (is_null), or a
-      // single-known-operator object resolved through __SW_STRUCT_BINOP (own-key
-      // only). Object.keys yields only own enumerable string keys, so no
-      // inherited key reaches an operator decision. Anything else \u2014 a nested
-      // array, unknown operator, $-smuggling \u2014 is a VALIDATION_ERROR. This is
-      // the ONE place operator resolution happens; the where-walker calls it for
-      // both the plain form AND each element of a range array, so there is a
-      // single path through the null-prototype authority \u2014 no second lookup to
-      // drift or to reopen the inherited-property class.
+
+
+
+
+
+
+
+
+
+
       function __sw_structCompileCondition(col, cond) {
         if (cond === null) return { op: 'is_null', column: col };
         if (typeof cond !== 'object' || __sw_arrayIsArray(cond)) {
-          // A bare scalar \u2192 eq. An array here is a NESTED array (the walker
-          // already peeled one level for the range case): not bindable \u2192 throws.
+
+
           __sw_structAssertBindable(cond, false, 'where["' + col + '"]');
           return { op: 'eq', column: col, value: cond };
         }
@@ -8693,11 +8690,11 @@ ${DB_LIVE_INVALIDATION_JS}      // Detect the (op, table) from a SQL statement. 
           for (let j = 0; j < cond.in.length; j++) __sw_structAssertBindable(cond.in[j], false, 'where["' + col + '"].in[' + j + ']');
           return { op: 'in', column: col, values: __sw_arrayCopy(cond.in) };
         }
-        // Substring search: the PLATFORM composes the LIKE
-        // pattern \u2014 the caller's string is data, so % and _ in it match
-        // literally (escaped at render), never as wildcards. For a
-        // caller-authored pattern, use { like } \u2014 its value is still a bound
-        // param, but its wildcards are the caller's own.
+
+
+
+
+
         if (opk === 'contains' || opk === 'startsWith' || opk === 'endsWith') {
           if (typeof cond[opk] !== 'string') {
             __sw_structThrow('where["' + col + '"].' + opk + ' must be a string \u2014 the platform composes the search pattern from it (wildcards in the value match literally).');
@@ -8712,7 +8709,7 @@ ${DB_LIVE_INVALIDATION_JS}      // Detect the (op, table) from a SQL statement. 
         __sw_structThrow('where["' + col + '"]: unsupported operator ' + JSON.stringify(opk) + '. Supported: eq, ne, lt, lte, gt, gte, like, in, contains, startsWith, endsWith, and { not: null } or a bare null.');
       }
 
-      // order: 'col' | ['col', dir] | [['col', dir], ...]. dir defaults to asc.
+
       function __sw_structCompileOrder(order) {
         if (order === undefined || order === null) return undefined;
         let tuples;
@@ -8738,13 +8735,13 @@ ${DB_LIVE_INVALIDATION_JS}      // Detect the (op, table) from a SQL statement. 
         return v;
       }
 
-      // Validate + narrow an options object to a NULL-PROTOTYPE, own-keys-only
-      // copy. Callers then read opts.where / opts.columns / spec.set off THIS
-      // copy, so an inherited or prototype-polluted key (Object.create({ where:
-      // ... }), Object.prototype.where = ...) is neither validated in nor read
-      // back out \u2014 one chokepoint makes every caller safe. Null-proto is
-      // essential: a plain {} copy would still resolve a polluted
-      // Object.prototype.where on a missing key.
+
+
+
+
+
+
+
       function __sw_structReadOpts(opts, allowed, api) {
         if (opts === undefined || opts === null) return __sw_objCreateNull();
         if (typeof opts !== 'object' || __sw_arrayIsArray(opts)) __sw_structThrow(api + ': options must be an object.');
@@ -8757,11 +8754,11 @@ ${DB_LIVE_INVALIDATION_JS}      // Detect the (op, table) from a SQL statement. 
         return copy;
       }
 
-      // SCOPES keys are baked lowercased (scope-enforcement.ts lowercases every
-      // table_name before it reaches PROJECT_SCOPES), so ONE lowercased
-      // own-property lookup resolves the owner column. Own-property-gated so a
-      // polluted Object.prototype cannot inject a phantom owner column for an
-      // undeclared table.
+
+
+
+
+
       function __sw_structResolveOwnerColumn(table) {
         const lc = __sw_lower(table);
         if (__sw_own(SCOPES, lc)) { const v = SCOPES[lc]; return (typeof v === 'string' && v) ? v : null; }
@@ -8772,8 +8769,8 @@ ${DB_LIVE_INVALIDATION_JS}      // Detect the (op, table) from a SQL statement. 
         return null;
       }
 
-      // The declared intent for a table, own-property-gated against a polluted prototype. Returns
-      // 'scoped' | 'shared' | 'server_only' | null (null = undeclared).
+
+
       function __sw_structResolveIntent(table) {
         const lc = __sw_lower(table);
         if (!__sw_own(TABLE_INTENTS, lc)) return null;
@@ -8781,30 +8778,30 @@ ${DB_LIVE_INVALIDATION_JS}      // Detect the (op, table) from a SQL statement. 
         return (v === 'scoped' || v === 'shared' || v === 'server_only' || v === 'policy') ? v : null;
       }
 
-      // \u2500\u2500 Managed-table write checks (Managed Database Slice 4, ) \u2500\u2500
-      // ONE chokepoint, run on the compiled IR right before execution. A
-      // table with a baked PROJECT_SCHEMA shape gets: unknown-column refusal
-      // across values/where/order/columns (with the declared column list),
-      // type-mismatch refusal on written values (column + expected type),
-      // and required-column-missing refusal on insert. It is also the
-      // deferred judge for object/array values the compiler let through: on
-      // a managed json column the platform serializes them; anywhere else
-      // they fail with the compiler's own long-standing message.
+
+
+
+
+
+
+
+
+
       function __sw_structManagedShape(table) {
         const lc = __sw_lower(table);
         if (!__sw_own(SCHEMA, lc)) return null;
         const v = SCHEMA[lc];
         return (v && typeof v === 'object' && __sw_arrayIsArray(v.columns) && v.columns.length > 0) ? v : null;
       }
-      // Membership-join scope spec for a table (Managed Database Slice 7,
-      // ). It rides INSIDE the baked PROJECT_SCHEMA shape (.member)
-      // so it travels every existing bake path. Structurally re-validated here
-      // \u2014 same-arity group key, string columns, a membership table + user
-      // column \u2014 so a polluted prototype or a malformed bake reads as "not
-      // member-scoped" and fails CLOSED at the scope resolver, never composing
-      // a broken join. Keys: g = group columns on this table, m = membership
-      // table, u = member-user column, mg = group columns on the membership
-      // table (same arity as g; length 1 scalar, \u22652 composite/polymorphic).
+
+
+
+
+
+
+
+
+
       function __sw_structResolveMember(table) {
         const shape = __sw_structManagedShape(table);
         if (!shape || !__sw_own(shape, 'member')) return null;
@@ -8812,19 +8809,19 @@ ${DB_LIVE_INVALIDATION_JS}      // Detect the (op, table) from a SQL statement. 
         return __sw_structPolicyMember(m) ? m : null;
       }
 ${DB_POLICY_HELPERS_JS}
-      // Declared relation resolver (composed joins, ; belongsTo
-      // ). Rides INSIDE the baked PROJECT_SCHEMA shape (.relations),
-      // like member. Every field is re-validated as a safe identifier here so a
-      // polluted prototype or malformed bake reads as "relation not declared"
-      // and fails CLOSED at the join composer, never composing a join against
-      // an unproven key.
-      //
-      // The kind field says WHICH SIDE holds the foreign key \u2014 the one thing that
-      // decides which column pair the composer joins, so an unrecognized value
-      // is refused rather than defaulted: composing the wrong direction would
-      // silently read a different table's rows.
-      //   hasMany (absent)  child.fk = root.parentKey   \u2192 many rows
-      //   belongsTo         root.fk  = parent.parentKey \u2192 at most one row
+
+
+
+
+
+
+
+
+
+
+
+
+
       function __sw_structResolveRelation(table, name) {
         const shape = __sw_structManagedShape(table);
         if (!shape || !__sw_own(shape, 'relations')) return null;
@@ -8859,56 +8856,56 @@ ${SCHEMA_VALIDATOR_JS}      const __sw_schemaChecks = __sw_createSchemaValidator
       function __sw_structDeclaredColumnList(shape, ownerColumn) { return __sw_schemaChecks.declaredColumnList(shape, ownerColumn); }
       function __sw_structExpectedType(t) { return __sw_schemaChecks.expectedType(t); }
       function __sw_structGotKind(v) { return __sw_schemaChecks.gotKind(v); }
-      // Calendar-date or full ISO-8601 datetime; T or space separator,
-      // optional seconds/fraction, optional Z / +-HH:MM zone. The Date.parse
-      // gate behind it rejects shapes like 2026-13-45 the regex can't.
+
+
+
       function __sw_structIsIsoTimestamp(v) { return __sw_schemaChecks.isIsoTimestamp(v); }
       function __sw_structThrowTypeMismatch(verb, table, col, got) { return __sw_schemaChecks.throwTypeMismatch(verb, table, col, got); }
-      // The exact form for a whole number wider than a JavaScript number:
-      // plain digits, optionally signed, exactly as a read returns them.
-      // Compare that text against the 64-bit range without a numeric
-      // conversion, which is the very thing that would lose it.
+
+
+
+
       function __sw_wholeNumberTextInRange(s) { return __sw_schemaChecks.wholeNumberTextInRange(s); }
-      // Type-check (and for json: serialize) ONE written value against its
-      // declared column. Returns the value to bind.
+
+
       function __sw_structCheckWriteValue(verb, table, col, v) { return __sw_schemaChecks.checkWriteValue(verb, table, col, v); }
-      // Refuse BEFORE the write a whole number the database cannot store as one
-      //. Whole numbers are kept as 64-bit values; anything past
-      // that range is stored as an approximate decimal and can never be read
-      // back exactly, so it must be refused up front rather than discovered
-      // after the row has already landed. A column declared as a decimal
-      // ('number') is exempt: large decimals are legitimate there.
+
+
+
+
+
+
       function __sw_structAssertStorableWholeNumber(verb, table, column, v, col) { return __sw_schemaChecks.assertStorableWholeNumber(verb, table, column, v, col); }
       function __sw_structAssertKnownColumn(verb, table, shape, ownerColumn, name, where) { return __sw_schemaChecks.assertKnownColumn(verb, table, shape, ownerColumn, name, where); }
 
-      // THE request identity for structured scoping: resolved
-      // lazily through the same path sw.auth.fromRequest uses (the resolver the
-      // auth namespace publishes into the context-head slot) against THIS
-      // context's own \`request\`, and memoized for the request \u2014 including a
-      // null (unauthenticated) or rejected resolution, so every query in a
-      // request sees one consistent identity. Nothing PASSED TO sw.db.*
-      // participates in the identity: the only input is the closed-over
-      // request (L4 \u2014 request.params/__sw_fn are writable on that object, so
-      // the precise claim is "no sw.db argument influences the principal", not
-      // "customer code cannot touch the request"). The identity is the SAME one
-      // the rest of the request sees via sw.auth, memoized REQUEST-LOCALLY
-      // (sol MED-2, 2026-08-02): repeated lookups within one request share a
-      // single /v1/auth/me verification. Across requests the platform may reuse a
-      // valid verification for at most 60 s (utils/app-credential-cache.ts),
-      // so a token revoked server-side is refused within 60 s.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
       let __sw_structIdentityMemo = null;
       function __sw_structRequestIdentity(failUnavailable) {
-        // Runtime v2 (sol P0-3): derive from the immutable auth snapshot, not
-        // the customer-visible mutable request, so identity can't be downgraded
-        // mid-request. (db scoping is already fail-closed on no-identity; this
-        // keeps ONE identity source across every surface.)
+
+
+
+
         if (!__sw_structIdentityMemo) __sw_structIdentityMemo = __sw_signedDelivery ? __sw_resolveIdentityOnce() : __sw_authResolveRequest(__sw_authSnapshotRequest,
           failUnavailable ? { __sw_failUnavailable: true } : undefined);
         return __sw_structIdentityMemo;
       }
 
-      // The controller owns memoization; retain each resolved identity so already
-      // prepared operations still carry its ledger guard after logout/rotation.
+
+
       const __sw_structVisitorSessions = __sw_objCreateNull();
       function __sw_structVisitorFor(id) { return __sw_structVisitorSessions[id] || null; }
       async function __sw_structVisitorIdentity() {
@@ -8916,10 +8913,10 @@ ${SCHEMA_VALIDATOR_JS}      const __sw_schemaChecks = __sw_createSchemaValidator
         __sw_structVisitorSessions[session.id] = session;
         return session;
       }
-      // The visitor session the browser ALREADY carries, with no ledger
-      // crossing. RETAINED exactly like a resolved one, so the renderer still
-      // emits this session's ledger liveness guard \u2014 the guard is what enforces
-      // revocation, and it is never dropped to save a round trip.
+
+
+
+
       async function __sw_structVisitorPeek() {
         const session = await __sw_peekVisitorIdentity();
         if (session) __sw_structVisitorSessions[session.id] = session;
@@ -8931,10 +8928,10 @@ ${SCHEMA_VALIDATOR_JS}      const __sw_schemaChecks = __sw_createSchemaValidator
         if (asServer !== undefined && asServer !== true) {
           __sw_structThrow('sw.db.' + verb + ': asServer must be exactly true (boolean) when present \u2014 it is the explicit server-mode annotation for intentional cross-user reads. Omit it for user-scoped access.');
         }
-        // Validate the identifier so a hostile name is a VALIDATION_ERROR, not a
-        // confusing "no declared intent" (and so the runtime's error ordering
-        // matches the deploy extractor's, which validates the identifier
-        // before classifying intent). The render chokepoint re-quotes it.
+
+
+
+
         if (typeof table !== 'string' || table.length > 64 || !__sw_reMatch(__SW_STRUCT_IDENT_RE, table)) {
           __sw_structThrow('Invalid identifier: table names must be 1-64 characters of letters, digits, and underscores, starting with a letter or underscore. Got: ' + JSON.stringify(String(table).slice(0, 40)));
         }
@@ -8981,22 +8978,22 @@ ${DB_POLICY_RESOLVE_SCOPE_JS}        const member = __sw_structResolveMember(tab
         if (ownerColumn === null) {
           const intent = __sw_structResolveIntent(table);
           if (intent === 'server_only') {
-            // Already unscoped by declaration; asServer stays an honest,
-            // recorded annotation rather than a silent no-op.
+
+
             return { scope: { mode: asServer === true ? 'server' : 'unscoped' }, principalId: undefined };
           }
           if (intent === 'scoped') {
             __sw_structThrow403('TABLE_INTENT_INVALID',
               'sw.db.' + verb + ' on "' + table + '": the table is declared user-owned but its ownership column is missing. Repair the scope declaration (sw.db.scope / db_scope_set), then redeploy.');
           }
-          // Name the file AND the step that applies it. The old
-          // message pointed only at sw.db.scope / db_scope_set, so a developer
-          // who had already declared the table in db/schema.ts and was running
-          // local dev read it as "your schema file does not count" and
-          // abandoned the managed API for raw SQL. db/schema.ts is applied on a
-          // production deploy only \u2014 never from local dev, a preview, or a dry
-          // run \u2014 so "declared but not yet deployed" is the single most likely
-          // reason to be reading this, and the message has to say so.
+
+
+
+
+
+
+
+
           __sw_structThrow403('TABLE_INTENT_REQUIRED',
             'sw.db.' + verb + ' on "' + table + '": this table has no declared intent, so the platform cannot prove how to access it safely. ' +
             'Declare it in db/schema.ts \u2014 table({ ... }, { scope: owner() }) for per-user rows, shared() for intentional cross-user access, serverOnly() for trusted server access \u2014 then run \`somewhere deploy\`, which is the step that applies db/schema.ts. ' +
@@ -9004,8 +9001,8 @@ ${DB_POLICY_RESOLVE_SCOPE_JS}        const member = __sw_structResolveMember(tab
             'Not using a schema file? sw.db.scope / db_scope_set declares a table immediately. For intentional server-authority SQL, authorize the caller first and use sw.db.server.query(sql, params).');
         }
         if (asServer === true || generatedRead) {
-          // Explicit server code or the private generated selector has no local
-          // principal. The managed API independently verifies the latter's token.
+
+
           const serverGrantRow = generatedRead ? undefined : __sw_structGrantRowFor(table);
           return { scope: generatedRead ? { mode: 'user', ownerColumn: ownerColumn } : serverGrantRow ? { mode: 'server', grantRow: serverGrantRow } : { mode: 'server' }, principalId: undefined };
         }
@@ -9013,20 +9010,20 @@ ${DB_POLICY_RESOLVE_SCOPE_JS}        const member = __sw_structResolveMember(tab
         let id = identity && identity.id;
         if ((id === undefined || id === null || (typeof id !== 'string' && typeof id !== 'number'))
             && allowVisitorIdentity !== false && !__sw_signedDelivery && __sw_structManagedShape(table)?.visitors === true) {
-          // The session the browser already carries needs no ledger pre-check:
-          // the composed statement embeds that session's liveness guard, so a
-          // revoked or missing ledger row reaches exactly the same rows (none)
-          // that issuing a fresh session would have. Only when there is nothing
-          // to carry does this fall back to issuing one \u2014 and a DECLARED PUBLIC
-          // read does not even need that: a session minted mid-read owns no
-          // rows, so its private branch is empty and the answer is the public
-          // branch either way. Anonymous public reads used to pay a mint's two
-          // ledger crossings, and every warm call one more, in front of the one
-          // statement that produced the rows.
-          // An INSERT is the exception, and stays exactly as it was: the new
-          // row needs an owner whose ledger row is known to exist, and a
-          // session that turns out not to be live must still be replaced by an
-          // issued one rather than silently writing nothing.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
           let visitor = verb === 'insert' ? null : await __sw_structVisitorPeek();
           if (!visitor && !(allowPublicGuest && verb !== 'insert')) visitor = await __sw_structVisitorIdentity();
           id = visitor && visitor.id;
@@ -9046,9 +9043,9 @@ ${DB_POLICY_RESOLVE_SCOPE_JS}        const member = __sw_structResolveMember(tab
         return { scope: grantRow ? { mode: 'user', ownerColumn: ownerColumn, grantRow: grantRow } : { mode: 'user', ownerColumn: ownerColumn }, principalId: id };
       }
 
-      // The scope argument is GONE: scoping is automatic and
-      // mandatory, so a leftover third argument fails loudly rather than
-      // silently meaning something different than it used to.
+
+
+
       function __sw_structNoScopeArg(arg, verb) {
         if (arg === undefined) return;
         const err = new Error('sw.db.' + verb + ' no longer takes a scope argument: user-owned tables are always scoped to the signed-in request user automatically, and other tables run as written. Remove the extra argument. For an intentional server-side cross-user read, pass { asServer: true } to sw.db.from/count; for explicit server writes, use sw.db.server.insert/update/remove/tx.');
@@ -9067,12 +9064,12 @@ ${DB_POLICY_RESOLVE_SCOPE_JS}        const member = __sw_structResolveMember(tab
           }
         }
       }
-      // Member-write guards (Slice 7). INSERT must carry the group columns so the
-      // platform can verify membership against the value the caller supplied \u2014 it
-      // cannot inject one (a user may belong to many groups). UPDATE must not
-      // touch a group column: moving a row between groups would cross the access
-      // boundary, so it is refused (the clean cut, mirroring the not-assignable
-      // owner column) rather than re-checked.
+
+
+
+
+
+
       function __sw_structAssertMemberGroupPresent(cols, member, verb) {
         for (let i = 0; i < member.g.length; i++) {
           const gc = __sw_lower(member.g[i]);
@@ -9097,27 +9094,27 @@ ${DB_POLICY_RESOLVE_SCOPE_JS}        const member = __sw_structResolveMember(tab
         }
       }
 
-      // \u2500\u2500 Whole-number fidelity on the affected-row RETURNING read \u2500\u2500
-      // The database stores whole numbers as 64-bit values; a JavaScript number
-      // is only exact to 9007199254740991. On a READ the platform recovers the
-      // exact value by re-running the SELECT with a cast-to-text projection
-      // (db-result-fidelity.ts). A WRITE cannot be re-run, so the same guard has
-      // to be INSIDE the statement: the platform composes the RETURNING list
-      // itself and casts any out-of-range whole number to text there, so the
-      // affected row comes back exactly as the read path would return it.
-      // Before this, a write whose affected row held a 64-bit id COMMITTED and
-      // THEN threw DATABASE_VALUE_TOO_LARGE from the read-back \u2014 a successful
-      // write reported as a failure, and no structured update to such a row was
-      // possible even when it did not touch that column.
-      //
-      // Column names come from the declared schema when the table is managed
-      // (free) and otherwise from ONE table-shape read, cached for this request.
-      // If the shape cannot be read, or carries a name this builder would not
-      // quote, the statement keeps its long-standing RETURNING * (rule 9: the
-      // fidelity guard must never turn a working write into a failing one).
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
       const __sw_returningShapeCache = new Map();
 
-      // The column list RETURNING must project, or null to keep RETURNING *.
+
       async function __sw_structReturningColumns(label, table) {
         const key = __sw_lower(table);
         if (__sw_returningShapeCache.has(key)) return __sw_returningShapeCache.get(key);
@@ -9135,13 +9132,13 @@ ${DB_POLICY_RESOLVE_SCOPE_JS}        const member = __sw_structResolveMember(tab
             if (!present) cols.push({ n: __sw_lower(ownerColumn), guard: false });
           }
         } else if (!__sw_quotableColumnName(table)) {
-          // Unreachable through the builder (the renderer quotes and validates
-          // the table first), and the only place a table name is spelled into
-          // SQL text rather than bound, so it is checked here on its own.
+
+
+
           cols = null;
         } else {
-          // hidden = 1 is a virtual table's hidden column, which SELECT * and
-          // RETURNING * both omit; generated columns (2/3) are included by both.
+
+
           const shapeSql = "SELECT name, type, hidden FROM pragma_table_xinfo('" + table + "')";
           try {
             const r = await __sw_execOne(label, DB, shapeSql, []);
@@ -9167,22 +9164,22 @@ ${DB_POLICY_RESOLVE_SCOPE_JS}        const member = __sw_structResolveMember(tab
         return cols;
       }
 
-      // THE renderer: a pure function of (IR, principalId, returning). Identifiers
-      // are validated + double-quoted; every value \u2014 including LIMIT/OFFSET \u2014 is a
-      // bound ?. For 'user' scope it appends "ownerColumn" = ? (and, for
-      // INSERT, adds the owner column + value itself). The owner predicate is
-      // NEVER in ir.where; the renderer owns it. The 'returning' argument is the
-      // write-path column list resolved above (null keeps RETURNING *).
+
+
+
+
+
+
 ${DB_RENDER_IR_JS}
 
-      // \u2500\u2500 Structured-query instrumentation \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
-      // One bounded JSON line per structured execution: value-free shape
-      // fingerprint, deployed operation, table, duration, rows
-      // returned/affected, and outcome. NEVER parameter values, NEVER row
-      // data. This is the access-map BYPRODUCT of the builder \u2014 the platform
-      // composed the query, so it records the shape without reading source.
-      // The fingerprint mirrors utils/query-manifest.ts EXACTLY (fnv1a64 over
-      // the canonical shape string); check-query-instrumentation pins the parity.
+
+
+
+
+
+
+
+
       function __sw_fnv1a64Hex(s) {
         let h = 0xcbf29ce484222325n;
         const prime = 0x100000001b3n;
@@ -9193,18 +9190,18 @@ ${DB_RENDER_IR_JS}
         }
         return h.toString(16).padStart(16, '0');
       }
-      // Shared join-segment builder for the shape fingerprint. Mirrors the copy
-      // in verify/contracts/query-manifest.ts byte-for-byte.
+
+
       function __sw_structRelScopeStr(scope) {
         return scope.mode === 'user' ? 'user.' + __sw_lower(scope.ownerColumn)
           : (scope.mode === 'member' ? 'mem.' + __sw_lower(scope.member.m)
           : (scope.mode === 'policy' ? 'pol.' + JSON.stringify(scope.policy)
           : (scope.mode === 'server' ? 'srv' : 'un')));
       }
-      // '.b' marks a belongsTo relation. Two relations can agree on every other
-      // field and still read different columns, so direction belongs in the
-      // identity; it is a SUFFIX so hasMany shapes keep the exact fingerprint
-      // the composed-joins slice minted (rule 9).
+
+
+
+
       function __sw_structRelDirStr(rel) { return rel.kind === 'belongsTo' ? '.b' : ''; }
       function __sw_structJoinSeg(ir) {
         const inc = ir.include || [];
@@ -9220,11 +9217,11 @@ ${DB_RENDER_IR_JS}
         }).slice().sort().join(';');
         return '|j:i=' + incStr + ';w=' + rwStr;
       }
-      // Composed-aggregate fingerprint segment. Appended ONLY when
-      // the IR carries aggregates, so every non-aggregate shape keeps its exact
-      // fingerprint (rule 9). Value-free: the aliases and group columns are
-      // names, and having records alias + operator, never the compared value.
-      // Mirrors aggregateSeg in verify/contracts/query-manifest.ts EXACTLY.
+
+
+
+
+
       function __sw_structAggSeg(ir) {
         const aggs = ir.aggregates || [];
         if (!aggs.length) return '';
@@ -9242,11 +9239,11 @@ ${DB_RENDER_IR_JS}
         const flt = __sw_arrayMap(ir.where || [], predShape).join(';');
         const ord = __sw_arrayMap(ir.order || [], function (o) { return lc(o.column) + '.' + o.dir; }).join(';');
         const wr = __sw_arrayMap((ir.values || []).concat(ir.increments || []), function (e) { return lc(e.column); }).join(';');
-        // 'srv' = explicit server-mode (asServer) \u2014 distinct from 'un'
-        // (declared shared/server_only) so telemetry can see sanctioned
-        // cross-user reads on owner tables. |oc: appends ONLY when an
-        // upsert clause is present, so every pre-existing shape keeps its
-        // exact fingerprint.
+
+
+
+
+
         const privateScope = ir.scope.mode === 'public' ? ir.scope.privateScope : ir.scope;
         const privateShape = !privateScope ? 'guest'
           : (privateScope.mode === 'user' ? 'user.' + lc(privateScope.ownerColumn)
@@ -9259,11 +9256,11 @@ ${DB_RENDER_IR_JS}
           : (ir.scope.mode === 'member' ? 'mem.' + lc(ir.scope.member.m)
           : (ir.scope.mode === 'policy' ? 'pol.' + JSON.stringify(ir.scope.policy)
           : (ir.scope.mode === 'server' ? 'srv' : 'un'))));
-        // Composed-join segment. Appended ONLY when include /
-        // relationWhere are present, so every pre-join shape keeps its exact
-        // fingerprint (rule 9). Sorted by relation name so declaration order
-        // does not change a view's identity. Mirrors queryShapeCanonical in
-        // verify/contracts/query-manifest.ts EXACTLY.
+
+
+
+
+
         return 'v2|' + ir.kind + '|' + lc(ir.table.name) + '|s:' + sel + '|f:' + flt + '|o:' + ord +
           '|l:' + (ir.limit !== undefined ? '1' : '0') + '|of:' + (ir.offset !== undefined ? '1' : '0') +
           '|w:' + wr + '|sc:' + sc + (ir.onConflict ? '|oc:' + ir.onConflict : '') + __sw_structJoinSeg(ir) + __sw_structAggSeg(ir);
@@ -9278,11 +9275,11 @@ ${DB_RENDER_IR_JS}
         }
         return fp;
       }
-      // WALL RULE 3 (types/query-ir.ts): the platform records what it
-      // composed. This emission IS the record \u2014 a byproduct of composition,
-      // never a reconstruction from reading code. Do not remove it as
-      // "just logging"; the persistence sink consumes it. NB: no backticks
-      // in this file \u2014 it is emitted inside a template literal.
+
+
+
+
+
       function __sw_emitQueryEvent(ir, ms, rows, ok, code) {
         try {
           const fp = __sw_structFingerprint(ir);
@@ -9291,8 +9288,8 @@ ${DB_RENDER_IR_JS}
             event: 'SW_QUERY', fp: fp, op: ir.kind,
             table: lcTable(ir), fn: fn, ms: ms, rows: rows, ok: ok,
             code: code || undefined,
-            // Explicit server operations record cross-user authority; this
-            // observation does not prove the function authorized its caller.
+
+
             unscoped: ir.scope.mode === 'server' ? true : undefined,
             authority: ir.scope.mode === 'server' ? 'server' : (ir.scope.mode === 'unscoped' || ir.scope.mode === 'public') ? 'declaration' : 'caller',
           }));
@@ -9301,15 +9298,15 @@ ${DB_RENDER_IR_JS}
         function lcTable(x) { return __sw_lower((x.table && x.table.name) || '').slice(0, 64); }
       }
 
-      // WALL RULE 3 sink: the record above PERSISTS. Events
-      // aggregate into a bounded buffer shared by this instance's requests, one
-      // per project, flushed once per window (shape metadata only \u2014
-      // fingerprint, op, table, fn, counts, latency; NEVER parameter values
-      // or row contents) and flush fire-and-forget over the project runtime
-      // credential \u2014 the same transport idiom as the size observation. The
-      // sink can never block, slow, or fail the query path: buffering runs
-      // inside the emit try/catch, the flush rides __sw_pendingBackground,
-      // and a flush failure is swallowed after a console.warn.
+
+
+
+
+
+
+
+
+
       function __sw_bufferQueryObservation(fp, op, table, fn, ms, rows, ok, authority) {
         if (isDraftExecution) return; // draft traffic must not pollute live observations
         let buf = __sw_queryObsShared.get(projectId);
@@ -9329,12 +9326,12 @@ ${DB_RENDER_IR_JS}
         if (rows > 0) agg.rows_sum += rows;
         __sw_scheduleQueryObsFlush(buf);
       }
-      // ONE FLUSH PER WINDOW PER INSTANCE, BEHIND THE ANSWER (,
-      // ). Nothing here needs to happen before the answer: it
-      // records what already happened. The scheduling request waits on the
-      // response gate (the shim releases it with the request held open by
-      // waitUntil), then QUERY_OBS_WINDOW_MS more, so every request in that
-      // window lands in the same flush instead of crossing on its own.
+
+
+
+
+
+
       function __sw_scheduleQueryObsFlush(buf) {
         if (buf.scheduled) return;
         buf.scheduled = true;
@@ -9342,10 +9339,10 @@ ${DB_RENDER_IR_JS}
           .then(function () { return new Promise(function (resolve) { setTimeout(resolve, __sw_QUERY_OBS_WINDOW_MS); }); })
           .then(function () { return __sw_flushQueryObs(buf); }));
       }
-      // A buffer with no fingerprint slots left cannot aggregate another shape,
-      // so it empties NOW and starts collecting again rather than losing the
-      // rest of the request. That is the one case that still crosses before the
-      // response, and it is the same escape valve the timer used to provide.
+
+
+
+
       function __sw_flushQueryObs(buf) {
         buf.scheduled = false;
         const list = [];
@@ -9353,9 +9350,9 @@ ${DB_RENDER_IR_JS}
         const dropped = buf.dropped;
         buf.byFp = Object.create(null); buf.fps = 0; buf.dropped = 0;
         if (list.length === 0 && dropped === 0) return Promise.resolve();
-        // An ingest-marked bundle (; ) sends the SAME body to the trusted executor's
-        // isolated ingest, with the release attestation; the executor queues it to the telemetry store. Otherwise the
-        // legacy API route, unchanged. Never both, no fallback: a refused or failed post is dropped and counted.
+
+
+
         const __sw_obsIngest = typeof __sw_telemetryIngestActive === 'function' && __sw_telemetryIngestActive(env);
         return platformFetch(__sw_obsIngest ? '/v1/executor/telemetry/query-observations' : '/v1/db/query-observations', {
           method: 'POST',
@@ -9470,45 +9467,45 @@ ${DB_AGGREGATE_JS}
         server: __sw_structServerNamespace(),
         batch(statements, options) { return __sw_rawBatch(statements, options, null); },
         async migrate(_sql) {
-          // sw.db.migrate was removed from the function runtime
-          // 2026-05-21. Schema changes must run with
-          // developer credentials so a public handler can't ALTER /
-          // DROP at request time. Same shape of error as the DDL
-          // guard so call sites get a consistent recovery message.
+
+
+
+
+
           const err = new Error(
             'Functions cannot change the database schema. Edit db/schema.ts and deploy or preview the app source; ' +
             'the platform applies the declaration with that release.'
           );
           err.code = 'DDL_NOT_ALLOWED_IN_FUNCTION';
-          // Same as the raw-SQL DDL guard above: expose as 403 so the recovery
-          // message reaches the developer instead of a 500 FUNCTION_ERROR.
+
+
           err.status = 403;
           err.__sw_expose = true;
           throw err;
         },
         async tables() {
           ensureBinding();
-          // The one listing rule (utils/listed-tables.ts): hide a leading "_"
-          // or a LITERAL "sqlite_" / "d1_" prefix; sqlitex_notes stays listed.
+
+
           const r = await DB.prepare(
             "SELECT name FROM sqlite_master WHERE type='table' AND substr(name, 1, 1) != '_' AND lower(substr(name, 1, 7)) != 'sqlite_' AND lower(substr(name, 1, 3)) != 'd1_'"
           ).all();
           return (r.results || []).map((row) => row.name);
         },
         scope: __sw_scopeDeclare,
-        // Structured query builder. The platform composes,
-        // renders, and scopes these \u2014 see the __sw_struct* helpers above.
-        // sw.db.delete is a trivial alias of sw.db.remove (both call the same
-        // composer). A scope argument fails loudly, never silently.
+
+
+
+
         from(table, opts, legacyScope) { __sw_structNoScopeArg(legacyScope, 'from'); return __sw_structFrom(table, opts); },
         count(table, opts, legacyScope) { __sw_structNoScopeArg(legacyScope, 'count'); return __sw_structCount(table, opts); },
-        // Composed aggregates \u2014 count/sum/avg/min/max with
-        // group-by over the rows the caller is allowed to read.
+
+
         aggregate(table, opts, legacyScope) { __sw_structNoScopeArg(legacyScope, 'aggregate'); return __sw_structAggregate(table, opts); },
-        // insert's third argument is the OPTIONS object ({ onConflict } \u2014
-        // ). The scope-argument shapes ({ user }, { unscoped })
-        // fail loudly: they would change semantics, so they are never read
-        // as options.
+
+
+
+
         insert(table, values, opts) {
           if (opts !== undefined && opts !== null && typeof opts === 'object' && !__sw_arrayIsArray(opts) && (__sw_own(opts, 'user') || __sw_own(opts, 'unscoped'))) {
             __sw_structNoScopeArg(opts, 'insert');
@@ -9519,14 +9516,14 @@ ${DB_AGGREGATE_JS}
         remove(table, spec, legacyScope) { __sw_structNoScopeArg(legacyScope, 'remove'); return __sw_structRemove(table, spec); },
         delete(table, spec, legacyScope) { __sw_structNoScopeArg(legacyScope, 'delete'); return __sw_structRemove(table, spec); },
         async dump() {
-          // sw.db.dump is developer-only and is NOT callable from a
-          // deployed function. A full-database export must run with
-          // developer credentials \u2014 a public request handler must not be
-          // able to siphon the entire database at request time. Same
-          // immediate-throw shape as sw.db.migrate: the
-          // dev-only db-dump route only ever answered the runtime key
-          // with an opaque 403, so short-circuit with a clear, actionable
-          // error instead of a confusing round-trip.
+
+
+
+
+
+
+
+
           const err = new Error(
             'sw.db.dump is not available inside a deployed function \u2014 ' +
             'exporting the whole database is a developer-only operation. ' +
@@ -9537,13 +9534,13 @@ ${DB_AGGREGATE_JS}
           throw err;
         },
         onchange: (function () {
-          // sw.db.onchange manages a database-change webhook \u2014 developer-
-          // only, NOT callable from a deployed function. A public request
-          // handler must not be able to point change notifications at an
-          // arbitrary URL at request time. Like sw.db.dump / sw.db.migrate,
-          // the dev-only db-webhook route only ever returned the runtime
-          // key an opaque 403, so each method throws a clear, actionable
-          // error instead.
+
+
+
+
+
+
+
           function deny() {
             const err = new Error(
               'sw.db.onchange is not available inside a deployed function \u2014 ' +
@@ -9612,7 +9609,7 @@ var DB_RAW_JS = `      var __sw_rawReadDbInstance = null;
       }
 
       function __sw_rawRequireAuthority(api, authority) {
-        // Split: raw SQL reaches only the separate raw database, never managed rows.
+
         if (__SW_DB_SPLIT || DB_WRITE_MODE !== 'managed' || authority === __sw_structServerNamespace) return;
         const err = new Error(api + ' is unavailable in managed mode because raw SQL cannot apply declared row permissions. ' +
           'Use sw.db.from/count/insert/update/remove/tx for declared operations. ' +
@@ -9623,17 +9620,17 @@ var DB_RAW_JS = `      var __sw_rawReadDbInstance = null;
         throw err;
       }
 
-      // Raw-write public-data invalidation lives HERE, beside the raw paths that call it, so this
-      // fragment carries every helper it uses (pfb from Docs: a fragment-level executor found
-      // __sw_rawResultWrote undefined when it lived in db-public-read.ts). Raw SQL through the NATIVE binding of a legacy (non-split, non-managed) project can write any
-      // table, including a declared public one, and the platform never parses it. Such a write \u2014 or
-      // one whose outcome is unknown \u2014 drops ALL of this project's cached public results (step 2
-      // decision 2). REST raw SQL lands in /v1/db/query|batch, which purge on their own; split-layout
-      // raw SQL reaches only the separate raw database, never declared rows.
-      // At most ONE project-wide signal per request (#743 review), and none when this release declares
-      // no publicly readable table: there is then no cached public result to drop.
-      // var, uninitialised: this fragment's state must be usable wherever the closure places it (the
-      // fragment's own __sw_rawReadDbInstance is a var for the same reason). undefined reads as "not yet".
+
+
+
+
+
+
+
+
+
+
+
       var __sw_publicDataInvalidated;
       var __sw_hasPublicReadTable;
       function __sw_releaseHasPublicReadTable() {
@@ -9662,9 +9659,9 @@ var DB_RAW_JS = `      var __sw_rawReadDbInstance = null;
         });
         __sw_pendingBackground.push(pending);
       }
-      // A raw SQL write names no rows the platform can attribute, so it cannot
-      // notify a live list. Say so once per table per request instead of
-      // leaving the list silently stale (structured writes notify).
+
+
+
       var __sw_rawLiveWarned;
       function __sw_rawLiveWarn(sql) {
         const mut = __sw_mutationOf(sql);
@@ -9688,20 +9685,20 @@ var DB_RAW_JS = `      var __sw_rawReadDbInstance = null;
         __sw_assertSingleStatement(sql);
         __sw_assertNoDdl(sql);
         options = options || {};
-        // { user } is refused: the platform never rewrites raw
-        // SQL to inject an owner filter. Preserve its specific loud failure.
+
+
         if (__sw_own(options, 'user')) {
           __sw_throwRawSqlCannotBePlatformScoped('sw.db.query');
         }
-        // Neither the legacy { unscoped: true } annotation nor { asServer:
-        // true } can mint server authority. Only the closure-private namespace
-        // capability reaches the managed read transport.
+
+
+
         __sw_rawRequireAuthority(api, authority);
         let r;
         try {
           r = await __sw_execOne(api, rawSqlDb(), sql, params);
         } catch (error) {
-          // A write that failed after it may have reached the database is treated as landed.
+
           if (__sw_mutationOf(sql)) __sw_publicDataInvalidate();
           throw error;
         }
@@ -9712,8 +9709,8 @@ var DB_RAW_JS = `      var __sw_rawReadDbInstance = null;
         if (mut) {
           __sw_deferDbSizeObservation(r);
         }
-        // Provider last_row_id is connection-global and can describe another
-        // request. Keep it internal; INSERT ... RETURNING exposes this call's id.
+
+
         return {
           data: rows,
           error: null,
@@ -9745,7 +9742,7 @@ var DB_RAW_JS = `      var __sw_rawReadDbInstance = null;
         try {
           results = await __sw_execBatch(api, rawSqlDb(), statements);
         } catch (error) {
-          // DB_BATCH_OUTCOME_UNKNOWN and any other post-dispatch failure: treated as landed.
+
           if (batchMutates) __sw_publicDataInvalidate();
           throw error;
         }
@@ -9762,7 +9759,7 @@ var DB_RAW_JS = `      var __sw_rawReadDbInstance = null;
       }
 `;
 var DB_COMPOSED_WRITES_JS = `      // Per-column conditions are ANDed. A bounded $or group remains one
-      // predicate inside the independent platform ownership/member constraint.
+
       function __sw_structCompileWhere(where, allowOr) {
         if (where === undefined || where === null) return [];
         if (typeof where !== 'object' || __sw_arrayIsArray(where)) __sw_structThrow('where must be an object of { column: condition }.');
@@ -9791,10 +9788,10 @@ var DB_COMPOSED_WRITES_JS = `      // Per-column conditions are ANDed. A bounded
             continue;
           }
           if (__sw_arrayIsArray(cond)) {
-            // Iterate OWN indices only: a range array must be DENSE. A hole
-            // (sparse array, or a length that outruns own indices) would read
-            // through to an inherited Array.prototype[j] and smuggle a
-            // predicate the caller never wrote \u2014 reject it loudly instead.
+
+
+
+
             for (let j = 0; j < cond.length; j++) {
               if (!__sw_own(cond, j)) {
                 __sw_structThrow('where["' + col + '"] range array must be dense \u2014 element ' + j + ' is missing (sparse/holey arrays are not allowed).');
@@ -9839,7 +9836,7 @@ var DB_COMPOSED_WRITES_JS = `      // Per-column conditions are ANDed. A bounded
           }
           onConflict = opts.onConflict;
         }
-        // A present key is explicit: validated here and never dropped (managed-insert-receipt.ts).
+
         const idempotencyKey = opts.idempotencyKey;
         if (idempotencyKey !== undefined && (typeof idempotencyKey !== 'string' || !/^[A-Za-z0-9_-]{16,128}$/.test(idempotencyKey))) {
           throw __sw_keyedError('IDEMPOTENCY_KEY_INVALID', 'sw.db.insert: idempotencyKey is 16 to 128 letters, digits, "-" or "_".', 400);
@@ -9855,8 +9852,8 @@ var DB_COMPOSED_WRITES_JS = `      // Per-column conditions are ANDed. A bounded
         if (decided.scope.mode === 'policy') __sw_structAssertPolicyWrite(cols, decided.scope.policy, 'insert');
         if (decided.scope.mode === 'policy') __sw_structAssertPolicyInsert(cols, decided.scope.policy);
         if (decided.scope.mode === 'member') __sw_structAssertMemberGroupPresent(cols, decided.scope.member, 'insert');
-        // An upsert under a rule needs create (checked above) and, for "update", update on the
-        // conflicting row; a rule that never grants update refuses before anything runs.
+
+
         if (onConflict === 'update' && decided.scope.mode === 'policy' && !__sw_structPolicyAllows(decided.scope.policy, 'update')) {
           __sw_structThrow403('POLICY_OPERATION_NOT_ALLOWED', 'sw.db.insert on "' + table + '": onConflict: "update" updates the existing row, and the declared private policy does not grant update. Use onConflict: "ignore", or grant update.');
         }
@@ -9905,9 +9902,9 @@ var DB_COMPOSED_WRITES_JS = `      // Per-column conditions are ANDed. A bounded
         return { label: 'sw.db.remove', ir: ir, principalId: decided.principalId, mutation: { op: 'delete', table: table } };
       }
 
-      // Keyed managed inserts. The platform admits exactly one plain insert by a
-      // verified user or visitor on a table whose primary key is the integer id() and that has no
-      // blob() column; this mirrors that so a key is attached only where it can be honoured.
+
+
+
       function __sw_keyedError(code, message, status) {
         const e = new Error(message);
         e.code = code; e.status = status; e.retry = false; e.retryable = false; e.__sw_expose = true;
@@ -9921,20 +9918,20 @@ var DB_COMPOSED_WRITES_JS = `      // Per-column conditions are ANDed. A bounded
         if (!__sw_structVisitorFor(p.principalId) && mode === 'unscoped' && p.principalId === undefined
           && __sw_structResolveIntent(p.ir.table.name) === 'server_only') return false;
         const shape = __sw_structManagedShape(p.ir.table.name);
-        // The declared id() column, baked as a server fact; older bakes carry it only with a browser grant.
+
         const pk = shape && (shape.primaryKey !== undefined ? shape.primaryKey : shape.clientPrimaryKey);
         const pkColumn = typeof pk === 'string' ? shape.columns.find(function (c) { return c && c.n === pk; }) : null;
         return !!pkColumn && pkColumn.t === 'integer' && !shape.columns.some(function (c) { return !c || c.t === 'blob'; });
       }
-      // The request's own copy of its values: later changes to the caller's objects never reach a retry.
+
       function __sw_keyedCols(cols) {
         return cols.map(function (c) {
           return { column: c.column, value: c.value !== null && typeof c.value === 'object' ? __sw_jsonParse(JSON.stringify(c.value)) : c.value };
         });
       }
-      // Platform-private: reached only through __sw_dbNamespace.__sw_clientInsert by the generated
-      // /__sw/data door. A generated browser client's create carries its own random nonce, which
-      // lives in the separate client key domain; nothing here lets a caller choose the domain.
+
+
+
       function __sw_clientInsertBridge(table, values, key) {
         if (typeof key !== 'string' || !/^[0-9a-f]{32}$/.test(key)) {
           throw __sw_keyedError('IDEMPOTENCY_KEY_INVALID', 'A browser insert key is 32 lowercase hexadecimal characters. Nothing ran.', 400);
@@ -9943,18 +9940,18 @@ var DB_COMPOSED_WRITES_JS = `      // Per-column conditions are ANDed. A bounded
       }
       async function __sw_structInsert(table, values, opts, authority, clientKey) {
         const prepared = await __sw_structPrepareInsert(table, values, opts, authority);
-        // Two key domains (managed-insert-receipt.ts): a function's own keys ('runtime', bound to
-        // its verified principal) and generated browser nonces ('client').
+
+
         const scope = clientKey !== undefined ? 'client' : 'runtime';
         if (clientKey !== undefined) prepared.idempotencyKey = clientKey;
         const eligible = __sw_keyedInsertEligible(prepared, authority);
-        // An explicit key on an operation that cannot honour it refuses before anything runs; it
-        // never falls back to an unkeyed write. Without a key, other inserts are unchanged.
+
+
         if (prepared.idempotencyKey !== undefined && !eligible) {
           throw __sw_keyedError('IDEMPOTENCY_UNSUPPORTED', 'sw.db.insert: idempotencyKey is available only for a single plain insert by a signed-in user or visitor on a table whose key is id() and that has no blob() column. Nothing ran.', 400);
         }
         if (!eligible) return __sw_structExec(prepared.label, prepared.ir, prepared.principalId, prepared.mutation);
-        // One key per call, allocated once, before dispatch.
+
         const key = prepared.idempotencyKey !== undefined ? prepared.idempotencyKey
           : Array.from(crypto.getRandomValues(new Uint8Array(16)), function (b) { return b.toString(16).padStart(2, '0'); }).join('');
         const createdAt = Date.now();
@@ -9969,11 +9966,11 @@ var DB_COMPOSED_WRITES_JS = `      // Per-column conditions are ANDed. A bounded
         const send = async function (p) {
           p.ir.values = __sw_keyedCols(snapshot);
           try { return attach(await __sw_managedCall([p], false, key, scope)); }
-          // Committed without a confirmed receipt: no handle, since its protection is unproven.
+
           catch (e) { throw e && e.code === 'IDEMPOTENCY_RECEIPT_INVALID' ? e : attach(e); }
         };
-        // Process-local: it repeats this exact request under this runtime context's current
-        // authority, with the same key. It never runs on its own and never makes a new key.
+
+
         handle = Object.freeze({
           key: key,
           createdAt: createdAt,
@@ -9992,12 +9989,12 @@ var DB_COMPOSED_WRITES_JS = `      // Per-column conditions are ANDed. A bounded
         });
         return send(prepared);
       }
-      // Standalone exact-key caller UPDATES share the browser's non-disclosing
-      // missing-row result. A caller REMOVE that matches nothing returns the
-      // zero-change result instead, like bulk/conditional writes (founder
-      // decision, ): a missing row and a row outside the caller's
-      // access give the same { data: [], count: 0, changes: 0 }, so neither
-      // reveals existence. No existence probe bypasses authorization.
+
+
+
+
+
+
       async function __sw_structExecCallerWrite(prepared, authority, missThrows) {
         const ir = prepared.ir;
         const shape = __sw_structManagedShape(ir.table.name);
@@ -10036,21 +10033,21 @@ var DB_COMPOSED_WRITES_JS = `      // Per-column conditions are ANDed. A bounded
           const item = intent.op === 'insert' ? await __sw_structPrepareInsert(intent.table, intent.values, intent.options, authority)
             : intent.op === 'update' ? await __sw_structPrepareUpdate(intent.table, { set: intent.set, increment: intent.increment, where: intent.where }, authority)
               : await __sw_structPrepareRemove(intent.table, { where: intent.where }, authority);
-          // A membership- or policy-guarded insert raises inside the batch when
-          // the caller may not place the row, so the whole transaction rolls
-          // back (checked in the same transaction, after earlier intents).
-          // Updates and removes are already limited to rows the caller may
-          // reach by their WHERE predicate.
+
+
+
+
+
           if (item.ir.kind === 'insert' && (item.ir.scope.mode === 'member' || item.ir.scope.mode === 'policy'
             || (item.ir.scope.mode === 'user' || item.ir.scope.mode === 'server') && item.ir.scope.grantRow)) item.ir.txGuard = true;
-          // A transaction is never keyed: an explicit key on one of its inserts refuses before anything runs.
+
           if (item.idempotencyKey !== undefined) {
             throw __sw_keyedError('IDEMPOTENCY_UNSUPPORTED', 'sw.db.tx: an insert inside a transaction cannot take idempotencyKey. Nothing ran.', 400);
           }
           prepared.push(item);
         }
         if (__sw_usesManagedEndpoint()) return __sw_managedCall(prepared, true);
-        // Finish every validation and fidelity projection before mutation.
+
         const statements = [];
         for (let i = 0; i < prepared.length; i++) {
           const item = prepared[i];
@@ -10066,15 +10063,15 @@ var DB_COMPOSED_WRITES_JS = `      // Per-column conditions are ANDed. A bounded
           results = await __sw_execBatch('sw.db.tx', target, statements);
         } catch (error) {
           for (const item of prepared) __sw_emitQueryEvent(item.ir, Date.now() - started, 0, false, error && error.code || 'DB_BATCH_OUTCOME_UNKNOWN');
-          // A preflight refusal carries its existing remedy. A lost transport
-          // acknowledgement never proves rollback and must not invite replay.
+
+
           if (error && ['DRAFT_DB_NOT_ISOLATED', 'DEV_DB_NOT_ISOLATED', 'DB_CONNECTION_NOT_READY', 'CONSTRAINT_VIOLATION', 'DATA_CONFLICT', 'DATABASE_VALUE_TOO_LARGE',
             'MEMBERSHIP_REQUIRED', 'POLICY_AUTHORITY_REQUIRED'].indexOf(error.code) !== -1) throw error;
           throw __sw_batchOutcomeUnknown();
         }
-        // The whole transaction committed, so every publicly readable table it
-        // touched has a cached public result to drop \u2014 once per table, not once
-        // per intent (; the single-write seam does the same).
+
+
+
         const purged = new Set();
         for (const item of prepared) {
           const table = __sw_lower(String(item.mutation.table));
@@ -10093,14 +10090,14 @@ var DB_COMPOSED_WRITES_JS = `      // Per-column conditions are ANDed. A bounded
           if (delivery) row.live_delivery = delivery;
           output.push(row);
         }
-        // Declared types are read back only after every post-commit signal went out.
+
         for (let i = 0; i < output.length; i++) __sw_structDecodeRows(prepared[i].ir, output[i].data, true);
         return output;
       }
 
       function __sw_structEnforceSchema(verb, ir) { return __sw_schemaChecks.enforceSchema(verb, ir); }
 
-      // The closure function itself is the private capability; JSON cannot name it.
+
       function __sw_structServerNamespace() {
         function arity(actual, maximum) { if (actual > maximum) __sw_structThrow('sw.db.server accepts only the operation arguments; no caller or authority override.'); }
         return Object.freeze({
@@ -10144,7 +10141,7 @@ var DB_COMPOSED_WRITES_JS = `      // Per-column conditions are ANDed. A bounded
         return false;
       }
       function __sw_structOperationDb(ir, principalId) {
-        // Never use a baked production binding when a dev/draft slot resolves by REST.
+
         if ((ir.scope.mode === 'server' || __sw_structNeedsPrimary(ir)) && __sw_dbExecutionPath === 'native') {
           __sw_dbSessionState().noSessionPin = 'first-primary';
         }
@@ -10153,13 +10150,13 @@ var DB_COMPOSED_WRITES_JS = `      // Per-column conditions are ANDed. A bounded
       }
 `;
 var DB_SESSION_RECOVERY_JS = `      // \u2500\u2500 Read replicas, at the one native-binding chokepoint \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
-      // A bookmark is valid only for the database that issued it. Its string
-      // carries no provenance, so shape validation is necessary but not
-      // sufficient: the provider can reject a foreign bookmark when opening
-      // the session or when its first statement executes. That refusal means
-      // "position unavailable", not "customer query failed". Retry exactly
-      // once through a fresh unconstrained session; every other error keeps
-      // its existing path and shape.
+
+
+
+
+
+
+
       function __sw_dbSessionState() {
         if (!__sw_dbSessionState.s) {
           __sw_dbSessionState.s = {
@@ -10272,22 +10269,22 @@ var DB_SESSION_RECOVERY_JS = `      // \u2500\u2500 Read replicas, at the one na
         __sw_dbSessionState().preparedSources.set(wrapped, source);
         return wrapped;
       }
-      // ONE REQUEST SKIPS THE SESSION, and it is not the one you would guess
-      //. Until 2026-09-19 every caller the edge called "near"
-      // got the bare binding, on the belief that a session costs ~15 ms per
-      // statement and buys nothing beside the primary. Measured against the
-      // provider's own served_by_primary field, the toll is ~0-4 ms and the
-      // belief was load-bearing in the wrong direction: when the recorded
-      // region was wrong \u2014 6 of 70 sampled live databases \u2014 the "near" caller
-      // was the one paying a full cross-continent trip on every statement,
-      // 183 ms where a session would have cost 17 ms.
-      //
-      // So the verdict now decides exactly one thing: a caller beside the
-      // primary who arrived holding the primary PIN needs no session, because
-      // a bare prepare() IS the primary and already satisfies the constraint.
-      // Even then, the pin is re-published only for a method that can write \u2014
-      // publishing it from a GET would pin that caller's next request to the
-      // primary for nothing, which is the very cost this change removes.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
       function __sw_sessionedNativeDb(binding) {
         if (!binding || typeof binding.withSession !== 'function') return binding;
         var state = __sw_dbSessionState();
@@ -10327,9 +10324,9 @@ var DB_SESSION_RECOVERY_JS = `      // \u2500\u2500 Read replicas, at the one na
           withSession: function (constraint) { return binding.withSession(constraint); },
         };
       }
-      // The edge's geography verdict, trusted as issued and used for nothing
-      // but the primary-pin shortcut above. Absent means "not beside it",
-      // which is the safe reading and the one every older edge produces.
+
+
+
       function __sw_dbNearPrimary() {
         try {
           return !!request && !!request.headers
@@ -10345,29 +10342,29 @@ var DB_SESSION_RECOVERY_JS = `      // \u2500\u2500 Read replicas, at the one na
       }
 `;
 var DB_COALESCE_JS = `      // STATE LIVES ON A HOISTED FUNCTION, deliberately. This fragment is
-      // concatenated into the sw.db namespace AFTER that namespace's own
-      // \`return\`, so only hoisted function declarations here ever execute \u2014 a
-      // \`let\` or \`const\` at this level would sit in its temporal dead zone
-      // forever and throw on first touch. (db-result-fidelity.ts is all
-      // function declarations for the same reason.) A function declaration
-      // inside a function body is a fresh object per invocation, and the sw.db
-      // namespace is an IIFE built once per request, so this memo is
-      // request-local exactly like every other piece of sw.db state.
+
+
+
+
+
+
+
+
       function __sw_coalesceState() {
         if (!__sw_coalesceState.s) __sw_coalesceState.s = { queue: [], scheduled: false };
         return __sw_coalesceState.s;
       }
-      // Burn a floor of microtask hops so sibling calls that travel a slightly
-      // longer async path still land in the same batch \u2014 sw.db.from resolves
-      // relations and sw.db.count does not, so two calls made on the same line
-      // reach the transport a few hops apart. Then keep extending while the
-      // queue is still growing. No timer, so the floor costs nanoseconds.
+
+
+
+
+
       function __sw_coalesceMinHops() { return 6; }
       function __sw_coalesceMaxHops() { return 24; }
       function __sw_coalesceMaxStatements() { return 24; }
 
-      // Merge only what can be merged without changing a single observable
-      // behaviour. Every clause here is load-bearing \u2014 see the header comment.
+
+
       function __sw_coalesceEligible(database, sql) {
         if (__sw_dbExecutionPath !== 'native') return false;
         if (!database || database !== DB) return false;
@@ -10375,9 +10372,9 @@ var DB_COALESCE_JS = `      // STATE LIVES ON A HOISTED FUNCTION, deliberately. 
         return __sw_dbStatementKind(sql) === 'SELECT';
       }
 
-      // Run one queued statement by itself, on the same prepare/decode path a
-      // non-coalesced read takes. Errors are handed to the queued caller, whose
-      // own __sw_timedExec wrapper decorates and retries them exactly as before.
+
+
+
       function __sw_coalesceRunAlone(entry) {
         let pending;
         try {
@@ -10396,8 +10393,8 @@ var DB_COALESCE_JS = `      // STATE LIVES ON A HOISTED FUNCTION, deliberately. 
         const size = __sw_coalesceMaxStatements();
         for (let start = 0; start < entries.length; start += size) {
           const chunk = entries.slice(start, start + size);
-          // A lone statement has nothing to travel with: send it as itself
-          // rather than wrapping one statement in a batch envelope.
+
+
           if (chunk.length === 1) { __sw_coalesceRunAlone(chunk[0]); continue; }
           const database = chunk[0].database;
           const crossingStart = Date.now();
@@ -10412,8 +10409,8 @@ var DB_COALESCE_JS = `      // STATE LIVES ON A HOISTED FUNCTION, deliberately. 
           } catch (_) {
             merged = false;
           }
-          // A transport that answers a batch with anything but one result per
-          // statement cannot be index-aligned, so it is not trusted to be.
+
+
           if (!merged || !__sw_batchReceiptComplete(results, chunk.length)) {
             for (let i = 0; i < chunk.length; i++) __sw_coalesceRunAlone(chunk[i]);
             continue;
@@ -10449,22 +10446,22 @@ var DB_COALESCE_JS = `      // STATE LIVES ON A HOISTED FUNCTION, deliberately. 
           try {
             await __sw_coalesceFlush(entries);
           } catch (err) {
-            // The flush already answers every queued caller on both the merged
-            // and the fall-back path, so reaching here means the coalescer
-            // itself broke. Fail LOUD on every waiting call rather than leaving
-            // a handler hanging on a promise nothing will ever settle.
+
+
+
+
             for (let i = 0; i < entries.length; i++) entries[i].reject(err);
           }
         })();
       }
 
-      // THE seam every single-statement sw.db execution passes through. A
-      // statement that cannot be merged goes straight down the pre-existing
-      // path; a mergeable read is queued and answered from the shared batch.
-      // Either way it is wrapped in the same __sw_timedExec as before, so
-      // timing, slow-query warnings, error decoration and backpressure retry
-      // are identical \u2014 and the measured duration still includes everything
-      // the caller actually waited for.
+
+
+
+
+
+
+
       function __sw_execOne(label, database, sql, params) {
         if (!__sw_coalesceEligible(database, sql)) {
           return __sw_execOneDirect(label, database, sql, params);
@@ -10638,11 +10635,11 @@ var DB_RESULT_FIDELITY_JS = `      var __sw_declaredResultChecks;
         return err;
       }
 
-      // The same failure on a statement that has ALREADY RUN. Saying so is the
-      // whole point: a caller that reads 'failed' off a committed INSERT retries
-      // it and writes the row twice. Raw SQL is run exactly as
-      // written, so the platform cannot add the cast for the caller here \u2014 the
-      // composed writers (sw.db.insert / update / remove) do it themselves.
+
+
+
+
+
       function __sw_exactIntegerWriteError(column) {
         const err = new Error(
           'The statement ran and its changes were applied, but the row it returned holds an integer outside ' +
@@ -10657,42 +10654,42 @@ var DB_RESULT_FIDELITY_JS = `      var __sw_declaredResultChecks;
         return err;
       }
 
-      // \u2500\u2500 Declared whole numbers \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
-      // integer() is the JavaScript-safe whole number; bigint() is a signed
-      // 64-bit whole number whose one written form is canonical decimal text.
-      // Writes, filters and keys are checked here before any transport; reads
-      // are decoded below by __sw_declaredValue. Function declarations only:
-      // the closure returns before a binding in this fragment would initialize.
+
+
+
+
+
+
       function __sw_canonicalBigintShape(s) { return __sw_schemaChecks.canonicalBigintShape(s); }
-      // Canonical signed 64-bit decimal text: no plus sign, no leading zeros,
-      // no "-0", inside the range. Checked as text, never as a number.
+
+
       function __sw_isCanonicalBigintText(s) { return __sw_schemaChecks.isCanonicalBigintText(s); }
       function __sw_structThrowWideInteger(verb, table, col) { return __sw_schemaChecks.throwWideInteger(verb, table, col); }
-      // integer() / bigint() written values, called from
-      // __sw_structCheckWriteValue in db.ts. Returns the value to bind.
+
+
       function __sw_structCheckWholeNumberValue(verb, table, col, v) { return __sw_schemaChecks.checkWholeNumberValue(verb, table, col, v); }
-      // Canonical decimal text inside the exact range \u2192 that number; otherwise
-      // null. Lets a URL parameter like '42' address an integer() row.
+
+
       function __sw_integerTextNumber(v) { return __sw_schemaChecks.integerTextNumber(v); }
-      // A comparison value on a declared whole-number column must be that
-      // column's own form: a JavaScript-safe number for integer() \u2014 canonical
-      // decimal text inside that range is NORMALIZED to the number in the
-      // predicate itself, so the value bound is the value checked \u2014 and
-      // canonical decimal text for bigint(). A rounded or mixed form would
-      // compare against a different number than the caller meant.
+
+
+
+
+
+
       function __sw_structCheckFilterValues(verb, table, shape, predicate, where) { return __sw_schemaChecks.checkFilterValues(verb, table, shape, predicate, where); }
 
-      // THE declared-type decoder for composed results. A
-      // column db/schema.ts declares boolean is stored 0/1, json as text, blob
-      // as bytes. Every structured result (from, include, insert/update/remove
-      // returns, tx, aggregate group keys) comes back in the declared type \u2014
-      // the values the generated browser data client receives, because that
-      // handler reads through this same seam. Raw SQL never passes here.
+
+
+
+
+
+
       function __sw_declaredValueInvalid() { return __sw_declaredValueInvalid; }
       function __sw_declaredValueWide() { return __sw_declaredValueWide; }
-      // Whole-number text exactly as the recovery produces it: CAST(<integer>
-      // AS TEXT), i.e. canonical signed 64-bit decimal. The same bound check as
-      // writes, so out-of-range TEXT stored by raw SQL is never accepted.
+
+
+
       function __sw_declaredWholeText(value) {
         return __sw_isCanonicalBigintText(value);
       }
@@ -10728,14 +10725,14 @@ var DB_RESULT_FIDELITY_JS = `      var __sw_declaredResultChecks;
         return kind === 'INSERT' || kind === 'UPDATE' || kind === 'DELETE' || kind === 'REPLACE';
       }
 
-      // THE result-row decoding chokepoint for every sw.db transport and shape:
-      // native binding, REST fallback, raw query, structured query, and batch
-      // statement results all pass here before customer code can observe them.
-      // The native binding has already materialized an out-of-range INTEGER as
-      // an inexact Number, but that Number is still detectably unsafe. Replay a
-      // read-only SELECT through SQLite with a per-column CAST-to-TEXT guard to
-      // recover the exact stored integer. If replay is unsafe (non-SELECT) or
-      // cannot produce an exact value, fail loudly instead of returning a lie.
+
+
+
+
+
+
+
+
       async function __sw_decodeDbResult(database, sql, params, result) {
         const unsafeColumn = __sw_unsafeIntegerResultColumn(result);
         if (!unsafeColumn) return result;
@@ -10767,11 +10764,11 @@ var DB_RESULT_FIDELITY_JS = `      var __sw_declaredResultChecks;
         return exact;
       }
 
-      // SQLite column affinity, from the declared type. Only INTEGER, NUMERIC
-      // and BLOB/none affinity can hold a whole number out of exact range \u2014
-      // TEXT affinity stores it as text and REAL affinity as a decimal, neither
-      // of which the read path ever flags. Guarding only these keeps the
-      // composed RETURNING list short on wide tables.
+
+
+
+
+
       function __sw_integerCapableAffinity(declaredType) {
         const t = __sw_lower(String(declaredType == null ? '' : declaredType));
         if (t.indexOf('int') !== -1) return true;
@@ -10788,15 +10785,15 @@ var DB_RESULT_FIDELITY_JS = `      var __sw_declaredResultChecks;
 
       function __sw_returningSql(cols) { return __sw_declaredResults().returning(cols); }
 
-      // The single-statement execution path, unchanged. __sw_execOne itself now
-      // lives in db-coalesce.ts, which routes a mergeable read into the shared
-      // batch and everything else straight here (function declarations hoist
-      // across fragments \u2014 they share one closure).
+
+
+
+
       function __sw_execOneDirect(label, database, sql, params) {
         return __sw_timedExec(label, sql, async function () {
           const result = await __sw_prepOn(database, sql, params).all();
-          // The database answered: a write here has run, even if decoding its
-          // returned row fails next (__sw_exactIntegerWriteError says so).
+
+
           __sw_noteConfirmedWrites([sql]);
           return __sw_decodeDbResult(database, sql, params, result);
         }, database).catch(function (err) { throw __sw_committedReadFailure([sql], err); });
@@ -10810,8 +10807,8 @@ var DB_RESULT_FIDELITY_JS = `      var __sw_declaredResultChecks;
           });
           const results = await database.batch(prepared);
           if (!__sw_batchReceiptComplete(results, statements.length)) throw __sw_batchOutcomeUnknown();
-          // A complete receipt means the atomic batch committed. An incomplete
-          // one stayed unknown above and is not counted as a write.
+
+
           __sw_noteConfirmedWrites(statements.map(function (statement) { return statement.sql; }));
           for (let i = 0; i < results.length; i++) {
             results[i] = await __sw_decodeDbResult(database, statements[i].sql, statements[i].params, results[i]);
@@ -10836,8 +10833,8 @@ var POSTGRES_JS = `    get postgres() {
             'Neon-Batch-Deferrable',
             'Authorization',
           ];
-          // Own DATA properties only: a getter, or an entry inherited from a
-          // polluted prototype, decides nothing here.
+
+
           const own = function (obj, key) {
             if (!obj || typeof obj !== 'object') return undefined;
             const d = Object.getOwnPropertyDescriptor(obj, key);
@@ -10858,8 +10855,8 @@ var POSTGRES_JS = `    get postgres() {
               ? input
               : (input && typeof input === 'object' ? own(input, 'url') : undefined);
             if (typeof asked !== 'string') return refuse('no destination');
-            // String equality against a compile-time constant. No parser is
-            // consulted, so a replaced global URL cannot move the target.
+
+
             let target = null;
             for (let i = 0; i < endpoints.length; i++) {
               if (endpoints[i] === asked) { target = endpoints[i]; break; }
@@ -10869,9 +10866,9 @@ var POSTGRES_JS = `    get postgres() {
             if (typeof method !== 'string' || method.toUpperCase() !== 'POST') return refuse('method');
             const askedHeaders = own(opts, 'headers');
             if (own(askedHeaders, 'Neon-Connection-String') !== dsn) return refuse('connection string');
-            // Null-prototype literals: RequestInit and HeadersInit are read by
-            // property lookup, so an inherited cf/dispatcher would otherwise
-            // reach the native fetch without this code copying anything.
+
+
+
             const headers = { __proto__: null, 'Neon-Connection-String': dsn };
             for (let i = 0; i < FORWARD.length; i++) {
               const value = own(askedHeaders, FORWARD[i]);
@@ -10891,10 +10888,10 @@ var POSTGRES_JS = `    get postgres() {
             });
           };
         };
-        // Re-installed on every read, so a customer wrapper never outlives the
-        // next use of sw.postgres. Without the driver config or the frozen
-        // endpoints in the bundle this does nothing and the platform transport
-        // stays in place.
+
+
+
+
         if (typeof __sw_neonConfig !== 'undefined' && __sw_neonConfig
             && typeof __SW_POSTGRES_SQL_ENDPOINTS !== 'undefined') {
           const direct = __sw_pgTransport(connectionString, __SW_POSTGRES_SQL_ENDPOINTS, __sw_runtimeFetch);
@@ -10926,12 +10923,12 @@ var FS_JS = `    fs: (function () {
         err.status = 400;
         return __sw_markExpected(err);
       }
-      // A file path inside a request URL: every segment percent-encoded, so a
-      // name containing # ? % or a space stays part of the path. Unencoded, a
-      // # cut off the as_user query (project authority) and a ? injected a
-      // different as_user. The route decodes each segment
-      // once; . and .. would be collapsed by URL parsing before it could
-      // refuse them, so they are refused here with the route's own rule.
+
+
+
+
+
+
       function __sw_fsUrlPath(path) {
         return __sw_fsPath(path).split('/').map(function (segment) {
           if (segment === '.' || segment === '..') {
@@ -10944,19 +10941,19 @@ var FS_JS = `    fs: (function () {
         }).join('/');
       }
       const __sw_fsOuterFetch = platformFetch;
-      // Per invocation and shared by the file views, never an isolate authority cache.
+
       const __sw_filesRead = { envelope: null, subject: null, generation: 0, pending: 0 };
       if (typeof __sw_filesMutationState !== 'undefined') __sw_filesMutationState = __sw_filesRead;
       function __sw_makeFs(__sw_fsActor, __sw_fsIsDev, __sw_fsServerAuthority) {
-        // Every transport call below goes through these: with an acting user they add that user's
-        // verified credential headers; the explicit server/dev views declare project authority.
-        // Missing user credentials never widen access.
+
+
+
         async function __sw_fsWithSubject(opts) {
           const actor = await __sw_fsActor();
           if (!actor) {
             if (__sw_fsServerAuthority) {
-              // The explicit project view declares itself; the platform never
-              // infers project authority from a missing user.
+
+
               const base = opts || {};
               return Object.assign({}, base, { headers: Object.assign({}, base.headers || {}, { 'X-Somewhere-Fs-Authority': 'server' }) });
             }
@@ -11008,19 +11005,19 @@ var FS_JS = `    fs: (function () {
       async read(path, opts) {
         path = __sw_fsUrlPath(path);
         opts = opts || {};
-        // Runtime v2: the acting end-user is DERIVED from the
-        // request's verified principal, never a caller { user }/as_user claim
-        // (a claim would let function code read any user's private file). With
-        // a verified app-user the read is ACL-scoped to them; in a server/
-        // developer context (no app-user on the request) there is no as_user
-        // and the project/developer read capability is preserved \u2014 a
-        // project-owned asset reads as before. Omission is the absence of a
-        // credential, never a widening the caller can request.
+
+
+
+
+
+
+
+
         const asUser = await __sw_fsActor();
         const userQ = asUser ? 'as_user=' + encodeURIComponent(asUser) : '';
-        // Line-range mode: return the parsed JSON envelope so user code
-        // gets { content, lines, total_lines } directly. No lines option
-        // preserves the legacy behavior (raw Response).
+
+
+
         if (opts.lines) {
           const range = Array.isArray(opts.lines)
             ? opts.lines[0] + '-' + opts.lines[1]
@@ -11043,25 +11040,25 @@ var FS_JS = `    fs: (function () {
       async write(path, body, opts) {
         path = __sw_fsUrlPath(path);
         opts = opts || {};
-        // Accept both camelCase and snake_case so docs that say
-        // content_type and SDKs that pass contentType both work. Without
-        // this, snake_case was silently dropped \u2014 the file would land
-        // with application/octet-stream and browsers refused to play it.
+
+
+
+
         const ct = opts.contentType || opts.content_type || 'application/octet-stream';
-        // Honor visibility:'public' (or public:true). The PUT route decides
-        // visibility solely from the X-Visibility header; without it every
-        // function write landed PRIVATE regardless of the option (the MCP
-        // fs_write path worked, the in-function shim silently dropped it).
+
+
+
+
         const headers = { 'Content-Type': ct };
         if (opts.visibility === 'public' || opts.public === true) headers['X-Visibility'] = 'public';
-        // Opt-in conditional write: { if_match: <version> } pins the version
-        // this writer last read (write/stat/versions all return it). If the
-        // file changed since, the platform refuses with FS_VERSION_CONFLICT
-        // instead of silently last-write-wins. Omit for today's behavior.
+
+
+
+
         const ifMatch = opts.ifMatch ?? opts.if_match;
         if (ifMatch !== undefined && ifMatch !== null) headers['If-Match'] = String(ifMatch);
-        // Runtime v2 #2: forward the DERIVED acting end-user so a write made in
-        // a user's request is owned by them (sw.fs.dev omits it \u2192 project-owned).
+
+
         const asUser = await __sw_fsActor();
         const userQ = asUser ? '?as_user=' + encodeURIComponent(asUser) : '';
         const r = await platformFetch('/v1/fs/' + projectId + path + userQ, {
@@ -11079,8 +11076,8 @@ var FS_JS = `    fs: (function () {
           if (conflict && conflict.data) err.current_version = conflict.data.current_version;
           throw __sw_markExpected(err);
         }
-        // Any other refusal is the platform's own typed error, as for read: an
-        // authorization 403 stays a 403 for the app, not a bare Error/500.
+
+
         if (!r.ok) {
           let data;
           try { data = await r.json(); } catch { data = null; }
@@ -11092,8 +11089,8 @@ var FS_JS = `    fs: (function () {
         const asUser = await __sw_fsActor();
         const userQ = asUser ? '?as_user=' + encodeURIComponent(asUser) : '';
         const r = await platformFetch('/v1/fs/' + projectId + __sw_fsUrlPath(path) + userQ, { method: 'DELETE' });
-        // A refused or failed delete is the platform's own typed error, as for read and write: resolving with the error
-        // envelope let callers report a delete that never happened as a success (founder file benchmark, 2026-10-22).
+
+
         if (!r.ok) {
           let data;
           try { data = await r.json(); } catch { data = null; }
@@ -11129,12 +11126,12 @@ var FS_JS = `    fs: (function () {
           body: JSON.stringify(body),
         });
       },
-      // Runtime v2 #2 (, sol P0-1): every ownership-bearing fs op \u2014
-      // including the read-scanners \u2014 DERIVES the acting end-user and forwards
-      // as_user so the route ACL-scopes it. Without this these ops ran
-      // project-wide from any user context (search leaked cross-file snippets,
-      // publicUrl flipped visibility on files the caller did not own). The dev
-      // view (sw.fs.dev.*) forwards no as_user \u2192 project-wide, by design.
+
+
+
+
+
+
       async stat(path) {
         const asUser = await __sw_fsActor();
         const userQ = asUser ? '?as_user=' + encodeURIComponent(asUser) : '';
@@ -11157,10 +11154,10 @@ var FS_JS = `    fs: (function () {
         const dirPath = path && path !== '/' && !path.endsWith('/') ? path + '/' : (path || '/');
         return platformJSON('/v1/fs/' + projectId + dirPath + qs);
       },
-      // diff / glob / search \u2014 CUT from the default user-facing sw.fs (sol
-      // P0-1). Per-user file diff/glob/search is a niche capability we won't
-      // bolt ownership-derivation + route ACL onto; it lives ONLY under
-      // sw.fs.dev.* with project authority. Model per-user data in sw.db.
+
+
+
+
       diff(path, opts) {
         if (!__sw_fsIsDev) throw __sw_fsDevOnly('diff');
         opts = opts || {};
@@ -11205,17 +11202,17 @@ var FS_JS = `    fs: (function () {
           body: JSON.stringify(bodyObj),
         });
       },
-      // sw.fs.uploadUrl({ path, maxSize?, contentType?, expiresIn? })
-      // \u2192 { url, path, expires_at, max_size, content_type,
-      //     owner_subject_type, owner_subject_id }
-      // Mints a short-lived signed URL the browser can PUT bytes to
-      // directly. The browser does NOT need a platform key.
+
+
+
+
+
       async uploadUrl(opts) {
         opts = opts || {};
-        // Runtime v2: upload URLs are ownership-bearing writes too. Derive the
-        // actor from the verified request exactly like write(); caller identity
-        // fields are not copied from opts. The explicit sw.fs.dev view and
-        // server/background contexts derive no actor and remain project-owned.
+
+
+
+
         const asUser = await __sw_fsActor();
         const body = {
           project_id: projectId,
@@ -11230,19 +11227,19 @@ var FS_JS = `    fs: (function () {
           body: JSON.stringify(body),
         });
       },
-      // sw.fs.signedUrl(path, { expiresIn? })
-      //   \u2192 { url, token, path, expires_at, expires_in }
-      // Mints a short-lived signed URL anyone can GET to download the
-      // file. No platform key required for the recipient. Default 1h,
-      // max 7d. Common for email attachments, image previews, share
-      // links.
+
+
+
+
+
+
       async signedUrl(path, opts) {
         opts = opts || {};
-        // Runtime v2: the owner is DERIVED from the request's
-        // verified principal, never a caller { user }/as_user claim. With a
-        // verified app-user the link is minted only if that end-user owns the
-        // file; in a server/developer context (no app-user) as_user is omitted
-        // and full backend access is preserved.
+
+
+
+
+
         const asUser = await __sw_fsActor();
         const body = {
           path: __sw_fsPath(path),
@@ -11254,22 +11251,22 @@ var FS_JS = `    fs: (function () {
           body: JSON.stringify(body),
         });
       },
-      // sw.fs.public_url(path, opts?) \u2192 { path, public_url, content_type, size_bytes, visibility }
-      // Returns a file's permanent, unauthenticated public URL.
-      // SECURITY: asking for the URL no longer silently makes a
-      // PRIVATE file world-readable. For an already-public file it just returns
-      // the URL. For a private file you must opt in to publishing:
-      //   sw.fs.public_url(path, { makePublic: true })
-      // Without the opt-in a private file throws FILE_PRIVATE and stays private.
-      // For a time-limited link to a private file WITHOUT exposing it, use
-      // sw.fs.signedUrl(path) instead.
-      // public_url / publicUrl \u2014 user-scoped in the default sw.fs (sol round 5
-      // carve-out). makePublic FLIPS visibility (a mutation); the DERIVED owner
-      // is forwarded and the route enforces authorizeFileMutation (owner-only)
-      // on the flip, so an end-user can only publish a file THEY own. This is
-      // the correct fix for the original round-1 finding (not hiding it behind
-      // dev). In sw.fs.dev.* the actor is null \u2192 project-wide, as with the other
-      // dev ops.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
       async public_url(path, opts) {
         opts = opts || {};
         const makePublic = opts.makePublic === true || opts.make_public === true || opts.public === true;
@@ -11281,14 +11278,14 @@ var FS_JS = `    fs: (function () {
       publicUrl(path, opts) {
         return this.public_url(path, opts);
       },
-      // sw.fs.setOwner(path, user)
-      //   \u2192 { path, owner_subject_type, owner_subject_id }
-      // Assigns (or transfers) a PRIVATE file to a single end-user so only that
-      // app_user can read it \u2014 via sw.fs.read(path, { user }) /
-      // sw.fs.signedUrl(path, { user }). Pass null to reset ownership back to
-      // the project. The ACL applies to private files only.
-      // sw.fs.server.setOwner(path, user, { collection, group? }) adopts an
-      // existing file under a declared collection's folder into it.
+
+
+
+
+
+
+
+
       async setOwner(path, user, opts) {
         let owner = user ?? null;
         if (owner && typeof owner === 'object' && typeof owner.id === 'string') {
@@ -11300,11 +11297,11 @@ var FS_JS = `    fs: (function () {
           err.status = 400;
           throw __sw_markExpected(err);
         }
-        // Ownership transfer is project authority, not an end-user file
-        // mutation. Forward the derived actor so user requests fail closed;
-        // the route permits only a harmless same-owner no-op used by the
-        // generated upload scaffold. Server/background contexts derive no
-        // actor and keep the trusted project-level operation.
+
+
+
+
+
         const asUser = await __sw_fsActor();
         const body = { path: __sw_fsPath(path), owner };
         if (asUser) body.as_user = asUser;
@@ -11317,21 +11314,21 @@ var FS_JS = `    fs: (function () {
           body: JSON.stringify(body),
         });
       },
-      // sw.fs.uploadFromRequest(req, { path, maxBytes?, allowedTypes?, fieldName?, public? })
-      //   \u2192 { url, path, size, contentType, visibility }
-      //
-      // One-call multipart upload handler. Parses multipart/form-data
-      // from the request, validates against the optional limits, writes
-      // to the given path, returns a URL the browser can fetch.
-      // The file is PRIVATE by default \u2014 in that case url is a
-      // short-lived signed URL (anyone with the link can GET it until it
-      // expires, the file itself stays private). Pass { public: true } to
-      // store the file world-readable; only then is url a permanent
-      // public /storage URL. Earlier this always returned a /storage URL
-      // even for the private default, so the link 404'd / 403'd \u2014 the
-      // bytes were never world-readable.
-      // Throws on every failure mode with a stable error code in the
-      // message so the caller can map \u2192 HTTP status.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
       async uploadFromRequest(req, opts) {
         opts = opts || {};
         const path = opts.path;
@@ -11373,7 +11370,7 @@ var FS_JS = `    fs: (function () {
         await this.write(path, bytes, { contentType: fileType, public: makePublic });
         const normalizedPath = path.startsWith('/') ? path : '/' + path;
         if (makePublic) {
-          // World-readable: the permanent public URL actually serves the bytes.
+
           return {
             url: '/storage' + normalizedPath,
             path: normalizedPath,
@@ -11382,9 +11379,9 @@ var FS_JS = `    fs: (function () {
             visibility: 'public',
           };
         }
-        // Private (default): a bare /storage URL would NOT serve this file, so
-        // hand back a short-lived signed URL the caller can use / share until
-        // it expires. The file itself stays private.
+
+
+
         const signed = await this.signedUrl(normalizedPath);
         return {
           url: signed && signed.url ? signed.url : null,
@@ -11395,8 +11392,8 @@ var FS_JS = `    fs: (function () {
         };
       },
         };
-        // The declared file collections door (/__sw/files) forwards through the same verified path:
-        // it acts only as this request's own signed-in user and returns the raw platform response.
+
+
         Object.defineProperty(view, '__sw_collections', {
           enumerable: false,
           value: async function (input, extraHeaders) {
@@ -11416,9 +11413,9 @@ var FS_JS = `    fs: (function () {
         return view;
       }
       const __sw_fs = __sw_makeFs(function () { return __sw_optionalSubject(); }, false);
-      // sw.fs.server is the named bypass: like sw.db.server, every operation
-      // records authority 'server' in the function's logs (operation name only \u2014
-      // never a path or file contents).
+
+
+
       __sw_fs.server = (function (view) {
         Object.keys(view).forEach(function (op) {
           const fn = view[op];
@@ -11430,33 +11427,33 @@ var FS_JS = `    fs: (function () {
         });
         return view;
       })(__sw_makeFs(function () { return null; }, false, true));
-      // The explicit project/developer capability \u2014 as_user always omitted, and
-      // the project-authority scanners (search/diff/glob/public_url) live ONLY
-      // here, never on the default user-facing sw.fs (sol P0-1: cut, not guard).
-      // sol round 6: .dev is attached ONLY when the ENTRYPOINT is structurally
-      // allowed to have it \u2014 run_code, which passes devFsEnabled=true. Every
-      // HTTP-reached context (fetch handlers, and cron/queue/job delivered to
-      // them over HTTP) constructs sw WITHOUT the flag, so .dev is simply never
-      // present \u2014 no header is inspected and there is nothing to replay. A
-      // cron or other trusted background handler uses sw.fs.server for project
-      // files. The default view requires a verified user; project-wide
-      // scanners remain in run_code (FS_DEV_NOT_IN_REQUEST names it).
+
+
+
+
+
+
+
+
+
+
+
       if (devFsEnabled) __sw_fs.dev = __sw_makeFs(function () { return null; }, true, true);
       return __sw_fs;
     })(),
 `;
 var STORAGE_JS = `    storage: (function () {
-      // sw.storage.* was removed when sw.fs replaced the legacy storage
-      // API \u2014 the old storage route now returns 410 GONE (see
-      // worker/src/index.ts). The old shim forwarded to that dead route,
-      // so get()/delete() failed SILENTLY (the 410 response was handed
-      // back as if it were file data) and put() threw an opaque
-      // "storage.put failed: 410". sw.fs is a different, versioned file
-      // store under a different key space, so a silent redirect would
-      // read the WRONG location and miss data written via the old API.
-      // Each method throws one clear, actionable error instead \u2014 the
-      // same immediate-throw shape as the sw.db dev-only shim.
-      //
+
+
+
+
+
+
+
+
+
+
+
       function deny() {
         const err = new Error(
           'sw.storage is removed \u2014 use sw.fs instead. ' +
@@ -11493,14 +11490,14 @@ var EMAIL_JS = `    email: {
         const q = new URLSearchParams({ project_id: projectId, id: String(id || '') });
         return platformJSON('/v1/email/managed-status?' + q.toString());
       },
-      // Scrub before you send: has this ONE address bounced or complained?
-      // \u2192 { address, suppressed, status, last_at, occurrences }.
+
+
       checkSuppression(address) {
         const q = new URLSearchParams({ project_id: projectId, address: String(address || '') });
         return platformJSON('/v1/email/suppression?' + q.toString());
       },
-      // The dead-address list (bounced/complained) to scrub a mailing list in
-      // one call \u2192 { bounces: [{ address, last_status, last_at, occurrences }] }.
+
+
       bounces(opts) {
         opts = opts || {};
         const q = new URLSearchParams({ project_id: projectId });
@@ -11508,8 +11505,8 @@ var EMAIL_JS = `    email: {
         if (opts.limit) q.set('limit', String(opts.limit));
         return platformJSON('/v1/email/bounces?' + q.toString());
       },
-      // Read auth mail sent only to this project's controlled test domain.
-      // Real recipients can never appear here.
+
+
       inbox(address, opts) {
         opts = opts || {};
         const q = new URLSearchParams({ project_id: projectId, address: String(address || '') });
@@ -11552,14 +11549,14 @@ ON CONFLICT(user_id) DO UPDATE SET blob_json = (
 WHERE json_type(_ai_user_memory.blob_json) = 'object'
 RETURNING blob_json`;
 var AI_JS = `    ai: (function () {
-      // Legacy memory uses the bound database; split memory uses private transport.
+
       const DB = env.PROJECT_DB;
 
-      // hideCost ( #2): keep per-call cost ACCESSIBLE to the dev
-      // (r.cost.total_cents) but NON-ENUMERABLE, so a naive Response.json(result)
-      // or {...result} does NOT forward the owner's retail price to end users.
-      // Explicit reads + destructuring still work; nothing breaks for devs who
-      // read it on purpose.
+
+
+
+
+
       function hideCost(r) {
         if (r && typeof r === 'object' && Object.prototype.hasOwnProperty.call(r, 'cost')) {
           try { Object.defineProperty(r, 'cost', { value: r.cost, enumerable: false, writable: true, configurable: true }); } catch (e) { /* noop */ }
@@ -11567,14 +11564,14 @@ var AI_JS = `    ai: (function () {
         return r;
       }
 
-      // Runtime v2 (, sol P0-2 round 2): identity NEVER travels
-      // through the caller-supplied options object in ANY form \u2014 not a
-      // subject_id field, not an internal marker read off the same object (that
-      // was the forge). The outbound body is built from an ALLOWLIST of intended
-      // fields (everything else dropped), and the subject is applied SEPARATELY
-      // from a source the customer cannot reach: either a boundSubject passed
-      // OUT OF BAND by sw.ai.scoped/forUser (their closure), or \u2014 by default \u2014
-      // the request's verified principal derived at the chokepoint.
+
+
+
+
+
+
+
+
       const __SW_CHAT_FIELDS = [
         'messages', 'model', 'provider', 'system', 'max_tokens', 'temperature',
         'top_p', 'top_k', 'stop_sequences', 'tools', 'tool_choice',
@@ -11585,12 +11582,12 @@ var AI_JS = `    ai: (function () {
       async function __sw_chatImpl(opts, boundSubject) {
         opts = opts || {};
         const body = { project_id: projectId };
-        // ALLOWLIST: copy ONLY intended fields (drops any subject_id /
-        // subject_type / marker / project_id the caller tried to smuggle).
+
+
         for (const k of __SW_CHAT_FIELDS) {
           if (__sw_own(opts, k) && opts[k] !== undefined) body[k] = opts[k];
         }
-        // Identity, from an internal source ONLY, after the allowlist.
+
         if (boundSubject && boundSubject.id) {
           body.subject_type = boundSubject.type || 'app_user';
           body.subject_id = String(boundSubject.id);
@@ -11624,11 +11621,11 @@ var AI_JS = `    ai: (function () {
           body: JSON.stringify(body),
         }));
       }
-      // Default surface \u2014 derives the request principal; never scoped by opts.
+
       function chat(opts) { return __sw_chatImpl(opts, null); }
-      // A storage call from a signed-in visitor also carries the visitor's
-      // original credential, as sw.fs does, so the platform can verify who the
-      // file belongs to. Without a visitor nothing changes.
+
+
+
       async function __sw_aiMediaHeaders(storage) {
         const subject = await __sw_optionalSubject();
         if (!subject) return {};
@@ -11641,9 +11638,9 @@ var AI_JS = `    ai: (function () {
           body: JSON.stringify({ ...opts, project_id: projectId }),
         }));
       }
-      // tts returns binary audio (Response) when no storage opt is set,
-      // and a JSON envelope { storage_path, ... } when storage is set.
-      // Mirrors sw.render.* \u2014 keep raw Response so callers can stream.
+
+
+
       async function tts(opts) {
         opts = opts || {};
         const body = JSON.stringify({ ...opts, project_id: projectId });
@@ -11656,9 +11653,9 @@ var AI_JS = `    ai: (function () {
           let msg = 'tts failed: ' + r.status;
           let code;
           try { const j = await r.json(); if (j && j.error) code = j.error; if (j && j.message) msg = j.message; } catch { /* noop */ }
-          // A 402 INSUFFICIENT_BALANCE is end-user-triggerable and apps
-          // echo err.message to end users \u2014 never leak the owner billing
-          // prose. Keep the real code/status for the dev's own logging.
+
+
+
           if (r.status === 402 && (code === 'INSUFFICIENT_BALANCE' || code === 'PAID_API_NOT_ACTIVATED' || code === 'PAID_AI_DISABLED')) {
             msg = 'This AI feature is temporarily unavailable; a later request can succeed.';
           }
@@ -11678,8 +11675,8 @@ var AI_JS = `    ai: (function () {
           let msg = 'generate-image failed: ' + r.status;
           let code;
           try { const j = await r.json(); if (j && j.error) code = j.error; if (j && j.message) msg = j.message; } catch { /* noop */ }
-          // 402 INSUFFICIENT_BALANCE is end-user-triggerable \u2014 keep the
-          // real code/status for logging but neutralize the message.
+
+
           if (r.status === 402 && (code === 'INSUFFICIENT_BALANCE' || code === 'PAID_API_NOT_ACTIVATED' || code === 'PAID_AI_DISABLED')) {
             msg = 'This AI feature is temporarily unavailable; a later request can succeed.';
           }
@@ -11699,8 +11696,8 @@ var AI_JS = `    ai: (function () {
           let msg = 'remove-background failed: ' + r.status;
           let code;
           try { const j = await r.json(); if (j && j.error) code = j.error; if (j && j.message) msg = j.message; } catch { /* noop */ }
-          // 402 INSUFFICIENT_BALANCE is end-user-triggerable \u2014 keep the
-          // real code/status for logging but neutralize the message.
+
+
           if (r.status === 402 && (code === 'INSUFFICIENT_BALANCE' || code === 'PAID_API_NOT_ACTIVATED' || code === 'PAID_AI_DISABLED')) {
             msg = 'This AI feature is temporarily unavailable; a later request can succeed.';
           }
@@ -11731,12 +11728,12 @@ var AI_JS = `    ai: (function () {
       function catalog() {
         return platformJSON('/v1/ai/catalog');
       }
-      // Conversation listing / fetching / deletion \u2014 needed by chat
-      // apps that want a Claude.ai-style sidebar of prior conversations
-      //. Same endpoints the MCP ai_conversation_* tools
-      // hit; sw.ai.conversations.* mirrors that surface inside a
-      // deployed function so the UI can render previews + handle
-      // "new chat" / "delete" without round-tripping to MCP.
+
+
+
+
+
+
       function conversationsList(opts) {
         opts = opts || {};
         const q = new URLSearchParams({ project_id: projectId });
@@ -11762,11 +11759,11 @@ var AI_JS = `    ai: (function () {
           method: 'DELETE',
         });
       }
-      // fork(sourceId, newId, opts?) \u2014 branch a conversation under a
-      // fresh id without losing the original. Use for "regenerate
-      // from this point" / "what if I asked X differently" UIs.
-      // opts.upToMessageId truncates the copy at that message id
-      // (inclusive); omit to copy the full history.
+
+
+
+
+
       function conversationFork(sourceId, newId, opts) {
         opts = opts || {};
         const body = { project_id: projectId, new_conversation_id: newId };
@@ -11778,14 +11775,14 @@ var AI_JS = `    ai: (function () {
           body: JSON.stringify(body),
         });
       }
-      // Runtime v2: the DEFAULT accessor is the request's own
-      // conversations \u2014 the app_user subject is DERIVED, never a caller
-      // subject_id/subject_type claim (which is why a conversation-id alone can
-      // never fetch another user's messages: every call carries the verified
-      // subject). Each op fails closed without a verified user. forUser(userId)
-      // is the EXPLICIT developer capability for another end-user's / a
-      // project-or-session-scoped history \u2014 cross-subject, named, running under
-      // the project's developer authority; not reachable via app-user identity.
+
+
+
+
+
+
+
+
       const conversations = {
         async list(opts) {
           const uid = await __sw_requireSubject('sw.ai.conversations.list');
@@ -11813,16 +11810,16 @@ var AI_JS = `    ai: (function () {
         },
       };
 
-      // Backward-compatible adapter. sw.agent owns the one model/tool step
-      // engine; keeping this forwarding surface avoids a second loop drifting
-      // away from durable execution again.
-      // chatWithTools \u2014 the agent drives the model/tool loop and issues the
-      // chat calls. A caller CANNOT supply the bound-chat hook (sol P0-2): the
-      // default strips __sw_boundChat, so the agent's steps go through sw.ai.chat
-      // and DERIVE the request principal. sw.ai.scoped(id).chatWithTools re-sets
-      // __sw_boundChat to a closure-bound chat AFTER the strip (below), so its
-      // steps persist under the explicitly-named subject \u2014 out of band, never
-      // from opts.
+
+
+
+
+
+
+
+
+
+
       async function chatWithTools(opts) {
         const o = { ...(opts || {}) };
         delete o.__sw_boundChat;
@@ -11838,28 +11835,28 @@ var AI_JS = `    ai: (function () {
         });
       }
 
-      // sw.ai.userMemory \u2014 per-user structured memory blob with
-      // auto-compaction ( item 2). Every chat app
-      // reinvents this \u2014 Nibble has nibble_memory, RailTime would
-      // have railtime_memory, etc. One table, three calls.
-      //
-      //   const m = await sw.ai.userMemory.get();            // subject derived
-      //   await sw.ai.userMemory.update({ preferred_line: 'Northern' });
-      //   // After N turns, fold history into the structured blob:
-      //   await sw.ai.userMemory.compact({
-      //     type: 'object',
-      //     properties: {
-      //       preferred_line: { type: 'string' },
-      //       commute_time: { type: 'string' },
-      //       last_seen_disruptions: { type: 'array', items: { type: 'string' } },
-      //     },
-      //   }, { conversation_id: 'railtime:me' });
-      //   // Runtime v2: the user is the request's verified
-      //   // principal; these calls take no user id and require a signed-in user.
-      //
-      // Storage is in the project's own database under
-      // _ai_user_memory \u2014 _-prefixed so it's hidden from db_browse /
-      // db_describe like the other platform tables.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
       const memoryTableSql = "CREATE TABLE IF NOT EXISTS _ai_user_memory (user_id TEXT PRIMARY KEY, blob_json TEXT NOT NULL DEFAULT '{}', updated_at INTEGER NOT NULL)";
       let memoryEnsured = false;
       async function ensureMemoryTable() {
@@ -11894,10 +11891,10 @@ var AI_JS = `    ai: (function () {
         ).bind(String(userId), JSON.stringify(memory), Date.now()).run();
         return memory;
       }
-      // sw.ai.userMemory \u2014 Runtime v2: the subject is DERIVED
-      // from the request's verified principal, never a caller-passed id. Each
-      // op fails closed (AUTH_REQUIRED) without a verified user, before any DB
-      // read or write. One user reads/writes only their own memory blob.
+
+
+
+
       const userMemory = {
         async get() {
           const userId = await __sw_requireSubject('sw.ai.userMemory.get');
@@ -11928,27 +11925,27 @@ var AI_JS = `    ai: (function () {
           await DB.prepare('DELETE FROM _ai_user_memory WHERE user_id = ?').bind(String(userId)).run();
           return { cleared: true };
         },
-        // compact(userId, schema, opts?) \u2014 feeds recent conversation
-        // turns to a cheap model with the schema as a response_schema,
-        // merges the structured output into the existing blob. Returns
-        // the new blob. Use after N conversation turns or as a periodic
-        // cron task. Cost: one ai.chat call against the cheapest model.
+
+
+
+
+
         async compact(schema, opts) {
           opts = opts || {};
           if (!schema || typeof schema !== 'object') {
             const err = new Error('sw.ai.userMemory.compact: schema (JSON Schema object) is required'); err.code = 'VALIDATION_ERROR'; throw err;
           }
           const userId = await __sw_requireSubject('sw.ai.userMemory.compact');
-          // Pull recent turns from the user's conversation, if one was
-          // named. Without a conversation_id we still extract from any
-          // history the dev pre-loads as opts.history.
+
+
+
           let recentText = '';
           if (opts.conversation_id) {
             try {
-              // Runtime v2 (sol P0-2b): fetch THROUGH the derived conversations
-              // accessor \u2014 it scopes to the request's verified subject, so a
-              // conversation-id alone can never pull another user's messages
-              // into this user's memory blob. (No hand-built subject predicate.)
+
+
+
+
               const full = await conversations.get(opts.conversation_id, { include: 'messages' });
               const msgs = Array.isArray(full && full.messages) ? full.messages : [];
               const lastN = msgs.slice(-Number(opts.windowMessages) || -20);
@@ -11994,14 +11991,14 @@ var AI_JS = `    ai: (function () {
         },
       };
 
-      // sw.ai.catalogTool \u2014 RETIRED from the customer runtime (Runtime v2,
-      // , #4). It auto-assembled a SELECT/LIKE tool from a table +
-      // column list; that inference-driven surface is being replaced by the
-      // additive AI DB tool built on the declared table-intent manifest, not
-      // retrofitted with per-call authority. Cut, don't harden \u2014 the method is
-      // kept as a tombstone so callers get a clear error rather than
-      // "undefined is not a function". Build the tool explicitly with
-      // sw.db + sw.ai.chatWithTools, or use the manifest-based tool when it lands.
+
+
+
+
+
+
+
+
       function catalogTool() {
         const err = new Error('sw.ai.catalogTool is not part of the runtime. Assemble the search tool explicitly from sw.db + sw.ai.chatWithTools, or use the manifest-based AI DB tool. The platform docs (ai) show both.');
         err.code = 'CATALOG_TOOL_RETIRED';
@@ -12023,8 +12020,8 @@ var AI_JS = `    ai: (function () {
             throw err;
           }
           const sType = subjectType || 'app_user';
-          // The bound subject lives in THIS closure \u2014 never in the caller's
-          // opts object \u2014 so it cannot be forged by customer code (sol P0-2).
+
+
           const boundSubject = { type: sType, id: String(subjectId) };
           return {
             chat(opts) { return __sw_chatImpl(opts, boundSubject); },
@@ -12368,7 +12365,7 @@ var AGENT_JS = `    agent: (function () {
         }
 
         budgetCheck(true);
-        // Scoped chat remains closure-bound, outside the provider request body.
+
         const __sw_chatFn = typeof opts.__sw_boundChat === 'function' ? opts.__sw_boundChat : sw.ai.chat;
         const { response, blocks, toolUses, truncated, startedAt, durationMs, results: orderedResults, executes } = await executeModelToolStep({
           callModel: () => __sw_chatFn(callOpts),
@@ -12389,9 +12386,9 @@ var AGENT_JS = `    agent: (function () {
               checkSpendCap(opts, state, stepNumber, false);
               return;
             }
-            // Durable: the charged call's cap stop is decided before its raw
-            // response is serialized, so an oversized response cannot turn the
-            // stop into a retried (re-charged) step. Kept only if it fits.
+
+
+
             try { budgetCheck(false); }
             catch (stop) {
               try { state.last_response = jsonSafe(response, 'model response', 512 * 1024, opts); }
@@ -12566,9 +12563,9 @@ var AGENT_JS = `    agent: (function () {
         return { __sw_agent_turn: true, state: safeState, done: next.done };
       }
 
-      // A durable run's budget stop is its last turn, not a callback failure:
-      // the state already holds the charged call's cost and tokens, and
-      // returning it ends the run instead of letting the workflow retry the call.
+
+
+
       function budgetStopTurn(state, error, opts) {
         const reason = error.code === 'AI_COST_PENDING' ? 'cost_pending' : 'spend_cap_exceeded';
         state.stop_reason = reason;
@@ -12576,8 +12573,8 @@ var AGENT_JS = `    agent: (function () {
         let safeState;
         try { safeState = jsonSafe(state, 'agent checkpoint', 1024 * 1024, opts); }
         catch (tooLarge) {
-          // Only last_response may be dropped, once; a checkpoint that is still
-          // too large stays an error (the run's known unresolved limit).
+
+
           if (state.last_response === null) throw tooLarge;
           state.last_response = null;
           safeState = jsonSafe(state, 'agent checkpoint', 1024 * 1024, opts);
@@ -12643,11 +12640,11 @@ var AGENT_JS = `    agent: (function () {
     })(),
 `;
 var IMAGE_JS = `    image: (function () {
-      // Image transformations \u2014 URL builder. Returns a string URL that
-      // points at Cloudflare's image resizer on the project's domain.
-      // Stick the URL in <img src="..."> or fetch it server-side. No
-      // API call is made by this helper; transformation happens at the
-      // edge when the URL is fetched.
+
+
+
+
+
       const PROJECT_HOST = env.SUBDOMAIN && env.TENANT_DOMAIN
         ? env.SUBDOMAIN + '.' + env.TENANT_DOMAIN
         : null;
@@ -12673,20 +12670,20 @@ var IMAGE_JS = `    image: (function () {
           throw new Error('sw.image.resize: source must be a non-empty URL or path string');
         }
         const optStr = buildOpts(opts);
-        // Absolute URL: use as-is for the source. The cdn-cgi prefix
-        // still needs a host with Image Transformations enabled \u2014 we
-        // use the project's own subdomain.
-        // NOTE: this regex lives inside a template literal; \\/ here
-        // emits / in the bundle, which is what V8 needs to keep the
-        // regex literal valid. A bare / collapses to / and breaks
-        // every customer's bundle (incident: 2026-05-09).
+
+
+
+
+
+
+
         if (/^https?:\\/\\//i.test(source)) {
           if (!PROJECT_HOST) {
             throw new Error('sw.image.resize: project subdomain not available; cannot build transform URL');
           }
           return 'https://' + PROJECT_HOST + '/cdn-cgi/image/' + optStr + '/' + source;
         }
-        // Relative path: assume project subdomain.
+
         if (!PROJECT_HOST) {
           throw new Error('sw.image.resize: project subdomain not available; pass an absolute URL instead');
         }
@@ -12698,20 +12695,20 @@ var IMAGE_JS = `    image: (function () {
     })(),
 `;
 var AUTH_MANAGED_VISITOR_JS = `      // Visitor identity is declared when the release has visitor-owned tables:
-      // legacy bundles carry the signing key; split bundles carry no key and no
-      // managed binding, so the declaration itself is the signal.
+
+
       function __sw_visitorDeclared() {
         if (env.SW_DB_LAYOUT !== 'split') return !!env.PROJECT_VISITOR_SECRET;
         return __sw_visitorSession.visitorOwnerTables(__sw_jsonParse(env.PROJECT_SCHEMA || '{}'), __sw_jsonParse(env.PROJECT_SCOPES || '{}')).length > 0;
       }
-      // Split storage: the platform runs the same visitor
-      // helpers over its managed ledger with a key it derives itself
-      // (/v1/db/managed/visitor-session). This controller holds only the
-      // browser's ORIGINAL visitor cookie from the immutable snapshot, or a
-      // token the platform issued during this request, and stages exactly the
-      // cookie the platform answers. It keeps the legacy controller's
-      // contract: serialized transitions, cached resolution, a failed claim
-      // poisoning later transitions, peek never issuing.
+
+
+
+
+
+
+
+
       function __sw_managedVisitorController() {
         let token = __sw_readCookie(__sw_authSnapshotRequest.headers.get('cookie'), '__Host-sw_visitor') || null;
         let peeked, resolved, claimFailure;
@@ -12840,8 +12837,8 @@ var AUTH_REFRESH_RESPONSE_JS = `(async function (refresh) {
   try { result = await response.json(); } catch (_) { result = null; }
   if (!response.ok || !result || result.ok === false) {
     const err = __sw_platformError(response, result);
-    // Only definite auth denials from the response are public. Thrown
-    // transport errors and unknown rotation outcomes stay opaque.
+
+
     if (result && result.ok === false &&
         ((response.status === 401 && err.code === 'AUTH_INVALID_CREDS') ||
          (response.status === 403 && err.code === 'AUTH_BANNED'))) {
@@ -12854,13 +12851,13 @@ var AUTH_REFRESH_RESPONSE_JS = `(async function (refresh) {
 })`;
 var AUTH_JS = `    auth: (function () {
       const DB = env.PROJECT_DB;
-      // Forward an end-user JWT (app_user) directly as the Authorization
-      // header \u2014 used for routes that require an app_user JWT (verify
-      // email, update password, profile, /me). The smt_ developer key is
-      // skipped for these calls because the route handlers explicitly
-      // reject developer mode.
-      // The ONE answer for "identity could not be adjudicated": a fixed code,
-      // status and message. Never the platform's prose, a token or user data.
+
+
+
+
+
+
+
       function __sw_authVerifyUnavailable() {
         const unavailable = new Error('Identity verification is temporarily unavailable. Please retry.');
         unavailable.code = 'AUTH_VERIFY_UNAVAILABLE';
@@ -12869,14 +12866,14 @@ var AUTH_JS = `    auth: (function () {
         return unavailable;
       }
 
-      // ONE TRACE WITH THE SERVER. The auth calls are built by
-      // hand (they need the raw Response for the rotated-token headers), so
-      // unlike platformFetch they sent no traceparent and recorded no client
-      // span: the platform sampled them on an unrelated trace id and a slow
-      // sign-in could not be split into the hop and the platform's work. This
-      // carries the function's trace context and records the client span
-      // exactly as platformFetch does. Observes only: the request, its
-      // credential headers, its result and its errors are unchanged.
+
+
+
+
+
+
+
+
       async function __sw_tracedAuthFetch(path, init) {
         const method = init.method || 'GET';
         const startedAt = Date.now();
@@ -12917,12 +12914,12 @@ var AUTH_JS = `    auth: (function () {
           'Authorization': 'Bearer ' + token,
           ...(opts.headers || {}),
         };
-        // Bind the token to THIS function's project \u2014 the same
-        // cross-project binding sw.auth.me stamps. Without it, every helper
-        // built on userTokenJSON (updateProfile / updatePassword / deleteUser /
-        // verify-email / resend) accepted a JWT minted by ANOTHER project and
-        // mutated THAT project's user. The route rejects (401) when the token's
-        // project_id differs from this header \u2014 same enforcement /v1/auth/me uses.
+
+
+
+
+
+
         if (projectId && !headers['X-Sw-Executing-Project']) {
           headers['X-Sw-Executing-Project'] = projectId;
         }
@@ -12947,8 +12944,8 @@ var AUTH_JS = `    auth: (function () {
           const err = new Error(msg);
           err.code = (data && data.error) || 'AUTH_ERROR';
           err.status = r.status;
-          // A definite refusal: a 4xx with the platform's own error body.
-          // Transport failures, 5xx and unreadable bodies are not refusals.
+
+
           err.__sw_refusal = r.status >= 400 && r.status < 500 && !!data && data.ok === false;
           throw err;
         }
@@ -12964,17 +12961,17 @@ var AUTH_JS = `    auth: (function () {
         }
         const cookieHeader = req.headers.get('cookie') || req.headers.get('Cookie') || '';
         __sw_expireLegacyAuthCookiesIfPresent(cookieHeader, req.url);
-        // NULL PROTOTYPE, deliberately. Both the membership test below
-        // ("k in jar") and every "jar[name]" read traverse the prototype
-        // chain. With a plain {}, a polluted Object.prototype.token \u2014 set by
-        // app code, a dependency, or an earlier request in this warm isolate
-        // \u2014 is read as this request's credential even when the request
-        // carried no cookie at all; it also makes the membership test treat a
-        // real cookie as already-present and DROP it. A null-prototype jar
-        // inherits nothing, so both reads can only ever see keys this cookie
-        // header actually supplied. Fixed at the jar rather than by guarding
-        // each read, so a fifth read cannot reintroduce it.
-        // NB: this file is emitted as a template literal \u2014 no backticks.
+
+
+
+
+
+
+
+
+
+
+
         const jar = __sw_objCreateNull();
         for (const part of cookieHeader.split(';')) {
           const eq = part.indexOf('=');
@@ -13023,12 +13020,12 @@ var AUTH_JS = `    auth: (function () {
         return { token, refreshToken, fromCookie };
       }
 
-      // One account change for the request's own session (cookie or Bearer).
-      // A change never runs on a read method: a cross-site link or page load
-      // sends GET with the cookie and no Origin, so it is refused before the
-      // session is read. ends: true is for a change the platform answers by
-      // ending every session (password, MFA activation, account deletion):
-      // the cookies are cleared instead of re-staged.
+
+
+
+
+
+
       async function sessionChange(method, req, path, opts) {
         if (req && req.headers && typeof req.headers.get === 'function' && !__sw_isUnsafeCookieMethod(req.method)) {
           const err = new Error('sw.auth.' + method + ' changes the account, so it runs only on POST, PUT, PATCH or DELETE.');
@@ -13036,7 +13033,7 @@ var AUTH_JS = `    auth: (function () {
           err.status = 405;
           throw __sw_markExpected(err);
         }
-        // The step's own fields are checked after the method, before the session.
+
         const body = typeof opts.body === 'function' ? opts.body() : opts.body;
         const auth = cookieSessionAuth(method, req);
         let d;
@@ -13047,10 +13044,10 @@ var AUTH_JS = `    auth: (function () {
             ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
           });
         } catch (err) {
-          // A refused change did not end anything; if the platform refreshed
-          // the session before refusing, the old refresh cookie is rotated
-          // away, so the new pair is staged before the refusal leaves. An
-          // unknown failure stages nothing and completes nothing.
+
+
+
+
           if (err && err.__sw_refusal === true && auth.fromCookie && __sw_pendingRefresh.access && __sw_pendingRefresh.refresh) {
             __sw_setAuthCookies(__sw_pendingRefresh.access, __sw_pendingRefresh.refresh);
           }
@@ -13079,11 +13076,11 @@ var AUTH_JS = `    auth: (function () {
         return opts;
       }
 
-      // A shallow clone of an auth payload that also clones a nested .user. The
-      // me() cache stores a PRIVATE snapshot and hands out only clones of it, so
-      // every caller gets a fresh object: mutating a previously-returned payload
-      // can never corrupt the snapshot or any later caller's copy \u2014 which is
-      // also what makes id/role read off a fresh me() result authoritative.
+
+
+
+
+
       function __sw_identityUser(profile) {
         const user = __sw_assign({}, profile);
         delete user.plan; delete user.plan_status; delete user.entitlements; delete user.__sw_entitlements;
@@ -13097,11 +13094,11 @@ var AUTH_JS = `    auth: (function () {
         return __sw_assign({}, payload);
       }
 
-      // Social sign-in is bound to the browser that starts it.
-      // oauthStart keeps a per-attempt verifier in an HttpOnly app-origin cookie
-      // named by its public attempt id and sends only the challenge. The final
-      // code comes back with that attempt id, which only SELECTS the one ORIGINAL
-      // request cookie presented; the platform still proves the full challenge.
+
+
+
+
+
       const __SW_OAUTH_ATTEMPT_RE = /^__Host-sw_oauth_app_([A-Za-z0-9_-]{16})=([A-Za-z0-9_-]{43})$/;
       function __sw_oauthAttempts() {
         const header = __sw_authSnapshotRequest.headers.get('cookie') || '';
@@ -13152,9 +13149,9 @@ var AUTH_JS = `    auth: (function () {
           err.status = 400;
           throw __sw_markExpected(err);
         }
-        // Resolve the actor only from the Request supplied to this operation.
-        // The platform route independently re-reads the stored admin role and
-        // applies the same-project, self-op, last-admin, rate, and audit gates.
+
+
+
         const authRequest = new Request(req.url, {
           method: opts.method || 'GET',
           headers: req.headers,
@@ -13196,29 +13193,29 @@ var AUTH_JS = `    auth: (function () {
         return new Response(null, { status: 302, headers: { Location: redirectTo || '/' } });
       }
 
-      // THE identity spine (, Runtime v2). The ONE derivation of a
-      // verified principal \u2014 behind sw.auth.fromRequest / sw.auth.requireUser
-      // AND the automatic structured-query scoping in sw.db.
-      // User authority arrives on EITHER credential TRANSPORT and both verify
-      // identically \u2014 the seven checks run once, server-side, inside
-      // sw.auth.me (signature, issuer, audience/project binding, expiration,
-      // token type, session/revocation state, intended authority):
-      //   (a) the credential ATTACHED to req \u2014 cookie or Authorization Bearer;
-      //   (b) opts.forwardedToken \u2014 an explicitly forwarded platform-issued
-      //       app-user token STRING (a second transport, never an exception).
-      // Returns { user, id, role } or null. id/role are captured from the fresh
-      // me() result BEFORE enrichment and before any customer code can touch the
-      // object \u2014 me() only ever returns network-fresh objects or clones of its
-      // private cache snapshot \u2014 so they are the authoritative identity; an
-      // enriched dev-table row can never supply either value. It NEVER accepts
-      // an identity CLAIM: a bare id / { user } / mutable principal handed as
-      // forwardedToken is a typed FORWARDED_CREDENTIAL_INVALID throw, never a
-      // silent identity.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
       async function __sw_resolveRequestUser(req, opts) {
         if (__sw_mcpRequest && req === __sw_mcpRequest) return __sw_mcpPrincipal();
-        // Transport (b): an explicitly forwarded credential. Presence of the
-        // key with a non-string value is an identity CLAIM \u2014 reject it loudly
-        // rather than deriving authority from something the caller supplied.
+
+
+
         if (opts && __sw_own(opts, 'forwardedToken')
             && opts.forwardedToken !== undefined && opts.forwardedToken !== null) {
           const forwarded = opts.forwardedToken;
@@ -13228,24 +13225,24 @@ var AUTH_JS = `    auth: (function () {
             err.status = 400;
             throw __sw_markExpected(err);
           }
-          // A forwarded access token is a bearer credential, not this request's
-          // session: no cookie, no CSRF gate, no auto-refresh.
+
+
           return await __sw_principalFromToken(forwarded, { fromCookie: false, refreshToken: null, enrich: opts });
         }
 
         if (!req || !req.headers || typeof req.headers.get !== 'function') return null;
-        // Parse the Cookie header once into an exact-key map. A per-name
-        // regex had an order edge case \u2014 reading 'token' failed when
-        // 'sw_refresh_token' (which contains "token") came first in the
-        // header, which browsers do freely. Exact-key match
-        // is order-independent and collision-free.
+
+
+
+
+
         const cookieHeader = req.headers.get('cookie') || req.headers.get('Cookie') || '';
         __sw_expireLegacyAuthCookiesIfPresent(cookieHeader, req.url);
-        // Null-prototype (H1): the jar must reflect ONLY cookies actually in
-        // the header. A plain {} reads through Object.prototype, so a polluted
-        // Object.prototype.token would supply a phantom cookie that resolves an
-        // unauthenticated request as another user and even overrides a real
-        // Bearer (the cookie names are checked before the Authorization header).
+
+
+
+
+
         const jar = __sw_objCreateNull();
         for (const part of cookieHeader.split(';')) {
           const eq = part.indexOf('=');
@@ -13266,9 +13263,9 @@ var AUTH_JS = `    auth: (function () {
         }
         if (!token) return null;
 
-        // CSRF gate ( +  + ):
-        // missing Origin on unsafe cookie-authenticated methods is a typed
-        // 400; disallowed cross-origin cookie auth is a typed 403.
+
+
+
         if (fromCookie) {
           __sw_pendingRefresh.cookieMode = true;
           __sw_enforceCookieCsrf(req);
@@ -13288,11 +13285,11 @@ var AUTH_JS = `    auth: (function () {
         return await __sw_principalFromToken(token, { fromCookie, refreshToken, enrich: opts });
       }
 
-      // Shared verification tail: a token \u2192 a verified principal (or null).
-      // Both credential transports funnel through here, so the seven checks
-      // (run inside me(), server-side) happen once. id/role are read off the
-      // fresh me() result before enrichment, so an enriched dev-table row can
-      // never supply either. ctx = { fromCookie, refreshToken, enrich }.
+
+
+
+
+
       async function __sw_principalFromToken(token, ctx) {
         ctx = ctx || {};
         const enrich = ctx.enrich;
@@ -13302,24 +13299,24 @@ var AUTH_JS = `    auth: (function () {
           const result = await __sw_auth.me(token, ctx.refreshToken ? { refreshToken: ctx.refreshToken, noCache } : (noCache ? { noCache: true } : undefined));
           user = result && result.user ? result.user : (result || null);
         } catch (err) {
-          // Do NOT collapse two different facts into one silent null
-          // ( / feedback_fail_loudly). A 401/403 is an EXPECTED
-          // credential rejection \u2014 invalid / expired / revoked token \u2014 and the
-          // caller treating it as unauthenticated is correct and quiet by
-          // design. ANYTHING ELSE (network error, 5xx, timeout) is a
-          // verification we COULD NOT ADJUDICATE: returning null there logs a
-          // still-valid session out AND hides a platform fault behind a
-          // "session ended" \u2014 exactly why this incident stayed invisible for
-          // hours. Every context, draft or ordinary, throws the fixed typed
-          // unavailability; the platform's prose is never forwarded. A deleted
-          // user is the platform's one non-401/403 rejection (404
-          // AUTH_INVALID_CREDS on /v1/auth/me) and stays unauthenticated.
+
+
+
+
+
+
+
+
+
+
+
+
           const status = err && typeof err.status === 'number' ? err.status : 0;
           const credentialRejected = status === 401 || status === 403
             || (status === 404 && err && err.code === 'AUTH_INVALID_CREDS');
           if (credentialRejected) return null;
-          // Fixed code and a bounded HTTP status only: err.code and err.message
-          // can carry upstream data, so neither is logged.
+
+
           console.error(
             '[sw.auth] identity verification could not complete (PLATFORM FAULT, not a logout \u2014 the credential may still be valid):',
             'AUTH_VERIFY_UNAVAILABLE',
@@ -13327,34 +13324,34 @@ var AUTH_JS = `    auth: (function () {
           );
           throw __sw_authVerifyUnavailable();
         }
-        // me() resolved, so this must be a verified identity. A resolved
-        // answer without one is not a credential rejection.
+
+
         if (!user || typeof user !== 'object' || __sw_arrayIsArray(user)) throw __sw_authVerifyUnavailable();
-        // The authoritative identity read: off the object me() just returned,
-        // before enrichment and before the object is handed to anyone.
+
+
         const verifiedId = user.id;
         const verifiedRole = user.role === 'admin' ? 'admin' : 'user';
         if (typeof verifiedId !== 'string' || !verifiedId.trim()) throw __sw_authVerifyUnavailable();
-        // Draft identity reads must not claim visitor rows in shared storage.
+
         if (!isDraftExecution) await __sw_claimVisitorForUser(verifiedId, __sw_pendingRefresh.access || token);
 
-        // Cookie session that auto-refreshed \u2192 re-issue the httpOnly cookies so
-        // the browser keeps a long-lived session, invisibly. The
-        // header-based X-New-* path (non-cookie clients) is unaffected. Only a
-        // request-attached cookie transport re-issues; a forwarded token does not.
+
+
+
+
         if (ctx.fromCookie && __sw_pendingRefresh.access && __sw_pendingRefresh.refresh) {
           __sw_setAuthCookies(__sw_pendingRefresh.access, __sw_pendingRefresh.refresh);
         }
 
-        // Optional enrichment \u2014 JOIN the dev's user-table row onto
-        // the platform user. Skipped when not requested or when sw.db
-        // isn't bound (shouldn't happen in practice). Errors are
-        // swallowed so a missing table doesn't crash the request \u2014
-        // returns the unenriched user.
+
+
+
+
+
         if (enrich && enrich.enrichFrom && DB && typeof DB.prepare === 'function') {
           const table = String(enrich.enrichFrom);
-          // Allow only [a-zA-Z0-9_] table names to block SQL injection on
-          // this enrichment surface.
+
+
           if (!/^[a-zA-Z0-9_]+$/.test(table)) {
             console.error('sw.auth.fromRequest: invalid enrichFrom table name:', table);
             return { user: user, id: verifiedId, role: verifiedRole };
@@ -13374,8 +13371,8 @@ var AUTH_JS = `    auth: (function () {
               'SELECT ' + selectExpr + ' FROM "' + table + '" WHERE "' + joinCol + '" = ?'
             ).bind(verifiedId).first();
             if (row) {
-              // Platform fields win on collision \u2014 never let the
-              // dev table overwrite id/email/etc.
+
+
               user = __sw_assign({}, row, user);
             }
           } catch (err) {
@@ -13407,34 +13404,34 @@ var AUTH_JS = `    auth: (function () {
           opts = opts || {};
           const refreshToken = isDraftExecution ? null : (opts.refreshToken || null);
 
-          // Pre-flight parses the JWT and detects malformed input
-          // synchronously. Expired tokens are tolerated here ONLY when
-          // a paired refreshToken is supplied \u2014 the platform-side
-          // /v1/auth/me handler does the auto-refresh dance and
-          // returns the new pair via X-New-* response headers, which
-          // we capture into the function context's __sw_pendingRefresh
-          // slot so the shim can attach them to the user's response.
+
+
+
+
+
+
+
           const pre = refreshToken
             ? __sw_preflightJwtAllowExpired(token)
             : __sw_preflightJwt(token);
 
-          // Request-local single-flight: one verification per
-          // credential per request, INCLUDING the expired+refresh path. Without it, sw.auth.requireUser and
-          // the sw.db scoped-query resolver each fire their own /v1/auth/me \u2014
-          // two auto-refreshes of the SAME refresh token, and single-use
-          // rotation reads the second as reuse and revokes the whole session.
-          // Re-enter ONCE (guarded by __sw_noInflight) to run the body below,
-          // memoize that promise by signature, and hand every caller its own
-          // clone so a mutated return can't corrupt a shared snapshot.
+
+
+
+
+
+
+
+
           if (pre && pre.sig && !opts.__sw_noInflight) {
             const inflight = __sw_cacheGet(__sw_authMeInflight, pre.sig);
             if (inflight) return inflight.then(__sw_cloneAuthPayload);
             const p = __sw_auth.me(token, __sw_assign({}, opts, { __sw_noInflight: true }));
             __sw_cacheSet(__sw_authMeInflight, pre.sig, p);
-            // Ordinary single-flight covers pending work only. A fulfilled
-            // promise must not bypass the snapshot's absolute expiry. Keep the
-            // expired-token refresh result so this request never rotates the
-            // same single-use refresh token twice.
+
+
+
+
             if (!(refreshToken && pre.expired)) {
               const clear = () => {
                 if (__sw_cacheGet(__sw_authMeInflight, pre.sig) === p) __sw_cacheDelete(__sw_authMeInflight, pre.sig);
@@ -13445,12 +13442,12 @@ var AUTH_JS = `    auth: (function () {
           }
 
           const now = Date.now();
-          // A portable signed snapshot works on every instance, including a cold
-          // instance and role checks. The original expiry is checked on every use.
-          // Only with a bound receipt key: a bundle without one (a temporary
-          // runtime, or a key that could not be derived) takes the platform's
-          // /v1/auth/me below, as a draft does, instead of refusing every
-          // signed-in user.
+
+
+
+
+
+
           if (!isDraftExecution && env.PROJECT_AUTH_RECEIPT_KEY && pre && !pre.expired) {
             const claims = await __sw_verifyAccessToken(env.PROJECT_AUTH_RECEIPT_KEY, token, projectId);
             if (claims) {
@@ -13467,37 +13464,37 @@ var AUTH_JS = `    auth: (function () {
             throw invalid;
           }
 
-          // REQUEST-LOCAL /me memo. Reached only by a draft or
-          // a bundle without a receipt key. The single-flight above clears once
-          // settled, so without this two sequential lookups in one request (the
-          // declared-data permission check, then the row composer) each crossed
-          // /v1/auth/me. Never for a role check (noCache) or the expired+refresh
-          // path; the map dies with the request, and each hit is a fresh clone.
+
+
+
+
+
+
           if (!opts.noCache && pre && pre.sig && !(refreshToken && pre.expired)) {
             const hit = __sw_cacheGet(__sw_authMeCache, pre.sig);
             if (hit && hit.expiresAt > now) return __sw_cloneAuthPayload(hit.snapshot);
           }
 
-          // Build the auth call by hand because we need the raw
-          // Response back to read X-New-* headers \u2014 userTokenJSON
-          // throws away the headers and returns data only.
+
+
+
           const headers = { 'Authorization': 'Bearer ' + token };
           if (refreshToken) headers['X-Refresh-Token'] = refreshToken;
-          // Bind the token to THIS function's project.
-          // Without this, /v1/auth/me only checks the token is internally
-          // consistent with its OWN project_id \u2014 so a JWT minted for
-          // project A authenticated inside project B's deployed function.
-          // The header tells /me which project is executing; /me rejects
-          // (401) when the token's project_id differs \u2014 the same binding
-          // the REST /v1/db path enforces via resolveProjectScope.
+
+
+
+
+
+
+
           if (projectId) headers['X-Sw-Executing-Project'] = projectId;
-          // NAMED LIKE EVERY OTHER PLATFORM CALL. This one
-          // is built by hand rather than through platformFetch because it needs
-          // the raw Response to read the rotated-token headers \u2014 which also
-          // meant it recorded no span, so the one round trip that happens in
-          // front of every authenticated statement read as unexplained handler
-          // time. It asks for, and records, the same upstream split, and joins
-          // the function's trace (__sw_tracedAuthFetch).
+
+
+
+
+
+
+
           if (__sw_serverTiming) headers['X-Sw-Server-Timing'] = '1';
           const r = await __sw_tracedAuthFetch('/v1/auth/me', { headers });
           let data;
@@ -13511,8 +13508,8 @@ var AUTH_JS = `    auth: (function () {
           }
 
           const payload = data.data;
-          // A successful HTTP response is not an identity receipt. In every
-          // context, malformed authority data must never become a visitor.
+
+
           if (data.ok !== true || !payload || typeof payload !== 'object'
               || Array.isArray(payload) || !payload.user || typeof payload.user !== 'object'
               || Array.isArray(payload.user) || typeof payload.user.id !== 'string' || !payload.user.id.trim()) {
@@ -13558,9 +13555,9 @@ var AUTH_JS = `    auth: (function () {
             if (!claims) throw new Error('Refreshed access token could not be verified.');
             user = __sw_identityUser(claims.user); expiresAt = claims.exp * 1000;
           } else {
-            // No receipt key bound: the platform answers who the new
-            // token is. Its expiry is read from the token the platform just issued, and
-            // only times the next refresh; it grants nothing.
+
+
+
             const verified = await __sw_auth.me(d.access_token, { __sw_noInflight: true });
             if (!verified || !verified.user) throw new Error('Refreshed access token could not be verified.');
             user = verified.user; expiresAt = __sw_preflightJwt(d.access_token).expSec * 1000;
@@ -13615,21 +13612,21 @@ var AUTH_JS = `    auth: (function () {
             body: JSON.stringify(opts || {}),
           });
         },
-        // A profile change returns { user }. An email change is verify-gated:
-        // it returns { email_change } and is finished with the two
-        // verifyEmailChange\u2026WithCookie calls below.
+
+
+
         async updateProfileWithCookie(req, opts) {
           const d = await sessionChange('updateProfileWithCookie', req, '/v1/auth/users/me', { method: 'PATCH', body: opts || {} });
           if (d && d.email_change && typeof d.email_change === 'object' && !__sw_arrayIsArray(d.email_change) && !d.user) {
             return { email_change: d.email_change };
           }
-          // Same wrapped contract as the other cookie helpers.
+
           return { user: __sw_requireAuthUser('updateProfileWithCookie', d) };
         },
-        // Email change for cookie sessions. The change stays bound to the
-        // session that started it; change_id is email_change.id and code is
-        // the 6-digit code from the email (the current address on the
-        // verify_current_email phase, then the new address).
+
+
+
+
         async verifyEmailChangeCurrentWithCookie(req, opts) {
           return sessionChange('verifyEmailChangeCurrentWithCookie', req, '/v1/auth/change-email/verify-current', { body: function () {
             opts = requireFields('verifyEmailChangeCurrentWithCookie', opts, ['change_id', 'code']);
@@ -13642,11 +13639,11 @@ var AUTH_JS = `    auth: (function () {
             return { change_id: opts.change_id, code: opts.code };
           } });
         },
-        // Email verification for cookie sessions: the signed-in user comes
-        // from the request's session (cookie, or a Bearer header), so app code
-        // never handles a token. request\u2026 emails a 6-digit code to the
-        // account's address; verify\u2026 checks it. Both return the route's data:
-        // { sent\u2026 } / { already_verified: true } and { verified: true }.
+
+
+
+
+
         async requestEmailVerificationWithCookie(req) {
           return sessionChange('requestEmailVerificationWithCookie', req, '/v1/auth/request-email-verification', {});
         },
@@ -13662,9 +13659,9 @@ var AUTH_JS = `    auth: (function () {
             return { code: code };
           } });
         },
-        // Changing the password ends every session of the account, this one
-        // included: the cookies are cleared and the user signs in again with
-        // the new password.
+
+
+
         async updatePasswordWithCookie(req, opts) {
           return sessionChange('updatePasswordWithCookie', req, '/v1/auth/update-password', { ends: true, body: function () {
             opts = requireFields('updatePasswordWithCookie', opts, ['new_password']);
@@ -13673,16 +13670,16 @@ var AUTH_JS = `    auth: (function () {
             return body;
           } });
         },
-        // Deletes the signed-in account and clears its session cookies.
+
         async deleteUserWithCookie(req) {
           return sessionChange('deleteUserWithCookie', req, '/v1/auth/users/me', { method: 'DELETE', ends: true });
         },
         deleteUser(token) {
           return userTokenJSON('/v1/auth/users/me', token, { method: 'DELETE' });
         },
-        // Start social sign-in from a server handler. After consent the platform
-        // redirects to redirect_uri with ?code=; the matching *Exchange or
-        // *CallbackWithCookie redeems it with this browser's verifier.
+
+
+
         oauthStart(provider, opts) {
           return oauthStart(provider, opts);
         },
@@ -13705,20 +13702,20 @@ var AUTH_JS = `    auth: (function () {
           return socialOauthExchange('discord', opts);
         },
 
-        // \u2500\u2500 httpOnly cookie sessions \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
-        // Set the session as HttpOnly + Secure cookies on the response and
-        // return the user. The client just does fetch(url, { credentials:
-        // 'include' }) \u2014 no tokens in localStorage, nothing for XSS to steal,
-        // and fromRequest auto-refreshes the cookie so sessions are long-lived.
-        // The cookies ride out on the Response via the shim, so the handler
-        // returns a Response-ready envelope and does zero header work.
-        //
-        // Response contract (, ): signup returns
-        // { user }. Password login returns either { user } after staging a
-        // complete cookie session, or the validated
-        // { mfa_required:true, mfa_token } challenge without staging cookies.
-        // Malformed/mixed upstream success bodies throw before any visitor or
-        // cookie effect.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
         async loginWithCookie(req, email, password) {
           const creds = __sw_cookieCreds('loginWithCookie', req, email, password);
           let d;
@@ -13740,8 +13737,8 @@ var AUTH_JS = `    auth: (function () {
           if (access && refresh) { await __sw_completeVisitorSignIn(access); __sw_setAuthCookies(access, refresh); }
           return { user: __sw_requireAuthUser('signupWithCookie', d), expires_at: __sw_preflightJwt(access).expSec * 1000 };
         },
-        // Completes the Google OAuth round-trip: reads ?code from the callback
-        // request, exchanges it, sets the cookies, returns a 302 redirect.
+
+
         async googleCallbackWithCookie(req, redirectTo) {
           const u = new URL(req.url);
           const code = u.searchParams.get('code');
@@ -13762,11 +13759,11 @@ var AUTH_JS = `    auth: (function () {
         discordCallbackWithCookie(req, redirectTo) {
           return socialOauthCallbackWithCookie('discord', req, redirectTo);
         },
-        // Mint the httpOnly session cookies from an existing token pair \u2014
-        // the primitive the *WithCookie helpers wrap. For
-        // backends (e.g. @somewhere-cloud/sdk/server, or its legacy auth shim) that already called
-        // login / googleExchange / verifyOtp and want THAT session as
-        // cookies without a second platform call.
+
+
+
+
+
         setSessionCookies(access, refresh) {
           if (typeof access !== 'string' || !access || typeof refresh !== 'string' || !refresh) {
             const err = new Error('sw.auth.setSessionCookies: access and refresh must be non-empty strings');
@@ -13775,33 +13772,33 @@ var AUTH_JS = `    auth: (function () {
           }
           __sw_setAuthCookies(access, refresh);
         },
-        // Park the Set-Cookie expirations that end a cookie session (the
-        // clear half of setSessionCookies). logoutWithCookie does this AND
-        // revokes server-side \u2014 prefer it when you have the Request.
+
+
+
         clearSessionCookies() {
           __sw_clearAuthCookies();
         },
-        // Revokes the session server-side and clears the cookies. Answers ok
-        // only when the platform confirmed the refresh session revoked
-        // (logged_out: true), or when the request carried no session cookie.
-        // - Refresh revocation refused or unconfirmed: throws with its code and
-        //   status and stages no cookie change; the account cookies stay.
-        // - Account revocation confirmed but visitor revocation failed: the
-        //   account cookies are cleared and VISITOR_SIGN_OUT_UNCONFIRMED (503,
-        //   partial) is thrown; the visitor session's state is unknown.
+
+
+
+
+
+
+
+
         async logoutWithCookie(req) {
           const ch = (req && req.headers && (req.headers.get('cookie') || req.headers.get('Cookie'))) || '';
           const refresh = __sw_readCookie(ch, '__Host-sw_refresh_token');
           const access = __sw_readCookie(ch, '__Host-token');
-          // Check each cookie credential's own request before revocation or
-          // staging clears. Visitor logout consumes the immutable snapshot.
+
+
           if (refresh || access) __sw_enforceCookieCsrf(req);
           if (__sw_visitorDeclared() && __sw_readCookie(__sw_authSnapshotRequest.headers.get('cookie'), '__Host-sw_visitor')) {
             __sw_enforceCookieCsrf(__sw_authSnapshotRequest);
           }
           if (refresh) {
-            // The access cookie (signed, names its session) lets the platform confirm a
-            // sign-out whose first response was lost; it revokes nothing by itself.
+
+
             const result = await this.logout(access ? { refresh_token: refresh, access_token: access } : { refresh_token: refresh }).catch(function (err) { throw __sw_markExpected(err); });
             if (!result || result.logged_out !== true) {
               const err = new Error('Could not confirm sign-out.');
@@ -13809,14 +13806,14 @@ var AUTH_JS = `    auth: (function () {
               err.status = 502;
               throw err;
             }
-            // A confirmed sign-out drops this isolate's receipt for the signed-out
-            // access token at once (other isolates stay inside the 60 s policy).
+
+
             if (access && __sw_receiptSubtle) {
               try { __sw_cacheDelete(__sw_authReceipts, await __sw_receiptSha(access)); } catch (_) {}
             }
           } else if (access) {
-            // Without the refresh cookie the session cannot be revoked here;
-            // nothing was sent and nothing was cleared.
+
+
             const err = new Error('This session has no refresh cookie, so it cannot be signed out here. Nothing was signed out.');
             err.code = 'LOGOUT_REFRESH_REQUIRED';
             err.status = 400;
@@ -13829,9 +13826,9 @@ var AUTH_JS = `    auth: (function () {
               await __sw_visitorController().revoke();
             } catch (visitorErr) {
               if (!refresh) throw visitorErr;
-              // The account session is confirmed revoked and its clearing
-              // cookies are staged; exposing this error lets the shim send
-              // them with the 503. The visitor error stays internal (cause).
+
+
+
               const err = new Error('Signed out of the account, but could not confirm the visitor session was signed out.');
               err.code = 'VISITOR_SIGN_OUT_UNCONFIRMED';
               err.status = 503;
@@ -13844,10 +13841,10 @@ var AUTH_JS = `    auth: (function () {
           return { ok: true };
         },
 
-        // Magic-link / OTP sign-in (Supabase-shaped). Email-based,
-        // single-use, 15-minute TTL. Auto-creates the user on first
-        // sign-in. verifyOtp consumes the token and returns the same
-        // shape login/signup produce.
+
+
+
+
         signInWithOtp(opts) {
           opts = opts || {};
           if (!opts.email) {
@@ -13867,10 +13864,10 @@ var AUTH_JS = `    auth: (function () {
             err.code = 'VALIDATION_ERROR';
             throw err;
           }
-          // Carries expires_at like login/signup, so a cookie-mode verify tells the client when to
-          // refresh. Without it the SDK refreshed at once and a page change orphaned the pending
-          // marker. The link is already consumed: an unreadable token returns
-          // the session unchanged rather than throwing it away.
+
+
+
+
           return platformJSON('/v1/auth/magic-link/verify', {
             method: 'POST',
             body: JSON.stringify({ ...opts, project_id: projectId }),
@@ -13881,13 +13878,13 @@ var AUTH_JS = `    auth: (function () {
           });
         },
 
-        // App-user invitations. invite() sends ONE invite email from the
-        // platform auth sender and returns { invite, delivery }; the invitee
-        // need not be a user yet. The link lands on the app's /auth/magic
-        // page; verifying it signs the invitee in as the invited address and
-        // returns redirect_uri with ?invite_id=<id>. data stays server-side:
-        // read it with getAcceptedInvite(req, id), which returns the invite
-        // only to the account that accepted it.
+
+
+
+
+
+
+
         invite(opts) {
           opts = opts || {};
           if (!opts.email || !opts.redirect_uri) {
@@ -13939,10 +13936,10 @@ var AUTH_JS = `    auth: (function () {
           });
           return data.invite;
         },
-        // The accepted invite, only for the signed-in account that accepted
-        // it. Anyone else (another account, a pending, revoked or expired
-        // invite) gets INVITE_NOT_ACCEPTED_BY_YOU; nobody signed in gets
-        // AUTH_REQUIRED. Use its data (team id, role) to grant access.
+
+
+
+
         async getAcceptedInvite(req, id) {
           const user = await this.requireUser(req);
           const invite = await this.getInvite(id);
@@ -13955,14 +13952,14 @@ var AUTH_JS = `    auth: (function () {
           return invite;
         },
 
-        // Email sign-in codes. The app owner sets the policy ('off', 'optional', 'required') with a
-        // developer key. A user with the factor answers every password sign-in with { mfa_required: true,
-        // mfa_token, methods: ['email'] } and no session; challenge() (or challengeWithCookie) completes it with the
-        // code. The explicit forms send the user's JWT through userTokenJSON (project-bound); platformJSON would
-        // replace it with the developer key.
+
+
+
+
+
         mfa: {
-          // Turn codes on (policy 'optional' or 'required'): mails a code to the verified address.
-          // Resolves { challenge_id, delivery, expires_in }, or { enrolled: true } when already on.
+
+
           enroll(opts) {
             opts = opts || {};
             if (!opts.token) {
@@ -13975,10 +13972,10 @@ var AUTH_JS = `    auth: (function () {
               body: JSON.stringify({ method: 'email' }),
             });
           },
-          // Authenticator-app activation is not available: answers 501 AUTH_FEATURE_UNAVAILABLE.
-          // Establish recent authority for the exact enrollment. Password
-          // success returns activation_token directly. Email sends a code and
-          // returns challenge_id for verifyReauthentication().
+
+
+
+
           reauthenticate(opts) {
             opts = opts || {};
             if (!opts.token || !opts.enrollment_id || !opts.method) {
@@ -14011,7 +14008,7 @@ var AUTH_JS = `    auth: (function () {
               }),
             });
           },
-          // Confirm enrolment with the code enroll() mailed. Resolves { enrolled: true, method: 'email' }.
+
           verify(opts) {
             opts = opts || {};
             if (!opts.token || !opts.challenge_id || !opts.code) {
@@ -14024,9 +14021,9 @@ var AUTH_JS = `    auth: (function () {
               body: JSON.stringify({ challenge_id: opts.challenge_id, code: opts.code }),
             });
           },
-          // Second-factor exchange after /login returned
-          // { mfa_required:true, mfa_token }: the 6-digit code from the email.
-          // Returns the same shape as /login on success.
+
+
+
           challenge(opts) {
             opts = opts || {};
             if (!opts.mfa_token || !opts.code) {
@@ -14043,8 +14040,8 @@ var AUTH_JS = `    auth: (function () {
               }),
             });
           },
-          // Mail a new code for the same sign-in (60 s apart, 5 an hour per account). The sign-in keeps its
-          // original 5-minute expiry. Resolves { sent, delivery, expires_in }.
+
+
           resend(opts) {
             opts = opts || {};
             if (!opts.mfa_token) {
@@ -14057,11 +14054,11 @@ var AUTH_JS = `    auth: (function () {
               body: JSON.stringify({ project_id: projectId, mfa_token: opts.mfa_token, resend: true }),
             });
           },
-          // Complete the password-login MFA branch as a cookie session. This
-          // adds no authority: it brokers the same developer-authenticated
-          // challenge(), then keeps the returned access/refresh credentials
-          // inside the backend runtime while performing the same visitor and
-          // cookie transition as ordinary loginWithCookie.
+
+
+
+
+
           async challengeWithCookie(opts) {
             let d;
             try { d = await this.challenge(opts); }
@@ -14071,9 +14068,9 @@ var AUTH_JS = `    auth: (function () {
             __sw_setAuthCookies(session.access, session.refresh);
             return { user: session.user, expires_at: __sw_preflightJwt(session.access).expSec * 1000 };
           },
-          // Turn codes off, in two steps: { token, password } re-checks the password and mails a code
-          // (resolves { challenge_id, delivery, expires_in }); { token, challenge_id, code } removes the factor
-          // (resolves { enrolled: false }). Refused under a 'required' policy (409 AUTH_MFA_REQUIRED_BY_APP).
+
+
+
           unenroll(opts) {
             opts = opts || {};
             const confirming = opts.challenge_id !== undefined;
@@ -14087,9 +14084,9 @@ var AUTH_JS = `    auth: (function () {
               body: JSON.stringify(confirming ? { challenge_id: opts.challenge_id, code: opts.code } : { password: opts.password }),
             });
           },
-          // For a user who cannot receive a code (no session needed): { email, password } starts a 72-hour wait
-          // and mails a notice with a cancel link (202 { removal_pending, removes_at }); the same call after the
-          // wait removes the factor ({ enrolled: false }). Refused (503) when the app cannot email the user.
+
+
+
           recover(opts) {
             opts = opts || {};
             if (!opts.email || !opts.password) {
@@ -14102,8 +14099,8 @@ var AUTH_JS = `    auth: (function () {
               body: JSON.stringify({ project_id: projectId, email: opts.email, password: opts.password }),
             });
           },
-          // Cancel a pending removal with the token from the notice's cancel link (no session or code).
-          // Resolves { outcome: 'cancelled' | 'already_closed' | 'completed', message }.
+
+
           cancelRecovery(opts) {
             opts = opts || {};
             if (!opts.token) {
@@ -14116,8 +14113,8 @@ var AUTH_JS = `    auth: (function () {
               body: JSON.stringify({ token: opts.token }),
             });
           },
-          // The same steps for the request's own session (cookie or Bearer). challenge_id and the codes are the
-          // step's own one-time credentials and stay explicit. Turning codes on or off ends no session.
+
+
           async enrollWithCookie(req) {
             return sessionChange('mfa.enrollWithCookie', req, '/v1/auth/mfa/enroll', { body: { method: 'email' } });
           },
@@ -14155,11 +14152,11 @@ var AUTH_JS = `    auth: (function () {
           },
         },
 
-        // The historical sw.auth.admin surface stays removed: it implicitly
-        // forwarded deploy-time authority and turned public handlers into
-        // account-takeover primitives. In-app admins use the request-first
-        // sw.auth.moderation surface below; operator tooling keeps using the
-        // developer-authenticated control plane.
+
+
+
+
+
         admin: new Proxy({}, {
           get(_target, prop) {
             return () => {
@@ -14176,11 +14173,11 @@ var AUTH_JS = `    auth: (function () {
         }),
 
 ${AUTH_SERVER_JS}
-        // Request-principal-gated in-app moderation. Unlike the historical
-        // sw.auth.admin implementation, this surface never forwards the
-        // deploy-time project key and never accepts an actor/user principal as
-        // an argument. Every operation derives the actor from req and the
-        // platform repeats authorization at the mutation chokepoint.
+
+
+
+
+
         moderation: Object.freeze({
           ban(req, userId, opts) {
             return moderationJSON(req, moderationUserPath(userId, '/ban'), {
@@ -14218,42 +14215,42 @@ ${AUTH_SERVER_JS}
           },
         }),
 
-        // Pull the end user out of the request in one call. Looks at
-        // common cookie names (token, auth_token, session) first, then
-        // the Authorization: Bearer header. Validates via sw.auth.me.
-        // Returns the user object on success or null when no token is
-        // present / the token is invalid / expired. Never throws \u2014 the
-        // caller handles "no auth" with a single null check.
-        //
-        // Auto-refresh: when the request also carries an X-Refresh-Token
-        // header (or refresh_token / sw_refresh_token cookie) and the
-        // access token is expired, the platform mints a fresh pair and
-        // we stash it into __sw_pendingRefresh; the function shim
-        // attaches X-New-Access-Token / X-New-Refresh-Token to the
-        // caller's response. Opt out with X-No-Auto-Refresh: 1.
-        // Throwing variant of fromRequest \u2014 pulls the JWT from the
-        // request, returns the user, or throws a 401 AUTH_REQUIRED error
-        // if the request is unauthenticated. The thrown error is marked
-        // with __sw_markExpected so BOTH dispatch paths surface it as a
-        // real 401: the sw.endpoint wrapper reads e.status, and the bare
-        // export-default routing shim's catch-all only returns a 4xx when
-        // __sw_expose is set (otherwise it flattens every throw into an
-        // opaque 500 FUNCTION_ERROR \u2014 which turned this expected auth
-        // failure into a black-box 500 for the no-try/catch snippet below).
-        // So a typical guarded handler is one line:
-        //
-        //   export default async (req, sw) => {
-        //     const user = await sw.auth.requireUser(req);
-        //     return Response.json({ id: user.id, email: user.email });
-        //   };
-        //
-        // Optional second arg matches sw.auth.fromRequest's enrichment
-        // shape so requireUser(req, { enrichFrom: 'members', fields: [...] })
-        // returns the joined fields too. Add role:'admin' to require the
-        // platform-owned app-user role in the same call. Role checks bypass
-        // the short auth cache and read the role the resolver captured at
-        // verification, BEFORE enrichment \u2014 a caller-supplied/enriched role
-        // field is never authority.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
         async requireUser(req, options) {
           const requiredRole = options && typeof options === 'object'
             ? options.role
@@ -14288,25 +14285,25 @@ ${AUTH_SERVER_JS}
             : { role: role };
           return this.requireUser(req, options);
         },
-        // fromRequest(req, enrich?) \u2014 resolves the signed-in user from
-        // the request, optionally joining one row from a user-table the
-        // dev maintains so every handler doesn't have to do a follow-up
-        // SELECT. The enrich shape mirrors the Adapted Co feedback in
-        // :
-        //
-        //   const me = await sw.auth.fromRequest(req, {
-        //     enrichFrom: 'members',
-        //     fields: ['role', 'metadata'],   // optional, default '*'
-        //     on: 'id',                       // optional, default 'id'
-        //   });
-        //   // me.id, me.email, me.role, me.metadata
-        //
-        // The join column on the user-table defaults to id and
-        // matches the platform user's id. Set "on" to a different
-        // column (e.g. user_id) when the dev's table doesn't use the
-        // platform id as its primary key. Enrichment errors (missing
-        // table, missing column) are swallowed \u2014 the base user is
-        // returned without the extra fields and an error is logged.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
         async fromRequest(req, enrich) {
           const resolved = await __sw_resolveRequestUser(req, enrich);
           return resolved ? resolved.user : null;
@@ -14322,24 +14319,24 @@ ${AUTH_SERVER_JS}
           throw err;
         },
       };
-      // Publish the identity spine into the context-head slots so surfaces
-      // assembled before this namespace can resolve a verified principal
-      // lazily. sw.db uses __sw_authResolveRequest (transport (a), request-
-      // attached) for query-time scoping;
-      // __sw_authVerifyPrincipal is the same spine under an intent-named handle
-      // for Runtime v2 surfaces that also accept a forwarded token \u2014 transport
-      // (b) \u2014 via opts.forwardedToken. Both point at the one
-      // resolver; there is no parallel derivation.
+
+
+
+
+
+
+
+
       __sw_authResolveRequest = __sw_resolveRequestUser;
       __sw_authVerifyPrincipal = __sw_resolveRequestUser;
-      // The controller receives only the release's owner mappings and frozen cookie.
-      // The visitor ledger reaches the project database through the binding
-      // directly, so its crossings never produced an sw_db_<n> span and read as
-      // unexplained handler time \u2014 on an anonymous declared-data read they were
-      // the ENTIRE gap between sw_function and the project query.
-      // Each ledger crossing now carries its own sw_visitor_<n> span. Present
-      // only for a trusted-marker request; otherwise the binding is handed over
-      // untouched.
+
+
+
+
+
+
+
+
       let __sw_visitorLedgerCrossings = 0;
       function __sw_visitorLedgerDb(db) {
         if (!__sw_serverTiming) return db;
@@ -14392,10 +14389,10 @@ ${AUTH_MANAGED_VISITOR_JS}      function __sw_visitorController() {
           }
           const shapes = __sw_jsonParse(env.PROJECT_SCHEMA || '{}');
           const scopes = __sw_jsonParse(env.PROJECT_SCOPES || '{}');
-          // Claim where this release's rows live: the baked, digest-covered
-          // PROJECT_TABLE_PHYSICAL map (verified at bake), the same value the
-          // renderer resolves. A forked table's sealed declared-name object is
-          // never claimed; nothing is inferred and no SQL is rewritten.
+
+
+
+
           const physical = __sw_jsonParse(env.PROJECT_TABLE_PHYSICAL || '{}');
           const tables = __sw_visitorSession.visitorOwnerTables(shapes, scopes).map(function (entry) {
             const key = entry.table.toLowerCase();
@@ -14418,20 +14415,20 @@ ${AUTH_MANAGED_VISITOR_JS}      function __sw_visitorController() {
       __sw_peekVisitorIdentity = function () { return __sw_visitorController().peek(); };
       async function __sw_completeVisitorSignIn(access) {
         if (!__sw_visitorDeclared() || (!visitorIdentity && !__sw_readCookie(__sw_authSnapshotRequest.headers.get('cookie'), '__Host-sw_visitor'))) return;
-        // Verify the new access credential; never let a mutable login result
-        // supply the account that receives visitor rows.
+
+
         const principal = await __sw_principalFromToken(access, { enrich: { __sw_noAuthCache: true } });
         if (!principal) { const err = new Error('The new account session could not be verified.'); err.code = 'AUTH_VERIFY_UNAVAILABLE'; err.status = 503; err.__sw_expose = true; throw err; }
       }
       async function __sw_claimVisitorForUser(id, accessToken) {
         if (__sw_visitorDeclared()) {
-          // Split: the platform verifies this exact app session before claiming.
+
           if (await __sw_visitorController().claim(id, accessToken)) __sw_visitorClaimPrimary = true;
         }
       }
-      // This request's first failed logoutWithCookie, kept so a handler that
-      // swallows it (an older SDK's best-effort catch) cannot answer success:
-      // the shim answers this original error instead of a status below 400.
+
+
+
       let __sw_logoutFailure = null;
       const __sw_logoutWithCookie = __sw_auth.logoutWithCookie;
       __sw_auth.logoutWithCookie = function (req) {
@@ -14446,9 +14443,9 @@ ${AUTH_MANAGED_VISITOR_JS}      function __sw_visitorController() {
 `;
 var JOBS_JS = `    jobs: {
       async create(opts) {
-        // A row-bound job ({ row: { binding, id } }) acts for the signed-in
-        // user on one declared row, so only that user's own request creates
-        // one: never a job delivery, never a cross-origin cookie request.
+
+
+
         const bound = !!opts && opts.row !== undefined && opts.row !== null;
         if (bound) {
           if (__sw_signedDelivery) {
@@ -14468,9 +14465,9 @@ var JOBS_JS = `    jobs: {
         });
       },
       async status(jobId) {
-        // One encoded segment: a raw id like '../fs/<project>/' was resolved
-        // by URL parsing into another route under the project key. Dot-only
-        // ids survive encoding and would still navigate, so they are refused.
+
+
+
         const id = String(jobId);
         if (id === '.' || id === '..') {
           const err = new Error('sw.jobs.status: job id may not be "." or "..".');
@@ -14542,7 +14539,7 @@ var LOGS_JS = `    logs: {
         }
         return response;
         })();
-        // Protect unawaited delivery without replacing the caller's rejection.
+
         __sw_pendingBackground.push(delivery.then(function () {}, function () {}));
         return delivery;
       },
@@ -14550,33 +14547,33 @@ var LOGS_JS = `    logs: {
       info(msg, data) { return this._send('info', msg, data); },
       warn(msg, data) { return this._send('warn', msg, data); },
       error(msg, data) { return this._send('error', msg, data); },
-      // sw.logs.tail({ limit?, level?, since?, source?, search? }) \u2014 read this
-      // project's OWN recent logs back, in one call, so a script can run an
-      // action then read the logs it produced without a second round-trip
-      // through the dashboard. Reads the same owner-scoped app_logs the
-      // GET /v1/logs read path returns; the runtime key is pinned to this
-      // project, so it can only ever see this project's logs. Both writes and
-      // reads fail loudly: sw.logs.* resolves only after the platform durably
-      // accepts the row into its queue (or direct fallback), and tail() throws
-      // on read failure.
-      //
-      // Read consistency: log writes (sw.logs.* and platform internalLog) are
-      // ingested through a durable queue that batch-inserts, so a line you just
-      // wrote can lag a short window before tail() returns it (pfb
-      // F-LOG-WRITE-READ-GAP). tail() reports only committed rows \u2014 it never
-      // invents or waits on an un-ingested write. Poll briefly if you need
-      // read-your-write.
-      //
-      //   since: epoch-ms number OR ISO-8601 string \u2014 returns logs at/after it.
-      //   level: 'debug' | 'info' | 'warn' | 'error'.   source: filter by source.
-      //   limit: default 50, capped at 500 by the read path.
-      //   trace_id: return ONLY the lines written while handling ONE request.
-      //             Pass sw.trace.id to read back this request's own lines, or
-      //             the id from a report to read back someone else's. Every
-      //             returned line also carries its own trace_id, so one noisy
-      //             log leads straight to the request that produced it.
-      // Returns an array of { id, level, message, data, source, created_at,
-      // trace_id } (newest first).
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
       async tail(opts) {
         opts = opts || {};
         const qs = new URLSearchParams({ project_id: projectId });
@@ -14591,25 +14588,25 @@ var LOGS_JS = `    logs: {
         const d = await platformJSON('/v1/logs?' + qs.toString());
         return (d && d.logs) || [];
       },
-      // sw.logs.trace(traceId) \u2014 the ORDERED PARENT/CHILD OPERATION TREE for
-      // one request: what ran, in what order, how long each step took, which
-      // step called which, and which one failed. One id in, the whole
-      // waterfall out \u2014 no joining log lines by timestamp.
-      //
-      //   const t = await sw.logs.trace(sw.trace.id);
-      //   t.waterfall  // flat, pre-order: read top-to-bottom = the request
-      //                // in the order it happened. Each entry has
-      //                // { name, depth, offset_ms, duration_ms, status }.
-      //   t.tree                // the same spans, nested by parent
-      //   t.slowest_operation   // what to fix first
-      //   t.failed_operations   // what broke
-      //
-      // Omit the argument to read THIS request's own trace. Note a request's
-      // own spans are written after its response flushes, so calling this on
-      // your own in-flight id returns { found: false } \u2014 pass an id from an
-      // EARLIER request (a log line, an error row, an X-Trace-Id header).
-      // found:false always carries a reason string; an unstored trace never
-      // looks the same as a wrong id.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
       async trace(traceId) {
         const id = traceId || (sw.trace && sw.trace.id);
         if (!id) {
@@ -14624,10 +14621,10 @@ var LOGS_JS = `    logs: {
 var ANALYTICS_JS = `    analytics: {
       async track(event, opts) {
         opts = opts || {};
-        // When collection is allowed, attribution is platform-derived. A verified
-        // app-user becomes the subject; other work stays project-level.
-        // Identity-looking fields in opts are not forwarded.
-        // Choice comes from the immutable original request, never opts or app-mutated headers.
+
+
+
+
         const choices = (__sw_authSnapshotRequest.headers.get('cookie') || '').split(';').map(part => part.trim()).filter(part => part.indexOf('__Host-sw_analytics_choice=') === 0);
         const choice = choices.length === 1 ? choices[0].slice('__Host-sw_analytics_choice='.length) : null;
         const choiceHeaders = choice ? { 'X-Somewhere-Analytics-Choice': choice } : {};
@@ -14659,342 +14656,354 @@ var ANALYTICS_JS = `    analytics: {
       },
     },
 
-    // sw.render.{screenshot,pdf} \u2014 when storage opt is set, returns a
-    // JSON envelope { storage_path, size_bytes, content_type }; without
-    // storage, returns the raw fetch Response so callers can stream
-    // the binary out (e.g. to the browser).`;
-var RENDER_JS = `    render: (function () {
-      // A storage call from a signed-in visitor carries the visitor's original
-      // credential, as sw.fs does, so the platform can verify who the file
-      // belongs to. Without a visitor nothing changes.
-      async function __sw_renderStorageHeaders() {
-        const subject = await __sw_optionalSubject();
-        return subject ? __sw_runtimeSubjectHeaders('X-Somewhere-Fs-Authority', 'none') : {};
-      }
-      return {
-      async screenshot(opts) {
+
+
+
+
+
+
+var RENDER_JS = `, render: (function():), { async, function: __sw_renderStorageHeaders };
+() => {
+    const subject = await __sw_optionalSubject();
+    return subject ? __sw_runtimeSubjectHeaders('X-Somewhere-Fs-Authority', 'none') : {};
+};
+return {
+    async screenshot(opts) {
         opts = opts || {};
         const body = JSON.stringify({ ...opts, project_id: projectId });
         if (opts.storage) {
-          return platformJSON('/v1/render/screenshot', { method: 'POST', headers: await __sw_renderStorageHeaders(), body });
+            return platformJSON('/v1/render/screenshot', { method: 'POST', headers: await __sw_renderStorageHeaders(), body });
         }
         const r = await platformFetch('/v1/render/screenshot', { method: 'POST', body });
         if (!r.ok) {
-          let msg = 'screenshot failed: ' + r.status;
-          let code;
-          try { const j = await r.json(); if (j && j.error) code = j.error; if (j && j.message) msg = j.message; } catch { /* noop */ }
-          // 402 INSUFFICIENT_BALANCE is end-user-triggerable \u2014 keep the
-          // real code/status for logging but neutralize the message.
-          if (r.status === 402 && code === 'INSUFFICIENT_BALANCE') {
-            msg = 'This feature is temporarily unavailable; a later request can succeed.';
-          }
-          const err = new Error(msg); if (code) err.code = code; err.status = r.status; throw err;
+            let msg = 'screenshot failed: ' + r.status;
+            let code;
+            try {
+                const j = await r.json();
+                if (j && j.error)
+                    code = j.error;
+                if (j && j.message)
+                    msg = j.message;
+            }
+            catch { }
+            if (r.status === 402 && code === 'INSUFFICIENT_BALANCE') {
+                msg = 'This feature is temporarily unavailable; a later request can succeed.';
+            }
+            const err = new Error(msg);
+            if (code)
+                err.code = code;
+            err.status = r.status;
+            throw err;
         }
         return r;
-      },
-      async pdf(opts) {
+    },
+    async pdf(opts) {
         opts = opts || {};
         const body = JSON.stringify({ ...opts, project_id: projectId });
         if (opts.storage) {
-          return platformJSON('/v1/render/pdf', { method: 'POST', headers: await __sw_renderStorageHeaders(), body });
+            return platformJSON('/v1/render/pdf', { method: 'POST', headers: await __sw_renderStorageHeaders(), body });
         }
         const r = await platformFetch('/v1/render/pdf', { method: 'POST', body });
         if (!r.ok) {
-          let msg = 'pdf failed: ' + r.status;
-          let code;
-          try { const j = await r.json(); if (j && j.error) code = j.error; if (j && j.message) msg = j.message; } catch { /* noop */ }
-          // 402 INSUFFICIENT_BALANCE is end-user-triggerable \u2014 keep the
-          // real code/status for logging but neutralize the message.
-          if (r.status === 402 && code === 'INSUFFICIENT_BALANCE') {
-            msg = 'This feature is temporarily unavailable; a later request can succeed.';
-          }
-          const err = new Error(msg); if (code) err.code = code; err.status = r.status; throw err;
+            let msg = 'pdf failed: ' + r.status;
+            let code;
+            try {
+                const j = await r.json();
+                if (j && j.error)
+                    code = j.error;
+                if (j && j.message)
+                    msg = j.message;
+            }
+            catch { }
+            if (r.status === 402 && code === 'INSUFFICIENT_BALANCE') {
+                msg = 'This feature is temporarily unavailable; a later request can succeed.';
+            }
+            const err = new Error(msg);
+            if (code)
+                err.code = code;
+            err.status = r.status;
+            throw err;
         }
         return r;
-      },
-      };
-    })(),
-`;
-var SEARCH_JS = `    search: {
-      async add(path) {
+    },
+};
+(),
+    `;
+
+
+var SEARCH_JS = `;
+search: {
+    async;
+    add(path);
+    {
         const userId = await __sw_requireSubject('sw.search.add');
         return platformJSON('/v1/search/managed/add', {
-          method: 'POST',
-          headers: { 'X-Sw-Verified-Subject': userId },
-          body: JSON.stringify({ project_id: projectId, path }),
-        });
-      },
-      createIndex(name) {
-        return platformJSON('/v1/search/index', {
-          method: 'POST',
-          body: JSON.stringify({ project_id: projectId, name }),
-        });
-      },
-      listIndexes() {
-        return platformJSON('/v1/search/index?project_id=' + encodeURIComponent(projectId));
-      },
-      deleteIndex(name) {
-        return platformJSON('/v1/search/index/' + encodeURIComponent(name) + '?project_id=' + encodeURIComponent(projectId), { method: 'DELETE' });
-      },
-      upsert(opts) {
-        // Inside a job or cron delivery the write names its job, so once the
-        // job is cancelled or finished its later batches are refused instead
-        // of re-adding items the app already removed. The id is
-        // the delivery's own job header (job tiers, container and agent steps
-        // all send it), never the message-id fallback of invocationId, and only
-        // in the shapes the platform mints: job_ + 16 or 32 lowercase hex.
-        const deliveredJobId = __sw_signedDelivery && (__sw_signedDelivery.source === 'job' || __sw_signedDelivery.source === 'cron')
-          ? __sw_internalInvocationRequest.headers.get('X-Somewhere-Job-Id') : null;
-        const fence = deliveredJobId && /^job_(?:[a-f0-9]{16}|[a-f0-9]{32})$/.test(deliveredJobId) ? deliveredJobId : null;
-        return platformJSON('/v1/search/upsert', {
-          method: 'POST',
-          ...(fence ? { headers: { 'X-Sw-Job-Fence': fence } } : {}),
-          body: JSON.stringify({ ...opts, project_id: projectId }),
-        });
-      },
-      query(opts) {
-        if (typeof opts === 'string') {
-          return __sw_requireSubject('sw.search.query').then((userId) => platformJSON('/v1/search/managed/query', {
             method: 'POST',
             headers: { 'X-Sw-Verified-Subject': userId },
-            body: JSON.stringify({ project_id: projectId, query: opts }),
-          }));
+            body: JSON.stringify({ project_id: projectId, path }),
+        });
+    }
+    createIndex(name);
+    {
+        return platformJSON('/v1/search/index', {
+            method: 'POST',
+            body: JSON.stringify({ project_id: projectId, name }),
+        });
+    }
+    listIndexes();
+    {
+        return platformJSON('/v1/search/index?project_id=' + encodeURIComponent(projectId));
+    }
+    deleteIndex(name);
+    {
+        return platformJSON('/v1/search/index/' + encodeURIComponent(name) + '?project_id=' + encodeURIComponent(projectId), { method: 'DELETE' });
+    }
+    upsert(opts);
+    {
+        const deliveredJobId = __sw_signedDelivery && (__sw_signedDelivery.source === 'job' || __sw_signedDelivery.source === 'cron')
+            ? __sw_internalInvocationRequest.headers.get('X-Somewhere-Job-Id') : null;
+        const fence = deliveredJobId && /^job_(?:[a-f0-9]{16}|[a-f0-9]{32})$/.test(deliveredJobId) ? deliveredJobId : null;
+        return platformJSON('/v1/search/upsert', {
+            method: 'POST',
+            ...(fence ? { headers: { 'X-Sw-Job-Fence': fence } } : {}),
+            body: JSON.stringify({ ...opts, project_id: projectId }),
+        });
+    }
+    query(opts);
+    {
+        if (typeof opts === 'string') {
+            return __sw_requireSubject('sw.search.query').then((userId) => platformJSON('/v1/search/managed/query', {
+                method: 'POST',
+                headers: { 'X-Sw-Verified-Subject': userId },
+                body: JSON.stringify({ project_id: projectId, query: opts }),
+            }));
         }
         return platformJSON('/v1/search/query', {
-          method: 'POST',
-          body: JSON.stringify({ ...opts, project_id: projectId }),
+            method: 'POST',
+            body: JSON.stringify({ ...opts, project_id: projectId }),
         });
-      },
-      async remove(opts) {
-        // POST /v1/search/remove accepts at most 1000 ids per request (its documented limit). A larger set is
-        // removed in sequential batches of that size. The batches are NOT one atomic removal:
-        // the first failed batch stops the rest, is never retried here, and the thrown error reports which ids
-        // are confirmed removed, which are unconfirmed (that batch may or may not have applied) and which were
-        // not attempted. Success is returned only when every batch is confirmed.
+    }
+    async;
+    remove(opts);
+    {
         const ids = opts && Array.isArray(opts.ids) ? opts.ids : null;
         const BATCH = 1000;
         if (!ids || ids.length <= BATCH) {
-          return platformJSON('/v1/search/remove', { method: 'POST', body: JSON.stringify({ ...opts, project_id: projectId }) });
+            return platformJSON('/v1/search/remove', { method: 'POST', body: JSON.stringify({ ...opts, project_id: projectId }) });
         }
         const unique = Array.from(new Set(ids));
         let removed = 0;
         let last = null;
         let batches = 0;
         for (let offset = 0; offset < unique.length; offset += BATCH) {
-          const batch = unique.slice(offset, offset + BATCH);
-          try {
-            last = await platformJSON('/v1/search/remove', { method: 'POST', body: JSON.stringify({ ...opts, ids: batch, project_id: projectId }) });
-          } catch (err) {
-            // A 4xx is a refusal before any mutation (that batch was not removed). Anything else (an unconfirmed
-            // removal, a 5xx, a lost reply) leaves that batch's outcome unknown.
-            const status = err && typeof err.status === 'number' ? err.status : null;
-            const definite = status !== null && status >= 400 && status < 500 && !(err && err.code === 'SEARCH_REMOVE_UNCONFIRMED');
-            const failure = new Error(removed > 0
-              ? 'Search removal stopped partway: ' + removed + ' of ' + unique.length + ' items are confirmed removed. '
-                + (definite ? 'The next batch was refused and nothing after it was attempted.' : 'The next batch could not be confirmed (some of it may be removed) and nothing after it was attempted.')
-                + ' Check which ids still exist before removing again.'
-              : ((err && err.message) || 'Search removal failed.'));
-            failure.code = removed > 0 ? 'SEARCH_REMOVE_PARTIAL' : (err && err.code) || 'SEARCH_REMOVE_FAILED';
-            if (status !== null) failure.status = status;
-            failure.retry = false;
-            failure.cause_code = (err && err.code) || null;
-            failure.partial = {
-              total: unique.length,
-              removed_ids: unique.slice(0, offset),
-              unconfirmed_ids: definite ? [] : batch,
-              not_removed_ids: definite ? unique.slice(offset) : unique.slice(offset + batch.length),
-            };
-            throw failure;
-          }
-          removed += batch.length;
-          batches++;
+            const batch = unique.slice(offset, offset + BATCH);
+            try {
+                last = await platformJSON('/v1/search/remove', { method: 'POST', body: JSON.stringify({ ...opts, ids: batch, project_id: projectId }) });
+            }
+            catch (err) {
+                const status = err && typeof err.status === 'number' ? err.status : null;
+                const definite = status !== null && status >= 400 && status < 500 && !(err && err.code === 'SEARCH_REMOVE_UNCONFIRMED');
+                const failure = new Error(removed > 0
+                    ? 'Search removal stopped partway: ' + removed + ' of ' + unique.length + ' items are confirmed removed. '
+                        + (definite ? 'The next batch was refused and nothing after it was attempted.' : 'The next batch could not be confirmed (some of it may be removed) and nothing after it was attempted.')
+                        + ' Check which ids still exist before removing again.'
+                    : ((err && err.message) || 'Search removal failed.'));
+                failure.code = removed > 0 ? 'SEARCH_REMOVE_PARTIAL' : (err && err.code) || 'SEARCH_REMOVE_FAILED';
+                if (status !== null)
+                    failure.status = status;
+                failure.retry = false;
+                failure.cause_code = (err && err.code) || null;
+                failure.partial = {
+                    total: unique.length,
+                    removed_ids: unique.slice(0, offset),
+                    unconfirmed_ids: definite ? [] : batch,
+                    not_removed_ids: definite ? unique.slice(offset) : unique.slice(offset + batch.length),
+                };
+                throw failure;
+            }
+            removed += batch.length;
+            batches++;
         }
         return { index: opts.index, removed, item_count: last && last.item_count !== undefined ? last.item_count : null, batches };
-      },
-    },
+    }
+}
 `;
-var INBOX_JS = `    inbox: (function () {
-      const __sw_inboxIdentityKeys = new Set([
+
+
+var INBOX_JS = `;
+inbox: (function () {
+    const __sw_inboxIdentityKeys = new Set([
         'as_user', 'asUser', 'user_id', 'userId', 'owner',
         'owner_id', 'owner_subject_id', 'owner_subject_type',
         'subject_id', 'subject_type',
-      ]);
-      function __sw_inboxCleanOpts(opts) {
+    ]);
+    function __sw_inboxCleanOpts(opts) {
         const clean = {};
-        if (!opts || typeof opts !== 'object') return clean;
+        if (!opts || typeof opts !== 'object')
+            return clean;
         for (const key of Object.keys(opts)) {
-          if (!__sw_inboxIdentityKeys.has(key)) clean[key] = opts[key];
+            if (!__sw_inboxIdentityKeys.has(key))
+                clean[key] = opts[key];
         }
         return clean;
-      }
-      function __sw_makeInbox(projectMode) {
+    }
+    function __sw_makeInbox(projectMode) {
         async function requestAuthority() {
-          const projectAuthority = projectMode || __sw_hasRuntimeProjectAuthority();
-          const authorityHeaders = await __sw_runtimeSubjectHeaders(
-            'X-Somewhere-Inbox-Authority',
-            projectAuthority ? 'project_runtime' : 'unauthenticated',
-            projectMode,
-          );
-          return {
-            subject: authorityHeaders['X-Somewhere-Acting-Subject'] || null,
-            headers: authorityHeaders,
-          };
+            const projectAuthority = projectMode || __sw_hasRuntimeProjectAuthority();
+            const authorityHeaders = await __sw_runtimeSubjectHeaders('X-Somewhere-Inbox-Authority', projectAuthority ? 'project_runtime' : 'unauthenticated', projectMode);
+            return {
+                subject: authorityHeaders['X-Somewhere-Acting-Subject'] || null,
+                headers: authorityHeaders,
+            };
         }
         async function headers() {
-          return (await requestAuthority()).headers;
+            return (await requestAuthority()).headers;
         }
         return {
-          async listAddresses() {
-            return platformJSON('/v1/inbox/addresses?project_id=' + encodeURIComponent(projectId), { headers: await headers() });
-          },
-          async createAddress(opts) {
-            opts = __sw_inboxCleanOpts(opts);
-            const authority = await requestAuthority();
-            // Preserve the API's mailbox kind. The authority header above, not
-            // credential absence, decides whether this is an app-user write,
-            // an explicit project-runtime write, or an unauthenticated request.
-            // The route rejects the last case; it never silently changes an app
-            // mailbox into an admin mailbox.
-            const body = { ...opts, kind: projectMode ? 'admin' : 'app', project_id: projectId };
-            return platformJSON('/v1/inbox/addresses', {
-              method: 'POST',
-              headers: authority.headers,
-              body: JSON.stringify(body),
-            });
-          },
-          async listAppAddresses() {
-            return platformJSON('/v1/inbox/addresses?kind=app&project_id=' + encodeURIComponent(projectId), { headers: await headers() });
-          },
-          async deleteAddress(id) {
-            return platformJSON('/v1/inbox/addresses/' + encodeURIComponent(id), { method: 'DELETE', headers: await headers() });
-          },
-          async list(opts) {
-            opts = __sw_inboxCleanOpts(opts);
-            const params = ['project_id=' + encodeURIComponent(projectId)];
-            if (opts.address_id) params.push('address_id=' + encodeURIComponent(opts.address_id));
-            if (opts.limit) params.push('limit=' + Number(opts.limit));
-            if (opts.unread) params.push('unread=1');
-            if (opts.q) params.push('q=' + encodeURIComponent(String(opts.q)));
-            if (opts.include_spam) params.push('include_spam=1');
-            // Opaque server-issued next_cursor, passed back unchanged; the API
-            // binds it to this project, address and filters (INVALID_CURSOR otherwise).
-            if (opts.cursor) params.push('cursor=' + encodeURIComponent(String(opts.cursor)));
-            return platformJSON('/v1/inbox?' + params.join('&'), { headers: await headers() });
-          },
-          async get(id, opts) {
-            opts = __sw_inboxCleanOpts(opts);
-            const qs = opts.include_html ? '?include=html' : '';
-            return platformJSON('/v1/inbox/' + encodeURIComponent(id) + qs, { headers: await headers() });
-          },
-          // Returns a Response \u2014 caller can stream/redirect/serve. The response
-          // carries X-Somewhere-Ownership-Status because bytes have no JSON body.
-          async raw(id) {
-            return platformFetch('/v1/inbox/' + encodeURIComponent(id) + '/raw', { headers: await headers() });
-          },
-          async attachment(id, idx) {
-            return platformFetch('/v1/inbox/' + encodeURIComponent(id) + '/attachments/' + Number(idx), { headers: await headers() });
-          },
-          async markRead(id, read) {
-            const body = read === false ? { read: false } : { read: true };
-            return platformJSON('/v1/inbox/' + encodeURIComponent(id) + '/read', {
-              method: 'POST', headers: await headers(), body: JSON.stringify(body),
-            });
-          },
-          async delete(id) {
-            return platformJSON('/v1/inbox/' + encodeURIComponent(id), { method: 'DELETE', headers: await headers() });
-          },
-          async reply(id, opts) {
-            opts = __sw_inboxCleanOpts(opts);
-            return platformJSON('/v1/inbox/' + encodeURIComponent(id) + '/reply', {
-              method: 'POST', headers: await headers(), body: JSON.stringify(opts),
-            });
-          },
-          async send(addressId, opts) {
-            opts = __sw_inboxCleanOpts(opts);
-            return platformJSON('/v1/inbox/addresses/' + encodeURIComponent(addressId) + '/send', {
-              method: 'POST', headers: await headers(), body: JSON.stringify(opts),
-            });
-          },
-          async threads(opts) {
-            opts = __sw_inboxCleanOpts(opts);
-            const params = ['project_id=' + encodeURIComponent(projectId)];
-            if (opts.address_id) params.push('address_id=' + encodeURIComponent(opts.address_id));
-            if (opts.limit) params.push('limit=' + Number(opts.limit));
-            if (opts.include_spam) params.push('include_spam=1');
-            if (opts.cursor) params.push('cursor=' + encodeURIComponent(String(opts.cursor)));
-            return platformJSON('/v1/inbox/threads?' + params.join('&'), { headers: await headers() });
-          },
-          async thread(root) {
-            return platformJSON('/v1/inbox/threads/by-root?project_id=' +
-              encodeURIComponent(projectId) + '&root=' + encodeURIComponent(root), { headers: await headers() });
-          },
-          rules: {
-            async list(opts) {
-              opts = __sw_inboxCleanOpts(opts);
-              const params = ['project_id=' + encodeURIComponent(projectId)];
-              if (opts.address_id) params.push('address_id=' + encodeURIComponent(opts.address_id));
-              return platformJSON('/v1/inbox/rules?' + params.join('&'), { headers: await headers() });
+            async listAddresses() {
+                return platformJSON('/v1/inbox/addresses?project_id=' + encodeURIComponent(projectId), { headers: await headers() });
             },
-            async create(opts) {
-              opts = __sw_inboxCleanOpts(opts);
-              return platformJSON('/v1/inbox/rules', {
-                method: 'POST', headers: await headers(),
-                body: JSON.stringify({ ...opts, project_id: projectId }),
-              });
+            async createAddress(opts) {
+                opts = __sw_inboxCleanOpts(opts);
+                const authority = await requestAuthority();
+                const body = { ...opts, kind: projectMode ? 'admin' : 'app', project_id: projectId };
+                return platformJSON('/v1/inbox/addresses', {
+                    method: 'POST',
+                    headers: authority.headers,
+                    body: JSON.stringify(body),
+                });
+            },
+            async listAppAddresses() {
+                return platformJSON('/v1/inbox/addresses?kind=app&project_id=' + encodeURIComponent(projectId), { headers: await headers() });
+            },
+            async deleteAddress(id) {
+                return platformJSON('/v1/inbox/addresses/' + encodeURIComponent(id), { method: 'DELETE', headers: await headers() });
+            },
+            async list(opts) {
+                opts = __sw_inboxCleanOpts(opts);
+                const params = ['project_id=' + encodeURIComponent(projectId)];
+                if (opts.address_id)
+                    params.push('address_id=' + encodeURIComponent(opts.address_id));
+                if (opts.limit)
+                    params.push('limit=' + Number(opts.limit));
+                if (opts.unread)
+                    params.push('unread=1');
+                if (opts.q)
+                    params.push('q=' + encodeURIComponent(String(opts.q)));
+                if (opts.include_spam)
+                    params.push('include_spam=1');
+                if (opts.cursor)
+                    params.push('cursor=' + encodeURIComponent(String(opts.cursor)));
+                return platformJSON('/v1/inbox?' + params.join('&'), { headers: await headers() });
+            },
+            async get(id, opts) {
+                opts = __sw_inboxCleanOpts(opts);
+                const qs = opts.include_html ? '?include=html' : '';
+                return platformJSON('/v1/inbox/' + encodeURIComponent(id) + qs, { headers: await headers() });
+            },
+            async raw(id) {
+                return platformFetch('/v1/inbox/' + encodeURIComponent(id) + '/raw', { headers: await headers() });
+            },
+            async attachment(id, idx) {
+                return platformFetch('/v1/inbox/' + encodeURIComponent(id) + '/attachments/' + Number(idx), { headers: await headers() });
+            },
+            async markRead(id, read) {
+                const body = read === false ? { read: false } : { read: true };
+                return platformJSON('/v1/inbox/' + encodeURIComponent(id) + '/read', {
+                    method: 'POST', headers: await headers(), body: JSON.stringify(body),
+                });
             },
             async delete(id) {
-              return platformJSON('/v1/inbox/rules/' + encodeURIComponent(id), { method: 'DELETE', headers: await headers() });
+                return platformJSON('/v1/inbox/' + encodeURIComponent(id), { method: 'DELETE', headers: await headers() });
             },
-          },
+            async reply(id, opts) {
+                opts = __sw_inboxCleanOpts(opts);
+                return platformJSON('/v1/inbox/' + encodeURIComponent(id) + '/reply', {
+                    method: 'POST', headers: await headers(), body: JSON.stringify(opts),
+                });
+            },
+            async send(addressId, opts) {
+                opts = __sw_inboxCleanOpts(opts);
+                return platformJSON('/v1/inbox/addresses/' + encodeURIComponent(addressId) + '/send', {
+                    method: 'POST', headers: await headers(), body: JSON.stringify(opts),
+                });
+            },
+            async threads(opts) {
+                opts = __sw_inboxCleanOpts(opts);
+                const params = ['project_id=' + encodeURIComponent(projectId)];
+                if (opts.address_id)
+                    params.push('address_id=' + encodeURIComponent(opts.address_id));
+                if (opts.limit)
+                    params.push('limit=' + Number(opts.limit));
+                if (opts.include_spam)
+                    params.push('include_spam=1');
+                if (opts.cursor)
+                    params.push('cursor=' + encodeURIComponent(String(opts.cursor)));
+                return platformJSON('/v1/inbox/threads?' + params.join('&'), { headers: await headers() });
+            },
+            async thread(root) {
+                return platformJSON('/v1/inbox/threads/by-root?project_id=' +
+                    encodeURIComponent(projectId) + '&root=' + encodeURIComponent(root), { headers: await headers() });
+            },
+            rules: {
+                async list(opts) {
+                    opts = __sw_inboxCleanOpts(opts);
+                    const params = ['project_id=' + encodeURIComponent(projectId)];
+                    if (opts.address_id)
+                        params.push('address_id=' + encodeURIComponent(opts.address_id));
+                    return platformJSON('/v1/inbox/rules?' + params.join('&'), { headers: await headers() });
+                },
+                async create(opts) {
+                    opts = __sw_inboxCleanOpts(opts);
+                    return platformJSON('/v1/inbox/rules', {
+                        method: 'POST', headers: await headers(),
+                        body: JSON.stringify({ ...opts, project_id: projectId }),
+                    });
+                },
+                async delete(id) {
+                    return platformJSON('/v1/inbox/rules/' + encodeURIComponent(id), { method: 'DELETE', headers: await headers() });
+                },
+            },
         };
-      }
-
-      // A verified app-user request is subject-scoped. A request with no
-      // verified principal is explicitly labelled unauthenticated; omission is
-      // never interpreted as project authority. Server code that deliberately
-      // needs project scope uses sw.inbox.project below.
-      const userInbox = __sw_makeInbox(false);
-      // Deliberate trusted cross-user/admin path. It never impersonates a user,
-      // and app mail creation is unavailable here (createAddress forces admin).
-      const projectInbox = __sw_makeInbox(true);
-      projectInbox.assignLegacyOwner = function (addressId, appUserId) {
+    }
+    const userInbox = __sw_makeInbox(false);
+    const projectInbox = __sw_makeInbox(true);
+    projectInbox.assignLegacyOwner = function (addressId, appUserId) {
         return platformJSON('/v1/inbox/addresses/' + encodeURIComponent(addressId) + '/ownership', {
-          method: 'POST',
-          headers: { 'X-Somewhere-Inbox-Authority': 'project_runtime' },
-          body: JSON.stringify({ app_user_id: String(appUserId) }),
-        });
-      };
-      projectInbox.grants = {
-        list(addressId) {
-          return platformJSON('/v1/inbox/addresses/' + encodeURIComponent(addressId) + '/grants', {
-            headers: { 'X-Somewhere-Inbox-Authority': 'project_runtime' },
-          });
-        },
-        set(addressId, collaboratorUserId, role) {
-          return platformJSON('/v1/inbox/addresses/' + encodeURIComponent(addressId) + '/grants', {
             method: 'POST',
             headers: { 'X-Somewhere-Inbox-Authority': 'project_runtime' },
-            body: JSON.stringify({ collaborator_user_id: String(collaboratorUserId), role: role }),
-          });
+            body: JSON.stringify({ app_user_id: String(appUserId) }),
+        });
+    };
+    projectInbox.grants = {
+        list(addressId) {
+            return platformJSON('/v1/inbox/addresses/' + encodeURIComponent(addressId) + '/grants', {
+                headers: { 'X-Somewhere-Inbox-Authority': 'project_runtime' },
+            });
+        },
+        set(addressId, collaboratorUserId, role) {
+            return platformJSON('/v1/inbox/addresses/' + encodeURIComponent(addressId) + '/grants', {
+                method: 'POST',
+                headers: { 'X-Somewhere-Inbox-Authority': 'project_runtime' },
+                body: JSON.stringify({ collaborator_user_id: String(collaboratorUserId), role: role }),
+            });
         },
         delete(addressId, collaboratorUserId) {
-          return platformJSON('/v1/inbox/addresses/' + encodeURIComponent(addressId) + '/grants/' + encodeURIComponent(collaboratorUserId), {
-            method: 'DELETE',
-            headers: { 'X-Somewhere-Inbox-Authority': 'project_runtime' },
-          });
+            return platformJSON('/v1/inbox/addresses/' + encodeURIComponent(addressId) + '/grants/' + encodeURIComponent(collaboratorUserId), {
+                method: 'DELETE',
+                headers: { 'X-Somewhere-Inbox-Authority': 'project_runtime' },
+            });
         },
-      };
-      userInbox.project = projectInbox;
-      return userInbox;
-    })(),
-
-    // sw.connect.* \u2014 read-side third-party connections.
-    // Opposite of sw.payments: read another account's data, don't accept money.`;
+    };
+    userInbox.project = projectInbox;
+    return userInbox;
+})(),
+;
 var CONNECT_JS = `    connect: {
       stripe: {
-        // Returns { url } \u2014 send the creator's browser there to authorize
-        // read-only access to their existing Stripe. opts.return_url is where
-        // Stripe bounces them back (gets ?connect=success|error appended).
+
+
+
         connect(opts) {
           opts = opts || {};
           return platformJSON('/v1/connect/stripe/connect', {
@@ -15002,16 +15011,16 @@ var CONNECT_JS = `    connect: {
             body: JSON.stringify({ project_id: projectId, return_url: opts.return_url || opts.returnUrl }),
           });
         },
-        // { connected, account_id, scope, status, sync_error, connected_at, updated_at }
-        // status is \`syncing\` until the initial subscriber cache is durable,
-        // and \`error\` when the cache is stale/failed; subscribers() fails loud
-        // in either state instead of returning a misleading empty list.
+
+
+
+
         status() {
           return platformJSON('/v1/connect/stripe/status?project_id=' + encodeURIComponent(projectId));
         },
-        // { data: [{ email, tier, status, current_period_end, ... }], next_cursor,
-        //   sync_status: 'connected', updated_at }
-        // Reads the platform-cached list (kept fresh by the Connect webhook).
+
+
+
         subscribers(opts) {
           opts = opts || {};
           const params = new URLSearchParams({ project_id: projectId });
@@ -15078,9 +15087,9 @@ var PAYMENTS_JS = `    async quote(resource, range, opts) {
         const slotEnv = opts.env || projectEnv;
         const headers = {};
         if (opts.row !== undefined) {
-          // A row-bound checkout acts as the signed-in user of this live release; the platform
-          // verifies the app token and the release attestation. Never a job proof.
-          // It holds the row's one checkout slot, so a cross-site cookie request may not start it.
+
+
+
           __sw_enforceAmbientCookieCsrf();
           if (!env.SW_EXECUTION_ATTESTATION) {
             const err = new Error('sw.payments.checkout: deploy this app before using a row-bound checkout.');
@@ -15100,8 +15109,8 @@ var PAYMENTS_JS = `    async quote(resource, range, opts) {
         }
         if (opts.row === undefined && opts.metadata && typeof opts.metadata === 'object'
             && Object.prototype.hasOwnProperty.call(opts.metadata, 'app_user_id')) {
-          // A plan checkout for an app user: the platform grants it only to this
-          // request's verified signed-in user, so carry that subject's proof.
+
+
           Object.assign(headers, await __sw_runtimeSubjectHeaders('X-Somewhere-Payments-Authority', 'none'));
         }
         return __sw_afterBillingChange(platformJSON('/v1/payments/checkout', {
@@ -15110,10 +15119,10 @@ var PAYMENTS_JS = `    async quote(resource, range, opts) {
           body: JSON.stringify({ ...opts, project_id: projectId, env: slotEnv }),
         }));
       },
-      // checkoutForUser(opts) \u2014 Runtime v2: the app_user is
-      // DERIVED from the request's verified principal, never a caller-passed id
-      // (which could bind a checkout to another user's account). Fail-closed.
-      // The merchant checkout() above stays a service op on the same route.
+
+
+
+
       async checkoutForUser(opts) {
         opts = opts || {};
         if (!opts.plan) {
@@ -15173,14 +15182,14 @@ var PAYMENTS_JS = `    async quote(resource, range, opts) {
           }),
         }));
       },
-      // portalForUser(opts) \u2014 Runtime v2: the app_user is DERIVED from the
-      // request's verified principal, never caller-supplied. Fail-closed. The
-      // merchant portal() above (customer_id) stays a service op.
+
+
+
       async portalForUser(opts) {
         opts = opts || {};
         const userId = await __sw_requireSubject('sw.payments.portalForUser');
         const env = opts.env || projectEnv;
-        // The platform opens a portal for an app user only with that user's verified proof.
+
         const headers = await __sw_runtimeSubjectHeaders('X-Somewhere-Payments-Authority', 'none');
         return __sw_afterBillingChange(platformJSON('/v1/payments/portal', {
           method: 'POST',
@@ -15193,9 +15202,9 @@ var PAYMENTS_JS = `    async quote(resource, range, opts) {
           }),
         }));
       },
-      // subscriptionForUser / cancelForUser \u2014 the signed-in user's own plan subscription for this
-      // project and env. No user, customer or subscription argument: the platform selects it from
-      // the verified subject this request proves.
+
+
+
       async subscriptionForUser(opts) {
         opts = opts || {};
         await __sw_requireSubject('sw.payments.subscriptionForUser');
@@ -15206,7 +15215,7 @@ var PAYMENTS_JS = `    async quote(resource, range, opts) {
       },
       async cancelForUser(opts) {
         opts = opts || {};
-        // It changes the user's billing, so a cross-site cookie request may not start it.
+
         __sw_enforceAmbientCookieCsrf();
         await __sw_requireSubject('sw.payments.cancelForUser');
         const env = opts.env || projectEnv;
@@ -15242,10 +15251,10 @@ var BILLING_JS = `    billing: {
       plans() {
         return platformJSON('/v1/entitlements/plans?project_id=' + encodeURIComponent(projectId));
       },
-      // has(feature) \u2014 Runtime v2: the subject is DERIVED from the request's
-      // verified principal, never a caller-passed id. Checking
-      // another user's entitlements is a server concern (raw /v1/entitlements),
-      // not this end-user gate.
+
+
+
+
       async has(feature) {
         if (!feature) {
           const err = new Error('sw.billing.has: feature is required');
@@ -15321,7 +15330,7 @@ var GROUPS_JS = `    groups: (() => {
         };
       }
       const seg = (value) => encodeURIComponent(String(value));
-      // Keyset pages: { items, next_cursor }. Pass next_cursor back as cursor.
+
       const page = (params, opts) => {
         const q = [];
         for (const [key, value] of [...params, ['cursor', opts && opts.cursor], ['limit', opts && opts.limit]]) {
@@ -15329,14 +15338,14 @@ var GROUPS_JS = `    groups: (() => {
         }
         return q.length ? '?' + q.join('&') : '';
       };
-      // The first argument (a Request) is accepted for compatibility and ignored.
+
       return {
         create(_req, input) { return call('POST', '', { name: input && input.name }); },
         list(_req, opts) { return call('GET', page([], opts)); },
         get(_req, groupId) { return call('GET', '/' + seg(groupId)); },
         members(_req, groupId, opts) { return call('GET', '/' + seg(groupId) + '/members' + page([], opts)); },
-        // One email; the platform completes the membership when the invitee
-        // signs in, through it or with any sign-in proving that address.
+
+
         invite(_req, groupId, input) {
           return call('POST', '/' + seg(groupId) + '/invitations', {
             email: input && input.email, role: input && input.role, redirect_uri: input && input.redirect_uri,
@@ -15346,9 +15355,9 @@ var GROUPS_JS = `    groups: (() => {
         invitations(_req, groupId, opts) { return call('GET', '/' + seg(groupId) + '/invitations' + page([], opts)); },
         revokeInvitation(_req, inviteId) { return call('POST', '/invitation-grants/' + seg(inviteId) + '/revoke'); },
         leave(_req, groupId) { return call('POST', '/' + seg(groupId) + '/leave'); },
-        // Owner only; the group's own app rows stay, unreachable without server authority.
+
         delete(_req, groupId) { return call('POST', '/' + seg(groupId) + '/delete'); },
-        // Directly, for an existing account with a verified email; otherwise invite.
+
         add(_req, groupId, userId, role) { return call('POST', '/' + seg(groupId) + '/members', { user_id: userId, role }); },
         remove(_req, groupId, userId) { return call('POST', '/' + seg(groupId) + '/members/' + seg(userId) + '/remove'); },
         setRole(_req, groupId, userId, role) { return call('POST', '/' + seg(groupId) + '/members/' + seg(userId) + '/role', { role }); },
@@ -15382,7 +15391,7 @@ var TASKS_JS = `    tasks: (() => {
         return { data: data.data, page: data.page };
       }
       return {
-      // sw.tasks.create({ title, description?, status?, priority?, assignee?, labels?, due_at?, area?, parent_id? })
+
       create(opts) {
         opts = opts || {};
         return platformJSON('/v1/tasks', {
@@ -15390,8 +15399,8 @@ var TASKS_JS = `    tasks: (() => {
           body: JSON.stringify({ ...opts, project_id: projectId }),
         });
       },
-      // Preserve the existing array/full-list defaults. listPage opts into bounded reads.
-      // Pass parent_id: 'null' to fetch only top-level tasks.
+
+
       list(opts) {
         const q = listQuery(opts);
         if (!q.has('view')) q.set('view', 'full');
@@ -15403,34 +15412,34 @@ var TASKS_JS = `    tasks: (() => {
       overview(opts) {
         return platformJSON('/v1/tasks/overview?' + queryOptions(opts, ['area', 'section', 'cursor']));
       },
-      // Preserve full detail by default. Request current/history/field for bounded reads.
+
       get(id, opts) {
         const q = queryOptions(opts, ['view', 'kind', 'field', 'event_id', 'cursor', 'limit', 'offset']);
         if (!q.has('view')) q.set('view', 'full');
         return platformJSON('/v1/tasks/' + encodeURIComponent(id) + '?' + q);
       },
-      // sw.tasks.update(id, { title?, description?, status?, priority?, assignee?, labels?, due_at?, area?, parent_id? })
+
       update(id, opts) {
         return platformJSON('/v1/tasks/' + encodeURIComponent(id), {
           method: 'PATCH',
           body: JSON.stringify({ ...(opts || {}), project_id: projectId }),
         });
       },
-      // sw.tasks.delete(id)
+
       delete(id) {
         return platformJSON('/v1/tasks/' + encodeURIComponent(id) + '?project_id=' + encodeURIComponent(projectId), { method: 'DELETE' });
       },
-      // sw.tasks.comment(id, body, author?)
+
       comment(id, body, author) {
         return platformJSON('/v1/tasks/' + encodeURIComponent(id) + '/comments', {
           method: 'POST',
           body: JSON.stringify({ project_id: projectId, body: body, ...(author ? { author: author } : {}) }),
         });
       },
-      // sw.tasks.settings.get() / sw.tasks.settings.update({ webhook_url?, notify_email? })
-      // \u2014 webhook_secret is returned exactly once when first set; store it
-      // server-side to verify the X-Somewhere-Signature header on incoming
-      // task webhook POSTs.
+
+
+
+
       settings: {
         get() {
           return platformJSON('/v1/tasks/settings?project_id=' + encodeURIComponent(projectId));
@@ -15495,11 +15504,11 @@ var CALENDAR_JS = `    calendar: {
         });
       },
       cancel(idOrOpts, opts) {
-        // Paid cancellations expose reservation.cancellation_status as
-        // \`refund_pending\`, \`refund_succeeded\`, \`refund_failed\`, or
-        // \`refund_unknown\`, plus cancellation_refund_intent_id/error. The
-        // reservation leaves active state before money moves; retry the same
-        // cancel call to reconcile a pending/unknown durable refund intent.
+
+
+
+
+
         const body = typeof idOrOpts === 'string'
           ? { ...(opts || {}), reservation_id: idOrOpts }
           : { ...(idOrOpts || {}) };
@@ -15599,21 +15608,21 @@ var CALENDAR_JS = `    calendar: {
     },
 `;
 var RATE_LIMIT_JS = `    rateLimit: {
-      // sw.rateLimit.check(key, max, windowSeconds) \u2192 { allowed, remaining, reset, ... }
-      // Fixed-window counter, scoped per (project, key). On allowed=false the
-      // caller should return 429.
-      //
-      // The platform's counter is the only source of truth. A warm instance
-      // that already holds the counter's answer for this key in the current
-      // window decides the next request from it and records the request after
-      // the response. It waits for the counter whenever it holds no answer for
-      // the current window, when the budget is nearly spent, while 4 of its
-      // requests are still unrecorded, or after a failed record. A window
-      // therefore admits at most the limit plus 4 per instance serving the
-      // key, and a spent limit answers 429 for the rest of its window.
+
+
+
+
+
+
+
+
+
+
+
+
       async check(key, max, windowSeconds) {
-        // A handler check runs with no rate-limit store. It reports the limit
-        // as not evaluated and lets the handler run; the live route enforces it.
+
+
         if (env.DRAFT_INLINE_CHECK === '1') {
           console.log('Rate limit (' + max + ' per ' + windowSeconds + 's) not evaluated: a handler check does not count requests. Your live route enforces it.');
           return {
@@ -15654,8 +15663,8 @@ var RATE_LIMIT_JS = `    rateLimit: {
     },
 `;
 var WEB_JS = `    web: {
-      // sw.web.scrape(url, opts?) \u2014 fetch a URL, return its content as
-      // markdown by default. opts: { formats?, only_main?, wait_for? }
+
+
       scrape(url, opts) {
         opts = opts || {};
         return platformJSON('/v1/web/scrape', {
@@ -15669,9 +15678,9 @@ var WEB_JS = `    web: {
           }),
         });
       },
-      // sw.web.search(query, opts?) \u2014 search the public web by keyword.
-      // Returns { query, results: [{ url, title, description, age, source }], count }
-      // opts: { count?, country?, freshness?, safesearch? }
+
+
+
       search(query, opts) {
         opts = opts || {};
         return platformJSON('/v1/web/search', {
@@ -15688,803 +15697,746 @@ var WEB_JS = `    web: {
       },
     },
 
-    // sw.notifications \u2014 unified notify primitive.
-    // Fans out across the channels the app uses: push (sw.push), the
-    // app's own in-app bell (a _notifications table in the project DB,
-    // auto-created on first use), and optionally email when the dev
-    // passes an explicit email address. Safe to call from an LLM tool
-    // \u2014 write your own dedup if you need it; this layer is the
-    // primitive, not the policy.`;
-var NOTIFICATIONS_JS = `    notifications: (function () {
-      // Direct DB binding for the bell store. Each IIFE binds
-      // its own copy \u2014 mirrors ai.ts / auth.ts \u2014 because fragments are
-      // separate closures; without this every bell method ReferenceErrors.
-      const DB = env.PROJECT_DB;
-      const TABLE_SQL = "CREATE TABLE IF NOT EXISTS _notifications (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, title TEXT, body TEXT, url TEXT, read INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL); CREATE INDEX IF NOT EXISTS idx_notifications_user ON _notifications(user_id, created_at DESC);";
-      let ensured = false;
-      // Split database layouts (every managed-data project) never bind
-      // PROJECT_DB. Their bell rows live in the platform inbox instead
-      // (routes/app-notifications.ts); legacy layouts keep _notifications.
-      const PLATFORM_INBOX = env.SW_DB_LAYOUT === 'split';
-      const INBOX_ROUTE = '/v1/app-notifications';
-      async function inboxHeaders() {
-        return Object.assign(
-          { 'Content-Type': 'application/json' },
-          await __sw_runtimeSubjectHeaders('X-Somewhere-Notifications-Authority', 'project_runtime'),
-        );
-      }
-      function requireDB(method) {
-        if (!DB || typeof DB.prepare !== 'function') {
-          const err = new Error('sw.notifications.' + method + ': sw.db is not attached to this deploy. Call any sw.db.* method once first to provision the database, then redeploy.');
-          err.code = 'DB_NOT_PROVISIONED';
-          throw err;
-        }
-      }
-      async function ensureTable() {
-        if (ensured) return;
-        if (!DB || typeof DB.exec !== 'function') return;
-        try { await DB.exec(TABLE_SQL); ensured = true; } catch (err) {
-          // exec doesn't support multi-statement on some D1 versions;
-          // try one at a time.
-          try {
+
+
+
+
+
+
+
+
+
+var NOTIFICATIONS_JS = `, notifications: (function():), { const: DB = env.PROJECT_DB };
+const TABLE_SQL = "CREATE TABLE IF NOT EXISTS _notifications (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, title TEXT, body TEXT, url TEXT, read INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL); CREATE INDEX IF NOT EXISTS idx_notifications_user ON _notifications(user_id, created_at DESC);";
+let ensured = false;
+const PLATFORM_INBOX = env.SW_DB_LAYOUT === 'split';
+const INBOX_ROUTE = '/v1/app-notifications';
+async function inboxHeaders() {
+    return Object.assign({ 'Content-Type': 'application/json' }, await __sw_runtimeSubjectHeaders('X-Somewhere-Notifications-Authority', 'project_runtime'));
+}
+function requireDB(method) {
+    if (!DB || typeof DB.prepare !== 'function') {
+        const err = new Error('sw.notifications.' + method + ': sw.db is not attached to this deploy. Call any sw.db.* method once first to provision the database, then redeploy.');
+        err.code = 'DB_NOT_PROVISIONED';
+        throw err;
+    }
+}
+async function ensureTable() {
+    if (ensured)
+        return;
+    if (!DB || typeof DB.exec !== 'function')
+        return;
+    try {
+        await DB.exec(TABLE_SQL);
+        ensured = true;
+    }
+    catch (err) {
+        try {
             await DB.prepare("CREATE TABLE IF NOT EXISTS _notifications (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, title TEXT, body TEXT, url TEXT, read INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL)").run();
             await DB.prepare("CREATE INDEX IF NOT EXISTS idx_notifications_user ON _notifications(user_id, created_at DESC)").run();
             ensured = true;
-          } catch (e2) {
-            console.error('sw.notifications: ensureTable failed:', e2 && e2.message ? e2.message : e2);
-          }
         }
-      }
-
-      return {
-        // send(userId, { title, body?, url?, email?, channels? }) \u2192
-        // { bell?, push?, email? } with per-channel result or error.
-        // channels defaults to ['bell','push']. Pass channels:['email']
-        // (with email:'addr') to send only email, etc.
-        async send(userId, opts) {
-          opts = opts || {};
-          if (!userId) {
-            const err = new Error('sw.notifications.send: userId is required'); err.code = 'VALIDATION_ERROR'; throw err;
-          }
-          const title = opts.title || '';
-          const body = opts.body || '';
-          const url = opts.url || null;
-          const channels = Array.isArray(opts.channels) && opts.channels.length > 0
+        catch (e2) {
+            console.error('sw.notifications: ensureTable failed:', e2 && e2.message ? e2.message : e2);
+        }
+    }
+}
+return {
+    async send(userId, opts) {
+        opts = opts || {};
+        if (!userId) {
+            const err = new Error('sw.notifications.send: userId is required');
+            err.code = 'VALIDATION_ERROR';
+            throw err;
+        }
+        const title = opts.title || '';
+        const body = opts.body || '';
+        const url = opts.url || null;
+        const channels = Array.isArray(opts.channels) && opts.channels.length > 0
             ? opts.channels
             : ['bell', 'push'];
-          const results = {};
-
-          if (channels.includes('bell') && PLATFORM_INBOX) {
+        const results = {};
+        if (channels.includes('bell') && PLATFORM_INBOX) {
             try {
-              const r = await platformJSON(INBOX_ROUTE + '/send', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ project_id: projectId, user_id: String(userId), title, body, url }),
-              });
-              results.bell = { id: r && r.id, ok: true };
-            } catch (err) {
-              results.bell = { ok: false, error: err && err.message ? err.message : 'bell write failed', code: err && err.code };
-            }
-          } else if (channels.includes('bell')) {
-            try {
-              requireDB('send');
-              await ensureTable();
-              const id = 'ntf_' + crypto.randomUUID().replace(/-/g, '').slice(0, 16);
-              await DB.prepare(
-                'INSERT INTO _notifications (id, user_id, title, body, url, created_at) VALUES (?, ?, ?, ?, ?, ?)'
-              ).bind(id, String(userId), title, body, url, Date.now()).run();
-              results.bell = { id, ok: true };
-            } catch (err) {
-              results.bell = { ok: false, error: err && err.message ? err.message : 'bell write failed', code: err && err.code };
-            }
-          }
-
-          if (channels.includes('push')) {
-            try {
-              const r = await platformJSON('/v1/push/send', {
-                method: 'POST',
-                body: JSON.stringify({
-                  project_id: projectId,
-                  payload: { title, body, url },
-                  user_id: String(userId),
-                }),
-              });
-              results.push = { ok: true, ...r };
-            } catch (err) {
-              results.push = { ok: false, error: err && err.message ? err.message : 'push send failed', code: err && err.code };
-            }
-          }
-
-          if (channels.includes('email')) {
-            if (!opts.email || typeof opts.email !== 'string') {
-              results.email = { ok: false, error: "email channel requires opts.email (address). The user-table lookup is the dev's call \u2014 see sw.auth.fromRequest({ enrichFrom })." };
-            } else {
-              try {
-                const r = await platformJSON('/v1/email/send', {
-                  method: 'POST',
-                  body: JSON.stringify({
-                    project_id: projectId,
-                    app_user_id: String(userId),
-                    to: opts.email,
-                    subject: title,
-                    html: body || '',
-                    ...(opts.from ? { from: opts.from } : {}),
-                  }),
+                const r = await platformJSON(INBOX_ROUTE + '/send', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ project_id: projectId, user_id: String(userId), title, body, url }),
                 });
-                results.email = { ok: true, ...r };
-              } catch (err) {
-                results.email = { ok: false, error: err && err.message ? err.message : 'email send failed', code: err && err.code };
-              }
+                results.bell = { id: r && r.id, ok: true };
             }
-          }
-
-          return results;
-        },
-
-        // Bell-only SELF-SERVICE helpers (Runtime v2, ): the
-        // recipient is DERIVED from the request's verified principal, never a
-        // caller-passed id. No verified user fails closed (AUTH_REQUIRED) \u2014
-        // never a silent empty result that could mask a missing session.
-        async list(opts) {
-          opts = opts || {};
-          const userId = await __sw_requireSubject('sw.notifications.list');
-          if (PLATFORM_INBOX) {
+            catch (err) {
+                results.bell = { ok: false, error: err && err.message ? err.message : 'bell write failed', code: err && err.code };
+            }
+        }
+        else if (channels.includes('bell')) {
+            try {
+                requireDB('send');
+                await ensureTable();
+                const id = 'ntf_' + crypto.randomUUID().replace(/-/g, '').slice(0, 16);
+                await DB.prepare('INSERT INTO _notifications (id, user_id, title, body, url, created_at) VALUES (?, ?, ?, ?, ?, ?)').bind(id, String(userId), title, body, url, Date.now()).run();
+                results.bell = { id, ok: true };
+            }
+            catch (err) {
+                results.bell = { ok: false, error: err && err.message ? err.message : 'bell write failed', code: err && err.code };
+            }
+        }
+        if (channels.includes('push')) {
+            try {
+                const r = await platformJSON('/v1/push/send', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        project_id: projectId,
+                        payload: { title, body, url },
+                        user_id: String(userId),
+                    }),
+                });
+                results.push = { ok: true, ...r };
+            }
+            catch (err) {
+                results.push = { ok: false, error: err && err.message ? err.message : 'push send failed', code: err && err.code };
+            }
+        }
+        if (channels.includes('email')) {
+            if (!opts.email || typeof opts.email !== 'string') {
+                results.email = { ok: false, error: "email channel requires opts.email (address). The user-table lookup is the dev's call \u2014 see sw.auth.fromRequest({ enrichFrom })." };
+            }
+            else {
+                try {
+                    const r = await platformJSON('/v1/email/send', {
+                        method: 'POST',
+                        body: JSON.stringify({
+                            project_id: projectId,
+                            app_user_id: String(userId),
+                            to: opts.email,
+                            subject: title,
+                            html: body || '',
+                            ...(opts.from ? { from: opts.from } : {}),
+                        }),
+                    });
+                    results.email = { ok: true, ...r };
+                }
+                catch (err) {
+                    results.email = { ok: false, error: err && err.message ? err.message : 'email send failed', code: err && err.code };
+                }
+            }
+        }
+        return results;
+    },
+    async list(opts) {
+        opts = opts || {};
+        const userId = await __sw_requireSubject('sw.notifications.list');
+        if (PLATFORM_INBOX) {
             const limit = Math.max(1, Math.min(200, Number(opts.limit) || 50));
             const r = await platformJSON(INBOX_ROUTE + '/list?project_id=' + encodeURIComponent(projectId)
-              + '&limit=' + limit + (opts.unread_only ? '&unread_only=true' : ''), { headers: await inboxHeaders() });
+                + '&limit=' + limit + (opts.unread_only ? '&unread_only=true' : ''), { headers: await inboxHeaders() });
             return { notifications: (r && r.notifications) || [], count: (r && r.count) || 0 };
-          }
-          requireDB('list');
-          await ensureTable();
-          const limit = Math.max(1, Math.min(200, Number(opts.limit) || 50));
-          const where = opts.unread_only ? 'WHERE user_id = ? AND read = 0' : 'WHERE user_id = ?';
-          const r = await DB.prepare(
-            'SELECT id, title, body, url, read, created_at FROM _notifications ' + where + ' ORDER BY created_at DESC LIMIT ?'
-          ).bind(String(userId), limit).all();
-          return { notifications: r.results || [], count: (r.results || []).length };
-        },
-        async unreadCount() {
-          const userId = await __sw_requireSubject('sw.notifications.unreadCount');
-          if (PLATFORM_INBOX) {
+        }
+        requireDB('list');
+        await ensureTable();
+        const limit = Math.max(1, Math.min(200, Number(opts.limit) || 50));
+        const where = opts.unread_only ? 'WHERE user_id = ? AND read = 0' : 'WHERE user_id = ?';
+        const r = await DB.prepare('SELECT id, title, body, url, read, created_at FROM _notifications ' + where + ' ORDER BY created_at DESC LIMIT ?').bind(String(userId), limit).all();
+        return { notifications: r.results || [], count: (r.results || []).length };
+    },
+    async unreadCount() {
+        const userId = await __sw_requireSubject('sw.notifications.unreadCount');
+        if (PLATFORM_INBOX) {
             const r = await platformJSON(INBOX_ROUTE + '/unread-count?project_id=' + encodeURIComponent(projectId), { headers: await inboxHeaders() });
             return r && typeof r.count === 'number' ? r.count : 0;
-          }
-          requireDB('unreadCount');
-          await ensureTable();
-          const r = await DB.prepare(
-            'SELECT COUNT(*) AS n FROM _notifications WHERE user_id = ? AND read = 0'
-          ).bind(String(userId)).first();
-          return r && typeof r.n === 'number' ? r.n : 0;
-        },
-        // markRead(notificationId) \u2014 Runtime v2 closes the row-id-only hole:
-        // any caller with a bell-row id could previously flip ANOTHER user's
-        // notification. The UPDATE is now constrained to user_id = the verified
-        // recipient, so a foreign id simply matches nothing (0 changes).
-        async markRead(notificationId) {
-          if (!notificationId) return { ok: false, error: 'notificationId required' };
-          const userId = await __sw_requireSubject('sw.notifications.markRead');
-          if (PLATFORM_INBOX) {
+        }
+        requireDB('unreadCount');
+        await ensureTable();
+        const r = await DB.prepare('SELECT COUNT(*) AS n FROM _notifications WHERE user_id = ? AND read = 0').bind(String(userId)).first();
+        return r && typeof r.n === 'number' ? r.n : 0;
+    },
+    async markRead(notificationId) {
+        if (!notificationId)
+            return { ok: false, error: 'notificationId required' };
+        const userId = await __sw_requireSubject('sw.notifications.markRead');
+        if (PLATFORM_INBOX) {
             const r = await platformJSON(INBOX_ROUTE + '/mark-read', {
-              method: 'POST', headers: await inboxHeaders(),
-              body: JSON.stringify({ project_id: projectId, id: String(notificationId) }),
+                method: 'POST', headers: await inboxHeaders(),
+                body: JSON.stringify({ project_id: projectId, id: String(notificationId) }),
             });
             return { ok: true, changes: (r && r.changes) || 0 };
-          }
-          requireDB('markRead');
-          await ensureTable();
-          const res = await DB.prepare(
-            'UPDATE _notifications SET read = 1 WHERE id = ? AND user_id = ?'
-          ).bind(String(notificationId), String(userId)).run();
-          return { ok: true, changes: (res.meta && res.meta.changes) || 0 };
-        },
-        async markAllRead() {
-          const userId = await __sw_requireSubject('sw.notifications.markAllRead');
-          if (PLATFORM_INBOX) {
+        }
+        requireDB('markRead');
+        await ensureTable();
+        const res = await DB.prepare('UPDATE _notifications SET read = 1 WHERE id = ? AND user_id = ?').bind(String(notificationId), String(userId)).run();
+        return { ok: true, changes: (res.meta && res.meta.changes) || 0 };
+    },
+    async markAllRead() {
+        const userId = await __sw_requireSubject('sw.notifications.markAllRead');
+        if (PLATFORM_INBOX) {
             const r = await platformJSON(INBOX_ROUTE + '/mark-all-read', {
-              method: 'POST', headers: await inboxHeaders(), body: JSON.stringify({ project_id: projectId }),
+                method: 'POST', headers: await inboxHeaders(), body: JSON.stringify({ project_id: projectId }),
             });
             return { ok: true, changes: (r && r.changes) || 0 };
-          }
-          requireDB('markAllRead');
-          await ensureTable();
-          const res = await DB.prepare(
-            'UPDATE _notifications SET read = 1 WHERE user_id = ? AND read = 0'
-          ).bind(String(userId)).run();
-          return { ok: true, changes: (res.meta && res.meta.changes) || 0 };
-        },
-      };
-    })(),
-`;
-var PUSH_JS = `    push: (function () {
-      // The signed-in user of THIS request owns the device. The platform
-      // re-verifies the carried session; no argument can name a user.
-      async function __sw_pushDeviceHeaders(label) {
+        }
+        requireDB('markAllRead');
+        await ensureTable();
+        const res = await DB.prepare('UPDATE _notifications SET read = 1 WHERE user_id = ? AND read = 0').bind(String(userId)).run();
+        return { ok: true, changes: (res.meta && res.meta.changes) || 0 };
+    },
+};
+(),
+    `;
+
+
+var PUSH_JS = `;
+push: (function () {
+    async function __sw_pushDeviceHeaders(label) {
         await __sw_requireSubject(label);
-        return Object.assign(
-          { 'Content-Type': 'application/json' },
-          await __sw_runtimeSubjectHeaders('X-Somewhere-Push-Authority', 'project_runtime'),
-        );
-      }
-      function __sw_pushSubscription(input) {
-        if (input && typeof input.toJSON === 'function') input = input.toJSON();
+        return Object.assign({ 'Content-Type': 'application/json' }, await __sw_runtimeSubjectHeaders('X-Somewhere-Push-Authority', 'project_runtime'));
+    }
+    function __sw_pushSubscription(input) {
+        if (input && typeof input.toJSON === 'function')
+            input = input.toJSON();
         return input;
-      }
-      function __sw_pushQuery(opts) {
+    }
+    function __sw_pushQuery(opts) {
         opts = opts || {};
         let q = '?project_id=' + encodeURIComponent(projectId);
-        if (opts.user_id ?? opts.userId) q += '&user_id=' + encodeURIComponent(String(opts.user_id ?? opts.userId));
-        if (opts.subscription_id ?? opts.subscriptionId) q += '&subscription_id=' + encodeURIComponent(String(opts.subscription_id ?? opts.subscriptionId));
-        if (opts.limit !== undefined) q += '&limit=' + encodeURIComponent(String(opts.limit));
+        if (opts.user_id ?? opts.userId)
+            q += '&user_id=' + encodeURIComponent(String(opts.user_id ?? opts.userId));
+        if (opts.subscription_id ?? opts.subscriptionId)
+            q += '&subscription_id=' + encodeURIComponent(String(opts.subscription_id ?? opts.subscriptionId));
+        if (opts.limit !== undefined)
+            q += '&limit=' + encodeURIComponent(String(opts.limit));
         return q;
-      }
-      return {
-      // sw.push.vapidPublicKey() \u2192 { vapid_public_key }
-      // The browser passes vapid_public_key to PushManager.subscribe().
-      vapidPublicKey() {
-        return platformJSON('/v1/push/vapid-public-key?project_id=' + encodeURIComponent(projectId));
-      },
-      // sw.push.subscribe(subscription, { label? }) \u2192 { id, platform, owner, created }
-      // Registers the browser subscription for the signed-in user of this
-      // request. sw.push.subscribe({ test: true }) registers that user's push
-      // test inbox device instead (captured, never sent to a browser).
-      async subscribe(subscription, opts) {
-        opts = opts || {};
-        const headers = await __sw_pushDeviceHeaders('sw.push.subscribe');
-        const isTest = !!(subscription && subscription.test === true);
-        return platformJSON('/v1/push/subscribe', {
-          method: 'POST',
-          headers,
-          body: JSON.stringify(Object.assign(
-            { project_id: projectId },
-            isTest ? { test: true } : { subscription: __sw_pushSubscription(subscription) },
-            opts.label !== undefined ? { label: opts.label } : {},
-          )),
-        });
-      },
-      // sw.push.unsubscribe(endpoint | subscription | { test: true }) \u2192 { deleted }
-      // Removes one of the signed-in user's own devices. Idempotent.
-      async unsubscribe(target) {
-        const headers = await __sw_pushDeviceHeaders('sw.push.unsubscribe');
-        const isTest = !!(target && typeof target === 'object' && target.test === true);
-        const endpoint = typeof target === 'string' ? target : (target && target.endpoint);
-        return platformJSON('/v1/push/unsubscribe', {
-          method: 'POST',
-          headers,
-          body: JSON.stringify(isTest ? { project_id: projectId, test: true } : { project_id: projectId, endpoint }),
-        });
-      },
-      // sw.push.send({ payload, user_id | endpoint | subscription_id | audience, ttl? })
-      // payload may be a string or any JSON-serializable value. A target key
-      // that is present is always sent, even when its value is null or
-      // undefined, so the platform refuses it instead of widening the send.
-      send(opts) {
-        opts = opts || {};
-        const body = { project_id: projectId, payload: opts.payload, ttl: opts.ttl };
-        const aliases = [['user_id', 'userId'], ['endpoint', 'endpoint'], ['subscription_id', 'subscriptionId'], ['audience', 'audience']];
-        for (const [key, alias] of aliases) {
-          if (key in opts) body[key] = opts[key] === undefined ? null : opts[key];
-          else if (alias in opts) body[key] = opts[alias] === undefined ? null : opts[alias];
-        }
-        return platformJSON('/v1/push/send', { method: 'POST', body: JSON.stringify(body) });
-      },
-      // sw.push.subscriptions({ user_id?, limit? }) \u2192 { subscriptions } (no keys)
-      subscriptions(opts) {
-        return platformJSON('/v1/push/subscriptions' + __sw_pushQuery(opts));
-      },
-      // sw.push.deliveries({ user_id?, subscription_id?, limit? }) \u2192 { deliveries }
-      // Newest first, seven days kept. Test-inbox deliveries include payload.
-      deliveries(opts) {
-        return platformJSON('/v1/push/deliveries' + __sw_pushQuery(opts));
-      },
-      };
-    })(),`;
-var ROOMS_JS = `    rooms: (function () {
-      function __sw_roomsError(code, message, status) {
+    }
+    return {
+        vapidPublicKey() {
+            return platformJSON('/v1/push/vapid-public-key?project_id=' + encodeURIComponent(projectId));
+        },
+        async subscribe(subscription, opts) {
+            opts = opts || {};
+            const headers = await __sw_pushDeviceHeaders('sw.push.subscribe');
+            const isTest = !!(subscription && subscription.test === true);
+            return platformJSON('/v1/push/subscribe', {
+                method: 'POST',
+                headers,
+                body: JSON.stringify(Object.assign({ project_id: projectId }, isTest ? { test: true } : { subscription: __sw_pushSubscription(subscription) }, opts.label !== undefined ? { label: opts.label } : {})),
+            });
+        },
+        async unsubscribe(target) {
+            const headers = await __sw_pushDeviceHeaders('sw.push.unsubscribe');
+            const isTest = !!(target && typeof target === 'object' && target.test === true);
+            const endpoint = typeof target === 'string' ? target : (target && target.endpoint);
+            return platformJSON('/v1/push/unsubscribe', {
+                method: 'POST',
+                headers,
+                body: JSON.stringify(isTest ? { project_id: projectId, test: true } : { project_id: projectId, endpoint }),
+            });
+        },
+        send(opts) {
+            opts = opts || {};
+            const body = { project_id: projectId, payload: opts.payload, ttl: opts.ttl };
+            const aliases = [['user_id', 'userId'], ['endpoint', 'endpoint'], ['subscription_id', 'subscriptionId'], ['audience', 'audience']];
+            for (const [key, alias] of aliases) {
+                if (key in opts)
+                    body[key] = opts[key] === undefined ? null : opts[key];
+                else if (alias in opts)
+                    body[key] = opts[alias] === undefined ? null : opts[alias];
+            }
+            return platformJSON('/v1/push/send', { method: 'POST', body: JSON.stringify(body) });
+        },
+        subscriptions(opts) {
+            return platformJSON('/v1/push/subscriptions' + __sw_pushQuery(opts));
+        },
+        deliveries(opts) {
+            return platformJSON('/v1/push/deliveries' + __sw_pushQuery(opts));
+        },
+    };
+})(), `;
+
+
+var ROOMS_JS = `;
+rooms: (function () {
+    function __sw_roomsError(code, message, status) {
         const err = new Error(message);
         err.code = code;
         err.status = status;
         err.__sw_expose = true;
         return __sw_markExpected(err);
-      }
-      function __sw_roomsRef(label, table, id) {
+    }
+    function __sw_roomsRef(label, table, id) {
         if (typeof table !== 'string' || table.length === 0 || table.length > 128) {
-          throw __sw_roomsError('VALIDATION_ERROR', label + ': table must be the name of a table that declares rooms.', 400);
+            throw __sw_roomsError('VALIDATION_ERROR', label + ': table must be the name of a table that declares rooms.', 400);
         }
         if (!(typeof id === 'string' && id.length > 0 && id.length <= 4096) && !(typeof id === 'number' && Number.isSafeInteger(id))) {
-          throw __sw_roomsError('VALIDATION_ERROR', label + ': id must be the row id (a string or a whole number).', 400);
+            throw __sw_roomsError('VALIDATION_ERROR', label + ': id must be the row id (a string or a whole number).', 400);
         }
         return { table: table, id: id };
-      }
-      function __sw_roomsVisitorToken() {
+    }
+    function __sw_roomsVisitorToken() {
         const staged = typeof __sw_visitorSessionToken === 'function' ? __sw_visitorSessionToken() : null;
         return staged || __sw_readCookie(__sw_authSnapshotRequest.headers.get('cookie'), '__Host-sw_visitor') || null;
-      }
-      // The verified person of this request, carried the way every user-owned
-      // surface carries it. The platform re-verifies; nothing here is trusted.
-      async function __sw_roomsCallerHeaders(label, issueVisitor) {
+    }
+    async function __sw_roomsCallerHeaders(label, issueVisitor) {
         if (__sw_signedDelivery || __sw_hasRuntimeProjectAuthority()) {
-          throw __sw_roomsError('ROOM_NO_CALLER', label + ' acts as the person who made this request, and this request has none (a job, schedule or server call). Use sw.rooms.server.' + label.split('.').pop() + ' for platform authority.', 403);
+            throw __sw_roomsError('ROOM_NO_CALLER', label + ' acts as the person who made this request, and this request has none (a job, schedule or server call). Use sw.rooms.server.' + label.split('.').pop() + ' for platform authority.', 403);
         }
         __sw_enforceAmbientCookieCsrf();
         if (await __sw_optionalSubject()) {
-          return await __sw_runtimeSubjectHeaders('X-Somewhere-Rooms-Authority', 'none');
+            return await __sw_runtimeSubjectHeaders('X-Somewhere-Rooms-Authority', 'none');
         }
         let visitor = __sw_roomsVisitorToken();
         if (!visitor && issueVisitor && typeof __sw_resolveVisitorIdentity === 'function') {
-          // The ticket door gives a first-time anonymous visitor a session when the
-          // app declares visitor identity, so the person is the same on reconnect.
-          await __sw_resolveVisitorIdentity(); visitor = __sw_roomsVisitorToken();
+            await __sw_resolveVisitorIdentity();
+            visitor = __sw_roomsVisitorToken();
         }
-        if (visitor) return { 'X-Somewhere-Rooms-Authority': 'visitor', 'X-Sw-Visitor-Session': visitor };
+        if (visitor)
+            return { 'X-Somewhere-Rooms-Authority': 'visitor', 'X-Sw-Visitor-Session': visitor };
         throw __sw_roomsError('AUTH_REQUIRED', 'Rooms require a signed-in or visitor session.', 401);
-      }
-      async function __sw_roomsCall(path, headers, body) {
+    }
+    async function __sw_roomsCall(path, headers, body) {
         const r = await platformFetch(path, {
-          method: 'POST',
-          headers: Object.assign({ 'Content-Type': 'application/json' }, headers),
-          body: JSON.stringify(Object.assign({ project_id: projectId }, body)),
+            method: 'POST',
+            headers: Object.assign({ 'Content-Type': 'application/json' }, headers),
+            body: JSON.stringify(Object.assign({ project_id: projectId }, body)),
         });
         const data = await __sw_platformJSONBody(r);
         if (!r.ok || !data || data.ok === false) {
-          const err = __sw_platformError(r, data);
-          if (data && typeof data.reason === 'string') err.reason = data.reason;
-          if (data && data.state !== undefined) err.state = data.state;
-          if (data && data.version !== undefined) err.version = data.version;
-          if (r.status >= 400 && r.status < 500) { err.__sw_expose = true; __sw_markExpected(err); }
-          throw err;
+            const err = __sw_platformError(r, data);
+            if (data && typeof data.reason === 'string')
+                err.reason = data.reason;
+            if (data && data.state !== undefined)
+                err.state = data.state;
+            if (data && data.version !== undefined)
+                err.version = data.version;
+            if (r.status >= 400 && r.status < 500) {
+                err.__sw_expose = true;
+                __sw_markExpected(err);
+            }
+            throw err;
         }
         return data.data;
-      }
-      function __sw_roomsOps(label, prefix, headersFor) {
+    }
+    function __sw_roomsOps(label, prefix, headersFor) {
         return {
-          async act(table, id, action) {
-            const ref = __sw_roomsRef(label + '.act', table, id);
-            return __sw_roomsCall(prefix + 'act', await headersFor(label + '.act'), Object.assign(ref, { action: action }));
-          },
-          async set(table, id, patch) {
-            const ref = __sw_roomsRef(label + '.set', table, id);
-            if (!patch || typeof patch !== 'object' || Array.isArray(patch)) {
-              throw __sw_roomsError('VALIDATION_ERROR', label + '.set: patch must be an object of top-level keys (null deletes a key).', 400);
-            }
-            return __sw_roomsCall(prefix + 'set', await headersFor(label + '.set'), Object.assign(ref, { patch: patch }));
-          },
-          async send(table, id, message) {
-            const ref = __sw_roomsRef(label + '.send', table, id);
-            return __sw_roomsCall(prefix + 'send', await headersFor(label + '.send'), Object.assign(ref, { message: message }));
-          },
-          async get(table, id) {
-            const ref = __sw_roomsRef(label + '.get', table, id);
-            return __sw_roomsCall(prefix + 'get', await headersFor(label + '.get'), ref);
-          },
+            async act(table, id, action) {
+                const ref = __sw_roomsRef(label + '.act', table, id);
+                return __sw_roomsCall(prefix + 'act', await headersFor(label + '.act'), Object.assign(ref, { action: action }));
+            },
+            async set(table, id, patch) {
+                const ref = __sw_roomsRef(label + '.set', table, id);
+                if (!patch || typeof patch !== 'object' || Array.isArray(patch)) {
+                    throw __sw_roomsError('VALIDATION_ERROR', label + '.set: patch must be an object of top-level keys (null deletes a key).', 400);
+                }
+                return __sw_roomsCall(prefix + 'set', await headersFor(label + '.set'), Object.assign(ref, { patch: patch }));
+            },
+            async send(table, id, message) {
+                const ref = __sw_roomsRef(label + '.send', table, id);
+                return __sw_roomsCall(prefix + 'send', await headersFor(label + '.send'), Object.assign(ref, { message: message }));
+            },
+            async get(table, id) {
+                const ref = __sw_roomsRef(label + '.get', table, id);
+                return __sw_roomsCall(prefix + 'get', await headersFor(label + '.get'), ref);
+            },
         };
-      }
-      async function __sw_roomsServerHeaders() { return { 'X-Somewhere-Rooms-Authority': 'server' }; }
-      const __sw_roomsVerified = new WeakMap();
-      async function __sw_roomsEvent(req) {
+    }
+    async function __sw_roomsServerHeaders() { return { 'X-Somewhere-Rooms-Authority': 'server' }; }
+    const __sw_roomsVerified = new WeakMap();
+    async function __sw_roomsEvent(req) {
         if (!req || typeof req.clone !== 'function' || !req.headers) {
-          throw __sw_roomsError('ROOM_EVENT_INVALID', 'sw.rooms.event(req) takes the request your referee function received.', 400);
+            throw __sw_roomsError('ROOM_EVENT_INVALID', 'sw.rooms.event(req) takes the request your referee function received.', 400);
         }
         const known = __sw_roomsVerified.get(req);
-        if (known) return known;
+        if (known)
+            return known;
         const pending = (async function () {
-          const eventId = req.headers.get('x-somewhere-room-event');
-          const invalid = function () { return __sw_roomsError('ROOM_EVENT_INVALID', 'This request is not an event sent by a room of this app.', 403); };
-          if (!eventId) throw invalid();
-          const bytes = new Uint8Array(await req.clone().arrayBuffer());
-          let event;
-          try { event = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)); } catch (_) { throw invalid(); }
-          if (!event || typeof event !== 'object' || !event.row || typeof event.row.table !== 'string') throw invalid();
-          const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes));
-          let hex = '';
-          for (let i = 0; i < digest.length; i++) hex += digest[i].toString(16).padStart(2, '0');
-          let answer;
-          try {
-            answer = await __sw_roomsCall('/v1/rooms/verify-event', {}, { table: event.row.table, id: event.row.id, event_id: eventId, body_sha256: hex });
-          } catch (err) {
-            if (err && err.status >= 400 && err.status < 500) throw invalid();
-            throw err;
-          }
-          if (!answer || answer.valid !== true) throw invalid();
-          return event;
+            const eventId = req.headers.get('x-somewhere-room-event');
+            const invalid = function () { return __sw_roomsError('ROOM_EVENT_INVALID', 'This request is not an event sent by a room of this app.', 403); };
+            if (!eventId)
+                throw invalid();
+            const bytes = new Uint8Array(await req.clone().arrayBuffer());
+            let event;
+            try {
+                event = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
+            }
+            catch (_) {
+                throw invalid();
+            }
+            if (!event || typeof event !== 'object' || !event.row || typeof event.row.table !== 'string')
+                throw invalid();
+            const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes));
+            let hex = '';
+            for (let i = 0; i < digest.length; i++)
+                hex += digest[i].toString(16).padStart(2, '0');
+            let answer;
+            try {
+                answer = await __sw_roomsCall('/v1/rooms/verify-event', {}, { table: event.row.table, id: event.row.id, event_id: eventId, body_sha256: hex });
+            }
+            catch (err) {
+                if (err && err.status >= 400 && err.status < 500)
+                    throw invalid();
+                throw err;
+            }
+            if (!answer || answer.valid !== true)
+                throw invalid();
+            return event;
         })();
         __sw_roomsVerified.set(req, pending);
         pending.catch(function () { __sw_roomsVerified.delete(req); });
         return pending;
-      }
-      const __sw_rooms = Object.assign(__sw_roomsOps('sw.rooms', '/v1/rooms/', function (label) { return __sw_roomsCallerHeaders(label, false); }), {
+    }
+    const __sw_rooms = Object.assign(__sw_roomsOps('sw.rooms', '/v1/rooms/', function (label) { return __sw_roomsCallerHeaders(label, false); }), {
         server: Object.freeze(__sw_roomsOps('sw.rooms.server', '/v1/rooms/server/', __sw_roomsServerHeaders)),
         event: __sw_roomsEvent,
-        // A live list: the declared composed read plus a refresh subscription
-        // (worker/src/runtime/db.ts __sw_liveDeclare). Rows stay in the read.
         live: function live(name, read) {
-          if (arguments.length !== 2) throw __sw_roomsError('VALIDATION_ERROR', 'sw.rooms.live takes exactly (name, read): a declared name and sw.db.from(...).', 400);
-          const declare = __sw_liveDoor.get(sw.db);
-          if (typeof declare !== 'function') throw __sw_roomsError('ROOMS_LIVE_UNAVAILABLE', 'Live lists are unavailable in this runtime.', 500);
-          return declare(name, read);
+            if (arguments.length !== 2)
+                throw __sw_roomsError('VALIDATION_ERROR', 'sw.rooms.live takes exactly (name, read): a declared name and sw.db.from(...).', 400);
+            const declare = __sw_liveDoor.get(sw.db);
+            if (typeof declare !== 'function')
+                throw __sw_roomsError('ROOMS_LIVE_UNAVAILABLE', 'Live lists are unavailable in this runtime.', 500);
+            return declare(name, read);
         },
-      });
-      Object.freeze(__sw_rooms);
-      // Platform-private: the browser ticket door (/__sw/rooms/ticket) asks for a
-      // ticket as this request's person. Module-scoped, never reachable from sw.
-      __sw_roomsDoor.set(__sw_rooms, {
+    });
+    Object.freeze(__sw_rooms);
+    __sw_roomsDoor.set(__sw_rooms, {
         async ticket(table, id) {
-          const ref = __sw_roomsRef('joinRoom', table, id);
-          return __sw_roomsCall('/v1/rooms/ticket', await __sw_roomsCallerHeaders('sw.rooms.ticket', true), ref);
+            const ref = __sw_roomsRef('joinRoom', table, id);
+            return __sw_roomsCall('/v1/rooms/ticket', await __sw_roomsCallerHeaders('sw.rooms.ticket', true), ref);
         },
-      });
-      return __sw_rooms;
-    })(),
-`;
-var CONTEXT_TAIL_JS = `  };
-  // sw.realtime is RETIRED. There is no namespace: the property
-  // is a non-enumerable accessor, so it never appears on Object.keys(sw), in a
-  // catalog, or in a runtime type. Reaching for it throws a typed, documented
-  // error naming the replacement. Without this accessor the access is a bare
-  // "Cannot read properties of undefined (reading 'publish')" TypeError that
-  // teaches nothing. One thrower, mounted on both the
-  // standard sw and the draft proxy, so the answer is identical either way.
-  function __sw_realtimeRetired() {
+    });
+    return __sw_rooms;
+})(),
+    `;
+
+
+var CONTEXT_TAIL_JS = `;
+;
+function __sw_realtimeRetired() {
     const err = new Error('sw.realtime is not part of the runtime. For browser live updates, declare the read in a function with sw.rooms.live(name, sw.db.from(...)) and subscribe with watchLive from /__sw/rooms/client.js. For durable events and history, write rows with sw.db.');
     err.code = 'REALTIME_RETIRED';
     err.status = 410;
     throw __sw_markExpected(err);
-  }
-  if (isDraftExecution) {
-    // One capability boundary for draft execution. Drafts receive local
-    // computation plus their isolated database/files and diagnostic logs.
-    // Shared/external capabilities stay outside this object; a method whose
-    // name must remain discoverable but whose effect is shared fails with the
-    // same typed draft error.
+}
+if (isDraftExecution) {
     function draftScopeBlocked() {
-      const err = new Error('sw.db.scope is unavailable in a draft because scope declarations change shared project configuration. Declare the scope in production code, then open a new draft.');
-      err.code = 'DRAFT_SIDE_EFFECT_BLOCKED';
-      err.status = 409;
-      err.__sw_expose = true;
-      throw err;
-    }
-    draftScopeBlocked.list = draftScopeBlocked;
-    draftScopeBlocked.get = draftScopeBlocked;
-    const draftDb = Object.freeze({
-      query: sw.db.query,
-      batch: sw.db.batch,
-      tx: sw.db.tx,
-      server: sw.db.server,
-      tables: sw.db.tables,
-      from: sw.db.from,
-      count: sw.db.count,
-      insert: sw.db.insert,
-      update: sw.db.update,
-      remove: sw.db.remove,
-      delete: sw.db.delete,
-      scope: Object.freeze(draftScopeBlocked),
-    });
-    const draftFs = Object.freeze({
-      read: sw.fs.read,
-      write: sw.fs.write,
-      delete: sw.fs.delete,
-      move: sw.fs.move,
-      copy: sw.fs.copy,
-      restore: sw.fs.restore,
-      stat: sw.fs.stat,
-      versions: sw.fs.versions,
-      list: sw.fs.list,
-      diff: sw.fs.diff,
-      glob: sw.fs.glob,
-      search: sw.fs.search,
-      replace: sw.fs.replace,
-      uploadUrl: sw.fs.uploadUrl,
-      signedUrl: sw.fs.signedUrl,
-      public_url: sw.fs.public_url,
-      publicUrl: sw.fs.publicUrl,
-      setOwner: sw.fs.setOwner,
-      uploadFromRequest: sw.fs.uploadFromRequest,
-      // The explicit trusted view, as draftDb keeps sw.db.server. Its transport
-      // carries this draft's identity, so it reaches only the draft file clone.
-      server: sw.fs.server,
-    });
-    function draftReadNamespace(name, original, methods) {
-      const operations = new Set(Object.keys(original).filter(function (property) {
-        const descriptor = Object.getOwnPropertyDescriptor(original, property);
-        return !property.startsWith('__') && descriptor && typeof descriptor.value === 'function';
-      }));
-      const facade = Object.freeze(Object.assign(Object.create(null), methods));
-      return new Proxy(facade, {
-        get(target, property, receiver) {
-          if (typeof property !== 'string' || Object.prototype.hasOwnProperty.call(target, property)) {
-            return Reflect.get(target, property, receiver);
-          }
-          if (!operations.has(property)) return undefined;
-          const err = new Error('sw.' + name + '.' + property + ' is unavailable in a draft because it can affect shared or external state.');
-          err.code = 'DRAFT_SIDE_EFFECT_BLOCKED';
-          err.status = 409;
-          err.__sw_expose = true;
-          throw err;
-        },
-      });
-    }
-    const draftAuth = draftReadNamespace('auth', sw.auth, {
-      fromRequest: sw.auth.fromRequest,
-      requireUser: sw.auth.requireUser,
-    });
-    const draftBilling = draftReadNamespace('billing', sw.billing, {
-      has: sw.billing.has,
-      entitlements: sw.billing.entitlements,
-    });
-    // A preview's send is stored in the project's test inbox, never delivered
-    // to a real recipient; the API enforces that on the exact draft channel.
-    const draftEmail = draftReadNamespace('email', sw.email, {
-      send: sw.email.send,
-    });
-    // A preview's checkout and portal run in test mode; the API refuses shared quotes, bookings and
-    // holds and never delivers their webhooks to the production URL.
-    const draftPayments = draftReadNamespace('payments', sw.payments, {
-      checkout: sw.payments.checkout,
-      checkoutForUser: sw.payments.checkoutForUser,
-      portal: sw.payments.portal,
-      portalForUser: sw.payments.portalForUser,
-    });
-    // Rooms are a live-app feature: every operation refuses with one typed code,
-    // before any transport, and the real namespace is never reachable here.
-    function draftRoomsUnavailable() {
-      const err = new Error('Rooms work on the live app only, not in a preview. Deploy, then open the live app.');
-      err.code = 'ROOMS_DRAFT_UNAVAILABLE';
-      err.status = 409;
-      err.__sw_expose = true;
-      throw err;
-    }
-    const draftRoomsOps = { act: draftRoomsUnavailable, set: draftRoomsUnavailable, send: draftRoomsUnavailable, get: draftRoomsUnavailable };
-    // A preview still shows a live list's rows; only the subscription is unavailable.
-    async function draftRoomsLive(name, read) {
-      if (arguments.length !== 2) draftRoomsUnavailable();
-      const result = await read;
-      return Object.assign({}, result, { live: { name: name, state: 'unavailable', reason: 'ROOMS_DRAFT_UNAVAILABLE' } });
-    }
-    const draftRooms = Object.freeze(Object.assign({}, draftRoomsOps, { server: Object.freeze(Object.assign({}, draftRoomsOps)), event: draftRoomsUnavailable, live: draftRoomsLive }));
-    const draftSafe = new Set([
-      'project_id', 'subdomain', 'tier', 'env', 'request_id', 'params',
-      // Groups stays discoverable only to return its draft refusal before transport.
-      'groups',
-      'crypto', 'db', 'fs', 'auth', 'billing', 'email', 'payments', 'logs', 'rooms', 'sw', 'ctx',
-      '__sw_pendingRefresh', '__sw_pendingCookies', '__sw_pendingBackground',
-      // Response state the shim's attachPendingRefresh reads on every answer (#439). A draft's
-      // read session is inert by construction (context-head: envelope null when isDraftExecution),
-      // so it never issues a header; omitting it threw DRAFT_SIDE_EFFECT_BLOCKED and turned every
-      // draft response into a 409/500 (pfb ticket in the commit).
-      '__sw_readSession',
-      // The response gate the shim releases after the answer.
-      // The shim READS these off whatever buildPlatformContext returned, which
-      // in a draft is this proxy \u2014 an unlisted name throws from inside the
-      // shim's finally and would replace the draft's own response with a 409.
-      '__sw_afterResponse', '__sw_releaseAfterResponse', '__sw_nativeConsole',
-      // Tracing is observation, not a side effect: a draft must be able to
-      // read its own trace id, and the request shim must be able to drain its
-      // spans. Omitting these would make the draft proxy throw
-      // DRAFT_SIDE_EFFECT_BLOCKED on every draft request.
-      'trace', '__sw_trace',
-      '__sw_serverTiming',
-      // The handler wrapper reads this on every request to pick the MCP delivery's request. It is never
-      // defined in a draft (app MCP runs only on releases), so the read must yield undefined, not throw
-      // DRAFT_SIDE_EFFECT_BLOCKED for every draft function call.
-      '__sw_mcpRequest',
-    ]);
-    const draftTarget = Object.create(null);
-    for (const property of draftSafe) {
-      if (property === 'sw' || property === 'ctx') continue;
-      const descriptor = Object.getOwnPropertyDescriptor(sw, property);
-      if (!descriptor) continue;
-      if (property === 'db' || property === 'fs' || property === 'auth' || property === 'billing' || property === 'email'
-          || property === 'payments' || property === 'rooms') {
-        Object.defineProperty(draftTarget, property, {
-          value: property === 'db' ? draftDb : property === 'fs' ? draftFs : property === 'auth' ? draftAuth
-            : property === 'billing' ? draftBilling : property === 'email' ? draftEmail
-            : property === 'rooms' ? draftRooms : draftPayments,
-          enumerable: descriptor.enumerable,
-        });
-      } else {
-        Object.defineProperty(draftTarget, property, descriptor);
-      }
-    }
-    const draftSw = new Proxy(draftTarget, {
-      get(target, property, receiver) {
-        if (property === 'realtime') __sw_realtimeRetired();
-        if (typeof property !== 'string' || draftSafe.has(property)) {
-          return Reflect.get(target, property, receiver);
-        }
-        const err = new Error('sw.' + property + ' is unavailable in a draft because it can affect shared or external state.');
+        const err = new Error('sw.db.scope is unavailable in a draft because scope declarations change shared project configuration. Declare the scope in production code, then open a new draft.');
         err.code = 'DRAFT_SIDE_EFFECT_BLOCKED';
         err.status = 409;
         err.__sw_expose = true;
         throw err;
-      },
+    }
+    draftScopeBlocked.list = draftScopeBlocked;
+    draftScopeBlocked.get = draftScopeBlocked;
+    const draftDb = Object.freeze({
+        query: sw.db.query,
+        batch: sw.db.batch,
+        tx: sw.db.tx,
+        server: sw.db.server,
+        tables: sw.db.tables,
+        from: sw.db.from,
+        count: sw.db.count,
+        insert: sw.db.insert,
+        update: sw.db.update,
+        remove: sw.db.remove,
+        delete: sw.db.delete,
+        scope: Object.freeze(draftScopeBlocked),
+    });
+    const draftFs = Object.freeze({
+        read: sw.fs.read,
+        write: sw.fs.write,
+        delete: sw.fs.delete,
+        move: sw.fs.move,
+        copy: sw.fs.copy,
+        restore: sw.fs.restore,
+        stat: sw.fs.stat,
+        versions: sw.fs.versions,
+        list: sw.fs.list,
+        diff: sw.fs.diff,
+        glob: sw.fs.glob,
+        search: sw.fs.search,
+        replace: sw.fs.replace,
+        uploadUrl: sw.fs.uploadUrl,
+        signedUrl: sw.fs.signedUrl,
+        public_url: sw.fs.public_url,
+        publicUrl: sw.fs.publicUrl,
+        setOwner: sw.fs.setOwner,
+        uploadFromRequest: sw.fs.uploadFromRequest,
+        server: sw.fs.server,
+    });
+    function draftReadNamespace(name, original, methods) {
+        const operations = new Set(Object.keys(original).filter(function (property) {
+            const descriptor = Object.getOwnPropertyDescriptor(original, property);
+            return !property.startsWith('__') && descriptor && typeof descriptor.value === 'function';
+        }));
+        const facade = Object.freeze(Object.assign(Object.create(null), methods));
+        return new Proxy(facade, {
+            get(target, property, receiver) {
+                if (typeof property !== 'string' || Object.prototype.hasOwnProperty.call(target, property)) {
+                    return Reflect.get(target, property, receiver);
+                }
+                if (!operations.has(property))
+                    return undefined;
+                const err = new Error('sw.' + name + '.' + property + ' is unavailable in a draft because it can affect shared or external state.');
+                err.code = 'DRAFT_SIDE_EFFECT_BLOCKED';
+                err.status = 409;
+                err.__sw_expose = true;
+                throw err;
+            },
+        });
+    }
+    const draftAuth = draftReadNamespace('auth', sw.auth, {
+        fromRequest: sw.auth.fromRequest,
+        requireUser: sw.auth.requireUser,
+    });
+    const draftBilling = draftReadNamespace('billing', sw.billing, {
+        has: sw.billing.has,
+        entitlements: sw.billing.entitlements,
+    });
+    const draftEmail = draftReadNamespace('email', sw.email, {
+        send: sw.email.send,
+    });
+    const draftPayments = draftReadNamespace('payments', sw.payments, {
+        checkout: sw.payments.checkout,
+        checkoutForUser: sw.payments.checkoutForUser,
+        portal: sw.payments.portal,
+        portalForUser: sw.payments.portalForUser,
+    });
+    function draftRoomsUnavailable() {
+        const err = new Error('Rooms work on the live app only, not in a preview. Deploy, then open the live app.');
+        err.code = 'ROOMS_DRAFT_UNAVAILABLE';
+        err.status = 409;
+        err.__sw_expose = true;
+        throw err;
+    }
+    const draftRoomsOps = { act: draftRoomsUnavailable, set: draftRoomsUnavailable, send: draftRoomsUnavailable, get: draftRoomsUnavailable };
+    async function draftRoomsLive(name, read) {
+        if (arguments.length !== 2)
+            draftRoomsUnavailable();
+        const result = await read;
+        return Object.assign({}, result, { live: { name: name, state: 'unavailable', reason: 'ROOMS_DRAFT_UNAVAILABLE' } });
+    }
+    const draftRooms = Object.freeze(Object.assign({}, draftRoomsOps, { server: Object.freeze(Object.assign({}, draftRoomsOps)), event: draftRoomsUnavailable, live: draftRoomsLive }));
+    const draftSafe = new Set([
+        'project_id', 'subdomain', 'tier', 'env', 'request_id', 'params',
+        'groups',
+        'crypto', 'db', 'fs', 'auth', 'billing', 'email', 'payments', 'logs', 'rooms', 'sw', 'ctx',
+        '__sw_pendingRefresh', '__sw_pendingCookies', '__sw_pendingBackground',
+        '__sw_readSession',
+        '__sw_afterResponse', '__sw_releaseAfterResponse', '__sw_nativeConsole',
+        'trace', '__sw_trace',
+        '__sw_serverTiming',
+        '__sw_mcpRequest',
+    ]);
+    const draftTarget = Object.create(null);
+    for (const property of draftSafe) {
+        if (property === 'sw' || property === 'ctx')
+            continue;
+        const descriptor = Object.getOwnPropertyDescriptor(sw, property);
+        if (!descriptor)
+            continue;
+        if (property === 'db' || property === 'fs' || property === 'auth' || property === 'billing' || property === 'email'
+            || property === 'payments' || property === 'rooms') {
+            Object.defineProperty(draftTarget, property, {
+                value: property === 'db' ? draftDb : property === 'fs' ? draftFs : property === 'auth' ? draftAuth
+                    : property === 'billing' ? draftBilling : property === 'email' ? draftEmail
+                        : property === 'rooms' ? draftRooms : draftPayments,
+                enumerable: descriptor.enumerable,
+            });
+        }
+        else {
+            Object.defineProperty(draftTarget, property, descriptor);
+        }
+    }
+    const draftSw = new Proxy(draftTarget, {
+        get(target, property, receiver) {
+            if (property === 'realtime')
+                __sw_realtimeRetired();
+            if (typeof property !== 'string' || draftSafe.has(property)) {
+                return Reflect.get(target, property, receiver);
+            }
+            const err = new Error('sw.' + property + ' is unavailable in a draft because it can affect shared or external state.');
+            err.code = 'DRAFT_SIDE_EFFECT_BLOCKED';
+            err.status = 409;
+            err.__sw_expose = true;
+            throw err;
+        },
     });
     Object.defineProperty(draftTarget, 'sw', { value: draftSw, enumerable: true });
     Object.defineProperty(draftTarget, 'ctx', { value: draftSw, enumerable: true });
     Object.freeze(draftTarget);
     return draftSw;
-  }
-  if (__sw_mcpRequest) Object.defineProperty(sw, '__sw_mcpRequest', { value: __sw_mcpRequest });
-  sw.sw = sw;
-  sw.ctx = sw;
-  Object.defineProperty(sw, 'realtime', { get: __sw_realtimeRetired, enumerable: false, configurable: false });
+}
+if (__sw_mcpRequest)
+    Object.defineProperty(sw, '__sw_mcpRequest', { value: __sw_mcpRequest });
+sw.sw = sw;
+sw.ctx = sw;
+Object.defineProperty(sw, 'realtime', { get: __sw_realtimeRetired, enumerable: false, configurable: false });
+return sw;
+`;
 
-  // sol round 6: there is no post-construction "decide the context" step. The
-  // project/developer file view (sw.fs.dev) is CONSTRUCTED at the entrypoint
-  // structurally allowed to have it (run_code, via devFsEnabled) \u2014 see fs.ts and
-  // buildPlatformContext. The function bundle never sets that flag, so no HTTP-
-  // reached context (fetch handlers, cron, queue, job) has dev, and there is no
-  // header to inspect or replay. The round-5 __sw_init classifier is deleted.
-  return sw;
-}`;
+
 var PARTS = [
-    CONTEXT_HEAD_JS,
-    FETCH_JS,
-    CRYPTO_JS,
-    DB_JS,
-    DB_RAW_JS,
-    DB_COMPOSED_WRITES_JS,
-    DB_SESSION_RECOVERY_JS,
-    DB_COALESCE_JS,
-    DB_RESULT_FIDELITY_JS,
-    FS_JS,
-    STORAGE_JS,
-    EMAIL_JS,
-    AI_JS,
-    AGENT_JS,
-    IMAGE_JS,
-    AUTH_JS,
-    JOBS_JS,
-    QUEUE_JS,
-    LOGS_JS,
-    ANALYTICS_JS,
-    RENDER_JS,
-    SEARCH_JS,
-    POSTGRES_JS,
-    INBOX_JS,
-    CONNECT_JS,
-    PAYMENTS_JS,
-    BILLING_JS,
-    GROUPS_JS,
-    TASKS_JS,
-    CRON_JS,
-    CALENDAR_JS,
-    RATE_LIMIT_JS,
-    WEB_JS,
-    NOTIFICATIONS_JS,
-    PUSH_JS,
-    ROOMS_JS,
-    CONTEXT_TAIL_JS
+  CONTEXT_HEAD_JS,
+  FETCH_JS,
+  CRYPTO_JS,
+  DB_JS,
+  DB_RAW_JS,
+  DB_COMPOSED_WRITES_JS,
+  DB_SESSION_RECOVERY_JS,
+  DB_COALESCE_JS,
+  DB_RESULT_FIDELITY_JS,
+  FS_JS,
+  STORAGE_JS,
+  EMAIL_JS,
+  AI_JS,
+  AGENT_JS,
+  IMAGE_JS,
+  AUTH_JS,
+  JOBS_JS,
+  QUEUE_JS,
+  LOGS_JS,
+  ANALYTICS_JS,
+  RENDER_JS,
+  SEARCH_JS,
+  POSTGRES_JS,
+  INBOX_JS,
+  CONNECT_JS,
+  PAYMENTS_JS,
+  BILLING_JS,
+  GROUPS_JS,
+  TASKS_JS,
+  CRON_JS,
+  CALENDAR_JS,
+  RATE_LIMIT_JS,
+  WEB_JS,
+  NOTIFICATIONS_JS,
+  PUSH_JS,
+  ROOMS_JS,
+  CONTEXT_TAIL_JS
 ];
 var PLATFORM_CONTEXT_JS = PARTS.join("\n").trim();
+
+
 var import_declared_data_contract = __toESM(require_declared_data_contract());
+
+
 var PUBLIC_RESULT_MAX_AGE_SECONDS = 120;
+
+
 function declaredBranchReads(shape) {
-    const policy = shape.policy;
-    if (!policy || policy.k !== "a" || !Array.isArray(policy.reads))
-        return null;
-    const reads = policy.reads;
-    const hidden = [];
-    for (const list of reads) {
-        if (!list)
-            continue;
-        for (const column of shape.columns)
-            if (list.indexOf(column.n) === -1 && hidden.indexOf(column.n) === -1)
-                hidden.push(column.n);
-    }
-    return { reads, hidden };
+  const policy = shape.policy;
+  if (!policy || policy.k !== "a" || !Array.isArray(policy.reads)) return null;
+  const reads = policy.reads;
+  const hidden = [];
+  for (const list of reads) {
+    if (!list) continue;
+    for (const column of shape.columns) if (list.indexOf(column.n) === -1 && hidden.indexOf(column.n) === -1) hidden.push(column.n);
+  }
+  return { reads, hidden };
 }
 function declaredReadFields(shape) {
-    const policy = shape.client;
-    return policy.read === true ? shape.columns.filter((column) => column.n !== shape.author).map((column) => column.n) : Array.isArray(policy.read) ? policy.read : [];
+  const policy = shape.client;
+  return policy.read === true ? shape.columns.filter((column) => column.n !== shape.author).map((column) => column.n) : Array.isArray(policy.read) ? policy.read : [];
 }
 function declaredListGetPlan(operation, input, shape, fields, fail) {
-    const helpers = {
-        key(value, column) {
-            if (column && column.t === "integer") {
-                if (typeof value === "number" && Number.isSafeInteger(value))
-                    return value;
-                if (typeof value === "string" && /^(0|-?[1-9][0-9]*)$/.test(value) && value.length <= 17 && Number.isSafeInteger(Number(value)))
-                    return Number(value);
-                return fail(400, "DATA_INPUT_INVALID", "A valid primary key is required.");
-            }
-            if (!(typeof value === "string" && value.length > 0 && value.length <= 4096))
-                return fail(400, "DATA_INPUT_INVALID", "A valid primary key is required.");
-            return value;
-        },
-        and(where2, field, predicate) {
-            if (!Object.prototype.hasOwnProperty.call(where2, field))
-                where2[field] = predicate;
-            else
-                where2[field] = Array.isArray(where2[field]) ? [...where2[field], predicate] : [where2[field], predicate];
-        }
-    };
-    const primaryKey = shape.clientPrimaryKey;
-    const primaryColumn = shape.columns.find((column) => column.n === primaryKey);
-    const branchPolicy = shape.policy;
-    const branchHidden = [];
-    if (branchPolicy && branchPolicy.k === "a" && Array.isArray(branchPolicy.reads)) {
-        for (const list of branchPolicy.reads) {
-            if (!list)
-                continue;
-            for (const column of shape.columns)
-                if (list.indexOf(column.n) === -1 && branchHidden.indexOf(column.n) === -1)
-                    branchHidden.push(column.n);
-        }
+  const helpers = {
+
+
+
+    key(value, column) {
+      if (column && column.t === "integer") {
+        if (typeof value === "number" && Number.isSafeInteger(value)) return value;
+        if (typeof value === "string" && /^(0|-?[1-9][0-9]*)$/.test(value) && value.length <= 17 && Number.isSafeInteger(Number(value))) return Number(value);
+        return fail(400, "DATA_INPUT_INVALID", "A valid primary key is required.");
+      }
+      if (!(typeof value === "string" && value.length > 0 && value.length <= 4096)) return fail(400, "DATA_INPUT_INVALID", "A valid primary key is required.");
+      return value;
+    },
+    and(where2, field, predicate) {
+      if (!Object.prototype.hasOwnProperty.call(where2, field)) where2[field] = predicate;
+      else where2[field] = Array.isArray(where2[field]) ? [...where2[field], predicate] : [where2[field], predicate];
     }
-    const where = Object.create(null);
-    if (operation === "get")
-        helpers.and(where, primaryKey, helpers.key(input.id, primaryColumn));
-    else {
-        if (input.where !== void 0) {
-            const filters = input.where;
-            if (!filters || typeof filters !== "object" || Array.isArray(filters))
-                fail(400, "DATA_INPUT_INVALID", "where must be an object.");
-            for (const field of Object.keys(filters)) {
-                const column = shape.columns.find((item) => item.n === field);
-                const value = filters[field];
-                if (branchHidden.indexOf(field) !== -1) {
-                    fail(400, "DATA_INPUT_INVALID", 'where cannot name "' + field + '": an access branch of this table leaves it out, so only columns every reader may read can filter.');
-                }
-                if (!fields.includes(field) || !column || column.t === "json" || column.t === "blob" || !(value === null || typeof value === "string" || typeof value === "boolean" || typeof value === "number" && Number.isFinite(value))) {
-                    fail(400, "DATA_INPUT_INVALID", "where accepts only equality values for readable scalar fields.");
-                }
-                helpers.and(where, field, value);
-            }
-        }
-        if (input.after !== void 0 && input.after !== null)
-            helpers.and(where, primaryKey, { gt: helpers.key(input.after, primaryColumn) });
+  };
+  const primaryKey = shape.clientPrimaryKey;
+  const primaryColumn = shape.columns.find((column) => column.n === primaryKey);
+  const branchPolicy = shape.policy;
+  const branchHidden = [];
+  if (branchPolicy && branchPolicy.k === "a" && Array.isArray(branchPolicy.reads)) {
+    for (const list of branchPolicy.reads) {
+      if (!list) continue;
+      for (const column of shape.columns) if (list.indexOf(column.n) === -1 && branchHidden.indexOf(column.n) === -1) branchHidden.push(column.n);
     }
-    const limit = operation === "get" ? 1 : input.limit === void 0 ? 25 : input.limit;
-    if (!Number.isInteger(limit) || limit < 1 || limit > 100)
-        fail(400, "DATA_INPUT_INVALID", "limit must be an integer from 1 to 100.");
-    if (input.can !== void 0 && input.can !== true && input.can !== false)
-        fail(400, "DATA_INPUT_INVALID", "can must be true or false.");
-    const options = { where, columns: [...fields], order: [[primaryKey, "asc"]], limit: operation === "get" ? 1 : limit + 1 };
-    if (input.can === true)
-        options.can = true;
-    return { limit, primaryKey, options };
+  }
+  const where = /* @__PURE__ */ Object.create(null);
+  if (operation === "get") helpers.and(where, primaryKey, helpers.key(input.id, primaryColumn));
+  else {
+    if (input.where !== void 0) {
+      const filters = input.where;
+      if (!filters || typeof filters !== "object" || Array.isArray(filters)) fail(400, "DATA_INPUT_INVALID", "where must be an object.");
+      for (const field of Object.keys(filters)) {
+        const column = shape.columns.find((item) => item.n === field);
+        const value = filters[field];
+        if (branchHidden.indexOf(field) !== -1) {
+          fail(400, "DATA_INPUT_INVALID", 'where cannot name "' + field + '": an access branch of this table leaves it out, so only columns every reader may read can filter.');
+        }
+        if (!fields.includes(field) || !column || column.t === "json" || column.t === "blob" || !(value === null || typeof value === "string" || typeof value === "boolean" || typeof value === "number" && Number.isFinite(value))) {
+          fail(400, "DATA_INPUT_INVALID", "where accepts only equality values for readable scalar fields.");
+        }
+        helpers.and(where, field, value);
+      }
+    }
+    if (input.after !== void 0 && input.after !== null) helpers.and(where, primaryKey, { gt: helpers.key(input.after, primaryColumn) });
+  }
+  const limit = operation === "get" ? 1 : input.limit === void 0 ? 25 : input.limit;
+  if (!Number.isInteger(limit) || limit < 1 || limit > 100) fail(400, "DATA_INPUT_INVALID", "limit must be an integer from 1 to 100.");
+  if (input.can !== void 0 && input.can !== true && input.can !== false) fail(400, "DATA_INPUT_INVALID", "can must be true or false.");
+  const options = { where, columns: [...fields], order: [[primaryKey, "asc"]], limit: operation === "get" ? 1 : limit + 1 };
+  if (input.can === true) options.can = true;
+  return { limit, primaryKey, options };
 }
 function declaredListGetPayload(operation, rows, fields, primaryKey, limit) {
-    const helpers = {
-        project(row) {
-            if (row === null || row === void 0)
-                return null;
-            const result = Object.create(null);
-            for (const field of fields)
-                if (Object.prototype.hasOwnProperty.call(row, field))
-                    result[field] = row[field];
-            const can = row.can;
-            if (can && typeof can === "object") {
-                result.can = { update: can.update === true, delete: can.delete === true };
-                result.mine = row.mine === true;
-            }
-            return result;
-        }
-    };
-    if (operation === "get")
-        return { data: helpers.project(rows[0]) };
-    const hasMore = rows.length > limit;
-    const page = rows.slice(0, limit);
-    return {
-        data: page.map((row) => helpers.project(row)),
-        next: hasMore ? page[page.length - 1][primaryKey] : null,
-        has_more: hasMore
-    };
+  const helpers = {
+    project(row) {
+      if (row === null || row === void 0) return null;
+      const result = /* @__PURE__ */ Object.create(null);
+      for (const field of fields) if (Object.prototype.hasOwnProperty.call(row, field)) result[field] = row[field];
+      const can = row.can;
+      if (can && typeof can === "object") {
+        result.can = { update: can.update === true, delete: can.delete === true };
+        result.mine = row.mine === true;
+      }
+      return result;
+    }
+  };
+  if (operation === "get") return { data: helpers.project(rows[0]) };
+  const hasMore = rows.length > limit;
+  const page = rows.slice(0, limit);
+  return {
+    data: page.map((row) => helpers.project(row)),
+    next: hasMore ? page[page.length - 1][primaryKey] : null,
+    has_more: hasMore
+  };
 }
-var DECLARED_DATA_READ_PLAN_SOURCE = `const __sw_dataBranchReads = (${declaredBranchReads.toString()});
-const __sw_dataReadFields = (${declaredReadFields.toString()});
-const __sw_dataListGetPlan = (${declaredListGetPlan.toString()});
-const __sw_dataListGetPayload = (${declaredListGetPayload.toString()});`;
-var DECLARED_DATA_RUNTIME_JS = String.raw `
-// The generated client's read-field grant and list/get translation, shared
-// with the platform's direct managed browser read (declared-data-read-plan.ts).
-${DECLARED_DATA_READ_PLAN_SOURCE}
+var DECLARED_DATA_READ_PLAN_SOURCE = `;
+const __sw_dataBranchReads = ($), { declaredBranchReads, toString };
+();
+;
+const __sw_dataReadFields = ($), { declaredReadFields, toString };
+();
+;
+const __sw_dataListGetPlan = ($), { declaredListGetPlan, toString };
+();
+;
+const __sw_dataListGetPayload = ($), { declaredListGetPayload, toString };
+();
+;
+`;
+
+
+var DECLARED_DATA_RUNTIME_JS = String.raw`;
+$;
+{
+    DECLARED_DATA_READ_PLAN_SOURCE;
+}
 let __sw_dataDigestPromise;
 let __sw_dataLegacyDigestPromise;
-// Platform-private bridge into the structured database closure. Only this
-// generated handler can brand a db namespace for one declared public SELECT;
-// customer code never receives an option or capability object it can forge.
-// Per-request private reader. Decoded claims are selectors only; the managed
-// API independently verifies the original token before any data statement.
 const __sw_generatedOwnerValues = Object.values;
 const __sw_generatedOwnerSome = Function.prototype.call.bind(Array.prototype.some);
 const __sw_generatedOwnerFinite = Number.isFinite;
@@ -16498,1420 +16450,1550 @@ const __sw_declaredPublicReadBridge = new WeakMap();
 const __sw_declaredPublicReadGet = WeakMap.prototype.get.bind(__sw_declaredPublicReadBridge);
 const __sw_declaredPublicReadSet = WeakMap.prototype.set.bind(__sw_declaredPublicReadBridge);
 const __sw_declaredPublicReadDelete = WeakMap.prototype.delete.bind(__sw_declaredPublicReadBridge);
-// ── PUBLIC-RESULT TALLY ────────────────────────────────────
-// The ONLY evidence the platform accepts for "this answer cannot differ by who
-// asked". Each structured read reports, from inside the database closure,
-// whether it resolved to the PUBLIC projection with no identity contribution:
-// no verified user, no visitor, no owner branch ORed into the predicate (see
-// db-public-read.ts). A request whose reads were ALL that — and which
-// performed at least one — produced rows that are a pure function of the
-// declared policy and the request's own parameters, which is the entire
-// precondition for letting the next anonymous reader share the answer.
-//
-// Keyed by the request's own db namespace, which the context builds fresh per
-// request. Isolate-level counters would leak one request's verdict into the
-// next; a WeakMap cannot.
-//
-// THE INVARIANT A NEW DECLARED OPERATION MUST KEEP: a marker needs at least one
-// POSITIVE note and no negative one, and __sw_dataRead is the only way the
-// handler below reads. An operation added here that reads through some other
-// verb would contribute rows nothing reported on — so route it through
-// __sw_dataRead, or have its verb note too. (__sw_dataRead was __sw_dataFrom
-// until it grew a second verb; aggregate reads through it, and sw.db.aggregate
-// notes from inside the database closure exactly as sw.db.from does.)
 const __sw_publicResultTally = new WeakMap();
 const __sw_publicResultTallyGet = WeakMap.prototype.get.bind(__sw_publicResultTally);
 const __sw_publicResultTallySet = WeakMap.prototype.set.bind(__sw_publicResultTally);
 function __sw_declaredPublicReadNote(db, guest, table) {
-  const tally = __sw_publicResultTallyGet(db) || { guest: 0, identity: 0, tables: [] };
-  if (guest) {
-    tally.guest++;
-    // Every table whose rows are IN the answer, so the edge can tag the entry
-    // for purge by a committed write to any of them. Only this side knows a
-    // relation's child table; the browser's request never names it.
-    const name = String(table || '').toLowerCase();
-    if (name && tally.tables.indexOf(name) === -1) tally.tables.push(name);
-  } else tally.identity++;
-  __sw_publicResultTallySet(db, tally);
+    const tally = __sw_publicResultTallyGet(db) || { guest: 0, identity: 0, tables: [] };
+    if (guest) {
+        tally.guest++;
+        const name = String(table || '').toLowerCase();
+        if (name && tally.tables.indexOf(name) === -1)
+            tally.tables.push(name);
+    }
+    else
+        tally.identity++;
+    __sw_publicResultTallySet(db, tally);
 }
 function __sw_publicResultOnly(db) {
-  const tally = __sw_publicResultTallyGet(db);
-  return !!tally && tally.guest > 0 && tally.identity === 0 && tally.tables.length > 0 ? tally : null;
+    const tally = __sw_publicResultTallyGet(db);
+    return !!tally && tally.guest > 0 && tally.identity === 0 && tally.tables.length > 0 ? tally : null;
 }
-// Record the verdict for the response layer to stamp. The DECISION is made
-// here and nowhere else; function-bundle.ts only carries it onto the response,
-// the same way it carries the database bookmark.
-//
-// Parked in a WeakMap rather than assigned onto the context: a draft artifact
-// wraps the context in a deny-by-default capability guard, so writing a new
-// property there reads as a customer reaching for an unknown capability and is
-// refused (DRAFT_SIDE_EFFECT_BLOCKED). A side table needs no such permission
-// and cannot be reached by customer code, which is the same reason the bridge
-// above is one.
 const __sw_publicResultVerdict = new WeakMap();
 const __sw_publicResultVerdictGet = WeakMap.prototype.get.bind(__sw_publicResultVerdict);
 const __sw_publicResultVerdictSet = WeakMap.prototype.set.bind(__sw_publicResultVerdict);
 function __sw_publicResultVerdictOf(sw) {
-  return (sw && __sw_publicResultVerdictGet(sw)) || null;
+    return (sw && __sw_publicResultVerdictGet(sw)) || null;
 }
 function __sw_dataPublicResult(sw, env, payload) {
-  const tally = sw && sw.db ? __sw_publicResultOnly(sw.db) : null;
-  if (tally && env && env.SW_RELEASE_ID) {
-    __sw_publicResultVerdictSet(sw, {
-      maxAgeSeconds: ${PUBLIC_RESULT_MAX_AGE_SECONDS},
-      policy: env.SW_RELEASE_ID,
-      tables: tally.tables.slice().sort(),
-    });
-  }
-  return payload;
+    const tally = sw && sw.db ? __sw_publicResultOnly(sw.db) : null;
+    if (tally && env && env.SW_RELEASE_ID) {
+        __sw_publicResultVerdictSet(sw, {
+            maxAgeSeconds: $
+        }, { PUBLIC_RESULT_MAX_AGE_SECONDS }, policy, env.SW_RELEASE_ID, tables, tally.tables.slice().sort());
+    }
+    ;
 }
+return payload;
 function __sw_dataFail(status, code, message) {
-  const error = new Error(message);
-  error.status = status; error.code = code; error.__sw_expose = true;
-  throw error;
+    const error = new Error(message);
+    error.status = status;
+    error.code = code;
+    error.__sw_expose = true;
+    throw error;
 }
 function __sw_dataIsDuplicateConflict(error) {
-  let current = error;
-  for (let depth = 0; current && depth < 4; depth++) {
-    const code = typeof current.code === 'string' ? current.code : '';
-    const message = typeof current.message === 'string' ? current.message : '';
-    if (code === 'DATA_CONFLICT' || /^SQLITE_CONSTRAINT_(?:UNIQUE|PRIMARYKEY)$/i.test(code)
-      || /^(?:D1_ERROR:\s*)?(?:UNIQUE|PRIMARY KEY) constraint failed(?:\s*:|$)/i.test(message)) return true;
-    current = current.original;
-  }
-  return false;
+    let current = error;
+    for (let depth = 0; current && depth < 4; depth++) {
+        const code = typeof current.code === 'string' ? current.code : '';
+        const message = typeof current.message === 'string' ? current.message : '';
+        if (code === 'DATA_CONFLICT' || /^SQLITE_CONSTRAINT_(?:UNIQUE|PRIMARYKEY)$/i.test(code)
+            || /^(?:D1_ERROR:\s*)?(?:UNIQUE|PRIMARY KEY) constraint failed(?:\s*:|$)/i.test(message))
+            return true;
+        current = current.original;
+    }
+    return false;
 }
 function __sw_dataPolicyUsesMembership(policy, table) {
-  if (!policy || typeof policy !== 'object') return false;
-  if (policy.k === 'm') return policy.m && policy.m.m === table && !policy.m.og;
-  if (policy.k === 'a') return policy.p.some(item => __sw_dataPolicyUsesMembership(item, table));
-  // allOf: a membership table named by either slot stays closed to browser writes.
-  if (policy.k === 'n') return __sw_dataPolicyUsesMembership(policy.g, table) || __sw_dataPolicyUsesMembership(policy.w, table);
-  if (policy.k === 'p') return __sw_dataPolicyUsesMembership(policy.p, table);
-  return false;
+    if (!policy || typeof policy !== 'object')
+        return false;
+    if (policy.k === 'm')
+        return policy.m && policy.m.m === table && !policy.m.og;
+    if (policy.k === 'a')
+        return policy.p.some(item => __sw_dataPolicyUsesMembership(item, table));
+    if (policy.k === 'n')
+        return __sw_dataPolicyUsesMembership(policy.g, table) || __sw_dataPolicyUsesMembership(policy.w, table);
+    if (policy.k === 'p')
+        return __sw_dataPolicyUsesMembership(policy.p, table);
+    return false;
 }
 function __sw_dataObject(value, label) {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    __sw_dataFail(400, 'DATA_INPUT_INVALID', label + ' must be an object.');
-  }
-  return value;
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        __sw_dataFail(400, 'DATA_INPUT_INVALID', label + ' must be an object.');
+    }
+    return value;
 }
 function __sw_dataKeys(value, allowed, label) {
-  __sw_dataObject(value, label);
-  for (const key of Object.keys(value)) {
-    if (!allowed.includes(key)) __sw_dataFail(400, 'DATA_INPUT_INVALID', label + ' contains unsupported field ' + key + '.');
-  }
+    __sw_dataObject(value, label);
+    for (const key of Object.keys(value)) {
+        if (!allowed.includes(key))
+            __sw_dataFail(400, 'DATA_INPUT_INVALID', label + ' contains unsupported field ' + key + '.');
+    }
 }
 async function __sw_dataReadBody(request) {
-  if ((request.headers.get('content-type') || '').split(';')[0].trim().toLowerCase() !== 'application/json') {
-    __sw_dataFail(415, 'DATA_JSON_REQUIRED', 'Send a JSON request.');
-  }
-  const reader = request.body && request.body.getReader();
-  if (!reader) __sw_dataFail(400, 'DATA_INPUT_INVALID', 'A JSON request body is required.');
-  const chunks = []; let size = 0;
-  try {
-    while (true) {
-      const part = await reader.read();
-      if (part.done) break;
-      size += part.value.byteLength;
-      if (size > 65536) {
-        await reader.cancel();
-        __sw_dataFail(413, 'DATA_INPUT_TOO_LARGE', 'Data requests must be at most 64 KiB.');
-      }
-      chunks.push(part.value);
+    if ((request.headers.get('content-type') || '').split(';')[0].trim().toLowerCase() !== 'application/json') {
+        __sw_dataFail(415, 'DATA_JSON_REQUIRED', 'Send a JSON request.');
     }
-  } finally { reader.releaseLock(); }
-  const bytes = new Uint8Array(size); let offset = 0;
-  for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
-  try { return JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)); }
-  catch (_) { __sw_dataFail(400, 'DATA_INPUT_INVALID', 'The request body is not valid JSON.'); }
+    const reader = request.body && request.body.getReader();
+    if (!reader)
+        __sw_dataFail(400, 'DATA_INPUT_INVALID', 'A JSON request body is required.');
+    const chunks = [];
+    let size = 0;
+    try {
+        while (true) {
+            const part = await reader.read();
+            if (part.done)
+                break;
+            size += part.value.byteLength;
+            if (size > 65536) {
+                await reader.cancel();
+                __sw_dataFail(413, 'DATA_INPUT_TOO_LARGE', 'Data requests must be at most 64 KiB.');
+            }
+            chunks.push(part.value);
+        }
+    }
+    finally {
+        reader.releaseLock();
+    }
+    const bytes = new Uint8Array(size);
+    let offset = 0;
+    for (const chunk of chunks) {
+        bytes.set(chunk, offset);
+        offset += chunk.byteLength;
+    }
+    try {
+        return JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
+    }
+    catch (_) {
+        __sw_dataFail(400, 'DATA_INPUT_INVALID', 'The request body is not valid JSON.');
+    }
 }
 function __sw_dataOrigin(request) {
-  // This endpoint is browser-facing even for public/visitor tables. Require
-  // exact same-origin POSTs independently of whether a session was supplied.
-  const origin = request.headers.get('origin');
-  if (!origin) __sw_dataFail(400, 'ORIGIN_REQUIRED', 'Data requests require the app Origin header.');
-  if (origin !== new URL(request.url).origin) {
-    __sw_dataFail(403, 'DATA_ORIGIN_FORBIDDEN', 'Data requests must come from this app origin.');
-  }
+    const origin = request.headers.get('origin');
+    if (!origin)
+        __sw_dataFail(400, 'ORIGIN_REQUIRED', 'Data requests require the app Origin header.');
+    if (origin !== new URL(request.url).origin) {
+        __sw_dataFail(403, 'DATA_ORIGIN_FORBIDDEN', 'Data requests must come from this app origin.');
+    }
 }
 function __sw_dataKey(value, column) {
-  // A whole-number key is the JavaScript-safe number the generated client
-  // types it as. Canonical decimal text inside that range (a URL parameter)
-  // is normalized to that number here, and the normalized value is the one
-  // returned and bound. A text (uuid) key is a bounded string.
-  if (column.t === 'integer') {
-    if (typeof value === 'number' && Number.isSafeInteger(value)) return value;
-    if (typeof value === 'string' && /^(0|-?[1-9][0-9]*)$/.test(value) && value.length <= 17 && Number.isSafeInteger(Number(value))) return Number(value);
-    __sw_dataFail(400, 'DATA_INPUT_INVALID', 'A valid primary key is required.');
-  }
-  if (!(typeof value === 'string' && value.length > 0 && value.length <= 4096)) __sw_dataFail(400, 'DATA_INPUT_INVALID', 'A valid primary key is required.');
-  return value;
+    if (column.t === 'integer') {
+        if (typeof value === 'number' && Number.isSafeInteger(value))
+            return value;
+        if (typeof value === 'string' && /^(0|-?[1-9][0-9]*)$/.test(value) && value.length <= 17 && Number.isSafeInteger(Number(value)))
+            return Number(value);
+        __sw_dataFail(400, 'DATA_INPUT_INVALID', 'A valid primary key is required.');
+    }
+    if (!(typeof value === 'string' && value.length > 0 && value.length <= 4096))
+        __sw_dataFail(400, 'DATA_INPUT_INVALID', 'A valid primary key is required.');
+    return value;
 }
 function __sw_dataAnd(where, field, predicate) {
-  if (!Object.prototype.hasOwnProperty.call(where, field)) where[field] = predicate;
-  else where[field] = Array.isArray(where[field]) ? [...where[field], predicate] : [where[field], predicate];
+    if (!Object.prototype.hasOwnProperty.call(where, field))
+        where[field] = predicate;
+    else
+        where[field] = Array.isArray(where[field]) ? [...where[field], predicate] : [where[field], predicate];
 }
-// Rows arrive already in their declared types: every structured result is
-// decoded once at the database seam (booleans, json, blob), so this only
-// narrows a row to the fields the client may read.
 function __sw_dataProject(row, fields) {
-  // A column an access branch withheld from this row is absent, not null.
-  if (row === null || row === undefined) return null;
-  const result = Object.create(null);
-  for (const field of fields) if (Object.prototype.hasOwnProperty.call(row, field)) result[field] = row[field];
-  return result;
+    if (row === null || row === undefined)
+        return null;
+    const result = Object.create(null);
+    for (const field of fields)
+        if (Object.prototype.hasOwnProperty.call(row, field))
+            result[field] = row[field];
+    return result;
 }
-// Named spans for this handler's own awaits. The context's
-// private timing record is present only behind the trusted marker, so an
-// ordinary request pays a property read and nothing else. CPU-only work is not
-// worth a span: the clock does not advance without awaited I/O.
 function __sw_dataSpan(sw, name, startedAt) {
-  const timing = sw && sw.__sw_serverTiming;
-  if (!timing || timing.entries.length >= 80) return;
-  const duration = Date.now() - startedAt;
-  if (!Number.isFinite(duration) || duration < 0) return;
-  timing.entries.push({ name: name, durationMs: duration });
+    const timing = sw && sw.__sw_serverTiming;
+    if (!timing || timing.entries.length >= 80)
+        return;
+    const duration = Date.now() - startedAt;
+    if (!Number.isFinite(duration) || duration < 0)
+        return;
+    timing.entries.push({ name: name, durationMs: duration });
 }
 async function __sw_dataAuthorizeRead(request, sw, shape, policy) {
-  const visitor = policy.identity === 'visitor';
-  if (visitor && shape.visitors !== true) {
-    __sw_dataFail(409, 'DATA_IDENTITY_MISMATCH', 'Visitor data access requires owner({ visitors: true }) on this table.');
-  }
-  if (!visitor && !policy.publicRead) {
-    const started = Date.now();
-    const user = await sw.auth.fromRequest(request);
-    __sw_dataSpan(sw, 'sw_data_authz', started);
-    if (!user || user.id === undefined || user.id === null) {
-      const message = shape.author
-        ? 'This shared table is a signed-in shared view, and this data request has no verified user. Sign in to read it. For intentionally public catalog data, declare an explicit client.read column allowlist plus client.publicRead in db/schema.ts, run \`somewhere deploy\`, then use the generated \`somewhere:data\` client (docs({ topic: \'declared-data\' })). client.publicRead does not grant anonymous authority to ordinary sw.db.from calls in custom functions.'
-        : 'This data operation requires a signed-in user.';
-      __sw_dataFail(401, 'AUTH_REQUIRED', message);
+    const visitor = policy.identity === 'visitor';
+    if (visitor && shape.visitors !== true) {
+        __sw_dataFail(409, 'DATA_IDENTITY_MISMATCH', 'Visitor data access requires owner({ visitors: true }) on this table.');
     }
-  }
+    if (!visitor && !policy.publicRead) {
+        const started = Date.now();
+        const user = await sw.auth.fromRequest(request);
+        __sw_dataSpan(sw, 'sw_data_authz', started);
+        if (!user || user.id === undefined || user.id === null) {
+            const message = shape.author
+                ? 'This shared table is a signed-in shared view, and this data request has no verified user. Sign in to read it. For intentionally public catalog data, declare an explicit client.read column allowlist plus client.publicRead in db/schema.ts, run \`somewhere deploy\`, then use the generated \`somewhere:data\` client (docs({ topic: \'declared-data\' })). client.publicRead does not grant anonymous authority to ordinary sw.db.from calls in custom functions.'
+                : 'This data operation requires a signed-in user.';
+            __sw_dataFail(401, 'AUTH_REQUIRED', message);
+        }
+    }
 }
 async function __sw_dataRead(sw, table, policy, options, verb) {
-  if (policy.publicRead) {
-    __sw_declaredPublicReadSet(sw.db, {
-      table,
-      identity: policy.identity,
-      where: typeof policy.publicRead === 'object' ? policy.publicRead.where : Object.create(null),
-    });
-  }
-  const started = Date.now();
-  try { return await (verb === 'aggregate' ? sw.db.aggregate(table, options) : sw.db.from(table, options)); }
-  finally {
-    if (policy.publicRead) __sw_declaredPublicReadDelete(sw.db);
-    __sw_dataSpan(sw, 'sw_data_op', started);
-  }
+    if (policy.publicRead) {
+        __sw_declaredPublicReadSet(sw.db, {
+            table,
+            identity: policy.identity,
+            where: typeof policy.publicRead === 'object' ? policy.publicRead.where : Object.create(null),
+        });
+    }
+    const started = Date.now();
+    try {
+        return await (verb === 'aggregate' ? sw.db.aggregate(table, options) : sw.db.from(table, options));
+    }
+    finally {
+        if (policy.publicRead)
+            __sw_declaredPublicReadDelete(sw.db);
+        __sw_dataSpan(sw, 'sw_data_op', started);
+    }
 }
-/** Whether this release's pinned contract grants the browser any operation (hasDeclaredDataAccess, at run time). */
-// Load-time Object.values and Array#some: customer code may replace globals in an earlier request.
 function __sw_dataAnyClientGrant() {
-  return __sw_generatedOwnerSome(__sw_generatedOwnerValues(__SW_DATA_SCHEMA), ({ client }) => client && (client.read !== false || client.create !== null
-    || client.update !== null || client.delete || client.intake !== undefined || client.links !== undefined));
+    return __sw_generatedOwnerSome(__sw_generatedOwnerValues(__SW_DATA_SCHEMA), ({ client }) => client && (client.read !== false || client.create !== null
+        || client.update !== null || client.delete || client.intake !== undefined || client.links !== undefined));
 }
-/** The exact current data contract digest (one computation per isolate). */
 function __sw_dataContractDigest() {
-  if (!__sw_dataDigestPromise) {
-    __sw_dataDigestPromise = crypto.subtle.digest('SHA-256', new TextEncoder().encode(__SW_DATA_CONTRACT_JSON))
-      .then(bytes => Array.from(new Uint8Array(bytes), byte => byte.toString(16).padStart(2, '0')).join(''));
-  }
-  return __sw_dataDigestPromise;
+    if (!__sw_dataDigestPromise) {
+        __sw_dataDigestPromise = crypto.subtle.digest('SHA-256', new TextEncoder().encode(__SW_DATA_CONTRACT_JSON))
+            .then(bytes => Array.from(new Uint8Array(bytes), byte => byte.toString(16).padStart(2, '0')).join(''));
+    }
+    return __sw_dataDigestPromise;
 }
-// ── Public intake ─────────────────────
-// Selected before any user or visitor is resolved: a submission is public even when the browser is
-// signed in, and it never joins a user, visitor, link or creator authority. The door checks only the
-// declaration, the accepted fields, the key and the reference's declared type; whether the target
-// exists, is public and is eligible is decided by the platform in the same transaction as the write.
 function __sw_dataIntakeReference(value, column) {
-  if (column && column.t === 'integer' && typeof value === 'number' && Number.isSafeInteger(value)) return value;
-  if (column && column.t === 'bigint' && typeof value === 'string' && /^(0|-?[1-9][0-9]{0,18})$/.test(value)
-    && BigInt(value) >= -9223372036854775808n && BigInt(value) <= 9223372036854775807n) return value;
-  if (column && column.t === 'text' && typeof value === 'string') return value;
-  __sw_dataFail(400, 'DATA_INPUT_INVALID', 'A valid reference is required.');
+    if (column && column.t === 'integer' && typeof value === 'number' && Number.isSafeInteger(value))
+        return value;
+    if (column && column.t === 'bigint' && typeof value === 'string' && /^(0|-?[1-9][0-9]{0,18})$/.test(value)
+        && BigInt(value) >= -9223372036854775808n && BigInt(value) <= 9223372036854775807n)
+        return value;
+    if (column && column.t === 'text' && typeof value === 'string')
+        return value;
+    __sw_dataFail(400, 'DATA_INPUT_INVALID', 'A valid reference is required.');
 }
 async function __sw_dataIntake(request, sw, input, table, shape) {
-  if (__sw_artifactExecution !== 'standard') __sw_dataFail(409, 'INTAKE_DRAFT_UNAVAILABLE', 'Public submissions work on the live app only.');
-  // The exact current contract only: the operation exists only in a client built for it.
-  if (input.contract !== await __sw_dataContractDigest()) __sw_dataFail(409, 'DATA_CONTRACT_MISMATCH', 'The app data contract changed. Reload the app before trying again.');
-  if (new URL(request.url).search !== '') __sw_dataFail(400, 'DATA_INPUT_INVALID', 'Public submissions take no URL query.');
-  const intake = shape.client && shape.client.intake;
-  if (!intake || JSON.parse(__SW_DATA_CONTRACT_JSON).insert_receipt !== 'insert-v1') __sw_dataFail(403, 'DATA_ACCESS_DENIED', 'This table does not accept public submissions.');
-  if (typeof input.operation_key !== 'string' || !/^[0-9a-f]{32}$/.test(input.operation_key)) {
-    __sw_dataFail(400, 'IDEMPOTENCY_KEY_INVALID', 'The operation key must be 32 lowercase hexadecimal characters.');
-  }
-  const target = Object.prototype.hasOwnProperty.call(__SW_DATA_SCHEMA, intake.target.table) ? __SW_DATA_SCHEMA[intake.target.table] : null;
-  const reference = __sw_dataIntakeReference(input.reference, target && target.columns.find(column => column.n === intake.target.field));
-  __sw_dataKeys(input.values, intake.fields, 'values');
-  const values = Object.keys(input.values).map(column => ({ column, value: input.values[column] }));
-  return sw.db.__sw_clientIntake.submit({ table, reference, values, key: input.operation_key }, request.headers.get('cf-connecting-ip'));
+    if (__sw_artifactExecution !== 'standard')
+        __sw_dataFail(409, 'INTAKE_DRAFT_UNAVAILABLE', 'Public submissions work on the live app only.');
+    if (input.contract !== await __sw_dataContractDigest())
+        __sw_dataFail(409, 'DATA_CONTRACT_MISMATCH', 'The app data contract changed. Reload the app before trying again.');
+    if (new URL(request.url).search !== '')
+        __sw_dataFail(400, 'DATA_INPUT_INVALID', 'Public submissions take no URL query.');
+    const intake = shape.client && shape.client.intake;
+    if (!intake || JSON.parse(__SW_DATA_CONTRACT_JSON).insert_receipt !== 'insert-v1')
+        __sw_dataFail(403, 'DATA_ACCESS_DENIED', 'This table does not accept public submissions.');
+    if (typeof input.operation_key !== 'string' || !/^[0-9a-f]{32}$/.test(input.operation_key)) {
+        __sw_dataFail(400, 'IDEMPOTENCY_KEY_INVALID', 'The operation key must be 32 lowercase hexadecimal characters.');
+    }
+    const target = Object.prototype.hasOwnProperty.call(__SW_DATA_SCHEMA, intake.target.table) ? __SW_DATA_SCHEMA[intake.target.table] : null;
+    const reference = __sw_dataIntakeReference(input.reference, target && target.columns.find(column => column.n === intake.target.field));
+    __sw_dataKeys(input.values, intake.fields, 'values');
+    const values = Object.keys(input.values).map(column => ({ column, value: input.values[column] }));
+    return sw.db.__sw_clientIntake.submit({ table, reference, values, key: input.operation_key }, request.headers.get('cf-connecting-ip'));
 }
 async function __sw_handleDeclaredData(request, sw, env) {
-  if (request.method !== 'POST') __sw_dataFail(405, 'METHOD_NOT_ALLOWED', 'Data operations use POST.');
-  __sw_dataOrigin(request);
-  const input = await __sw_dataReadBody(request);
-  __sw_dataObject(input, 'Request');
-  const operation = input.operation;
-  const extras = operation === 'list' ? ['limit', 'after', 'where', 'can']
-    : operation === 'relation_list' ? ['relation', 'parent_id', 'limit', 'after', 'where', 'link']
-    : operation === 'aggregate' ? ['count', 'sum', 'avg', 'min', 'max', 'groupBy', 'where', 'having', 'order', 'limit']
-    : operation === 'get' ? ['id', 'link', 'can'] : operation === 'delete' ? ['id']
-    : operation === 'create' ? ['values', 'link', 'idempotency_key'] : operation === 'update' ? ['id', 'values', 'link']
-    // Row links (declared-links.ts): the owner's link administration.
-    : operation === 'link_create' ? ['id', 'access', 'expires_in_days'] : operation === 'link_list' ? ['id']
-    : operation === 'link_revoke' ? ['id', 'link_id']
-    // Anonymous creation (declared-links.ts): no user, no visitor, its own key and creator secret.
-    : operation === 'create_anonymous' ? ['values', 'operation_key', 'creator_secret']
-    // Public intake (below): no user, no visitor, no link; the target's owner is the platform's to resolve.
-    : operation === 'intake' ? ['reference', 'values', 'operation_key'] : null;
-  if (!extras) __sw_dataFail(400, 'DATA_OPERATION_INVALID', 'Use list, get, relation_list, aggregate, create, update, or delete.');
-  __sw_dataKeys(input, ['contract', 'table', 'operation', ...extras], 'Request');
-  // A release that grants the browser nothing publishes no contract digest
-  // (app description data.client.status 'not_declared'), so no request can
-  // match one. Refuse as access, not as a stale client, whatever table is named.
-  if (!__sw_dataAnyClientGrant()) {
-    __sw_dataFail(403, 'DATA_ACCESS_DENIED', 'This app declares no browser data access. Use the table from a function with sw.db, or add a client block in db/schema.ts.');
-  }
-  __sw_dataContractDigest();
-  const keyed = Object.prototype.hasOwnProperty.call(input, 'idempotency_key');
-  let matchingContract = input.contract === await __sw_dataDigestPromise;
-  if (!matchingContract && !keyed) {
-    const legacy = JSON.parse(__SW_DATA_CONTRACT_JSON);
-    if (legacy.insert_receipt === 'insert-v1') {
-      if (!__sw_dataLegacyDigestPromise) {
-        delete legacy.insert_receipt;
-        __sw_dataLegacyDigestPromise = crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(legacy)))
-          .then(bytes => Array.from(new Uint8Array(bytes), byte => byte.toString(16).padStart(2, '0')).join(''));
-      }
-      matchingContract = input.contract === await __sw_dataLegacyDigestPromise;
+    if (request.method !== 'POST')
+        __sw_dataFail(405, 'METHOD_NOT_ALLOWED', 'Data operations use POST.');
+    __sw_dataOrigin(request);
+    const input = await __sw_dataReadBody(request);
+    __sw_dataObject(input, 'Request');
+    const operation = input.operation;
+    const extras = operation === 'list' ? ['limit', 'after', 'where', 'can']
+        : operation === 'relation_list' ? ['relation', 'parent_id', 'limit', 'after', 'where', 'link']
+            : operation === 'aggregate' ? ['count', 'sum', 'avg', 'min', 'max', 'groupBy', 'where', 'having', 'order', 'limit']
+                : operation === 'get' ? ['id', 'link', 'can'] : operation === 'delete' ? ['id']
+                    : operation === 'create' ? ['values', 'link', 'idempotency_key'] : operation === 'update' ? ['id', 'values', 'link']
+                        : operation === 'link_create' ? ['id', 'access', 'expires_in_days'] : operation === 'link_list' ? ['id']
+                            : operation === 'link_revoke' ? ['id', 'link_id']
+                                : operation === 'create_anonymous' ? ['values', 'operation_key', 'creator_secret']
+                                    : operation === 'intake' ? ['reference', 'values', 'operation_key'] : null;
+    if (!extras)
+        __sw_dataFail(400, 'DATA_OPERATION_INVALID', 'Use list, get, relation_list, aggregate, create, update, or delete.');
+    __sw_dataKeys(input, ['contract', 'table', 'operation', ...extras], 'Request');
+    if (!__sw_dataAnyClientGrant()) {
+        __sw_dataFail(403, 'DATA_ACCESS_DENIED', 'This app declares no browser data access. Use the table from a function with sw.db, or add a client block in db/schema.ts.');
     }
-  }
-  if (!matchingContract) {
-    __sw_dataFail(409, 'DATA_CONTRACT_MISMATCH', 'The app data contract changed. Reload the app before trying again.');
-  }
-  if (keyed) {
-    if (JSON.parse(__SW_DATA_CONTRACT_JSON).insert_receipt !== 'insert-v1' || Object.prototype.hasOwnProperty.call(input, 'link')) {
-      __sw_dataFail(400, 'IDEMPOTENCY_UNSUPPORTED', 'This operation does not support keyed inserts. Nothing ran.');
-    }
-    if (typeof input.idempotency_key !== 'string' || !/^[0-9a-f]{32}$/.test(input.idempotency_key)) {
-      __sw_dataFail(400, 'IDEMPOTENCY_KEY_INVALID', 'The insert key must be 32 lowercase hexadecimal characters.');
-    }
-  }
-  const table = input.table;
-  if (typeof table !== 'string' || !Object.prototype.hasOwnProperty.call(__SW_DATA_SCHEMA, table)) {
-    __sw_dataFail(403, 'DATA_ACCESS_DENIED', 'This table is not available through the app data client.');
-  }
-  const shape = __SW_DATA_SCHEMA[table], policy = shape.client;
-  if (operation === 'link_create' || operation === 'link_list' || operation === 'link_revoke') return __sw_dataManageLinks(request, sw, input, table, shape);
-  if (operation === 'create_anonymous') return __sw_dataCreateAnonymous(request, sw, input, table, shape);
-  if (operation === 'intake') return __sw_dataIntake(request, sw, input, table, shape);
-  // A request naming a link runs ONLY under that link (never also as a user).
-  if (Object.prototype.hasOwnProperty.call(input, 'link')) return __sw_dataLinked(request, sw, input, table, shape);
-  const reading = operation === 'list' || operation === 'get' || operation === 'relation_list' || operation === 'aggregate';
-  const permission = reading ? policy && policy.read : policy && policy[operation];
-  if (!policy || permission === false || permission === null || permission === undefined) {
-    __sw_dataFail(403, 'DATA_ACCESS_DENIED', 'This operation is not declared for the app data client.');
-  }
-  // Membership records are authority, even if a stale or forged bake exposed
-  // them. Never let the generic browser writer grant membership in a group.
-  if (!reading && __sw_generatedOwnerSome(__sw_generatedOwnerValues(__SW_DATA_SCHEMA), item => item.member && item.member.m === table || __sw_dataPolicyUsesMembership(item.policy, table))) {
-    __sw_dataFail(403, 'DATA_ACCESS_DENIED', 'Membership changes require a server function.');
-  }
-  if (policy.identity === 'visitor' && shape.visitors !== true) {
-    __sw_dataFail(409, 'DATA_IDENTITY_MISMATCH', 'Visitor data access requires owner({ visitors: true }) on this table.');
-  }
-  const prepareOwnerRead = reading && (operation === 'list' || operation === 'get')
-    ? __sw_generatedOwnerReadGet(sw.db) : null;
-  const ownerRead = prepareOwnerRead ? prepareOwnerRead(table) : null;
-  if (reading) {
-    if (!ownerRead) await __sw_dataAuthorizeRead(request, sw, shape, policy);
-  } else if (policy.identity !== 'visitor') {
-    const authStarted = Date.now();
-    const user = await sw.auth.fromRequest(request);
-    __sw_dataSpan(sw, 'sw_data_authz', authStarted);
-    if (!user || user.id === undefined || user.id === null) __sw_dataFail(401, 'AUTH_REQUIRED', 'This data operation requires a signed-in user.');
-  }
-  const fields = __sw_dataReadFields(shape);
-  const primaryKey = shape.clientPrimaryKey;
-  const primaryColumn = shape.columns.find(column => column.n === primaryKey);
-  if (operation === 'relation_list') {
-    const relation = Array.isArray(shape.relations) && shape.relations.find(item => item.name === input.relation);
-    if (!relation || relation.kind === 'belongsTo') __sw_dataFail(403, 'DATA_ACCESS_DENIED', 'This relation is not available through the app data client.');
-    const child = __SW_DATA_SCHEMA[relation.table], childPolicy = child && child.client;
-    if (!childPolicy || childPolicy.read === false) __sw_dataFail(403, 'DATA_ACCESS_DENIED', 'This relation is not available through the app data client.');
-    await __sw_dataAuthorizeRead(request, sw, child, childPolicy);
-    const parentId = __sw_dataKey(input.parent_id, primaryColumn);
-    const childFields = childPolicy.read === true ? child.columns.filter(column => column.n !== child.author).map(column => column.n) : childPolicy.read;
-    const childPrimaryKey = child.clientPrimaryKey;
-    const childPrimaryColumn = child.columns.find(column => column.n === childPrimaryKey);
-    const childBranch = __sw_dataBranchReads(child);
-    const where = Object.create(null);
-    __sw_dataAnd(where, relation.fk, parentId);
-    if (input.where !== undefined) {
-      __sw_dataObject(input.where, 'where');
-      for (const field of Object.keys(input.where)) {
-        const column = child.columns.find(column => column.n === field), value = input.where[field];
-        if (childBranch && childBranch.hidden.includes(field)) {
-          __sw_dataFail(400, 'DATA_INPUT_INVALID', 'where cannot name "' + field + '": an access branch of this table leaves it out, so only columns every reader may read can filter.');
+    __sw_dataContractDigest();
+    const keyed = Object.prototype.hasOwnProperty.call(input, 'idempotency_key');
+    let matchingContract = input.contract === await __sw_dataDigestPromise;
+    if (!matchingContract && !keyed) {
+        const legacy = JSON.parse(__SW_DATA_CONTRACT_JSON);
+        if (legacy.insert_receipt === 'insert-v1') {
+            if (!__sw_dataLegacyDigestPromise) {
+                delete legacy.insert_receipt;
+                __sw_dataLegacyDigestPromise = crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(legacy)))
+                    .then(bytes => Array.from(new Uint8Array(bytes), byte => byte.toString(16).padStart(2, '0')).join(''));
+            }
+            matchingContract = input.contract === await __sw_dataLegacyDigestPromise;
         }
-        if (!childFields.includes(field) || !column || column.t === 'json' || column.t === 'blob'
-          || !(value === null || typeof value === 'string' || typeof value === 'boolean'
-            || typeof value === 'number' && Number.isFinite(value))) {
-          __sw_dataFail(400, 'DATA_INPUT_INVALID', 'where accepts only equality values for readable scalar fields.');
+    }
+    if (!matchingContract) {
+        __sw_dataFail(409, 'DATA_CONTRACT_MISMATCH', 'The app data contract changed. Reload the app before trying again.');
+    }
+    if (keyed) {
+        if (JSON.parse(__SW_DATA_CONTRACT_JSON).insert_receipt !== 'insert-v1' || Object.prototype.hasOwnProperty.call(input, 'link')) {
+            __sw_dataFail(400, 'IDEMPOTENCY_UNSUPPORTED', 'This operation does not support keyed inserts. Nothing ran.');
         }
-        __sw_dataAnd(where, field, value);
-      }
-    }
-    if (input.after !== undefined && input.after !== null) __sw_dataAnd(where, childPrimaryKey, { gt: __sw_dataKey(input.after, childPrimaryColumn) });
-    const limit = input.limit === undefined ? 25 : input.limit;
-    if (!Number.isInteger(limit) || limit < 1 || limit > 100) __sw_dataFail(400, 'DATA_INPUT_INVALID', 'limit must be an integer from 1 to 100.');
-    const parent = await __sw_dataRead(sw, table, policy, {
-      where: { [primaryKey]: parentId }, columns: [primaryKey], order: [[primaryKey, 'asc']], limit: 1,
-    });
-    if (!parent.data.length) return __sw_dataPublicResult(sw, env, { data: [], next: null, has_more: false });
-    const result = await __sw_dataRead(sw, relation.table, childPolicy, {
-      where, columns: childFields, order: [[childPrimaryKey, 'asc']], limit: limit + 1,
-    });
-    const hasMore = result.data.length > limit, rows = result.data.slice(0, limit);
-    return __sw_dataPublicResult(sw, env, { data: rows.map(row => __sw_dataProject(row, childFields)),
-      next: hasMore ? rows[rows.length - 1][childPrimaryKey] : null, has_more: hasMore });
-  }
-  if (operation === 'aggregate') {
-    // This layer decides only WHAT IS READABLE; the composer decides what is
-    // AUTHORIZED and what is type-valid. Restricting to the declared read
-    // allowlist is the one thing the browser boundary has to add: without it a
-    // COUNT or MAX over a non-readable column would answer questions about
-    // fields this client was never granted.
-    const options = Object.create(null);
-    // A column some access branch leaves out never feeds a filter, grouping or aggregate.
-    const branchReads = __sw_dataBranchReads(shape);
-    const readableScalar = fields.filter(field => {
-      const column = shape.columns.find(item => item.n === field);
-      return column && column.t !== 'json' && column.t !== 'blob' && !(branchReads && branchReads.hidden.includes(field));
-    });
-    const aggregateField = (key) => {
-      const field = input[key];
-      if (typeof field !== 'string' || !readableScalar.includes(field)) {
-        __sw_dataFail(400, 'DATA_INPUT_INVALID', key + ' must name a readable field of this table.');
-      }
-      return field;
-    };
-    if (input.count !== undefined) {
-      if (input.count !== true) __sw_dataFail(400, 'DATA_INPUT_INVALID', 'count must be true.');
-      options.count = true;
-    }
-    for (const key of ['sum', 'avg', 'min', 'max']) {
-      if (input[key] !== undefined) options[key] = aggregateField(key);
-    }
-    // The composer composes these same keys from fn + column; mirroring the rule
-    // here is what lets having/order name them before the call is made.
-    const aliases = [
-      ...(options.count === true ? ['count'] : []),
-      ...['sum', 'avg', 'min', 'max'].filter(key => options[key] !== undefined).map(key => key + '_' + options[key]),
-    ];
-    if (aliases.length === 0) {
-      __sw_dataFail(400, 'DATA_INPUT_INVALID', 'aggregate needs at least one of count, sum, avg, min, or max.');
-    }
-    if (input.groupBy !== undefined) {
-      if (!Array.isArray(input.groupBy) || input.groupBy.length === 0
-        || input.groupBy.some(field => typeof field !== 'string' || !readableScalar.includes(field))) {
-        __sw_dataFail(400, 'DATA_INPUT_INVALID', 'groupBy must list readable fields of this table.');
-      }
-      options.groupBy = [...input.groupBy];
-    }
-    if (input.where !== undefined) {
-      __sw_dataObject(input.where, 'where');
-      const where = Object.create(null);
-      for (const field of Object.keys(input.where)) {
-        const value = input.where[field];
-        if (!readableScalar.includes(field)
-          || !(value === null || typeof value === 'string' || typeof value === 'boolean'
-            || typeof value === 'number' && Number.isFinite(value))) {
-          __sw_dataFail(400, 'DATA_INPUT_INVALID', 'where accepts only equality values for readable scalar fields.');
+        if (typeof input.idempotency_key !== 'string' || !/^[0-9a-f]{32}$/.test(input.idempotency_key)) {
+            __sw_dataFail(400, 'IDEMPOTENCY_KEY_INVALID', 'The insert key must be 32 lowercase hexadecimal characters.');
         }
-        __sw_dataAnd(where, field, value);
-      }
-      options.where = where;
     }
-    if (input.having !== undefined) {
-      __sw_dataObject(input.having, 'having');
-      const having = Object.create(null);
-      for (const alias of Object.keys(input.having)) {
-        if (!aliases.includes(alias)) __sw_dataFail(400, 'DATA_INPUT_INVALID', 'having must name an aggregate requested in the same call.');
-        const condition = __sw_dataObject(input.having[alias], 'having');
-        const keys = Object.keys(condition);
-        if (keys.length !== 1 || !['eq', 'ne', 'lt', 'lte', 'gt', 'gte'].includes(keys[0])
-          || typeof condition[keys[0]] !== 'number' || !Number.isFinite(condition[keys[0]])) {
-          __sw_dataFail(400, 'DATA_INPUT_INVALID', 'having conditions compare one aggregate to a number, e.g. { gt: 3 }.');
+    const table = input.table;
+    if (typeof table !== 'string' || !Object.prototype.hasOwnProperty.call(__SW_DATA_SCHEMA, table)) {
+        __sw_dataFail(403, 'DATA_ACCESS_DENIED', 'This table is not available through the app data client.');
+    }
+    const shape = __SW_DATA_SCHEMA[table], policy = shape.client;
+    if (operation === 'link_create' || operation === 'link_list' || operation === 'link_revoke')
+        return __sw_dataManageLinks(request, sw, input, table, shape);
+    if (operation === 'create_anonymous')
+        return __sw_dataCreateAnonymous(request, sw, input, table, shape);
+    if (operation === 'intake')
+        return __sw_dataIntake(request, sw, input, table, shape);
+    if (Object.prototype.hasOwnProperty.call(input, 'link'))
+        return __sw_dataLinked(request, sw, input, table, shape);
+    const reading = operation === 'list' || operation === 'get' || operation === 'relation_list' || operation === 'aggregate';
+    const permission = reading ? policy && policy.read : policy && policy[operation];
+    if (!policy || permission === false || permission === null || permission === undefined) {
+        __sw_dataFail(403, 'DATA_ACCESS_DENIED', 'This operation is not declared for the app data client.');
+    }
+    if (!reading && __sw_generatedOwnerSome(__sw_generatedOwnerValues(__SW_DATA_SCHEMA), item => item.member && item.member.m === table || __sw_dataPolicyUsesMembership(item.policy, table))) {
+        __sw_dataFail(403, 'DATA_ACCESS_DENIED', 'Membership changes require a server function.');
+    }
+    if (policy.identity === 'visitor' && shape.visitors !== true) {
+        __sw_dataFail(409, 'DATA_IDENTITY_MISMATCH', 'Visitor data access requires owner({ visitors: true }) on this table.');
+    }
+    const prepareOwnerRead = reading && (operation === 'list' || operation === 'get')
+        ? __sw_generatedOwnerReadGet(sw.db) : null;
+    const ownerRead = prepareOwnerRead ? prepareOwnerRead(table) : null;
+    if (reading) {
+        if (!ownerRead)
+            await __sw_dataAuthorizeRead(request, sw, shape, policy);
+    }
+    else if (policy.identity !== 'visitor') {
+        const authStarted = Date.now();
+        const user = await sw.auth.fromRequest(request);
+        __sw_dataSpan(sw, 'sw_data_authz', authStarted);
+        if (!user || user.id === undefined || user.id === null)
+            __sw_dataFail(401, 'AUTH_REQUIRED', 'This data operation requires a signed-in user.');
+    }
+    const fields = __sw_dataReadFields(shape);
+    const primaryKey = shape.clientPrimaryKey;
+    const primaryColumn = shape.columns.find(column => column.n === primaryKey);
+    if (operation === 'relation_list') {
+        const relation = Array.isArray(shape.relations) && shape.relations.find(item => item.name === input.relation);
+        if (!relation || relation.kind === 'belongsTo')
+            __sw_dataFail(403, 'DATA_ACCESS_DENIED', 'This relation is not available through the app data client.');
+        const child = __SW_DATA_SCHEMA[relation.table], childPolicy = child && child.client;
+        if (!childPolicy || childPolicy.read === false)
+            __sw_dataFail(403, 'DATA_ACCESS_DENIED', 'This relation is not available through the app data client.');
+        await __sw_dataAuthorizeRead(request, sw, child, childPolicy);
+        const parentId = __sw_dataKey(input.parent_id, primaryColumn);
+        const childFields = childPolicy.read === true ? child.columns.filter(column => column.n !== child.author).map(column => column.n) : childPolicy.read;
+        const childPrimaryKey = child.clientPrimaryKey;
+        const childPrimaryColumn = child.columns.find(column => column.n === childPrimaryKey);
+        const childBranch = __sw_dataBranchReads(child);
+        const where = Object.create(null);
+        __sw_dataAnd(where, relation.fk, parentId);
+        if (input.where !== undefined) {
+            __sw_dataObject(input.where, 'where');
+            for (const field of Object.keys(input.where)) {
+                const column = child.columns.find(column => column.n === field), value = input.where[field];
+                if (childBranch && childBranch.hidden.includes(field)) {
+                    __sw_dataFail(400, 'DATA_INPUT_INVALID', 'where cannot name "' + field + '": an access branch of this table leaves it out, so only columns every reader may read can filter.');
+                }
+                if (!childFields.includes(field) || !column || column.t === 'json' || column.t === 'blob'
+                    || !(value === null || typeof value === 'string' || typeof value === 'boolean'
+                        || typeof value === 'number' && Number.isFinite(value))) {
+                    __sw_dataFail(400, 'DATA_INPUT_INVALID', 'where accepts only equality values for readable scalar fields.');
+                }
+                __sw_dataAnd(where, field, value);
+            }
         }
-        having[alias] = { [keys[0]]: condition[keys[0]] };
-      }
-      options.having = having;
+        if (input.after !== undefined && input.after !== null)
+            __sw_dataAnd(where, childPrimaryKey, { gt: __sw_dataKey(input.after, childPrimaryColumn) });
+        const limit = input.limit === undefined ? 25 : input.limit;
+        if (!Number.isInteger(limit) || limit < 1 || limit > 100)
+            __sw_dataFail(400, 'DATA_INPUT_INVALID', 'limit must be an integer from 1 to 100.');
+        const parent = await __sw_dataRead(sw, table, policy, {
+            where: { [primaryKey]: parentId }, columns: [primaryKey], order: [[primaryKey, 'asc']], limit: 1,
+        });
+        if (!parent.data.length)
+            return __sw_dataPublicResult(sw, env, { data: [], next: null, has_more: false });
+        const result = await __sw_dataRead(sw, relation.table, childPolicy, {
+            where, columns: childFields, order: [[childPrimaryKey, 'asc']], limit: limit + 1,
+        });
+        const hasMore = result.data.length > limit, rows = result.data.slice(0, limit);
+        return __sw_dataPublicResult(sw, env, { data: rows.map(row => __sw_dataProject(row, childFields)),
+            next: hasMore ? rows[rows.length - 1][childPrimaryKey] : null, has_more: hasMore });
     }
-    if (input.order !== undefined) {
-      // Ordering an aggregate can only name a grouped field or an aggregate
-      // from this same call; anything else would name a column the result does
-      // not have. The composer refuses those too — this refusal just arrives
-      // with the browser boundary's vocabulary.
-      const orderable = [...(options.groupBy || []), ...aliases];
-      const entries = typeof input.order === 'string' ? [[input.order, 'asc']]
-        : Array.isArray(input.order) && typeof input.order[0] === 'string' ? [input.order] : input.order;
-      if (!Array.isArray(entries) || entries.length === 0 || entries.length > 4) __sw_dataFail(400, 'DATA_INPUT_INVALID', 'order must name up to 4 result fields.');
-      for (const entry of entries) {
-        const [field, direction] = Array.isArray(entry) ? entry : [entry, 'asc'];
-        if (!orderable.includes(field) || (direction !== undefined && direction !== 'asc' && direction !== 'desc')) {
-          __sw_dataFail(400, 'DATA_INPUT_INVALID', 'order must name a groupBy field or an aggregate from this call.');
+    if (operation === 'aggregate') {
+        const options = Object.create(null);
+        const branchReads = __sw_dataBranchReads(shape);
+        const readableScalar = fields.filter(field => {
+            const column = shape.columns.find(item => item.n === field);
+            return column && column.t !== 'json' && column.t !== 'blob' && !(branchReads && branchReads.hidden.includes(field));
+        });
+        const aggregateField = (key) => {
+            const field = input[key];
+            if (typeof field !== 'string' || !readableScalar.includes(field)) {
+                __sw_dataFail(400, 'DATA_INPUT_INVALID', key + ' must name a readable field of this table.');
+            }
+            return field;
+        };
+        if (input.count !== undefined) {
+            if (input.count !== true)
+                __sw_dataFail(400, 'DATA_INPUT_INVALID', 'count must be true.');
+            options.count = true;
         }
-      }
-      options.order = input.order;
+        for (const key of ['sum', 'avg', 'min', 'max']) {
+            if (input[key] !== undefined)
+                options[key] = aggregateField(key);
+        }
+        const aliases = [
+            ...(options.count === true ? ['count'] : []),
+            ...['sum', 'avg', 'min', 'max'].filter(key => options[key] !== undefined).map(key => key + '_' + options[key]),
+        ];
+        if (aliases.length === 0) {
+            __sw_dataFail(400, 'DATA_INPUT_INVALID', 'aggregate needs at least one of count, sum, avg, min, or max.');
+        }
+        if (input.groupBy !== undefined) {
+            if (!Array.isArray(input.groupBy) || input.groupBy.length === 0
+                || input.groupBy.some(field => typeof field !== 'string' || !readableScalar.includes(field))) {
+                __sw_dataFail(400, 'DATA_INPUT_INVALID', 'groupBy must list readable fields of this table.');
+            }
+            options.groupBy = [...input.groupBy];
+        }
+        if (input.where !== undefined) {
+            __sw_dataObject(input.where, 'where');
+            const where = Object.create(null);
+            for (const field of Object.keys(input.where)) {
+                const value = input.where[field];
+                if (!readableScalar.includes(field)
+                    || !(value === null || typeof value === 'string' || typeof value === 'boolean'
+                        || typeof value === 'number' && Number.isFinite(value))) {
+                    __sw_dataFail(400, 'DATA_INPUT_INVALID', 'where accepts only equality values for readable scalar fields.');
+                }
+                __sw_dataAnd(where, field, value);
+            }
+            options.where = where;
+        }
+        if (input.having !== undefined) {
+            __sw_dataObject(input.having, 'having');
+            const having = Object.create(null);
+            for (const alias of Object.keys(input.having)) {
+                if (!aliases.includes(alias))
+                    __sw_dataFail(400, 'DATA_INPUT_INVALID', 'having must name an aggregate requested in the same call.');
+                const condition = __sw_dataObject(input.having[alias], 'having');
+                const keys = Object.keys(condition);
+                if (keys.length !== 1 || !['eq', 'ne', 'lt', 'lte', 'gt', 'gte'].includes(keys[0])
+                    || typeof condition[keys[0]] !== 'number' || !Number.isFinite(condition[keys[0]])) {
+                    __sw_dataFail(400, 'DATA_INPUT_INVALID', 'having conditions compare one aggregate to a number, e.g. { gt: 3 }.');
+                }
+                having[alias] = { [keys[0]]: condition[keys[0]] };
+            }
+            options.having = having;
+        }
+        if (input.order !== undefined) {
+            const orderable = [...(options.groupBy || []), ...aliases];
+            const entries = typeof input.order === 'string' ? [[input.order, 'asc']]
+                : Array.isArray(input.order) && typeof input.order[0] === 'string' ? [input.order] : input.order;
+            if (!Array.isArray(entries) || entries.length === 0 || entries.length > 4)
+                __sw_dataFail(400, 'DATA_INPUT_INVALID', 'order must name up to 4 result fields.');
+            for (const entry of entries) {
+                const [field, direction] = Array.isArray(entry) ? entry : [entry, 'asc'];
+                if (!orderable.includes(field) || (direction !== undefined && direction !== 'asc' && direction !== 'desc')) {
+                    __sw_dataFail(400, 'DATA_INPUT_INVALID', 'order must name a groupBy field or an aggregate from this call.');
+                }
+            }
+            options.order = input.order;
+        }
+        let groupLimit = null;
+        if (input.limit !== undefined) {
+            if (!Number.isInteger(input.limit) || input.limit < 1 || input.limit > 100) {
+                __sw_dataFail(400, 'DATA_INPUT_INVALID', 'limit must be an integer from 1 to 100.');
+            }
+            options.limit = input.limit;
+            if (options.groupBy)
+                groupLimit = input.limit;
+        }
+        else if (options.groupBy)
+            groupLimit = 100;
+        if (groupLimit !== null) {
+            options.limit = groupLimit + 1;
+            if (options.order === undefined)
+                options.order = options.groupBy.map(field => [field, 'asc']);
+        }
+        const result = await __sw_dataRead(sw, table, policy, options, 'aggregate');
+        const groups = result.data.map(row => {
+            const projected = __sw_dataProject(row, options.groupBy || []);
+            const out = projected === null ? Object.create(null) : projected;
+            for (const alias of aliases)
+                if (Object.prototype.hasOwnProperty.call(row, alias))
+                    out[alias] = row[alias];
+            return out;
+        });
+        const hasMore = groupLimit !== null && groups.length > groupLimit;
+        return __sw_dataPublicResult(sw, env, groupLimit === null ? { data: groups }
+            : { data: hasMore ? groups.slice(0, groupLimit) : groups, has_more: hasMore });
     }
-    // A GROUPED aggregate is paged exactly like list(): ask the composer for one
-    // more group than the cap, so an answer that had to stop can SAY it stopped.
-    // Silently capping it is the one failure an aggregate hides best — a
-    // breakdown over more groups than the cap came back looking complete while
-    // its group counts summed to less than the ungrouped count, and no client
-    // could tell. An ungrouped aggregate is always exactly
-    // one row, so it keeps its shape and reports nothing.
-    let groupLimit = null;
-    if (input.limit !== undefined) {
-      if (!Number.isInteger(input.limit) || input.limit < 1 || input.limit > 100) {
-        __sw_dataFail(400, 'DATA_INPUT_INVALID', 'limit must be an integer from 1 to 100.');
-      }
-      options.limit = input.limit;
-      if (options.groupBy) groupLimit = input.limit;
-    } else if (options.groupBy) groupLimit = 100;
-    if (groupLimit !== null) {
-      options.limit = groupLimit + 1;
-      // WHICH groups a capped answer carries is ours to state, not the query
-      // planner's to choose: without an ORDER BY, a plan change silently changes
-      // the answer. list() orders by its primary key for the same reason.
-      if (options.order === undefined) options.order = options.groupBy.map(field => [field, 'asc']);
+    if (reading) {
+        const plan = __sw_dataListGetPlan(operation, input, shape, fields, __sw_dataFail);
+        let result;
+        try {
+            result = ownerRead ? await ownerRead(plan.options) : await __sw_dataRead(sw, table, policy, plan.options);
+        }
+        catch (error) {
+            if (ownerRead && error && error.status === 401 && (error.code === 'AUTH_REQUIRED' || error.code === 'AUTH_INVALID_CREDS'))
+                __sw_dataFail(401, 'AUTH_REQUIRED', 'This data operation requires a signed-in user.');
+            throw error;
+        }
+        if (plan.options.can) {
+            const membership = __sw_generatedOwnerSome(__sw_generatedOwnerValues(__SW_DATA_SCHEMA), item => item.member && item.member.m === table || __sw_dataPolicyUsesMembership(item.policy, table));
+            const declared = (op) => !membership && !!policy[op] && policy[op] !== null;
+            for (const row of result.data || []) {
+                if (row && row.can)
+                    row.can = { update: row.can.update === true && declared('update'), delete: row.can.delete === true && declared('delete') };
+            }
+        }
+        const payload = __sw_dataListGetPayload(operation, result.data, fields, plan.primaryKey, plan.limit);
+        return ownerRead ? payload : __sw_dataPublicResult(sw, env, payload);
     }
-    const result = await __sw_dataRead(sw, table, policy, options, 'aggregate');
-    const groups = result.data.map(row => {
-      const projected = __sw_dataProject(row, options.groupBy || []);
-      const out = projected === null ? Object.create(null) : projected;
-      for (const alias of aliases) if (Object.prototype.hasOwnProperty.call(row, alias)) out[alias] = row[alias];
-      return out;
-    });
-    const hasMore = groupLimit !== null && groups.length > groupLimit;
-    return __sw_dataPublicResult(sw, env, groupLimit === null ? { data: groups }
-      : { data: hasMore ? groups.slice(0, groupLimit) : groups, has_more: hasMore });
-  }
-  if (reading) {
-    const plan = __sw_dataListGetPlan(operation, input, shape, fields, __sw_dataFail);
     let result;
-    try { result = ownerRead ? await ownerRead(plan.options) : await __sw_dataRead(sw, table, policy, plan.options); }
+    const writeStarted = Date.now();
+    try {
+        if (operation === 'delete')
+            result = await sw.db.remove(table, { where: { [primaryKey]: __sw_dataKey(input.id, primaryColumn) } });
+        else {
+            __sw_dataKeys(input.values, permission, 'values');
+            if (operation === 'create')
+                result = keyed ? await sw.db.__sw_clientInsert.insert(table, input.values, input.idempotency_key) : await sw.db.insert(table, input.values);
+            else
+                result = await sw.db.update(table, { set: input.values, where: { [primaryKey]: __sw_dataKey(input.id, primaryColumn) } });
+        }
+        __sw_dataSpan(sw, 'sw_data_op', writeStarted);
+    }
     catch (error) {
-      // A selected token's refusal is final. Never refresh or replay after dispatch.
-      if (ownerRead && error && error.status === 401 && (error.code === 'AUTH_REQUIRED' || error.code === 'AUTH_INVALID_CREDS')) __sw_dataFail(401, 'AUTH_REQUIRED', 'This data operation requires a signed-in user.');
-      throw error;
+        __sw_dataSpan(sw, 'sw_data_op', writeStarted);
+        if (__sw_dataIsDuplicateConflict(error)) {
+            __sw_dataFail(409, 'DATA_CONFLICT', 'A record with these values already exists.');
+        }
+        throw error;
     }
-    // Row capability hints ( item 7): the platform's per-row answer, narrowed by this
-    // door's own constants, exactly what an update/delete here would refuse before any SQL: the
-    // operation must be declared for the browser client, and membership tables are never written
-    // from the browser. A hint only; the write itself still enforces.
-    if (plan.options.can) {
-      const membership = __sw_generatedOwnerSome(__sw_generatedOwnerValues(__SW_DATA_SCHEMA), item => item.member && item.member.m === table || __sw_dataPolicyUsesMembership(item.policy, table));
-      const declared = (op) => !membership && !!policy[op] && policy[op] !== null;
-      for (const row of result.data || []) {
-        if (row && row.can) row.can = { update: row.can.update === true && declared('update'), delete: row.can.delete === true && declared('delete') };
-      }
+    if ((operation === 'update' || operation === 'delete') && result.changes === 0) {
+        __sw_dataFail(404, 'DATA_NOT_FOUND', 'Record not found.');
     }
-    const payload = __sw_dataListGetPayload(operation, result.data, fields, plan.primaryKey, plan.limit);
-    return ownerRead ? payload : __sw_dataPublicResult(sw, env, payload);
-  }
-  let result;
-  const writeStarted = Date.now();
-  try {
-    if (operation === 'delete') result = await sw.db.remove(table, { where: { [primaryKey]: __sw_dataKey(input.id, primaryColumn) } });
-    else {
-      __sw_dataKeys(input.values, permission, 'values');
-      // A generated client's nonce goes to the separate client key domain; never sw.db.insert's options.
-      if (operation === 'create') result = keyed ? await sw.db.__sw_clientInsert.insert(table, input.values, input.idempotency_key) : await sw.db.insert(table, input.values);
-      else result = await sw.db.update(table, { set: input.values, where: { [primaryKey]: __sw_dataKey(input.id, primaryColumn) } });
-    }
-    __sw_dataSpan(sw, 'sw_data_op', writeStarted);
-  } catch (error) {
-    __sw_dataSpan(sw, 'sw_data_op', writeStarted);
-    if (__sw_dataIsDuplicateConflict(error)) {
-      __sw_dataFail(409, 'DATA_CONFLICT', 'A record with these values already exists.');
-    }
-    throw error;
-  }
-  if ((operation === 'update' || operation === 'delete') && result.changes === 0) {
-    __sw_dataFail(404, 'DATA_NOT_FOUND', 'Record not found.');
-  }
-  const resultCount = { count: result.count, changes: result.changes, ...(result.idempotency ? { idempotency: result.idempotency } : {}) };
-  return fields.length ? { data: __sw_dataProject(result.data[0], fields), ...resultCount } : resultCount;
+    const resultCount = { count: result.count, changes: result.changes, ...(result.idempotency ? { idempotency: result.idempotency } : {}) };
+    return fields.length ? { data: __sw_dataProject(result.data[0], fields), ...resultCount } : resultCount;
 }
 `;
-var DECLARED_FILES_RUNTIME_JS = String.raw `
+
+
+var DECLARED_FILES_RUNTIME_JS = String.raw`;
 async function __sw_handleDeclaredFiles(request, sw, env, fetcher) {
-  if (__sw_artifactExecution !== 'standard') {
-    __sw_dataFail(409, 'FILES_DRAFT_UNAVAILABLE', 'File collections are available on the live app.');
-  }
-  const url = new URL(request.url);
-  let input;
-  if (request.method === 'GET' && url.pathname.indexOf('/__sw/files/') === 0) {
-    // A cross-origin script read (fetch with credentials) carries an Origin;
-    // an <img>/<a> on the app's own pages does not need to.
-    const getOrigin = request.headers.get('origin');
-    if (getOrigin && getOrigin !== url.origin) __sw_dataFail(403, 'FILES_ORIGIN_FORBIDDEN', 'File requests must come from this app origin.');
-    const parts = url.pathname.slice('/__sw/files/'.length).split('/');
-    if (parts.length !== 2 || !parts[0] || !parts[1]) __sw_dataFail(404, 'FILE_NOT_FOUND', 'File not found.');
-    let collection, id;
-    try { collection = decodeURIComponent(parts[0]); id = decodeURIComponent(parts[1]); }
-    catch (_) { __sw_dataFail(404, 'FILE_NOT_FOUND', 'File not found.'); }
-    input = { operation: 'download', collection: collection, id: id };
-  } else if (request.method === 'POST' && url.pathname === '/__sw/files') {
-    const origin = request.headers.get('origin');
-    if (!origin) __sw_dataFail(400, 'ORIGIN_REQUIRED', 'File requests require the app Origin header.');
-    if (origin !== url.origin) __sw_dataFail(403, 'FILES_ORIGIN_FORBIDDEN', 'File requests must come from this app origin.');
-    input = await __sw_dataReadBody(request);
-    if (!input || typeof input !== 'object' || Array.isArray(input)) __sw_dataFail(400, 'FILES_INPUT_INVALID', 'Send a JSON object.');
-    if (Object.prototype.hasOwnProperty.call(input, 'as_user')) __sw_dataFail(400, 'FILES_INPUT_INVALID', 'This request contains unsupported field as_user.');
-    if (input.operation === 'download') __sw_dataFail(400, 'FILES_OPERATION_INVALID', 'Download a file with GET /__sw/files/<collection>/<id>.');
-  } else {
-    __sw_dataFail(405, 'METHOD_NOT_ALLOWED', 'Use GET /__sw/files/<collection>/<id> or POST /__sw/files.');
-  }
-  const user = await sw.auth.fromRequest(request);
-  if (!user || user.id === undefined || user.id === null) __sw_dataFail(401, 'AUTH_REQUIRED', 'Sign in to use this file operation.');
-  const headers = {};
-  const range = request.headers.get('range');
-  if (range && input.operation === 'download') headers['Range'] = range;
-  const upstream = await sw.fs.__sw_collections(input, headers);
-  const out = new Headers(upstream.headers);
-  out.set('Cache-Control', input.operation === 'download' ? 'private, no-store' : 'no-store');
-  return new Response(upstream.body, { status: upstream.status, headers: out });
+    if (__sw_artifactExecution !== 'standard') {
+        __sw_dataFail(409, 'FILES_DRAFT_UNAVAILABLE', 'File collections are available on the live app.');
+    }
+    const url = new URL(request.url);
+    let input;
+    if (request.method === 'GET' && url.pathname.indexOf('/__sw/files/') === 0) {
+        const getOrigin = request.headers.get('origin');
+        if (getOrigin && getOrigin !== url.origin)
+            __sw_dataFail(403, 'FILES_ORIGIN_FORBIDDEN', 'File requests must come from this app origin.');
+        const parts = url.pathname.slice('/__sw/files/'.length).split('/');
+        if (parts.length !== 2 || !parts[0] || !parts[1])
+            __sw_dataFail(404, 'FILE_NOT_FOUND', 'File not found.');
+        let collection, id;
+        try {
+            collection = decodeURIComponent(parts[0]);
+            id = decodeURIComponent(parts[1]);
+        }
+        catch (_) {
+            __sw_dataFail(404, 'FILE_NOT_FOUND', 'File not found.');
+        }
+        input = { operation: 'download', collection: collection, id: id };
+    }
+    else if (request.method === 'POST' && url.pathname === '/__sw/files') {
+        const origin = request.headers.get('origin');
+        if (!origin)
+            __sw_dataFail(400, 'ORIGIN_REQUIRED', 'File requests require the app Origin header.');
+        if (origin !== url.origin)
+            __sw_dataFail(403, 'FILES_ORIGIN_FORBIDDEN', 'File requests must come from this app origin.');
+        input = await __sw_dataReadBody(request);
+        if (!input || typeof input !== 'object' || Array.isArray(input))
+            __sw_dataFail(400, 'FILES_INPUT_INVALID', 'Send a JSON object.');
+        if (Object.prototype.hasOwnProperty.call(input, 'as_user'))
+            __sw_dataFail(400, 'FILES_INPUT_INVALID', 'This request contains unsupported field as_user.');
+        if (input.operation === 'download')
+            __sw_dataFail(400, 'FILES_OPERATION_INVALID', 'Download a file with GET /__sw/files/<collection>/<id>.');
+    }
+    else {
+        __sw_dataFail(405, 'METHOD_NOT_ALLOWED', 'Use GET /__sw/files/<collection>/<id> or POST /__sw/files.');
+    }
+    const user = await sw.auth.fromRequest(request);
+    if (!user || user.id === undefined || user.id === null)
+        __sw_dataFail(401, 'AUTH_REQUIRED', 'Sign in to use this file operation.');
+    const headers = {};
+    const range = request.headers.get('range');
+    if (range && input.operation === 'download')
+        headers['Range'] = range;
+    const upstream = await sw.fs.__sw_collections(input, headers);
+    const out = new Headers(upstream.headers);
+    out.set('Cache-Control', input.operation === 'download' ? 'private, no-store' : 'no-store');
+    return new Response(upstream.body, { status: upstream.status, headers: out });
 }
 `;
+
+
 var LINK_COOKIE_NAME = "__Host-sw_link";
 var LINK_COOKIE_MAX_ENTRIES = 4;
 var LINK_COOKIE_MAX_BYTES = 3500;
 var CREATOR_COOKIE_NAME = "__Host-sw_creator";
-var DECLARED_LINKS_RUNTIME_JS = String.raw `
-const __SW_LINK_COOKIE = ${JSON.stringify(LINK_COOKIE_NAME)};
-const __SW_LINK_MAX_ENTRIES = ${LINK_COOKIE_MAX_ENTRIES};
-const __SW_LINK_MAX_BYTES = ${LINK_COOKIE_MAX_BYTES};
+var DECLARED_LINKS_RUNTIME_JS = String.raw`;
+const __SW_LINK_COOKIE = $, { JSON, stringify };
+(LINK_COOKIE_NAME);
+;
+const __SW_LINK_MAX_ENTRIES = $, { LINK_COOKIE_MAX_ENTRIES };
+const __SW_LINK_MAX_BYTES = $, { LINK_COOKIE_MAX_BYTES };
 const __SW_LINK_ENTRY = /^(lnk_[0-9a-f]{32})\.([A-Za-z0-9_-]{43})$/;
-const __SW_CREATOR_COOKIE = ${JSON.stringify(CREATOR_COOKIE_NAME)};
+const __SW_CREATOR_COOKIE = $, { JSON, stringify };
+(CREATOR_COOKIE_NAME);
+;
 const __SW_CREATOR_ENTRY = /^(crt_[0-9a-f]{32})\.([A-Za-z0-9_-]{43})$/;
 function __sw_linkEntries(request, name, pattern) {
-  const cookie = name || __SW_LINK_COOKIE, entry = pattern || __SW_LINK_ENTRY;
-  const header = request.headers.get('cookie') || '';
-  let raw = null;
-  for (const part of header.split(';')) {
-    const at = part.indexOf('=');
-    if (at > 0 && part.slice(0, at).trim() === cookie) { raw = part.slice(at + 1).trim(); break; }
-  }
-  const entries = [];
-  if (!raw) return entries;
-  for (const item of raw.split('~')) {
-    const match = entry.exec(item);
-    if (match && !entries.some(entry => entry.grant === match[1])) entries.push({ grant: match[1], token: match[2] });
-  }
-  return entries.slice(-__SW_LINK_MAX_ENTRIES);
+    const cookie = name || __SW_LINK_COOKIE, entry = pattern || __SW_LINK_ENTRY;
+    const header = request.headers.get('cookie') || '';
+    let raw = null;
+    for (const part of header.split(';')) {
+        const at = part.indexOf('=');
+        if (at > 0 && part.slice(0, at).trim() === cookie) {
+            raw = part.slice(at + 1).trim();
+            break;
+        }
+    }
+    const entries = [];
+    if (!raw)
+        return entries;
+    for (const item of raw.split('~')) {
+        const match = entry.exec(item);
+        if (match && !entries.some(entry => entry.grant === match[1]))
+            entries.push({ grant: match[1], token: match[2] });
+    }
+    return entries.slice(-__SW_LINK_MAX_ENTRIES);
 }
 function __sw_linkSetCookie(entries, name) {
-  const cookie = name || __SW_LINK_COOKIE;
-  const attributes = '; Path=/; Secure; HttpOnly; SameSite=Strict';
-  if (!entries.length) return cookie + '=' + attributes + '; Max-Age=0';
-  return cookie + '=' + entries.map(entry => entry.grant + '.' + entry.token).join('~') + attributes + '; Max-Age=43200';
+    const cookie = name || __SW_LINK_COOKIE;
+    const attributes = '; Path=/; Secure; HttpOnly; SameSite=Strict';
+    if (!entries.length)
+        return cookie + '=' + attributes + '; Max-Age=0';
+    return cookie + '=' + entries.map(entry => entry.grant + '.' + entry.token).join('~') + attributes + '; Max-Age=43200';
 }
-/** Append (replacing the same grant), then drop the oldest until both bounds hold. */
 function __sw_linkKeep(entries, next, name) {
-  const kept = entries.filter(entry => entry.grant !== next.grant).concat([next]);
-  const dropped = [];
-  while (kept.length > __SW_LINK_MAX_ENTRIES || new TextEncoder().encode(__sw_linkSetCookie(kept, name)).length > __SW_LINK_MAX_BYTES) dropped.push(kept.shift().grant);
-  return { kept, dropped };
+    const kept = entries.filter(entry => entry.grant !== next.grant).concat([next]);
+    const dropped = [];
+    while (kept.length > __SW_LINK_MAX_ENTRIES || new TextEncoder().encode(__sw_linkSetCookie(kept, name)).length > __SW_LINK_MAX_BYTES)
+        dropped.push(kept.shift().grant);
+    return { kept, dropped };
 }
 function __sw_linkJson(status, body, cookie) {
-  const headers = { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' };
-  if (cookie) headers['Set-Cookie'] = cookie;
-  return new Response(JSON.stringify(body), { status, headers });
+    const headers = { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' };
+    if (cookie)
+        headers['Set-Cookie'] = cookie;
+    return new Response(JSON.stringify(body), { status, headers });
 }
 function __sw_linkSameOrigin(request) {
-  const origin = request.headers.get('origin');
-  const url = new URL(request.url);
-  if (origin) return origin === url.origin;
-  return request.method === 'GET' && request.headers.get('sec-fetch-site') === 'same-origin';
+    const origin = request.headers.get('origin');
+    const url = new URL(request.url);
+    if (origin)
+        return origin === url.origin;
+    return request.method === 'GET' && request.headers.get('sec-fetch-site') === 'same-origin';
 }
 async function __sw_handleRowLinkDoor(request, sw) {
-  if (__sw_artifactExecution !== 'standard') __sw_dataFail(409, 'LINKS_DRAFT_UNAVAILABLE', 'Share links work on the live app only.');
-  if (!__sw_linkSameOrigin(request)) __sw_dataFail(403, 'LINK_ORIGIN_FORBIDDEN', 'Link requests must come from this app origin.');
-  const path = new URL(request.url).pathname;
-  const entries = __sw_linkEntries(request);
-  if (path === '/__sw/link' && request.method === 'POST') {
-    const input = await __sw_dataReadBody(request);
-    __sw_dataKeys(input, ['secret'], 'Request');
-    if (typeof input.secret !== 'string' || !/^[A-Za-z0-9_-]{43}$/.test(input.secret)) __sw_dataFail(404, 'LINK_INVALID', 'This link is not valid.');
-    const granted = await sw.db.__sw_rowLinks.exchange(input.secret, request.headers.get('cf-connecting-ip'));
-    const result = __sw_linkKeep(entries, { grant: granted.link_id, token: granted.token });
-    return __sw_linkJson(200, { ok: true, data: { link_id: granted.link_id, table: granted.table, row_id: granted.row_id, access: granted.access,
-      expires_at: granted.expires_at, dropped: result.dropped } }, __sw_linkSetCookie(result.kept));
-  }
-  if (path === '/__sw/link/sessions' && request.method === 'GET') {
-    const live = entries.length ? await sw.db.__sw_rowLinks.sessions(entries) : [];
-    return __sw_linkJson(200, { ok: true, data: live });
-  }
-  if (path === '/__sw/link/forget' && request.method === 'POST') {
-    const input = await __sw_dataReadBody(request);
-    __sw_dataKeys(input, ['link_id'], 'Request');
-    const kept = input.link_id === undefined ? [] : entries.filter(entry => entry.grant !== input.link_id);
-    return __sw_linkJson(200, { ok: true, data: { remaining: kept.map(entry => entry.grant) } }, __sw_linkSetCookie(kept));
-  }
-  __sw_dataFail(405, 'METHOD_NOT_ALLOWED', 'Use POST /__sw/link, GET /__sw/link/sessions or POST /__sw/link/forget.');
+    if (__sw_artifactExecution !== 'standard')
+        __sw_dataFail(409, 'LINKS_DRAFT_UNAVAILABLE', 'Share links work on the live app only.');
+    if (!__sw_linkSameOrigin(request))
+        __sw_dataFail(403, 'LINK_ORIGIN_FORBIDDEN', 'Link requests must come from this app origin.');
+    const path = new URL(request.url).pathname;
+    const entries = __sw_linkEntries(request);
+    if (path === '/__sw/link' && request.method === 'POST') {
+        const input = await __sw_dataReadBody(request);
+        __sw_dataKeys(input, ['secret'], 'Request');
+        if (typeof input.secret !== 'string' || !/^[A-Za-z0-9_-]{43}$/.test(input.secret))
+            __sw_dataFail(404, 'LINK_INVALID', 'This link is not valid.');
+        const granted = await sw.db.__sw_rowLinks.exchange(input.secret, request.headers.get('cf-connecting-ip'));
+        const result = __sw_linkKeep(entries, { grant: granted.link_id, token: granted.token });
+        return __sw_linkJson(200, { ok: true, data: { link_id: granted.link_id, table: granted.table, row_id: granted.row_id, access: granted.access,
+                expires_at: granted.expires_at, dropped: result.dropped } }, __sw_linkSetCookie(result.kept));
+    }
+    if (path === '/__sw/link/sessions' && request.method === 'GET') {
+        const live = entries.length ? await sw.db.__sw_rowLinks.sessions(entries) : [];
+        return __sw_linkJson(200, { ok: true, data: live });
+    }
+    if (path === '/__sw/link/forget' && request.method === 'POST') {
+        const input = await __sw_dataReadBody(request);
+        __sw_dataKeys(input, ['link_id'], 'Request');
+        const kept = input.link_id === undefined ? [] : entries.filter(entry => entry.grant !== input.link_id);
+        return __sw_linkJson(200, { ok: true, data: { remaining: kept.map(entry => entry.grant) } }, __sw_linkSetCookie(kept));
+    }
+    __sw_dataFail(405, 'METHOD_NOT_ALLOWED', 'Use POST /__sw/link, GET /__sw/link/sessions or POST /__sw/link/forget.');
 }
-
-// ── Anonymous creation: one row and its private creator capability (creator-insert.ts) ──
-// Reached only as /__sw/data operation create_anonymous, after the door's origin check and contract
-// check, before any user or visitor is resolved: nothing signs in or mints a session to create a row.
-// The secret arrives only in this JSON body; a URL query is refused, and nothing here logs or echoes it.
 async function __sw_dataCreateAnonymous(request, sw, input, table, shape) {
-  if (__sw_artifactExecution !== 'standard') __sw_dataFail(409, 'LINKS_DRAFT_UNAVAILABLE', 'Anonymous creation works on the live app only.');
-  // The exact current contract only: a client from before the receipt contract never had this operation.
-  if (input.contract !== await __sw_dataContractDigest()) __sw_dataFail(409, 'DATA_CONTRACT_MISMATCH', 'The app data contract changed. Reload the app before trying again.');
-  if (new URL(request.url).search !== '') __sw_dataFail(400, 'DATA_INPUT_INVALID', 'Anonymous creation takes no URL query.');
-  const links = shape.client && shape.client.links;
-  if (!links || links.anonymousCreate !== true || !shape.client.create) __sw_dataFail(403, 'DATA_ACCESS_DENIED', 'This table does not allow anonymous creation.');
-  if (typeof input.operation_key !== 'string' || !/^[0-9a-f]{32}$/.test(input.operation_key)) {
-    __sw_dataFail(400, 'IDEMPOTENCY_KEY_INVALID', 'The operation key must be 32 lowercase hexadecimal characters.');
-  }
-  if (typeof input.creator_secret !== 'string' || !/^[0-9a-f]{64}$/.test(input.creator_secret)) {
-    __sw_dataFail(400, 'CREATOR_SECRET_INVALID', 'The creator secret must be 64 lowercase hexadecimal characters.');
-  }
-  __sw_dataKeys(input.values, shape.client.create, 'values');
-  const values = Object.keys(input.values).map(column => ({ column, value: input.values[column] }));
-  const created = await sw.db.__sw_rowLinks.createAnonymous({ table, values, key: input.operation_key, secret: input.creator_secret },
-    request.headers.get('cf-connecting-ip'));
-  return { data: __sw_dataProject(created.row, __sw_linkReadable(shape)), grant: created.grant, idempotency: created.idempotency };
+    if (__sw_artifactExecution !== 'standard')
+        __sw_dataFail(409, 'LINKS_DRAFT_UNAVAILABLE', 'Anonymous creation works on the live app only.');
+    if (input.contract !== await __sw_dataContractDigest())
+        __sw_dataFail(409, 'DATA_CONTRACT_MISMATCH', 'The app data contract changed. Reload the app before trying again.');
+    if (new URL(request.url).search !== '')
+        __sw_dataFail(400, 'DATA_INPUT_INVALID', 'Anonymous creation takes no URL query.');
+    const links = shape.client && shape.client.links;
+    if (!links || links.anonymousCreate !== true || !shape.client.create)
+        __sw_dataFail(403, 'DATA_ACCESS_DENIED', 'This table does not allow anonymous creation.');
+    if (typeof input.operation_key !== 'string' || !/^[0-9a-f]{32}$/.test(input.operation_key)) {
+        __sw_dataFail(400, 'IDEMPOTENCY_KEY_INVALID', 'The operation key must be 32 lowercase hexadecimal characters.');
+    }
+    if (typeof input.creator_secret !== 'string' || !/^[0-9a-f]{64}$/.test(input.creator_secret)) {
+        __sw_dataFail(400, 'CREATOR_SECRET_INVALID', 'The creator secret must be 64 lowercase hexadecimal characters.');
+    }
+    __sw_dataKeys(input.values, shape.client.create, 'values');
+    const values = Object.keys(input.values).map(column => ({ column, value: input.values[column] }));
+    const created = await sw.db.__sw_rowLinks.createAnonymous({ table, values, key: input.operation_key, secret: input.creator_secret }, request.headers.get('cf-connecting-ip'));
+    return { data: __sw_dataProject(created.row, __sw_linkReadable(shape)), grant: created.grant, idempotency: created.idempotency };
 }
-
-// ── /__sw/creator: the creator door (creator-*.ts on the platform) ─────────
-//   POST /__sw/creator { action: 'exchange', creator_id, secret, table }  sets the creator session cookie
-//   POST /__sw/creator { action, creator_id, table, ... }                 one creator operation
-//   GET  /__sw/creator/sessions                                           this browser's live creator sessions
-//   POST /__sw/creator/forget { creator_id? }                             drop one entry, or all
-// (GET /__sw/creator itself is the platform landing page, web/src/creator-landing.ts.) The secret is
-// accepted only by the exchange, in this JSON body; a URL query is refused on every request.
 function __sw_creatorRoot(table) {
-  const shape = typeof table === 'string' && Object.prototype.hasOwnProperty.call(__SW_DATA_SCHEMA, table) ? __SW_DATA_SCHEMA[table] : null;
-  return shape && shape.client && shape.client.links && shape.client.links.anonymousCreate === true ? shape : null;
+    const shape = typeof table === 'string' && Object.prototype.hasOwnProperty.call(__SW_DATA_SCHEMA, table) ? __SW_DATA_SCHEMA[table] : null;
+    return shape && shape.client && shape.client.links && shape.client.links.anonymousCreate === true ? shape : null;
 }
 function __sw_creatorValues(values, allowed) {
-  __sw_dataKeys(values, allowed, 'values');
-  const list = Object.keys(values).map(column => ({ column, value: values[column] }));
-  if (!list.length) __sw_dataFail(400, 'DATA_INPUT_INVALID', 'Supply at least one value.');
-  return list;
+    __sw_dataKeys(values, allowed, 'values');
+    const list = Object.keys(values).map(column => ({ column, value: values[column] }));
+    if (!list.length)
+        __sw_dataFail(400, 'DATA_INPUT_INVALID', 'Supply at least one value.');
+    return list;
 }
 async function __sw_handleCreatorDoor(request, sw) {
-  if (__sw_artifactExecution !== 'standard') __sw_dataFail(409, 'LINKS_DRAFT_UNAVAILABLE', 'Creator links work on the live app only.');
-  if (!__sw_linkSameOrigin(request)) __sw_dataFail(403, 'CREATOR_ORIGIN_FORBIDDEN', 'Creator requests must come from this app origin.');
-  const url = new URL(request.url);
-  if (url.search !== '') __sw_dataFail(400, 'DATA_INPUT_INVALID', 'Creator requests take no URL query.');
-  const path = url.pathname;
-  const entries = __sw_linkEntries(request, __SW_CREATOR_COOKIE, __SW_CREATOR_ENTRY);
-  const ip = request.headers.get('cf-connecting-ip');
-  if (path === '/__sw/creator/sessions' && request.method === 'GET') {
-    const live = entries.length ? await sw.db.__sw_rowLinks.creator({ action: 'sessions', entries: entries.map(entry => ({ creator_id: entry.grant, token: entry.token })) }, null, null, false) : [];
-    return __sw_linkJson(200, { ok: true, data: live });
-  }
-  if (path === '/__sw/creator/forget' && request.method === 'POST') {
+    if (__sw_artifactExecution !== 'standard')
+        __sw_dataFail(409, 'LINKS_DRAFT_UNAVAILABLE', 'Creator links work on the live app only.');
+    if (!__sw_linkSameOrigin(request))
+        __sw_dataFail(403, 'CREATOR_ORIGIN_FORBIDDEN', 'Creator requests must come from this app origin.');
+    const url = new URL(request.url);
+    if (url.search !== '')
+        __sw_dataFail(400, 'DATA_INPUT_INVALID', 'Creator requests take no URL query.');
+    const path = url.pathname;
+    const entries = __sw_linkEntries(request, __SW_CREATOR_COOKIE, __SW_CREATOR_ENTRY);
+    const ip = request.headers.get('cf-connecting-ip');
+    if (path === '/__sw/creator/sessions' && request.method === 'GET') {
+        const live = entries.length ? await sw.db.__sw_rowLinks.creator({ action: 'sessions', entries: entries.map(entry => ({ creator_id: entry.grant, token: entry.token })) }, null, null, false) : [];
+        return __sw_linkJson(200, { ok: true, data: live });
+    }
+    if (path === '/__sw/creator/forget' && request.method === 'POST') {
+        const input = await __sw_dataReadBody(request);
+        __sw_dataKeys(input, ['creator_id'], 'Request');
+        const kept = input.creator_id === undefined ? [] : entries.filter(entry => entry.grant !== input.creator_id);
+        return __sw_linkJson(200, { ok: true, data: { remaining: kept.map(entry => entry.grant) } }, __sw_linkSetCookie(kept, __SW_CREATOR_COOKIE));
+    }
+    if (path !== '/__sw/creator' || request.method !== 'POST')
+        __sw_dataFail(405, 'METHOD_NOT_ALLOWED', 'Use POST /__sw/creator, GET /__sw/creator/sessions or POST /__sw/creator/forget.');
     const input = await __sw_dataReadBody(request);
-    __sw_dataKeys(input, ['creator_id'], 'Request');
-    const kept = input.creator_id === undefined ? [] : entries.filter(entry => entry.grant !== input.creator_id);
-    return __sw_linkJson(200, { ok: true, data: { remaining: kept.map(entry => entry.grant) } }, __sw_linkSetCookie(kept, __SW_CREATOR_COOKIE));
-  }
-  if (path !== '/__sw/creator' || request.method !== 'POST') __sw_dataFail(405, 'METHOD_NOT_ALLOWED', 'Use POST /__sw/creator, GET /__sw/creator/sessions or POST /__sw/creator/forget.');
-  const input = await __sw_dataReadBody(request);
-  __sw_dataObject(input, 'Request');
-  const invalid = () => __sw_dataFail(404, 'CREATOR_INVALID', 'This creator link is not valid.');
-  if (input.action === 'exchange') {
-    __sw_dataKeys(input, ['action', 'creator_id', 'secret', 'table'], 'Request');
-    if (typeof input.creator_id !== 'string' || !/^crt_[0-9a-f]{32}$/.test(input.creator_id) || typeof input.secret !== 'string'
-      || !/^[0-9a-f]{64}$/.test(input.secret) || !__sw_creatorRoot(input.table)) invalid();
-    const granted = await sw.db.__sw_rowLinks.creator({ action: 'exchange', creator_id: input.creator_id, secret: input.secret, table: input.table }, null, ip, false);
-    const result = __sw_linkKeep(entries, { grant: granted.creator_id, token: granted.token }, __SW_CREATOR_COOKIE);
-    return __sw_linkJson(200, { ok: true, data: { creator_id: granted.creator_id, table: granted.table, row_id: granted.row_id,
-      expires_at: granted.expires_at, dropped: result.dropped } }, __sw_linkSetCookie(result.kept, __SW_CREATOR_COOKIE));
-  }
-  if (typeof input.creator_id !== 'string' || !/^crt_[0-9a-f]{32}$/.test(input.creator_id)) __sw_dataFail(400, 'DATA_INPUT_INVALID', 'creator must be a creator id.');
-  // A compiled browser names the contract it was built for; a stale one is refused before anything runs.
-  if (input.contract !== await __sw_dataContractDigest()) __sw_dataFail(409, 'DATA_CONTRACT_MISMATCH', 'The app data contract changed. Reload the app before trying again.');
-  const root = __sw_creatorRoot(input.table);
-  if (!root) invalid();
-  const entry = entries.find(item => item.grant === input.creator_id);
-  if (!entry) __sw_dataFail(401, 'CREATOR_SESSION_MISSING', 'The creator link session is no longer valid; opening the creator link again starts a new one.');
-  const owner = root.ownerColumn || 'user_id', key = root.clientPrimaryKey;
-  const childOf = (table) => {
-    const relation = (root.relations || []).find(r => r.table === table && root.client.links.children.includes(r.name));
-    const child = relation ? __SW_DATA_SCHEMA[table] : null;
-    if (!child || !child.client) __sw_dataFail(403, 'CREATOR_OPERATION_NOT_ALLOWED', 'A creator link reaches its row and its declared child rows only.');
-    return { child, fk: relation.fk };
-  };
-  const action = input.action;
-  let payload;
-  if (action === 'get' || action === 'link_list') { __sw_dataKeys(input, ['action', 'contract', 'creator_id', 'table', 'id'], 'Request'); payload = { action, id: input.id }; }
-  else if (action === 'update') {
-    __sw_dataKeys(input, ['action', 'contract', 'creator_id', 'table', 'id', 'values'], 'Request');
-    payload = { action, id: input.id, values: __sw_creatorValues(input.values, (root.client.update || []).filter(f => f !== owner && f !== key)) };
-  } else if (action === 'relation_list') {
-    __sw_dataKeys(input, ['action', 'contract', 'creator_id', 'table', 'relation', 'parent_id', 'after', 'limit'], 'Request');
-    payload = { action, relation: input.relation, parent_id: input.parent_id, ...(input.after === undefined ? {} : { after: input.after }), ...(input.limit === undefined ? {} : { limit: input.limit }) };
-  } else if (action === 'child_create') {
-    __sw_dataKeys(input, ['action', 'contract', 'creator_id', 'table', 'child', 'values'], 'Request');
-    const { child } = childOf(input.child);
-    if (!child.client.create) __sw_dataFail(403, 'CREATOR_OPERATION_NOT_ALLOWED', 'This child table takes no new rows from the app data client.');
-    payload = { action, table: input.child, values: __sw_creatorValues(input.values, child.client.create) };
-  } else if (action === 'child_update') {
-    __sw_dataKeys(input, ['action', 'contract', 'creator_id', 'table', 'child', 'id', 'values'], 'Request');
-    const { child, fk } = childOf(input.child);
-    payload = { action, table: input.child, id: input.id, values: __sw_creatorValues(input.values, (child.client.update || []).filter(f => f !== fk)) };
-  } else if (action === 'link_create') {
-    __sw_dataKeys(input, ['action', 'contract', 'creator_id', 'table', 'id', 'access', 'expires_in_days'], 'Request');
-    payload = { action, id: input.id, access: input.access, ...(input.expires_in_days === undefined ? {} : { expires_in_days: input.expires_in_days }) };
-  } else if (action === 'link_revoke') {
-    __sw_dataKeys(input, ['action', 'contract', 'creator_id', 'table', 'id', 'link_id'], 'Request');
-    payload = { action, id: input.id, link_id: input.link_id };
-  } else if (action === 'claim_status') {
-    __sw_dataKeys(input, ['action', 'contract', 'creator_id', 'table', 'id'], 'Request');
-    payload = { action, id: input.id };
-  } else if (action === 'claim') {
-    __sw_dataKeys(input, ['action', 'contract', 'creator_id', 'table', 'id', 'keep_shares'], 'Request');
-    if (input.keep_shares !== undefined && typeof input.keep_shares !== 'boolean') __sw_dataFail(400, 'DATA_INPUT_INVALID', 'keepShares must be true or false.');
-    payload = { action, id: input.id, keep_shares: input.keep_shares === true };
-  } else __sw_dataFail(400, 'DATA_OPERATION_INVALID', 'Unknown creator action.');
-  const session = entry.grant + '.' + entry.token + '.' + input.table;
-  const asUser = action === 'claim' || action === 'claim_status';
-  let data;
-  try { data = await sw.db.__sw_rowLinks.creator(payload, session, ip, asUser); }
-  catch (error) {
-    // A claim whose outcome is unknown is never reported as refused or retried. Only then, one read-only
-    // check under this same user and creator session may establish that this row is CURRENTLY theirs and
-    // this creator link has ended. reconciled: true reports that current ownership; it does not assert
-    // that this invocation performed the transition, and which shares were kept is unknown. A definite
-    // refusal (CREATOR_CLAIM_DENIED included) always stands; claimStatus() reports current ownership.
-    if (action !== 'claim' || !error || error.outcome !== 'unknown') throw error;
-    let status = null;
-    try { status = await sw.db.__sw_rowLinks.creator({ action: 'claim_status', id: input.id }, session, ip, true); } catch (_) {}
-    if (!status || status.status !== 'claimed_by_you') throw error;
-    data = { claimed: true, table: input.table, id: input.id, shares: 'unknown', reconciled: true };
-  }
-  if (action === 'claim') {
-    // The ended grant is the boundary in every tab; this only tidies this browser's cookie.
-    const kept = entries.filter(item => item.grant !== input.creator_id);
-    return __sw_linkJson(200, { ok: true, data }, __sw_linkSetCookie(kept, __SW_CREATOR_COOKIE));
-  }
-  return __sw_linkJson(200, { ok: true, data });
+    __sw_dataObject(input, 'Request');
+    const invalid = () => __sw_dataFail(404, 'CREATOR_INVALID', 'This creator link is not valid.');
+    if (input.action === 'exchange') {
+        __sw_dataKeys(input, ['action', 'creator_id', 'secret', 'table'], 'Request');
+        if (typeof input.creator_id !== 'string' || !/^crt_[0-9a-f]{32}$/.test(input.creator_id) || typeof input.secret !== 'string'
+            || !/^[0-9a-f]{64}$/.test(input.secret) || !__sw_creatorRoot(input.table))
+            invalid();
+        const granted = await sw.db.__sw_rowLinks.creator({ action: 'exchange', creator_id: input.creator_id, secret: input.secret, table: input.table }, null, ip, false);
+        const result = __sw_linkKeep(entries, { grant: granted.creator_id, token: granted.token }, __SW_CREATOR_COOKIE);
+        return __sw_linkJson(200, { ok: true, data: { creator_id: granted.creator_id, table: granted.table, row_id: granted.row_id,
+                expires_at: granted.expires_at, dropped: result.dropped } }, __sw_linkSetCookie(result.kept, __SW_CREATOR_COOKIE));
+    }
+    if (typeof input.creator_id !== 'string' || !/^crt_[0-9a-f]{32}$/.test(input.creator_id))
+        __sw_dataFail(400, 'DATA_INPUT_INVALID', 'creator must be a creator id.');
+    if (input.contract !== await __sw_dataContractDigest())
+        __sw_dataFail(409, 'DATA_CONTRACT_MISMATCH', 'The app data contract changed. Reload the app before trying again.');
+    const root = __sw_creatorRoot(input.table);
+    if (!root)
+        invalid();
+    const entry = entries.find(item => item.grant === input.creator_id);
+    if (!entry)
+        __sw_dataFail(401, 'CREATOR_SESSION_MISSING', 'The creator link session is no longer valid; opening the creator link again starts a new one.');
+    const owner = root.ownerColumn || 'user_id', key = root.clientPrimaryKey;
+    const childOf = (table) => {
+        const relation = (root.relations || []).find(r => r.table === table && root.client.links.children.includes(r.name));
+        const child = relation ? __SW_DATA_SCHEMA[table] : null;
+        if (!child || !child.client)
+            __sw_dataFail(403, 'CREATOR_OPERATION_NOT_ALLOWED', 'A creator link reaches its row and its declared child rows only.');
+        return { child, fk: relation.fk };
+    };
+    const action = input.action;
+    let payload;
+    if (action === 'get' || action === 'link_list') {
+        __sw_dataKeys(input, ['action', 'contract', 'creator_id', 'table', 'id'], 'Request');
+        payload = { action, id: input.id };
+    }
+    else if (action === 'update') {
+        __sw_dataKeys(input, ['action', 'contract', 'creator_id', 'table', 'id', 'values'], 'Request');
+        payload = { action, id: input.id, values: __sw_creatorValues(input.values, (root.client.update || []).filter(f => f !== owner && f !== key)) };
+    }
+    else if (action === 'relation_list') {
+        __sw_dataKeys(input, ['action', 'contract', 'creator_id', 'table', 'relation', 'parent_id', 'after', 'limit'], 'Request');
+        payload = { action, relation: input.relation, parent_id: input.parent_id, ...(input.after === undefined ? {} : { after: input.after }), ...(input.limit === undefined ? {} : { limit: input.limit }) };
+    }
+    else if (action === 'child_create') {
+        __sw_dataKeys(input, ['action', 'contract', 'creator_id', 'table', 'child', 'values'], 'Request');
+        const { child } = childOf(input.child);
+        if (!child.client.create)
+            __sw_dataFail(403, 'CREATOR_OPERATION_NOT_ALLOWED', 'This child table takes no new rows from the app data client.');
+        payload = { action, table: input.child, values: __sw_creatorValues(input.values, child.client.create) };
+    }
+    else if (action === 'child_update') {
+        __sw_dataKeys(input, ['action', 'contract', 'creator_id', 'table', 'child', 'id', 'values'], 'Request');
+        const { child, fk } = childOf(input.child);
+        payload = { action, table: input.child, id: input.id, values: __sw_creatorValues(input.values, (child.client.update || []).filter(f => f !== fk)) };
+    }
+    else if (action === 'link_create') {
+        __sw_dataKeys(input, ['action', 'contract', 'creator_id', 'table', 'id', 'access', 'expires_in_days'], 'Request');
+        payload = { action, id: input.id, access: input.access, ...(input.expires_in_days === undefined ? {} : { expires_in_days: input.expires_in_days }) };
+    }
+    else if (action === 'link_revoke') {
+        __sw_dataKeys(input, ['action', 'contract', 'creator_id', 'table', 'id', 'link_id'], 'Request');
+        payload = { action, id: input.id, link_id: input.link_id };
+    }
+    else if (action === 'claim_status') {
+        __sw_dataKeys(input, ['action', 'contract', 'creator_id', 'table', 'id'], 'Request');
+        payload = { action, id: input.id };
+    }
+    else if (action === 'claim') {
+        __sw_dataKeys(input, ['action', 'contract', 'creator_id', 'table', 'id', 'keep_shares'], 'Request');
+        if (input.keep_shares !== undefined && typeof input.keep_shares !== 'boolean')
+            __sw_dataFail(400, 'DATA_INPUT_INVALID', 'keepShares must be true or false.');
+        payload = { action, id: input.id, keep_shares: input.keep_shares === true };
+    }
+    else
+        __sw_dataFail(400, 'DATA_OPERATION_INVALID', 'Unknown creator action.');
+    const session = entry.grant + '.' + entry.token + '.' + input.table;
+    const asUser = action === 'claim' || action === 'claim_status';
+    let data;
+    try {
+        data = await sw.db.__sw_rowLinks.creator(payload, session, ip, asUser);
+    }
+    catch (error) {
+        if (action !== 'claim' || !error || error.outcome !== 'unknown')
+            throw error;
+        let status = null;
+        try {
+            status = await sw.db.__sw_rowLinks.creator({ action: 'claim_status', id: input.id }, session, ip, true);
+        }
+        catch (_) { }
+        if (!status || status.status !== 'claimed_by_you')
+            throw error;
+        data = { claimed: true, table: input.table, id: input.id, shares: 'unknown', reconciled: true };
+    }
+    if (action === 'claim') {
+        const kept = entries.filter(item => item.grant !== input.creator_id);
+        return __sw_linkJson(200, { ok: true, data }, __sw_linkSetCookie(kept, __SW_CREATOR_COOKIE));
+    }
+    return __sw_linkJson(200, { ok: true, data });
 }
-
-// ── /__sw/data under a link, and the owner's link administration ──────────
 function __sw_linkRootFor(table) {
-  for (const name of Object.keys(__SW_DATA_SCHEMA)) {
-    const links = __SW_DATA_SCHEMA[name].client && __SW_DATA_SCHEMA[name].client.links;
-    if (!links) continue;
-    const relation = (__SW_DATA_SCHEMA[name].relations || []).find(r => r.table === table && links.children.includes(r.name));
-    if (relation) return { root: name, relation };
-  }
-  return null;
+    for (const name of Object.keys(__SW_DATA_SCHEMA)) {
+        const links = __SW_DATA_SCHEMA[name].client && __SW_DATA_SCHEMA[name].client.links;
+        if (!links)
+            continue;
+        const relation = (__SW_DATA_SCHEMA[name].relations || []).find(r => r.table === table && links.children.includes(r.name));
+        if (relation)
+            return { root: name, relation };
+    }
+    return null;
 }
 function __sw_linkReadable(shape) {
-  const read = shape.client.read;
-  return read === true ? shape.columns.filter(column => column.n !== shape.author).map(column => column.n) : read || [];
+    const read = shape.client.read;
+    return read === true ? shape.columns.filter(column => column.n !== shape.author).map(column => column.n) : read || [];
 }
 async function __sw_dataManageLinks(request, sw, input, table, shape) {
-  if (__sw_artifactExecution !== 'standard') __sw_dataFail(409, 'LINKS_DRAFT_UNAVAILABLE', 'Share links work on the live app only.');
-  if (!shape.client || !shape.client.links) __sw_dataFail(403, 'DATA_ACCESS_DENIED', 'This table does not issue share links.');
-  const user = await sw.auth.fromRequest(request);
-  if (!user || user.id === undefined || user.id === null) __sw_dataFail(401, 'AUTH_REQUIRED', 'Sign in to manage share links.');
-  const id = __sw_dataKey(input.id, shape.columns.find(column => column.n === shape.clientPrimaryKey));
-  if (input.operation === 'link_create') {
-    if (input.access !== 'read' && input.access !== 'edit') __sw_dataFail(400, 'DATA_INPUT_INVALID', 'access must be "read" or "edit".');
-    const days = input.expires_in_days === undefined ? null : input.expires_in_days;
-    return sw.db.__sw_rowLinks.manage({ action: 'create', table, id, access: input.access, expires_in_days: days });
-  }
-  if (input.operation === 'link_list') return sw.db.__sw_rowLinks.manage({ action: 'list', table, id });
-  if (typeof input.link_id !== 'string') __sw_dataFail(400, 'DATA_INPUT_INVALID', 'Supply link_id.');
-  return sw.db.__sw_rowLinks.manage({ action: 'revoke', table, id, link_id: input.link_id });
+    if (__sw_artifactExecution !== 'standard')
+        __sw_dataFail(409, 'LINKS_DRAFT_UNAVAILABLE', 'Share links work on the live app only.');
+    if (!shape.client || !shape.client.links)
+        __sw_dataFail(403, 'DATA_ACCESS_DENIED', 'This table does not issue share links.');
+    const user = await sw.auth.fromRequest(request);
+    if (!user || user.id === undefined || user.id === null)
+        __sw_dataFail(401, 'AUTH_REQUIRED', 'Sign in to manage share links.');
+    const id = __sw_dataKey(input.id, shape.columns.find(column => column.n === shape.clientPrimaryKey));
+    if (input.operation === 'link_create') {
+        if (input.access !== 'read' && input.access !== 'edit')
+            __sw_dataFail(400, 'DATA_INPUT_INVALID', 'access must be "read" or "edit".');
+        const days = input.expires_in_days === undefined ? null : input.expires_in_days;
+        return sw.db.__sw_rowLinks.manage({ action: 'create', table, id, access: input.access, expires_in_days: days });
+    }
+    if (input.operation === 'link_list')
+        return sw.db.__sw_rowLinks.manage({ action: 'list', table, id });
+    if (typeof input.link_id !== 'string')
+        __sw_dataFail(400, 'DATA_INPUT_INVALID', 'Supply link_id.');
+    return sw.db.__sw_rowLinks.manage({ action: 'revoke', table, id, link_id: input.link_id });
 }
 async function __sw_dataLinked(request, sw, input, table, shape) {
-  if (__sw_artifactExecution !== 'standard') __sw_dataFail(409, 'LINKS_DRAFT_UNAVAILABLE', 'Share links work on the live app only.');
-  if (typeof input.link !== 'string' || !/^lnk_[0-9a-f]{32}$/.test(input.link)) __sw_dataFail(400, 'DATA_INPUT_INVALID', 'link must be a link id.');
-  const entry = __sw_linkEntries(request).find(item => item.grant === input.link);
-  if (!entry) __sw_dataFail(401, 'LINK_SESSION_MISSING', 'The link session is no longer valid; opening the link again starts a new one.');
-  const operation = input.operation;
-  const own = shape.client && shape.client.links;
-  const parent = own ? null : __sw_linkRootFor(table);
-  if (!own && !parent) __sw_dataFail(403, 'DATA_ACCESS_DENIED', 'This table is not reachable through a share link.');
-  // The ONE authority of this request; no signed-in user is ever resolved here.
-  sw.db.__sw_rowLinks.use({ grant: entry.grant, token: entry.token, root: own ? table : parent.root });
-  const key = shape.clientPrimaryKey, keyColumn = shape.columns.find(column => column.n === key);
-  if (own && operation === 'get') {
-    const result = await sw.db.from(table, { where: { [key]: __sw_dataKey(input.id, keyColumn) }, columns: own.read, limit: 1 });
-    return { data: __sw_dataProject(result.data[0], own.read) };
-  }
-  if (own && operation === 'update') {
-    __sw_dataKeys(input.values, own.edit, 'values');
-    const result = await sw.db.update(table, { set: input.values, where: { [key]: __sw_dataKey(input.id, keyColumn) } });
-    if (result.changes === 0) __sw_dataFail(404, 'DATA_NOT_FOUND', 'Record not found.');
-    return { data: __sw_dataProject(result.data[0], own.read), count: result.count, changes: result.changes };
-  }
-  if (own && operation === 'relation_list') {
-    const relation = (shape.relations || []).find(item => item.name === input.relation && own.children.includes(item.name));
-    if (!relation) __sw_dataFail(403, 'DATA_ACCESS_DENIED', 'This relation is not reachable through the link.');
-    const child = __SW_DATA_SCHEMA[relation.table], childFields = __sw_linkReadable(child);
-    const childKey = child.clientPrimaryKey, childKeyColumn = child.columns.find(column => column.n === childKey);
-    const where = Object.create(null);
-    __sw_dataAnd(where, relation.fk, __sw_dataKey(input.parent_id, keyColumn));
-    if (input.after !== undefined && input.after !== null) __sw_dataAnd(where, childKey, { gt: __sw_dataKey(input.after, childKeyColumn) });
-    if (input.where !== undefined) __sw_dataFail(400, 'DATA_INPUT_INVALID', 'Linked child lists take no where filter.');
-    const limit = input.limit === undefined ? 25 : input.limit;
-    if (!Number.isInteger(limit) || limit < 1 || limit > 100) __sw_dataFail(400, 'DATA_INPUT_INVALID', 'limit must be an integer from 1 to 100.');
-    const result = await sw.db.from(relation.table, { where, columns: childFields, order: [[childKey, 'asc']], limit: limit + 1 });
-    const hasMore = result.data.length > limit, rows = result.data.slice(0, limit);
-    return { data: rows.map(row => __sw_dataProject(row, childFields)), next: hasMore ? rows[rows.length - 1][childKey] : null, has_more: hasMore };
-  }
-  if (parent && operation === 'create') {
-    if (!shape.client.create) __sw_dataFail(403, 'DATA_ACCESS_DENIED', 'This operation is not declared for the app data client.');
-    __sw_dataKeys(input.values, shape.client.create, 'values');
-    let result;
-    try { result = await sw.db.insert(table, input.values); }
-    catch (error) {
-      if (__sw_dataIsDuplicateConflict(error)) __sw_dataFail(409, 'DATA_CONFLICT', 'A record with these values already exists.');
-      throw error;
+    if (__sw_artifactExecution !== 'standard')
+        __sw_dataFail(409, 'LINKS_DRAFT_UNAVAILABLE', 'Share links work on the live app only.');
+    if (typeof input.link !== 'string' || !/^lnk_[0-9a-f]{32}$/.test(input.link))
+        __sw_dataFail(400, 'DATA_INPUT_INVALID', 'link must be a link id.');
+    const entry = __sw_linkEntries(request).find(item => item.grant === input.link);
+    if (!entry)
+        __sw_dataFail(401, 'LINK_SESSION_MISSING', 'The link session is no longer valid; opening the link again starts a new one.');
+    const operation = input.operation;
+    const own = shape.client && shape.client.links;
+    const parent = own ? null : __sw_linkRootFor(table);
+    if (!own && !parent)
+        __sw_dataFail(403, 'DATA_ACCESS_DENIED', 'This table is not reachable through a share link.');
+    sw.db.__sw_rowLinks.use({ grant: entry.grant, token: entry.token, root: own ? table : parent.root });
+    const key = shape.clientPrimaryKey, keyColumn = shape.columns.find(column => column.n === key);
+    if (own && operation === 'get') {
+        const result = await sw.db.from(table, { where: { [key]: __sw_dataKey(input.id, keyColumn) }, columns: own.read, limit: 1 });
+        return { data: __sw_dataProject(result.data[0], own.read) };
     }
-    const fields = __sw_linkReadable(shape);
-    return { data: __sw_dataProject(result.data[0], fields), count: result.count, changes: result.changes };
-  }
-  if (parent && operation === 'update') {
-    if (!shape.client.update) __sw_dataFail(403, 'DATA_ACCESS_DENIED', 'This operation is not declared for the app data client.');
-    __sw_dataKeys(input.values, shape.client.update.filter(field => field !== parent.relation.fk), 'values');
-    const result = await sw.db.update(table, { set: input.values, where: { [key]: __sw_dataKey(input.id, keyColumn) } });
-    if (result.changes === 0) __sw_dataFail(404, 'DATA_NOT_FOUND', 'Record not found.');
-    const fields = __sw_linkReadable(shape);
-    return { data: __sw_dataProject(result.data[0], fields), count: result.count, changes: result.changes };
-  }
-  __sw_dataFail(403, 'LINK_OPERATION_NOT_ALLOWED', 'A share link allows reading and editing its row and adding or editing its child rows only.');
+    if (own && operation === 'update') {
+        __sw_dataKeys(input.values, own.edit, 'values');
+        const result = await sw.db.update(table, { set: input.values, where: { [key]: __sw_dataKey(input.id, keyColumn) } });
+        if (result.changes === 0)
+            __sw_dataFail(404, 'DATA_NOT_FOUND', 'Record not found.');
+        return { data: __sw_dataProject(result.data[0], own.read), count: result.count, changes: result.changes };
+    }
+    if (own && operation === 'relation_list') {
+        const relation = (shape.relations || []).find(item => item.name === input.relation && own.children.includes(item.name));
+        if (!relation)
+            __sw_dataFail(403, 'DATA_ACCESS_DENIED', 'This relation is not reachable through the link.');
+        const child = __SW_DATA_SCHEMA[relation.table], childFields = __sw_linkReadable(child);
+        const childKey = child.clientPrimaryKey, childKeyColumn = child.columns.find(column => column.n === childKey);
+        const where = Object.create(null);
+        __sw_dataAnd(where, relation.fk, __sw_dataKey(input.parent_id, keyColumn));
+        if (input.after !== undefined && input.after !== null)
+            __sw_dataAnd(where, childKey, { gt: __sw_dataKey(input.after, childKeyColumn) });
+        if (input.where !== undefined)
+            __sw_dataFail(400, 'DATA_INPUT_INVALID', 'Linked child lists take no where filter.');
+        const limit = input.limit === undefined ? 25 : input.limit;
+        if (!Number.isInteger(limit) || limit < 1 || limit > 100)
+            __sw_dataFail(400, 'DATA_INPUT_INVALID', 'limit must be an integer from 1 to 100.');
+        const result = await sw.db.from(relation.table, { where, columns: childFields, order: [[childKey, 'asc']], limit: limit + 1 });
+        const hasMore = result.data.length > limit, rows = result.data.slice(0, limit);
+        return { data: rows.map(row => __sw_dataProject(row, childFields)), next: hasMore ? rows[rows.length - 1][childKey] : null, has_more: hasMore };
+    }
+    if (parent && operation === 'create') {
+        if (!shape.client.create)
+            __sw_dataFail(403, 'DATA_ACCESS_DENIED', 'This operation is not declared for the app data client.');
+        __sw_dataKeys(input.values, shape.client.create, 'values');
+        let result;
+        try {
+            result = await sw.db.insert(table, input.values);
+        }
+        catch (error) {
+            if (__sw_dataIsDuplicateConflict(error))
+                __sw_dataFail(409, 'DATA_CONFLICT', 'A record with these values already exists.');
+            throw error;
+        }
+        const fields = __sw_linkReadable(shape);
+        return { data: __sw_dataProject(result.data[0], fields), count: result.count, changes: result.changes };
+    }
+    if (parent && operation === 'update') {
+        if (!shape.client.update)
+            __sw_dataFail(403, 'DATA_ACCESS_DENIED', 'This operation is not declared for the app data client.');
+        __sw_dataKeys(input.values, shape.client.update.filter(field => field !== parent.relation.fk), 'values');
+        const result = await sw.db.update(table, { set: input.values, where: { [key]: __sw_dataKey(input.id, keyColumn) } });
+        if (result.changes === 0)
+            __sw_dataFail(404, 'DATA_NOT_FOUND', 'Record not found.');
+        const fields = __sw_linkReadable(shape);
+        return { data: __sw_dataProject(result.data[0], fields), count: result.count, changes: result.changes };
+    }
+    __sw_dataFail(403, 'LINK_OPERATION_NOT_ALLOWED', 'A share link allows reading and editing its row and adding or editing its child rows only.');
 }
 `;
-var PUSH_CLIENT_MODULE_JS = `
+
+
+var PUSH_CLIENT_MODULE_JS = `;
 const DOOR = '/__sw/push';
 const WORKER_URL = '/__sw/push/sw.js';
 const WORKER_SCOPE = '/__sw/push/';
-
 function pushError(code, message, status) {
-  const err = new Error(message);
-  err.code = code;
-  if (status !== undefined) err.status = status;
-  return err;
+    const err = new Error(message);
+    err.code = code;
+    if (status !== undefined)
+        err.status = status;
+    return err;
 }
-
 async function call(operation, extra) {
-  const res = await fetch(DOOR, {
-    method: 'POST',
-    credentials: 'same-origin',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(Object.assign({ operation: operation }, extra || {})),
-  });
-  let body = null;
-  try { body = await res.json(); } catch (_) {}
-  if (!res.ok || !body || body.ok === false) {
-    throw pushError((body && (body.code || body.error)) || 'PUSH_REQUEST_FAILED', (body && body.message) || ('Push request failed: ' + res.status), res.status);
-  }
-  return body.data;
-}
-
-function supported() {
-  return typeof window !== 'undefined' && typeof navigator !== 'undefined'
-    && 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
-}
-
-function keyBytes(base64url) {
-  const padded = base64url + '='.repeat((4 - (base64url.length % 4)) % 4);
-  const raw = atob(padded.replace(/-/g, '+').replace(/_/g, '/'));
-  const out = new Uint8Array(raw.length);
-  for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
-  return out;
-}
-
-function sameKey(a, b) {
-  if (!a) return false;
-  const left = new Uint8Array(a);
-  if (left.length !== b.length) return false;
-  for (let i = 0; i < b.length; i++) if (left[i] !== b[i]) return false;
-  return true;
-}
-
-function deviceLabel() {
-  const ua = navigator.userAgent || '';
-  const browser = /Edg\\//.test(ua) ? 'Edge' : /OPR\\//.test(ua) ? 'Opera' : /Firefox\\//.test(ua) ? 'Firefox'
-    : /Chrome\\//.test(ua) ? 'Chrome' : /Safari\\//.test(ua) ? 'Safari' : 'Browser';
-  const os = /iPhone|iPad/.test(ua) ? 'iOS' : /Android/.test(ua) ? 'Android' : /Mac OS X/.test(ua) ? 'macOS'
-    : /Windows/.test(ua) ? 'Windows' : /Linux/.test(ua) ? 'Linux' : '';
-  return os ? browser + ' on ' + os : browser;
-}
-
-// navigator.serviceWorker.ready only settles for a worker that controls this
-// page; the push worker deliberately controls none, so wait for it directly.
-async function activeRegistration() {
-  const reg = await navigator.serviceWorker.register(WORKER_URL, { scope: WORKER_SCOPE });
-  if (reg.active) return reg;
-  const worker = reg.installing || reg.waiting;
-  if (!worker) throw pushError('PUSH_WORKER_UNAVAILABLE', 'The push service worker did not install.');
-  await new Promise(function (resolve, reject) {
-    worker.addEventListener('statechange', function () {
-      if (worker.state === 'activated') resolve();
-      else if (worker.state === 'redundant') reject(pushError('PUSH_WORKER_UNAVAILABLE', 'The push service worker failed to install.'));
-    });
-  });
-  return reg;
-}
-
-/**
- * Ask permission (if needed), subscribe this browser and register it for the
- * signed-in user. Call it from a click handler: browsers only show the
- * permission prompt for a user gesture.
- * enablePush({ test: true }) registers the user's push test inbox instead \u2014
- * no permission, no service worker; sends are captured in push history.
- */
-export async function enablePush(options) {
-  const opts = options || {};
-  if (opts.test === true) {
-    return call('subscribe', { test: true, label: opts.label || 'Push test inbox' });
-  }
-  if (!supported()) {
-    throw pushError('PUSH_UNSUPPORTED', 'This browser does not support web push. On iPhone and iPad, add the app to the Home Screen first.');
-  }
-  let permission = Notification.permission;
-  if (permission === 'default') permission = await Notification.requestPermission();
-  if (permission !== 'granted') {
-    throw pushError('PUSH_PERMISSION_DENIED', 'Notifications are blocked for this site. Allow them in the browser\\'s site settings and try again.');
-  }
-  const key = keyBytes((await call('key')).vapid_public_key);
-  const reg = await activeRegistration();
-  let sub = await reg.pushManager.getSubscription();
-  if (sub && !sameKey(sub.options && sub.options.applicationServerKey, key)) {
-    await sub.unsubscribe();
-    sub = null;
-  }
-  if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key });
-  const result = await call('subscribe', { subscription: sub.toJSON(), label: opts.label || deviceLabel() });
-  return Object.assign({ endpoint: sub.endpoint }, result);
-}
-
-/** Remove this browser's device for the signed-in user and unsubscribe it. */
-export async function disablePush(options) {
-  const opts = options || {};
-  if (opts.test === true) return call('unsubscribe', { test: true });
-  if (!supported()) return { deleted: false };
-  const reg = await navigator.serviceWorker.getRegistration(WORKER_SCOPE);
-  const sub = reg ? await reg.pushManager.getSubscription() : null;
-  if (!sub) return { deleted: false };
-  try {
-    return await call('unsubscribe', { endpoint: sub.endpoint });
-  } finally {
-    await sub.unsubscribe().catch(function () {});
-  }
-}
-
-/** { supported, permission, subscribed, endpoint } for this browser. */
-export async function pushStatus() {
-  if (!supported()) return { supported: false, permission: 'unsupported', subscribed: false, endpoint: null };
-  const reg = await navigator.serviceWorker.getRegistration(WORKER_SCOPE);
-  const sub = reg ? await reg.pushManager.getSubscription() : null;
-  return { supported: true, permission: Notification.permission, subscribed: !!sub, endpoint: sub ? sub.endpoint : null };
-}
-
-/**
- * handler({ type: 'push' | 'click', payload }) for every push that arrives
- * and every notification click while a tab of this app is open. Returns a
- * function that stops listening.
- */
-export function listenToPush(handler) {
-  if (typeof handler !== 'function') throw new TypeError('listenToPush takes a handler function');
-  if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return function () {};
-  const listener = function (event) {
-    const message = event.data;
-    if (message && message.__sw_push === true && (message.type === 'push' || message.type === 'click')) {
-      handler({ type: message.type, payload: message.payload });
-    }
-  };
-  navigator.serviceWorker.addEventListener('message', listener);
-  navigator.serviceWorker.startMessages();
-  return function () { navigator.serviceWorker.removeEventListener('message', listener); };
-}
-`;
-var PUSH_SERVICE_WORKER_JS = `
-const DOOR = '/__sw/push';
-
-function readPayload(event) {
-  if (!event.data) return {};
-  try {
-    const value = event.data.json();
-    return value && typeof value === 'object' && !Array.isArray(value) ? value : { title: String(value) };
-  } catch (_) {
-    return { title: event.data.text() };
-  }
-}
-
-async function broadcast(type, payload) {
-  const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
-  for (const client of windows) client.postMessage({ __sw_push: true, type: type, payload: payload });
-}
-
-self.addEventListener('install', function () { self.skipWaiting(); });
-
-self.addEventListener('push', function (event) {
-  const payload = readPayload(event);
-  const note = payload.notification && typeof payload.notification === 'object' ? payload.notification : payload;
-  const data = Object.assign({}, payload.data && typeof payload.data === 'object' ? payload.data : {});
-  if (typeof payload.url === 'string') data.url = payload.url;
-  const title = typeof note.title === 'string' && note.title ? note.title : self.location.hostname;
-  const options = {
-    body: typeof note.body === 'string' ? note.body : undefined,
-    icon: typeof note.icon === 'string' ? note.icon : undefined,
-    badge: typeof note.badge === 'string' ? note.badge : undefined,
-    image: typeof note.image === 'string' ? note.image : undefined,
-    tag: typeof note.tag === 'string' ? note.tag : undefined,
-    renotify: !!(note.tag && note.renotify),
-    requireInteraction: !!note.requireInteraction,
-    silent: !!note.silent,
-    data: data,
-  };
-  const work = [self.registration.showNotification(title, options), broadcast('push', payload)];
-  if (typeof payload.badge_count === 'number' && self.navigator && self.navigator.setAppBadge) {
-    work.push((payload.badge_count > 0 ? self.navigator.setAppBadge(payload.badge_count) : self.navigator.clearAppBadge()).catch(function () {}));
-  }
-  event.waitUntil(Promise.all(work));
-});
-
-// Clicks open same-origin URLs only; anything else opens the app root.
-self.addEventListener('notificationclick', function (event) {
-  event.notification.close();
-  const data = event.notification.data || {};
-  let target = self.location.origin + '/';
-  if (typeof data.url === 'string' && data.url) {
-    try {
-      const url = new URL(data.url, self.location.origin);
-      if (url.origin === self.location.origin) target = url.href;
-    } catch (_) {}
-  }
-  event.waitUntil((async function () {
-    await broadcast('click', data);
-    const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
-    for (const client of windows) {
-      if (client.url === target && 'focus' in client) return client.focus();
-    }
-    return self.clients.openWindow(target);
-  })());
-});
-
-// The push service rotated this browser's subscription: register the new one
-// for the same signed-in user and drop the old endpoint.
-self.addEventListener('pushsubscriptionchange', function (event) {
-  event.waitUntil((async function () {
-    async function door(body) {
-      const res = await fetch(DOOR, {
+    const res = await fetch(DOOR, {
         method: 'POST',
         credentials: 'same-origin',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      const parsed = await res.json().catch(function () { return null; });
-      if (!res.ok || !parsed || parsed.ok === false) throw new Error('push door ' + res.status);
-      return parsed.data;
-    }
-    let sub = event.newSubscription || null;
-    if (!sub) {
-      const key = (await door({ operation: 'key' })).vapid_public_key;
-      const padded = key + '='.repeat((4 - (key.length % 4)) % 4);
-      const raw = atob(padded.replace(/-/g, '+').replace(/_/g, '/'));
-      const bytes = new Uint8Array(raw.length);
-      for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
-      sub = await self.registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: bytes });
-    }
-    await door({
-      operation: 'replace',
-      subscription: sub.toJSON(),
-      old_endpoint: event.oldSubscription ? event.oldSubscription.endpoint : undefined,
+        body: JSON.stringify(Object.assign({ operation: operation }, extra || {})),
     });
-  })());
+    let body = null;
+    try {
+        body = await res.json();
+    }
+    catch (_) { }
+    if (!res.ok || !body || body.ok === false) {
+        throw pushError((body && (body.code || body.error)) || 'PUSH_REQUEST_FAILED', (body && body.message) || ('Push request failed: ' + res.status), res.status);
+    }
+    return body.data;
+}
+function supported() {
+    return typeof window !== 'undefined' && typeof navigator !== 'undefined'
+        && 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+}
+function keyBytes(base64url) {
+    const padded = base64url + '='.repeat((4 - (base64url.length % 4)) % 4);
+    const raw = atob(padded.replace(/-/g, '+').replace(/_/g, '/'));
+    const out = new Uint8Array(raw.length);
+    for (let i = 0; i < raw.length; i++)
+        out[i] = raw.charCodeAt(i);
+    return out;
+}
+function sameKey(a, b) {
+    if (!a)
+        return false;
+    const left = new Uint8Array(a);
+    if (left.length !== b.length)
+        return false;
+    for (let i = 0; i < b.length; i++)
+        if (left[i] !== b[i])
+            return false;
+    return true;
+}
+function deviceLabel() {
+    const ua = navigator.userAgent || '';
+    const browser = /Edg\\/ / .test(ua) ? 'Edge' : /OPR\\/ / .test(ua) ? 'Opera' : /Firefox\\/ / .test(ua) ? 'Firefox'
+        : /Chrome\\/ / .test(ua) ? 'Chrome' : /Safari\\/ / .test(ua) ? 'Safari' : 'Browser';
+    const os = /iPhone|iPad/.test(ua) ? 'iOS' : /Android/.test(ua) ? 'Android' : /Mac OS X/.test(ua) ? 'macOS'
+        : /Windows/.test(ua) ? 'Windows' : /Linux/.test(ua) ? 'Linux' : '';
+    return os ? browser + ' on ' + os : browser;
+}
+async function activeRegistration() {
+    const reg = await navigator.serviceWorker.register(WORKER_URL, { scope: WORKER_SCOPE });
+    if (reg.active)
+        return reg;
+    const worker = reg.installing || reg.waiting;
+    if (!worker)
+        throw pushError('PUSH_WORKER_UNAVAILABLE', 'The push service worker did not install.');
+    await new Promise(function (resolve, reject) {
+        worker.addEventListener('statechange', function () {
+            if (worker.state === 'activated')
+                resolve();
+            else if (worker.state === 'redundant')
+                reject(pushError('PUSH_WORKER_UNAVAILABLE', 'The push service worker failed to install.'));
+        });
+    });
+    return reg;
+}
+export async function enablePush(options) {
+    const opts = options || {};
+    if (opts.test === true) {
+        return call('subscribe', { test: true, label: opts.label || 'Push test inbox' });
+    }
+    if (!supported()) {
+        throw pushError('PUSH_UNSUPPORTED', 'This browser does not support web push. On iPhone and iPad, add the app to the Home Screen first.');
+    }
+    let permission = Notification.permission;
+    if (permission === 'default')
+        permission = await Notification.requestPermission();
+    if (permission !== 'granted') {
+        throw pushError('PUSH_PERMISSION_DENIED', 'Notifications are blocked for this site. Allow them in the browser\\', s, site, settings, and);
+        try { }
+        finally { }
+        again.;
+        ');;
+    }
+    const key = keyBytes((await call('key')).vapid_public_key);
+    const reg = await activeRegistration();
+    let sub = await reg.pushManager.getSubscription();
+    if (sub && !sameKey(sub.options && sub.options.applicationServerKey, key)) {
+        await sub.unsubscribe();
+        sub = null;
+    }
+    if (!sub)
+        sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key });
+    const result = await call('subscribe', { subscription: sub.toJSON(), label: opts.label || deviceLabel() });
+    return Object.assign({ endpoint: sub.endpoint }, result);
+}
+export async function disablePush(options) {
+    const opts = options || {};
+    if (opts.test === true)
+        return call('unsubscribe', { test: true });
+    if (!supported())
+        return { deleted: false };
+    const reg = await navigator.serviceWorker.getRegistration(WORKER_SCOPE);
+    const sub = reg ? await reg.pushManager.getSubscription() : null;
+    if (!sub)
+        return { deleted: false };
+    try {
+        return await call('unsubscribe', { endpoint: sub.endpoint });
+    }
+    finally {
+        await sub.unsubscribe().catch(function () { });
+    }
+}
+export async function pushStatus() {
+    if (!supported())
+        return { supported: false, permission: 'unsupported', subscribed: false, endpoint: null };
+    const reg = await navigator.serviceWorker.getRegistration(WORKER_SCOPE);
+    const sub = reg ? await reg.pushManager.getSubscription() : null;
+    return { supported: true, permission: Notification.permission, subscribed: !!sub, endpoint: sub ? sub.endpoint : null };
+}
+export function listenToPush(handler) {
+    if (typeof handler !== 'function')
+        throw new TypeError('listenToPush takes a handler function');
+    if (typeof navigator === 'undefined' || !('serviceWorker' in navigator))
+        return function () { };
+    const listener = function (event) {
+        const message = event.data;
+        if (message && message.__sw_push === true && (message.type === 'push' || message.type === 'click')) {
+            handler({ type: message.type, payload: message.payload });
+        }
+    };
+    navigator.serviceWorker.addEventListener('message', listener);
+    navigator.serviceWorker.startMessages();
+    return function () { navigator.serviceWorker.removeEventListener('message', listener); };
+}
+`;
+var PUSH_SERVICE_WORKER_JS = `;
+const DOOR = '/__sw/push';
+function readPayload(event) {
+    if (!event.data)
+        return {};
+    try {
+        const value = event.data.json();
+        return value && typeof value === 'object' && !Array.isArray(value) ? value : { title: String(value) };
+    }
+    catch (_) {
+        return { title: event.data.text() };
+    }
+}
+async function broadcast(type, payload) {
+    const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    for (const client of windows)
+        client.postMessage({ __sw_push: true, type: type, payload: payload });
+}
+self.addEventListener('install', function () { self.skipWaiting(); });
+self.addEventListener('push', function (event) {
+    const payload = readPayload(event);
+    const note = payload.notification && typeof payload.notification === 'object' ? payload.notification : payload;
+    const data = Object.assign({}, payload.data && typeof payload.data === 'object' ? payload.data : {});
+    if (typeof payload.url === 'string')
+        data.url = payload.url;
+    const title = typeof note.title === 'string' && note.title ? note.title : self.location.hostname;
+    const options = {
+        body: typeof note.body === 'string' ? note.body : undefined,
+        icon: typeof note.icon === 'string' ? note.icon : undefined,
+        badge: typeof note.badge === 'string' ? note.badge : undefined,
+        image: typeof note.image === 'string' ? note.image : undefined,
+        tag: typeof note.tag === 'string' ? note.tag : undefined,
+        renotify: !!(note.tag && note.renotify),
+        requireInteraction: !!note.requireInteraction,
+        silent: !!note.silent,
+        data: data,
+    };
+    const work = [self.registration.showNotification(title, options), broadcast('push', payload)];
+    if (typeof payload.badge_count === 'number' && self.navigator && self.navigator.setAppBadge) {
+        work.push((payload.badge_count > 0 ? self.navigator.setAppBadge(payload.badge_count) : self.navigator.clearAppBadge()).catch(function () { }));
+    }
+    event.waitUntil(Promise.all(work));
+});
+self.addEventListener('notificationclick', function (event) {
+    event.notification.close();
+    const data = event.notification.data || {};
+    let target = self.location.origin + '/';
+    if (typeof data.url === 'string' && data.url) {
+        try {
+            const url = new URL(data.url, self.location.origin);
+            if (url.origin === self.location.origin)
+                target = url.href;
+        }
+        catch (_) { }
+    }
+    event.waitUntil((async function () {
+        await broadcast('click', data);
+        const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+        for (const client of windows) {
+            if (client.url === target && 'focus' in client)
+                return client.focus();
+        }
+        return self.clients.openWindow(target);
+    })());
+});
+self.addEventListener('pushsubscriptionchange', function (event) {
+    event.waitUntil((async function () {
+        async function door(body) {
+            const res = await fetch(DOOR, {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify(body),
+            });
+            const parsed = await res.json().catch(function () { return null; });
+            if (!res.ok || !parsed || parsed.ok === false)
+                throw new Error('push door ' + res.status);
+            return parsed.data;
+        }
+        let sub = event.newSubscription || null;
+        if (!sub) {
+            const key = (await door({ operation: 'key' })).vapid_public_key;
+            const padded = key + '='.repeat((4 - (key.length % 4)) % 4);
+            const raw = atob(padded.replace(/-/g, '+').replace(/_/g, '/'));
+            const bytes = new Uint8Array(raw.length);
+            for (let i = 0; i < raw.length; i++)
+                bytes[i] = raw.charCodeAt(i);
+            sub = await self.registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: bytes });
+        }
+        await door({
+            operation: 'replace',
+            subscription: sub.toJSON(),
+            old_endpoint: event.oldSubscription ? event.oldSubscription.endpoint : undefined,
+        });
+    })());
 });
 `;
-var PUSH_DOOR_RUNTIME_JS = String.raw `
+var PUSH_DOOR_RUNTIME_JS = String.raw`;
 const __SW_PUSH_ASSETS = {
-  '/__sw/push/client.js': [${JSON.stringify(PUSH_CLIENT_MODULE_JS)}, 'public, max-age=300'],
-  // Revalidated on every update check, so a runtime change reaches browsers.
-  '/__sw/push/sw.js': [${JSON.stringify(PUSH_SERVICE_WORKER_JS)}, 'no-cache'],
+    '/__sw/push/client.js': [$, { JSON, : .stringify(PUSH_CLIENT_MODULE_JS) }, 'public, max-age=300'],
+    '/__sw/push/sw.js': [$, { JSON, : .stringify(PUSH_SERVICE_WORKER_JS) }, 'no-cache'],
 };
 function __sw_pushDoorMatch(url, env) {
-  if (url.pathname !== '/__sw/push' && !Object.prototype.hasOwnProperty.call(__SW_PUSH_ASSETS, url.pathname)) return null;
-  return { path: '/__sw/push', params: {}, load: async () => ({ default: (request, sw) => __sw_handlePushDoor(request, sw, env) }) };
+    if (url.pathname !== '/__sw/push' && !Object.prototype.hasOwnProperty.call(__SW_PUSH_ASSETS, url.pathname))
+        return null;
+    return { path: '/__sw/push', params: {}, load: async () => ({ default: (request, sw) => __sw_handlePushDoor(request, sw, env) }) };
 }
 async function __sw_handlePushDoor(request, sw, env) {
-  const url = new URL(request.url);
-  if (Object.prototype.hasOwnProperty.call(__SW_PUSH_ASSETS, url.pathname)) {
-    if (request.method !== 'GET' && request.method !== 'HEAD') __sw_dataFail(405, 'METHOD_NOT_ALLOWED', 'Use GET ' + url.pathname + '.');
-    const asset = __SW_PUSH_ASSETS[url.pathname];
-    return new Response(request.method === 'HEAD' ? null : asset[0], {
-      status: 200,
-      headers: { 'content-type': 'text/javascript; charset=utf-8', 'cache-control': asset[1] },
+    const url = new URL(request.url);
+    if (Object.prototype.hasOwnProperty.call(__SW_PUSH_ASSETS, url.pathname)) {
+        if (request.method !== 'GET' && request.method !== 'HEAD')
+            __sw_dataFail(405, 'METHOD_NOT_ALLOWED', 'Use GET ' + url.pathname + '.');
+        const asset = __SW_PUSH_ASSETS[url.pathname];
+        return new Response(request.method === 'HEAD' ? null : asset[0], {
+            status: 200,
+            headers: { 'content-type': 'text/javascript; charset=utf-8', 'cache-control': asset[1] },
+        });
+    }
+    if (__sw_artifactExecution !== 'standard') {
+        __sw_dataFail(409, 'PUSH_DRAFT_UNAVAILABLE', 'Push notifications are available on the live app.');
+    }
+    if (request.method !== 'POST')
+        __sw_dataFail(405, 'METHOD_NOT_ALLOWED', 'Use POST /__sw/push.');
+    const origin = request.headers.get('origin');
+    if (!origin)
+        __sw_dataFail(400, 'ORIGIN_REQUIRED', 'Push requests require the app Origin header.');
+    if (origin !== url.origin)
+        __sw_dataFail(403, 'PUSH_ORIGIN_FORBIDDEN', 'Push requests must come from this app origin.');
+    const input = await __sw_dataReadBody(request);
+    if (!input || typeof input !== 'object' || Array.isArray(input))
+        __sw_dataFail(400, 'PUSH_INPUT_INVALID', 'Send a JSON object.');
+    for (const key of ['user_id', 'userId', 'as_user', 'asUser']) {
+        if (Object.prototype.hasOwnProperty.call(input, key)) {
+            __sw_dataFail(400, 'IDENTITY_CLAIM_NOT_ALLOWED', 'A push device always belongs to the signed-in user; ' + key + ' is not accepted.');
+        }
+    }
+    const label = input.label === undefined ? undefined : input.label;
+    let data;
+    try {
+        if (input.operation === 'key') {
+            data = await sw.push.vapidPublicKey();
+        }
+        else if (input.operation === 'subscribe') {
+            data = await sw.push.subscribe(input.test === true ? { test: true } : input.subscription, { label: label });
+        }
+        else if (input.operation === 'unsubscribe') {
+            data = await sw.push.unsubscribe(input.test === true ? { test: true } : input.endpoint);
+        }
+        else if (input.operation === 'replace') {
+            data = await sw.push.subscribe(input.subscription, { label: label });
+            const next = input.subscription && input.subscription.endpoint;
+            if (typeof input.old_endpoint === 'string' && input.old_endpoint && input.old_endpoint !== next) {
+                await sw.push.unsubscribe(input.old_endpoint);
+            }
+        }
+        else {
+            __sw_dataFail(400, 'PUSH_OPERATION_INVALID', 'operation must be key, subscribe, unsubscribe or replace.');
+        }
+    }
+    catch (err) {
+        if (err && typeof err.status === 'number' && err.status >= 400 && err.status < 500)
+            err.__sw_expose = true;
+        throw err;
+    }
+    return new Response(JSON.stringify({ ok: true, data: data }), {
+        status: 200,
+        headers: { 'content-type': 'application/json', 'cache-control': 'no-store' },
     });
-  }
-  if (__sw_artifactExecution !== 'standard') {
-    __sw_dataFail(409, 'PUSH_DRAFT_UNAVAILABLE', 'Push notifications are available on the live app.');
-  }
-  if (request.method !== 'POST') __sw_dataFail(405, 'METHOD_NOT_ALLOWED', 'Use POST /__sw/push.');
-  const origin = request.headers.get('origin');
-  if (!origin) __sw_dataFail(400, 'ORIGIN_REQUIRED', 'Push requests require the app Origin header.');
-  if (origin !== url.origin) __sw_dataFail(403, 'PUSH_ORIGIN_FORBIDDEN', 'Push requests must come from this app origin.');
-  const input = await __sw_dataReadBody(request);
-  if (!input || typeof input !== 'object' || Array.isArray(input)) __sw_dataFail(400, 'PUSH_INPUT_INVALID', 'Send a JSON object.');
-  for (const key of ['user_id', 'userId', 'as_user', 'asUser']) {
-    if (Object.prototype.hasOwnProperty.call(input, key)) {
-      __sw_dataFail(400, 'IDENTITY_CLAIM_NOT_ALLOWED', 'A push device always belongs to the signed-in user; ' + key + ' is not accepted.');
-    }
-  }
-  const label = input.label === undefined ? undefined : input.label;
-  let data;
-  try {
-    if (input.operation === 'key') {
-      data = await sw.push.vapidPublicKey();
-    } else if (input.operation === 'subscribe') {
-      data = await sw.push.subscribe(input.test === true ? { test: true } : input.subscription, { label: label });
-    } else if (input.operation === 'unsubscribe') {
-      data = await sw.push.unsubscribe(input.test === true ? { test: true } : input.endpoint);
-    } else if (input.operation === 'replace') {
-      data = await sw.push.subscribe(input.subscription, { label: label });
-      const next = input.subscription && input.subscription.endpoint;
-      if (typeof input.old_endpoint === 'string' && input.old_endpoint && input.old_endpoint !== next) {
-        await sw.push.unsubscribe(input.old_endpoint);
-      }
-    } else {
-      __sw_dataFail(400, 'PUSH_OPERATION_INVALID', 'operation must be key, subscribe, unsubscribe or replace.');
-    }
-  } catch (err) {
-    if (err && typeof err.status === 'number' && err.status >= 400 && err.status < 500) err.__sw_expose = true;
-    throw err;
-  }
-  return new Response(JSON.stringify({ ok: true, data: data }), {
-    status: 200,
-    headers: { 'content-type': 'application/json', 'cache-control': 'no-store' },
-  });
 }
 `;
-var LIVE_CLIENT_MODULE_JS = `
+
+
+var LIVE_CLIENT_MODULE_JS = `;
 const LIVE_PING_FRAME = '{"type":"sw_ping"}';
 const LIVE_PING_MS = 25000;
 const LIVE_PONG_TIMEOUT_MS = 10000;
 const LIVE_SAFETY_REFRESH_MS = 60000;
 const LIVE_RETRY_LIMIT = 6;
-// Refusals that another attempt cannot change: report once, do not retry.
-// The next reconnect, focus or safety refresh still asks again.
 const LIVE_FINAL = { LIVE_ROLE_REQUIRED: 1, LIVE_MEMBERSHIP_REQUIRED: 1, LIVE_SCOPE_NOT_SUBSCRIBABLE: 1, LIVE_VIEW_NOT_DECLARED: 1, LIVE_VIEW_POLICY_SCOPE_UNSUPPORTED: 1, LIVE_NOT_DECLARED: 1, ROOMS_DRAFT_UNAVAILABLE: 1 };
-
 function liveError(code, message, cause) {
-  const err = new Error(message);
-  err.code = code;
-  if (cause !== undefined) err.cause = cause;
-  return err;
+    const err = new Error(message);
+    err.code = code;
+    if (cause !== undefined)
+        err.cause = cause;
+    return err;
 }
-
 export function watchLive(load, render, onError) {
-  if (typeof load !== 'function' || typeof render !== 'function' || (onError !== undefined && typeof onError !== 'function')) {
-    throw new TypeError('watchLive(load, render, onError?): load and render are functions; onError is an optional function');
-  }
-  let stopped = false;
-  let socket = null;
-  let socketGeneration = 0;
-  let liveKey = null;
-  let inFlight = null;
-  let dirty = false;
-  let reconnectRequested = false;
-  let retryTimer = null;
-  let failures = 0;
-  let pingTimer = null;
-  let pongTimer = null;
-  let reconnectTimer = null;
-  let drops = 0;
-  // Set by an account_full control: terminal until the page is deliberately shown again or comes
-  // back online; the automatic safety refresh does not re-ask, so a full account never causes a reconnect storm.
-  let accountFull = null;
-  // Set by an admission_unavailable control: a temporary refusal. The reconnect backs off (never at once) and the
-  // back-off is kept across refused handshakes; only a healthy admission (the socket's first resync) resets it.
-  let refused = null;
-
-  function report(err) {
-    const retrying = failures <= LIVE_RETRY_LIMIT;
-    const info = { attempt: failures, retrying: retrying };
-    if (onError) {
-      try { onError(err, info); } catch (handlerError) { console.error('[watchLive] onError threw', handlerError); }
-    } else {
-      console.error('[watchLive] ' + (err && err.code ? err.code + ': ' : '') + ((err && err.message) || String(err)) + (retrying ? ' (retrying)' : ' (gave up; the list refreshes again on reconnect, focus or within 60 s)'), err);
+    if (typeof load !== 'function' || typeof render !== 'function' || (onError !== undefined && typeof onError !== 'function')) {
+        throw new TypeError('watchLive(load, render, onError?): load and render are functions; onError is an optional function');
     }
-  }
-
-  function scheduleRetry(reconnect) {
-    if (stopped || retryTimer !== null || failures > LIVE_RETRY_LIMIT) return;
-    const delay = Math.min(500 * Math.pow(2, failures - 1), 15000);
-    retryTimer = setTimeout(function () { retryTimer = null; refresh(reconnect); }, delay);
-  }
-
-  function fail(err, reconnect) {
-    failures = err && LIVE_FINAL[err.code] ? LIVE_RETRY_LIMIT + 1 : failures + 1;
-    report(err);
-    scheduleRetry(reconnect);
-  }
-
-  function stopPing() {
-    if (pingTimer !== null) { clearInterval(pingTimer); pingTimer = null; }
-    if (pongTimer !== null) { clearTimeout(pongTimer); pongTimer = null; }
-  }
-
-  function connect(live) {
-    const nextKey = String(live.release_id) + ':' + String(live.fingerprint);
-    const generation = ++socketGeneration;
-    stopPing();
-    if (socket) { try { socket.close(1000, 'refresh'); } catch (_) {} }
-    liveKey = nextKey;
-    let ws;
-    try { ws = new WebSocket(live.subscribe_url); } catch (err) { socket = null; fail(liveError('LIVE_CONNECT_FAILED', 'The live connection could not be opened.', err), true); return; }
-    socket = ws;
-    let closed = false;
-    ws.onmessage = function (message) {
-      if (stopped || generation !== socketGeneration) return;
-      if (pongTimer !== null) { clearTimeout(pongTimer); pongTimer = null; }
-      let frame = null;
-      try { frame = JSON.parse(message.data); } catch (_) { return; }
-      if (!frame || frame.type !== 'live_control') return;
-      // resync_required: rows changed, or this socket just went live.
-      // release_changed / access_revoked / reauthorize_required: the socket
-      // closes next; the close handler reconnects through a fresh load.
-      // Only an admitted socket is sent resync_required, so it is the healthy-admission signal that resets back-off.
-      if (frame.event === 'resync_required') { drops = 0; refused = null; refresh(false); }
-      if (frame.event === 'admission_unavailable') refused = { code: frame.code || 'ROOM_ADMISSION_UNAVAILABLE', message: frame.message || 'Live list admission is temporarily unavailable.' };
-      if (frame.event === 'account_full') {
-        accountFull = { code: frame.code || 'ROOM_ACCOUNT_FULL', message: frame.message || 'This app has reached its limit of people connected at once.' };
-        // Terminal: cancel pending retries and reconnects; an in-flight load will not reconnect either (see refresh).
-        if (retryTimer !== null) { clearTimeout(retryTimer); retryTimer = null; }
-        if (reconnectTimer !== null) { clearTimeout(reconnectTimer); reconnectTimer = null; }
-      }
+    let stopped = false;
+    let socket = null;
+    let socketGeneration = 0;
+    let liveKey = null;
+    let inFlight = null;
+    let dirty = false;
+    let reconnectRequested = false;
+    let retryTimer = null;
+    let failures = 0;
+    let pingTimer = null;
+    let pongTimer = null;
+    let reconnectTimer = null;
+    let drops = 0;
+    let accountFull = null;
+    let refused = null;
+    function report(err) {
+        const retrying = failures <= LIVE_RETRY_LIMIT;
+        const info = { attempt: failures, retrying: retrying };
+        if (onError) {
+            try {
+                onError(err, info);
+            }
+            catch (handlerError) {
+                console.error('[watchLive] onError threw', handlerError);
+            }
+        }
+        else {
+            console.error('[watchLive] ' + (err && err.code ? err.code + ': ' : '') + ((err && err.message) || String(err)) + (retrying ? ' (retrying)' : ' (gave up; the list refreshes again on reconnect, focus or within 60 s)'), err);
+        }
+    }
+    function scheduleRetry(reconnect) {
+        if (stopped || retryTimer !== null || failures > LIVE_RETRY_LIMIT)
+            return;
+        const delay = Math.min(500 * Math.pow(2, failures - 1), 15000);
+        retryTimer = setTimeout(function () { retryTimer = null; refresh(reconnect); }, delay);
+    }
+    function fail(err, reconnect) {
+        failures = err && LIVE_FINAL[err.code] ? LIVE_RETRY_LIMIT + 1 : failures + 1;
+        report(err);
+        scheduleRetry(reconnect);
+    }
+    function stopPing() {
+        if (pingTimer !== null) {
+            clearInterval(pingTimer);
+            pingTimer = null;
+        }
+        if (pongTimer !== null) {
+            clearTimeout(pongTimer);
+            pongTimer = null;
+        }
+    }
+    function connect(live) {
+        const nextKey = String(live.release_id) + ':' + String(live.fingerprint);
+        const generation = ++socketGeneration;
+        stopPing();
+        if (socket) {
+            try {
+                socket.close(1000, 'refresh');
+            }
+            catch (_) { }
+        }
+        liveKey = nextKey;
+        let ws;
+        try {
+            ws = new WebSocket(live.subscribe_url);
+        }
+        catch (err) {
+            socket = null;
+            fail(liveError('LIVE_CONNECT_FAILED', 'The live connection could not be opened.', err), true);
+            return;
+        }
+        socket = ws;
+        let closed = false;
+        ws.onmessage = function (message) {
+            if (stopped || generation !== socketGeneration)
+                return;
+            if (pongTimer !== null) {
+                clearTimeout(pongTimer);
+                pongTimer = null;
+            }
+            let frame = null;
+            try {
+                frame = JSON.parse(message.data);
+            }
+            catch (_) {
+                return;
+            }
+            if (!frame || frame.type !== 'live_control')
+                return;
+            if (frame.event === 'resync_required') {
+                drops = 0;
+                refused = null;
+                refresh(false);
+            }
+            if (frame.event === 'admission_unavailable')
+                refused = { code: frame.code || 'ROOM_ADMISSION_UNAVAILABLE', message: frame.message || 'Live list admission is temporarily unavailable.' };
+            if (frame.event === 'account_full') {
+                accountFull = { code: frame.code || 'ROOM_ACCOUNT_FULL', message: frame.message || 'This app has reached its limit of people connected at once.' };
+                if (retryTimer !== null) {
+                    clearTimeout(retryTimer);
+                    retryTimer = null;
+                }
+                if (reconnectTimer !== null) {
+                    clearTimeout(reconnectTimer);
+                    reconnectTimer = null;
+                }
+            }
+        };
+        ws.onopen = function () {
+            if (stopped || generation !== socketGeneration)
+                return;
+            pingTimer = setInterval(function () {
+                if (stopped || generation !== socketGeneration)
+                    return;
+                if (ws.readyState !== 1) {
+                    onClose();
+                    return;
+                }
+                try {
+                    ws.send(LIVE_PING_FRAME);
+                }
+                catch (_) {
+                    onClose();
+                    return;
+                }
+                if (pongTimer === null)
+                    pongTimer = setTimeout(function () {
+                        pongTimer = null;
+                        if (generation === socketGeneration) {
+                            try {
+                                ws.close(4000, 'no_pong');
+                            }
+                            catch (_) { }
+                            onClose();
+                        }
+                    }, LIVE_PONG_TIMEOUT_MS);
+            }, LIVE_PING_MS);
+        };
+        function onClose() {
+            if (closed || stopped || generation !== socketGeneration)
+                return;
+            closed = true;
+            stopPing();
+            if (accountFull) {
+                socket = null;
+                liveKey = null;
+                failures = LIVE_RETRY_LIMIT + 1;
+                report(liveError(accountFull.code, accountFull.message));
+                return;
+            }
+            try {
+                ws.close(1000, 'replaced');
+            }
+            catch (_) { }
+            socket = null;
+            liveKey = null;
+            drops += 1;
+            const wasRefused = refused;
+            refused = null;
+            if (wasRefused)
+                report(liveError(wasRefused.code, wasRefused.message));
+            else if (drops > 3)
+                report(liveError('LIVE_DISCONNECTED', 'The live connection keeps closing; reconnecting.'));
+            if (reconnectTimer !== null)
+                return;
+            const delay = wasRefused ? Math.min(1000 * Math.pow(2, drops - 1), 30000) : drops === 1 ? 0 : Math.min(500 * Math.pow(2, drops - 2), 15000);
+            reconnectTimer = setTimeout(function () { reconnectTimer = null; refresh(true); }, delay);
+        }
+        ws.onclose = onClose;
+        ws.onerror = onClose;
+    }
+    function refresh(reconnect) {
+        if (stopped)
+            return Promise.resolve(null);
+        if (inFlight) {
+            dirty = true;
+            reconnectRequested = reconnectRequested || !!reconnect;
+            return inFlight;
+        }
+        if (retryTimer !== null) {
+            clearTimeout(retryTimer);
+            retryTimer = null;
+        }
+        if (reconnect && reconnectTimer !== null) {
+            clearTimeout(reconnectTimer);
+            reconnectTimer = null;
+        }
+        let snapshot = null;
+        inFlight = Promise.resolve().then(load).then(function (value) {
+            snapshot = value;
+            if (stopped)
+                return;
+            render(snapshot && snapshot.data, snapshot);
+            const live = snapshot && snapshot.live;
+            if (!live || live.state !== 'ready' || typeof live.subscribe_url !== 'string') {
+                throw liveError((live && live.reason) || 'LIVE_NOT_DECLARED', live ? 'The list loaded, but it could not subscribe to changes (' + (live.reason || live.state) + ').'
+                    : 'load() must return the JSON of a function that returns sw.rooms.live(name, read).');
+            }
+            failures = 0;
+            if (accountFull)
+                return;
+            const nextKey = String(live.release_id) + ':' + String(live.fingerprint);
+            if (reconnect || !socket || nextKey !== liveKey)
+                connect(live);
+        }).catch(function (err) {
+            if (!stopped)
+                fail(err && err.code ? err : liveError('LIVE_REFRESH_FAILED', 'Refreshing the live list failed: ' + ((err && err.message) || String(err)), err), reconnect || !socket);
+        }).then(function () {
+            inFlight = null;
+            if (dirty && !stopped) {
+                const again = reconnectRequested;
+                dirty = false;
+                reconnectRequested = false;
+                refresh(again);
+            }
+            return snapshot;
+        });
+        return inFlight;
+    }
+    function repair() {
+        if (stopped)
+            return;
+        failures = Math.min(failures, LIVE_RETRY_LIMIT);
+        refresh(!socket && reconnectTimer === null);
+    }
+    function deliberateRepair() { accountFull = null; repair(); }
+    function onVisibility() { if (document.visibilityState === 'visible')
+        deliberateRepair(); }
+    document.addEventListener('visibilitychange', onVisibility);
+    if (typeof window !== 'undefined')
+        window.addEventListener('online', deliberateRepair);
+    const safety = setInterval(function () { if (document.visibilityState !== 'hidden' && !accountFull)
+        repair(); }, LIVE_SAFETY_REFRESH_MS);
+    refresh(true);
+    return function stop() {
+        stopped = true;
+        socketGeneration++;
+        stopPing();
+        if (retryTimer !== null)
+            clearTimeout(retryTimer);
+        if (reconnectTimer !== null)
+            clearTimeout(reconnectTimer);
+        clearInterval(safety);
+        document.removeEventListener('visibilitychange', onVisibility);
+        if (typeof window !== 'undefined')
+            window.removeEventListener('online', deliberateRepair);
+        if (socket) {
+            try {
+                socket.close(1000, 'stopped');
+            }
+            catch (_) { }
+        }
     };
-    ws.onopen = function () {
-      if (stopped || generation !== socketGeneration) return;
-      pingTimer = setInterval(function () {
-        if (stopped || generation !== socketGeneration) return;
-        // A socket that is no longer open is dead even if its close event is late.
-        if (ws.readyState !== 1) { onClose(); return; }
-        try { ws.send(LIVE_PING_FRAME); } catch (_) { onClose(); return; }
-        if (pongTimer === null) pongTimer = setTimeout(function () {
-          pongTimer = null;
-          if (generation === socketGeneration) { try { ws.close(4000, 'no_pong'); } catch (_) {} onClose(); }
-        }, LIVE_PONG_TIMEOUT_MS);
-      }, LIVE_PING_MS);
-    };
-    function onClose() {
-      if (closed || stopped || generation !== socketGeneration) return;
-      closed = true;
-      stopPing();
-      if (accountFull) {
-        socket = null;
-        liveKey = null;
-        failures = LIVE_RETRY_LIMIT + 1;
-        report(liveError(accountFull.code, accountFull.message));
-        return;
-      }
-      // An error may leave the socket half-open; close it explicitly so no stale
-      // connection lingers behind the replacement.
-      try { ws.close(1000, 'replaced'); } catch (_) {}
-      socket = null;
-      liveKey = null;
-      // A fresh load re-checks access and mints a new ticket; it also shows
-      // anything that changed while the socket was down. The first drop
-      // reconnects at once; repeated drops back off and are reported.
-      drops += 1;
-      const wasRefused = refused;
-      refused = null;
-      if (wasRefused) report(liveError(wasRefused.code, wasRefused.message));
-      else if (drops > 3) report(liveError('LIVE_DISCONNECTED', 'The live connection keeps closing; reconnecting.'));
-      if (reconnectTimer !== null) return;
-      // A temporary admission refusal never reconnects at once; the back-off grows across refused handshakes.
-      const delay = wasRefused ? Math.min(1000 * Math.pow(2, drops - 1), 30000) : drops === 1 ? 0 : Math.min(500 * Math.pow(2, drops - 2), 15000);
-      reconnectTimer = setTimeout(function () { reconnectTimer = null; refresh(true); }, delay);
-    }
-    ws.onclose = onClose;
-    ws.onerror = onClose;
-  }
-
-  function refresh(reconnect) {
-    if (stopped) return Promise.resolve(null);
-    if (inFlight) {
-      dirty = true;
-      reconnectRequested = reconnectRequested || !!reconnect;
-      return inFlight;
-    }
-    if (retryTimer !== null) { clearTimeout(retryTimer); retryTimer = null; }
-    if (reconnect && reconnectTimer !== null) { clearTimeout(reconnectTimer); reconnectTimer = null; }
-    let snapshot = null;
-    inFlight = Promise.resolve().then(load).then(function (value) {
-      snapshot = value;
-      if (stopped) return;
-      render(snapshot && snapshot.data, snapshot);
-      const live = snapshot && snapshot.live;
-      if (!live || live.state !== 'ready' || typeof live.subscribe_url !== 'string') {
-        // The rows rendered, but nothing will tell this page about changes.
-        throw liveError((live && live.reason) || 'LIVE_NOT_DECLARED',
-          live ? 'The list loaded, but it could not subscribe to changes (' + (live.reason || live.state) + ').'
-               : 'load() must return the JSON of a function that returns sw.rooms.live(name, read).');
-      }
-      failures = 0;
-      // A full account is terminal until a deliberate retry: a load already in flight renders but never reconnects.
-      if (accountFull) return;
-      const nextKey = String(live.release_id) + ':' + String(live.fingerprint);
-      if (reconnect || !socket || nextKey !== liveKey) connect(live);
-    }).catch(function (err) {
-      if (!stopped) fail(err && err.code ? err : liveError('LIVE_REFRESH_FAILED', 'Refreshing the live list failed: ' + ((err && err.message) || String(err)), err), reconnect || !socket);
-    }).then(function () {
-      inFlight = null;
-      if (dirty && !stopped) {
-        const again = reconnectRequested;
-        dirty = false;
-        reconnectRequested = false;
-        refresh(again);
-      }
-      return snapshot;
-    });
-    return inFlight;
-  }
-
-  function repair() {
-    if (stopped) return;
-    failures = Math.min(failures, LIVE_RETRY_LIMIT);
-    refresh(!socket && reconnectTimer === null);
-  }
-  function deliberateRepair() { accountFull = null; repair(); }
-  function onVisibility() { if (document.visibilityState === 'visible') deliberateRepair(); }
-  document.addEventListener('visibilitychange', onVisibility);
-  if (typeof window !== 'undefined') window.addEventListener('online', deliberateRepair);
-  const safety = setInterval(function () { if (document.visibilityState !== 'hidden' && !accountFull) repair(); }, LIVE_SAFETY_REFRESH_MS);
-  refresh(true);
-
-  return function stop() {
-    stopped = true;
-    socketGeneration++;
-    stopPing();
-    if (retryTimer !== null) clearTimeout(retryTimer);
-    if (reconnectTimer !== null) clearTimeout(reconnectTimer);
-    clearInterval(safety);
-    document.removeEventListener('visibilitychange', onVisibility);
-    if (typeof window !== 'undefined') window.removeEventListener('online', deliberateRepair);
-    if (socket) { try { socket.close(1000, 'stopped'); } catch (_) {} }
-  };
 }
 `.trim();
-var ROOMS_CLIENT_MODULE_JS = `
+
+
+var ROOMS_CLIENT_MODULE_JS = `;
 const TICKET_PATH = '/__sw/rooms/ticket';
 const CONNECT_PATH = '/__sw/rooms/connect';
 const RENEW_MS = 240000;
@@ -17920,1335 +18002,2168 @@ const PING_FRAME = '{"t":"ping"}';
 const PONG_FRAME = '{"t":"pong"}';
 const FINAL_BYE = { row_deleted: 'ROOM_ROW_DELETED', full: 'ROOM_FULL', account_full: 'ROOM_ACCOUNT_FULL' };
 const FINAL_MESSAGE = {
-  ROOM_FULL: 'This room is full.',
-  ROOM_ROW_DELETED: 'This room\\'s row was deleted.',
-  ROOM_ACCOUNT_FULL: 'This app has reached its limit of people connected at once across all its rooms. Try again later.',
+    ROOM_FULL: 'This room is full.',
+    ROOM_ROW_DELETED: 'This room\\', s, row, was, deleted, : ., ',: ROOM_ACCOUNT_FULL, 'This app has reached its limit of people connected at once across all its rooms. Try again later.': ,
 };
-
 function roomError(code, message, extra) {
-  const err = new Error(message);
-  err.code = code;
-  if (extra) for (const key in extra) err[key] = extra[key];
-  return err;
+    const err = new Error(message);
+    err.code = code;
+    if (extra)
+        for (const key in extra)
+            err[key] = extra[key];
+    return err;
 }
-
 function merge(base, patch) {
-  const next = Object.assign({}, base);
-  for (const key of Object.keys(patch || {})) {
-    if (patch[key] === null) delete next[key];
-    else next[key] = patch[key];
-  }
-  return next;
+    const next = Object.assign({}, base);
+    for (const key of Object.keys(patch || {})) {
+        if (patch[key] === null)
+            delete next[key];
+        else
+            next[key] = patch[key];
+    }
+    return next;
 }
-
 async function requestTicket(table, id) {
-  let res;
-  try {
-    res = await fetch(TICKET_PATH, {
-      method: 'POST',
-      credentials: 'same-origin',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ table: table, id: id }),
-    });
-  } catch (cause) {
-    throw roomError('ROOM_UNREACHABLE', 'The room could not be reached. Check the connection.', { retryable: true, cause: cause });
-  }
-  let body = null;
-  try { body = await res.json(); } catch (_) {}
-  if (!res.ok || !body || body.ok === false || !body.data || typeof body.data.ticket !== 'string') {
-    const code = (body && (body.code || body.error)) || 'ROOM_UNREACHABLE';
-    throw roomError(code, (body && body.message) || ('The room could not be joined (' + res.status + ').'), {
-      status: res.status,
-      retryable: res.status >= 500 || res.status === 429 || !body,
-    });
-  }
-  return body.data.ticket;
-}
-
-function connectUrl(ticket) {
-  return (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + CONNECT_PATH + '?ticket=' + encodeURIComponent(ticket);
-}
-
-class Room {
-  constructor(table, id) {
-    this.table = table;
-    this.id = id;
-    this.state = {};
-    this.version = 0;
-    this.people = [];
-    this.canSet = false;
-    this.referee = false;
-    this.status = 'connecting';
-    const room = this;
-    this.me = {
-      info: null,
-      set(info) {
-        if (!info || typeof info !== 'object' || Array.isArray(info)) throw new TypeError('room.me.set takes an object');
-        room.me.info = info;
-        room._frame({ t: 'me', info: info });
-      },
-    };
-    this._handlers = { state: new Set(), message: new Set(), people: new Set(), status: new Set(), timer_failed: new Set() };
-    this._base = {};
-    this._you = null;
-    this._n = 0;
-    this._sets = [];
-    this._acts = new Map();
-    this._socket = null;
-    this._generation = 0;
-    this._stopped = false;
-    this._failures = 0;
-    this._retry = null;
-    this._renew = null;
-    this._ping = null;
-    this._lastPong = 0;
-    this._firstJoin = null;
-  }
-
-  on(event, fn) {
-    const set = this._handlers[event];
-    if (!set) throw new TypeError('room.on: unknown event ' + event + ' (use state, people, message, status or timer_failed)');
-    if (typeof fn !== 'function') throw new TypeError('room.on takes a function');
-    set.add(fn);
-    return () => set.delete(fn);
-  }
-
-  _emit(event, a, b) {
-    for (const fn of Array.from(this._handlers[event])) {
-      try { fn(a, b); } catch (err) { setTimeout(() => { throw err; }); }
-    }
-  }
-
-  _setStatus(status, detail) {
-    if (this.status === status) return;
-    this.status = status;
-    this._emit('status', status, detail);
-  }
-
-  _frame(frame) {
-    const socket = this._socket;
-    if (!socket || socket.readyState !== 1 || this.status !== 'open') return false;
-    socket.send(JSON.stringify(frame));
-    return true;
-  }
-
-  _recompute(change) {
-    let next = this._base;
-    for (const entry of this._sets) next = merge(next, entry.patch);
-    this.state = next;
-    this._emit('state', this.state, change || null);
-  }
-
-  _decoratePeople(list) {
-    return list.map((person) => Object.assign({}, person, { me: person.id === this._you }));
-  }
-
-  set(patch) {
-    if (!patch || typeof patch !== 'object' || Array.isArray(patch)) {
-      return Promise.reject(new TypeError('room.set takes an object of top-level keys (null deletes a key)'));
-    }
-    if (this._stopped) return Promise.reject(roomError('ROOM_LEFT', 'This room was left.'));
-    if (this.referee) return Promise.reject(roomError('ROOM_HAS_REFEREE', 'This room has a referee: use room.act(action).'));
-    const n = ++this._n;
-    return new Promise((resolve, reject) => {
-      const entry = { n: n, patch: patch, resolve: resolve, reject: reject, acked: null };
-      if (!this._frame({ t: 'set', n: n, patch: patch })) {
-        reject(roomError('ROOM_NOT_CONNECTED', 'The room is reconnecting; nothing was changed. Try again when room.status is open.'));
-        return;
-      }
-      this._sets.push(entry);
-      this._recompute({ by: 'me', pending: true });
-    });
-  }
-
-  act(action) {
-    if (this._stopped) return Promise.reject(roomError('ROOM_LEFT', 'This room was left.'));
-    if (!this.referee) return Promise.reject(roomError('ROOM_NO_REFEREE', 'This room has no referee: use room.set(patch).'));
-    const n = ++this._n;
-    return new Promise((resolve, reject) => {
-      if (!this._frame({ t: 'act', n: n, action: action })) {
-        reject(roomError('ROOM_NOT_CONNECTED', 'The room is reconnecting; the action was not sent. Try again when room.status is open.'));
-        return;
-      }
-      this._acts.set(n, { resolve: resolve, reject: reject, acked: null });
-    });
-  }
-
-  send(data) {
-    if (this._stopped) return false;
-    return this._frame({ t: 'msg', data: data });
-  }
-
-  leave() {
-    if (this._stopped) return;
-    this._stopped = true;
-    this._generation++;
-    this._clearTimers();
-    if (this._socket) { try { this._socket.close(1000, 'leave'); } catch (_) {} }
-    this._socket = null;
-    this._failUnanswered('ROOM_LEFT');
-    this._setStatus('closed', { code: 'left' });
-  }
-
-  _clearTimers() {
-    if (this._retry !== null) { clearTimeout(this._retry); this._retry = null; }
-    if (this._renew !== null) { clearInterval(this._renew); this._renew = null; }
-    if (this._ping !== null) { clearInterval(this._ping); this._ping = null; }
-  }
-
-  // Unanswered operations whose connection is gone: their outcome is unknown.
-  // Never re-sent; the caller gets the fresh state with the refusal.
-  _failUnanswered(reasonCode) {
-    const state = this.state;
-    const unknown = (kind) => roomError('ROOM_OUTCOME_UNKNOWN', 'The connection dropped before the room answered this ' + kind + '. It may or may not have been applied; err.state is the room\\'s current state.', { state: state, version: this.version, cause: reasonCode });
-    for (const entry of this._acts.values()) entry.reject(unknown('action'));
-    this._acts.clear();
-    for (const entry of this._sets) entry.reject(unknown('change'));
-    this._sets = [];
-  }
-
-  _settleAcked() {
-    for (const [n, entry] of this._acts) {
-      if (entry.acked !== null && this.version >= entry.acked) { this._acts.delete(n); entry.resolve(this.state); }
-    }
-    const before = this._sets.length;
-    this._sets = this._sets.filter((entry) => {
-      if (entry.acked !== null && this.version >= entry.acked) { entry.resolve(this._base); return false; }
-      return true;
-    });
-    return before !== this._sets.length;
-  }
-
-  _onFrame(frame) {
-    if (!frame || typeof frame.t !== 'string') return;
-    switch (frame.t) {
-      case 'hello': {
-        const first = this._firstJoin !== null;
-        this._you = frame.you;
-        this.canSet = frame.can_set === true;
-        this.referee = frame.referee === true;
-        this._base = frame.state && typeof frame.state === 'object' ? frame.state : {};
-        this.version = frame.version || 0;
-        this.people = this._decoratePeople(Array.isArray(frame.people) ? frame.people : []);
-        this._failures = 0;
-        this._setStatus('open');
-        // Anything unanswered from the previous connection gets this fresh state.
-        this.state = this._base;
-        this._failUnanswered('reconnected');
-        this._recompute({ by: null, joined: true });
-        this._emit('people', this.people);
-        if (this.me.info) this._frame({ t: 'me', info: this.me.info });
-        if (first) { const done = this._firstJoin; this._firstJoin = null; done.resolve(this); }
-        return;
-      }
-      case 'state': {
-        if (typeof frame.version === 'number' && frame.version <= this.version) return;
-        this._base = frame.state !== undefined ? (frame.state || {}) : merge(this._base, frame.patch);
-        this.version = frame.version;
-        this._settleAcked();
-        this._recompute({ by: frame.by === undefined ? null : frame.by, version: frame.version });
-        return;
-      }
-      case 'ok': {
-        const act = this._acts.get(frame.n);
-        if (act) {
-          if (this.version >= frame.version) { this._acts.delete(frame.n); act.resolve(this.state); }
-          else act.acked = frame.version;
-          return;
-        }
-        const entry = this._sets.find((item) => item.n === frame.n);
-        if (entry) {
-          entry.acked = frame.version;
-          if (this._settleAcked()) this._recompute({ by: 'me', version: this.version });
-        }
-        return;
-      }
-      case 'no': {
-        if (frame.state !== undefined && typeof frame.version === 'number' && frame.version >= this.version) {
-          this._base = frame.state || {};
-          this.version = frame.version;
-        }
-        const err = roomError(frame.code || 'ROOM_REFUSED', frame.reason || frame.code || 'The room refused this.', { reason: frame.reason, state: this._base, version: this.version });
-        const act = this._acts.get(frame.n);
-        if (act) { this._acts.delete(frame.n); err.state = this.state; act.reject(err); return; }
-        const index = this._sets.findIndex((item) => item.n === frame.n);
-        if (index !== -1) {
-          const entry = this._sets.splice(index, 1)[0];
-          this._recompute({ by: 'me', refused: frame.code });
-          err.state = this.state;
-          entry.reject(err);
-        }
-        return;
-      }
-      case 'msgs': {
-        for (const item of Array.isArray(frame.items) ? frame.items : []) this._emit('message', item.data, item.from);
-        return;
-      }
-      case 'people': {
-        const left = new Set(frame.left || []);
-        const changed = new Map((frame.changed || []).map((person) => [person.id, person]));
-        let next = this.people.filter((person) => !left.has(person.id)).map((person) => changed.has(person.id) ? Object.assign({}, person, changed.get(person.id), { me: person.id === this._you }) : person);
-        next = next.concat(this._decoratePeople((frame.joined || []).filter((person) => !next.some((p) => p.id === person.id))));
-        this.people = next;
-        this._emit('people', this.people);
-        return;
-      }
-      case 'timer_failed': {
-        this._emit('timer_failed');
-        return;
-      }
-      case 'bye': {
-        this._bye = frame.code;
-        return;
-      }
-      case 'pong': {
-        this._lastPong = Date.now();
-        return;
-      }
-      default:
-        return;
-    }
-  }
-
-  async _connect() {
-    const generation = ++this._generation;
-    let ticket;
+    let res;
     try {
-      ticket = await requestTicket(this.table, this.id);
-    } catch (err) {
-      if (generation !== this._generation || this._stopped) return;
-      if (err.retryable) return this._scheduleRetry();
-      return this._finish(err);
-    }
-    if (generation !== this._generation || this._stopped) return;
-    this._bye = null;
-    const socket = new WebSocket(connectUrl(ticket));
-    this._socket = socket;
-    this._lastPong = Date.now();
-    socket.onmessage = (message) => {
-      if (generation !== this._generation) return;
-      if (message.data === PONG_FRAME) { this._lastPong = Date.now(); return; }
-      let frame = null;
-      try { frame = JSON.parse(message.data); } catch (_) { return; }
-      this._onFrame(frame);
-    };
-    let closed = false;
-    const onGone = () => {
-      if (closed || generation !== this._generation) return;
-      closed = true;
-      this._socket = null;
-      if (this._ping !== null) { clearInterval(this._ping); this._ping = null; }
-      if (this._renew !== null) { clearInterval(this._renew); this._renew = null; }
-      if (this._stopped) return;
-      const finalCode = this._bye && FINAL_BYE[this._bye];
-      if (finalCode) {
-        return this._finish(roomError(finalCode, FINAL_MESSAGE[finalCode]));
-      }
-      this._setStatus('reconnecting', { code: this._bye || 'dropped' });
-      // expired / app_updated rejoin at once with a fresh ticket; a drop backs off.
-      if (this._bye === 'expired' || this._bye === 'app_updated') this._connect();
-      else this._scheduleRetry();
-    };
-    socket.onclose = onGone;
-    socket.onerror = onGone;
-    socket.onopen = () => {
-      if (generation !== this._generation) return;
-      this._ping = setInterval(() => {
-        if (Date.now() - this._lastPong > PING_MS * 2 + 5000) { try { socket.close(4000, 'no answer'); } catch (_) {} onGone(); return; }
-        try { socket.send(PING_FRAME); } catch (_) {}
-      }, PING_MS);
-      this._renew = setInterval(() => this._renewTicket(generation), RENEW_MS);
-    };
-  }
-
-  // Every 4 minutes: a fresh ticket over the open connection. The row's read
-  // rule is evaluated again each time; a refusal means access was removed and
-  // the room closes the connection when the current ticket expires.
-  async _renewTicket(generation) {
-    try {
-      const ticket = await requestTicket(this.table, this.id);
-      if (generation === this._generation && this._socket && this._socket.readyState === 1) {
-        this._socket.send(JSON.stringify({ t: 'ticket', ticket: ticket }));
-      }
-    } catch (err) {
-      if (!err.retryable) console.warn('[rooms] access to ' + this.table + ' ' + this.id + ' was not renewed: ' + err.code);
-    }
-  }
-
-  _scheduleRetry() {
-    if (this._stopped || this._retry !== null) return;
-    this._setStatus('reconnecting', { code: 'dropped' });
-    const delay = Math.min(500 * Math.pow(2, this._failures), 30000) * (0.75 + Math.random() * 0.5);
-    this._failures = Math.min(this._failures + 1, 6);
-    this._retry = setTimeout(() => { this._retry = null; this._connect(); }, delay);
-  }
-
-  _finish(err) {
-    this._stopped = true;
-    this._generation++;
-    this._clearTimers();
-    this._failUnanswered(err.code);
-    this._setStatus('closed', { code: err.code, error: err });
-    if (this._firstJoin) { const done = this._firstJoin; this._firstJoin = null; done.reject(err); }
-  }
-
-  _start() {
-    return new Promise((resolve, reject) => {
-      this._firstJoin = { resolve: resolve, reject: reject };
-      if (typeof window !== 'undefined') {
-        window.addEventListener('online', () => {
-          if (!this._stopped && this._retry !== null) { clearTimeout(this._retry); this._retry = null; this._connect(); }
+        res = await fetch(TICKET_PATH, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ table: table, id: id }),
         });
-      }
-      this._connect();
-    });
-  }
+    }
+    catch (cause) {
+        throw roomError('ROOM_UNREACHABLE', 'The room could not be reached. Check the connection.', { retryable: true, cause: cause });
+    }
+    let body = null;
+    try {
+        body = await res.json();
+    }
+    catch (_) { }
+    if (!res.ok || !body || body.ok === false || !body.data || typeof body.data.ticket !== 'string') {
+        const code = (body && (body.code || body.error)) || 'ROOM_UNREACHABLE';
+        throw roomError(code, (body && body.message) || ('The room could not be joined (' + res.status + ').'), {
+            status: res.status,
+            retryable: res.status >= 500 || res.status === 429 || !body,
+        });
+    }
+    return body.data.ticket;
 }
-
+function connectUrl(ticket) {
+    return (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + CONNECT_PATH + '?ticket=' + encodeURIComponent(ticket);
+}
+class Room {
+    constructor(table, id) {
+        this.table = table;
+        this.id = id;
+        this.state = {};
+        this.version = 0;
+        this.people = [];
+        this.canSet = false;
+        this.referee = false;
+        this.status = 'connecting';
+        const room = this;
+        this.me = {
+            info: null,
+            set(info) {
+                if (!info || typeof info !== 'object' || Array.isArray(info))
+                    throw new TypeError('room.me.set takes an object');
+                room.me.info = info;
+                room._frame({ t: 'me', info: info });
+            },
+        };
+        this._handlers = { state: new Set(), message: new Set(), people: new Set(), status: new Set(), timer_failed: new Set() };
+        this._base = {};
+        this._you = null;
+        this._n = 0;
+        this._sets = [];
+        this._acts = new Map();
+        this._socket = null;
+        this._generation = 0;
+        this._stopped = false;
+        this._failures = 0;
+        this._retry = null;
+        this._renew = null;
+        this._ping = null;
+        this._lastPong = 0;
+        this._firstJoin = null;
+    }
+    on(event, fn) {
+        const set = this._handlers[event];
+        if (!set)
+            throw new TypeError('room.on: unknown event ' + event + ' (use state, people, message, status or timer_failed)');
+        if (typeof fn !== 'function')
+            throw new TypeError('room.on takes a function');
+        set.add(fn);
+        return () => set.delete(fn);
+    }
+    _emit(event, a, b) {
+        for (const fn of Array.from(this._handlers[event])) {
+            try {
+                fn(a, b);
+            }
+            catch (err) {
+                setTimeout(() => { throw err; });
+            }
+        }
+    }
+    _setStatus(status, detail) {
+        if (this.status === status)
+            return;
+        this.status = status;
+        this._emit('status', status, detail);
+    }
+    _frame(frame) {
+        const socket = this._socket;
+        if (!socket || socket.readyState !== 1 || this.status !== 'open')
+            return false;
+        socket.send(JSON.stringify(frame));
+        return true;
+    }
+    _recompute(change) {
+        let next = this._base;
+        for (const entry of this._sets)
+            next = merge(next, entry.patch);
+        this.state = next;
+        this._emit('state', this.state, change || null);
+    }
+    _decoratePeople(list) {
+        return list.map((person) => Object.assign({}, person, { me: person.id === this._you }));
+    }
+    set(patch) {
+        if (!patch || typeof patch !== 'object' || Array.isArray(patch)) {
+            return Promise.reject(new TypeError('room.set takes an object of top-level keys (null deletes a key)'));
+        }
+        if (this._stopped)
+            return Promise.reject(roomError('ROOM_LEFT', 'This room was left.'));
+        if (this.referee)
+            return Promise.reject(roomError('ROOM_HAS_REFEREE', 'This room has a referee: use room.act(action).'));
+        const n = ++this._n;
+        return new Promise((resolve, reject) => {
+            const entry = { n: n, patch: patch, resolve: resolve, reject: reject, acked: null };
+            if (!this._frame({ t: 'set', n: n, patch: patch })) {
+                reject(roomError('ROOM_NOT_CONNECTED', 'The room is reconnecting; nothing was changed. Try again when room.status is open.'));
+                return;
+            }
+            this._sets.push(entry);
+            this._recompute({ by: 'me', pending: true });
+        });
+    }
+    act(action) {
+        if (this._stopped)
+            return Promise.reject(roomError('ROOM_LEFT', 'This room was left.'));
+        if (!this.referee)
+            return Promise.reject(roomError('ROOM_NO_REFEREE', 'This room has no referee: use room.set(patch).'));
+        const n = ++this._n;
+        return new Promise((resolve, reject) => {
+            if (!this._frame({ t: 'act', n: n, action: action })) {
+                reject(roomError('ROOM_NOT_CONNECTED', 'The room is reconnecting; the action was not sent. Try again when room.status is open.'));
+                return;
+            }
+            this._acts.set(n, { resolve: resolve, reject: reject, acked: null });
+        });
+    }
+    send(data) {
+        if (this._stopped)
+            return false;
+        return this._frame({ t: 'msg', data: data });
+    }
+    leave() {
+        if (this._stopped)
+            return;
+        this._stopped = true;
+        this._generation++;
+        this._clearTimers();
+        if (this._socket) {
+            try {
+                this._socket.close(1000, 'leave');
+            }
+            catch (_) { }
+        }
+        this._socket = null;
+        this._failUnanswered('ROOM_LEFT');
+        this._setStatus('closed', { code: 'left' });
+    }
+    _clearTimers() {
+        if (this._retry !== null) {
+            clearTimeout(this._retry);
+            this._retry = null;
+        }
+        if (this._renew !== null) {
+            clearInterval(this._renew);
+            this._renew = null;
+        }
+        if (this._ping !== null) {
+            clearInterval(this._ping);
+            this._ping = null;
+        }
+    }
+    _failUnanswered(reasonCode) {
+        const state = this.state;
+        const unknown = (kind) => roomError('ROOM_OUTCOME_UNKNOWN', 'The connection dropped before the room answered this ' + kind + '. It may or may not have been applied; err.state is the room\\', s, current, state., ', { state: state, version: this.version, cause: reasonCode }););
+        for (const entry of this._acts.values())
+            entry.reject(unknown('action'));
+        this._acts.clear();
+        for (const entry of this._sets)
+            entry.reject(unknown('change'));
+        this._sets = [];
+    }
+    _settleAcked() {
+        for (const [n, entry] of this._acts) {
+            if (entry.acked !== null && this.version >= entry.acked) {
+                this._acts.delete(n);
+                entry.resolve(this.state);
+            }
+        }
+        const before = this._sets.length;
+        this._sets = this._sets.filter((entry) => {
+            if (entry.acked !== null && this.version >= entry.acked) {
+                entry.resolve(this._base);
+                return false;
+            }
+            return true;
+        });
+        return before !== this._sets.length;
+    }
+    _onFrame(frame) {
+        if (!frame || typeof frame.t !== 'string')
+            return;
+        switch (frame.t) {
+            case 'hello': {
+                const first = this._firstJoin !== null;
+                this._you = frame.you;
+                this.canSet = frame.can_set === true;
+                this.referee = frame.referee === true;
+                this._base = frame.state && typeof frame.state === 'object' ? frame.state : {};
+                this.version = frame.version || 0;
+                this.people = this._decoratePeople(Array.isArray(frame.people) ? frame.people : []);
+                this._failures = 0;
+                this._setStatus('open');
+                this.state = this._base;
+                this._failUnanswered('reconnected');
+                this._recompute({ by: null, joined: true });
+                this._emit('people', this.people);
+                if (this.me.info)
+                    this._frame({ t: 'me', info: this.me.info });
+                if (first) {
+                    const done = this._firstJoin;
+                    this._firstJoin = null;
+                    done.resolve(this);
+                }
+                return;
+            }
+            case 'state': {
+                if (typeof frame.version === 'number' && frame.version <= this.version)
+                    return;
+                this._base = frame.state !== undefined ? (frame.state || {}) : merge(this._base, frame.patch);
+                this.version = frame.version;
+                this._settleAcked();
+                this._recompute({ by: frame.by === undefined ? null : frame.by, version: frame.version });
+                return;
+            }
+            case 'ok': {
+                const act = this._acts.get(frame.n);
+                if (act) {
+                    if (this.version >= frame.version) {
+                        this._acts.delete(frame.n);
+                        act.resolve(this.state);
+                    }
+                    else
+                        act.acked = frame.version;
+                    return;
+                }
+                const entry = this._sets.find((item) => item.n === frame.n);
+                if (entry) {
+                    entry.acked = frame.version;
+                    if (this._settleAcked())
+                        this._recompute({ by: 'me', version: this.version });
+                }
+                return;
+            }
+            case 'no': {
+                if (frame.state !== undefined && typeof frame.version === 'number' && frame.version >= this.version) {
+                    this._base = frame.state || {};
+                    this.version = frame.version;
+                }
+                const err = roomError(frame.code || 'ROOM_REFUSED', frame.reason || frame.code || 'The room refused this.', { reason: frame.reason, state: this._base, version: this.version });
+                const act = this._acts.get(frame.n);
+                if (act) {
+                    this._acts.delete(frame.n);
+                    err.state = this.state;
+                    act.reject(err);
+                    return;
+                }
+                const index = this._sets.findIndex((item) => item.n === frame.n);
+                if (index !== -1) {
+                    const entry = this._sets.splice(index, 1)[0];
+                    this._recompute({ by: 'me', refused: frame.code });
+                    err.state = this.state;
+                    entry.reject(err);
+                }
+                return;
+            }
+            case 'msgs': {
+                for (const item of Array.isArray(frame.items) ? frame.items : [])
+                    this._emit('message', item.data, item.from);
+                return;
+            }
+            case 'people': {
+                const left = new Set(frame.left || []);
+                const changed = new Map((frame.changed || []).map((person) => [person.id, person]));
+                let next = this.people.filter((person) => !left.has(person.id)).map((person) => changed.has(person.id) ? Object.assign({}, person, changed.get(person.id), { me: person.id === this._you }) : person);
+                next = next.concat(this._decoratePeople((frame.joined || []).filter((person) => !next.some((p) => p.id === person.id))));
+                this.people = next;
+                this._emit('people', this.people);
+                return;
+            }
+            case 'timer_failed': {
+                this._emit('timer_failed');
+                return;
+            }
+            case 'bye': {
+                this._bye = frame.code;
+                return;
+            }
+            case 'pong': {
+                this._lastPong = Date.now();
+                return;
+            }
+            default:
+                return;
+        }
+    }
+    async _connect() {
+        const generation = ++this._generation;
+        let ticket;
+        try {
+            ticket = await requestTicket(this.table, this.id);
+        }
+        catch (err) {
+            if (generation !== this._generation || this._stopped)
+                return;
+            if (err.retryable)
+                return this._scheduleRetry();
+            return this._finish(err);
+        }
+        if (generation !== this._generation || this._stopped)
+            return;
+        this._bye = null;
+        const socket = new WebSocket(connectUrl(ticket));
+        this._socket = socket;
+        this._lastPong = Date.now();
+        socket.onmessage = (message) => {
+            if (generation !== this._generation)
+                return;
+            if (message.data === PONG_FRAME) {
+                this._lastPong = Date.now();
+                return;
+            }
+            let frame = null;
+            try {
+                frame = JSON.parse(message.data);
+            }
+            catch (_) {
+                return;
+            }
+            this._onFrame(frame);
+        };
+        let closed = false;
+        const onGone = () => {
+            if (closed || generation !== this._generation)
+                return;
+            closed = true;
+            this._socket = null;
+            if (this._ping !== null) {
+                clearInterval(this._ping);
+                this._ping = null;
+            }
+            if (this._renew !== null) {
+                clearInterval(this._renew);
+                this._renew = null;
+            }
+            if (this._stopped)
+                return;
+            const finalCode = this._bye && FINAL_BYE[this._bye];
+            if (finalCode) {
+                return this._finish(roomError(finalCode, FINAL_MESSAGE[finalCode]));
+            }
+            this._setStatus('reconnecting', { code: this._bye || 'dropped' });
+            if (this._bye === 'expired' || this._bye === 'app_updated')
+                this._connect();
+            else
+                this._scheduleRetry();
+        };
+        socket.onclose = onGone;
+        socket.onerror = onGone;
+        socket.onopen = () => {
+            if (generation !== this._generation)
+                return;
+            this._ping = setInterval(() => {
+                if (Date.now() - this._lastPong > PING_MS * 2 + 5000) {
+                    try {
+                        socket.close(4000, 'no answer');
+                    }
+                    catch (_) { }
+                    onGone();
+                    return;
+                }
+                try {
+                    socket.send(PING_FRAME);
+                }
+                catch (_) { }
+            }, PING_MS);
+            this._renew = setInterval(() => this._renewTicket(generation), RENEW_MS);
+        };
+    }
+    async _renewTicket(generation) {
+        try {
+            const ticket = await requestTicket(this.table, this.id);
+            if (generation === this._generation && this._socket && this._socket.readyState === 1) {
+                this._socket.send(JSON.stringify({ t: 'ticket', ticket: ticket }));
+            }
+        }
+        catch (err) {
+            if (!err.retryable)
+                console.warn('[rooms] access to ' + this.table + ' ' + this.id + ' was not renewed: ' + err.code);
+        }
+    }
+    _scheduleRetry() {
+        if (this._stopped || this._retry !== null)
+            return;
+        this._setStatus('reconnecting', { code: 'dropped' });
+        const delay = Math.min(500 * Math.pow(2, this._failures), 30000) * (0.75 + Math.random() * 0.5);
+        this._failures = Math.min(this._failures + 1, 6);
+        this._retry = setTimeout(() => { this._retry = null; this._connect(); }, delay);
+    }
+    _finish(err) {
+        this._stopped = true;
+        this._generation++;
+        this._clearTimers();
+        this._failUnanswered(err.code);
+        this._setStatus('closed', { code: err.code, error: err });
+        if (this._firstJoin) {
+            const done = this._firstJoin;
+            this._firstJoin = null;
+            done.reject(err);
+        }
+    }
+    _start() {
+        return new Promise((resolve, reject) => {
+            this._firstJoin = { resolve: resolve, reject: reject };
+            if (typeof window !== 'undefined') {
+                window.addEventListener('online', () => {
+                    if (!this._stopped && this._retry !== null) {
+                        clearTimeout(this._retry);
+                        this._retry = null;
+                        this._connect();
+                    }
+                });
+            }
+            this._connect();
+        });
+    }
+}
 export async function joinRoom(table, id) {
-  if (typeof table !== 'string' || !table) throw new TypeError('joinRoom(table, id): table is the name of a table that declares rooms');
-  if (!(typeof id === 'string' && id) && !Number.isSafeInteger(id)) throw new TypeError('joinRoom(table, id): id is the row id');
-  return new Room(table, id)._start();
+    if (typeof table !== 'string' || !table)
+        throw new TypeError('joinRoom(table, id): table is the name of a table that declares rooms');
+    if (!(typeof id === 'string' && id) && !Number.isSafeInteger(id))
+        throw new TypeError('joinRoom(table, id): id is the row id');
+    return new Room(table, id)._start();
 }
 `.trim() + "\n\n" + LIVE_CLIENT_MODULE_JS;
-var ROOMS_DOOR_RUNTIME_JS = String.raw `
-const __SW_ROOMS_CLIENT_MODULE = ${JSON.stringify(ROOMS_CLIENT_MODULE_JS)};
+var ROOMS_DOOR_RUNTIME_JS = String.raw`;
+const __SW_ROOMS_CLIENT_MODULE = $, { JSON, stringify };
+(ROOMS_CLIENT_MODULE_JS);
+;
 function __sw_roomsDoorMatch(url) {
-  if (url.pathname !== '/__sw/rooms/ticket' && url.pathname !== '/__sw/rooms/client.js') return null;
-  return { path: '/__sw/rooms', params: {}, load: async () => ({ default: (request, sw) => __sw_handleRoomsDoor(request, sw) }) };
+    if (url.pathname !== '/__sw/rooms/ticket' && url.pathname !== '/__sw/rooms/client.js')
+        return null;
+    return { path: '/__sw/rooms', params: {}, load: async () => ({ default: (request, sw) => __sw_handleRoomsDoor(request, sw) }) };
 }
 async function __sw_handleRoomsDoor(request, sw) {
-  const url = new URL(request.url);
-  if (url.pathname === '/__sw/rooms/client.js') {
-    if (request.method !== 'GET' && request.method !== 'HEAD') __sw_dataFail(405, 'METHOD_NOT_ALLOWED', 'Use GET /__sw/rooms/client.js.');
-    return new Response(request.method === 'HEAD' ? null : __SW_ROOMS_CLIENT_MODULE, {
-      status: 200,
-      headers: { 'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'public, max-age=300' },
+    const url = new URL(request.url);
+    if (url.pathname === '/__sw/rooms/client.js') {
+        if (request.method !== 'GET' && request.method !== 'HEAD')
+            __sw_dataFail(405, 'METHOD_NOT_ALLOWED', 'Use GET /__sw/rooms/client.js.');
+        return new Response(request.method === 'HEAD' ? null : __SW_ROOMS_CLIENT_MODULE, {
+            status: 200,
+            headers: { 'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'public, max-age=300' },
+        });
+    }
+    if (__sw_artifactExecution !== 'standard') {
+        __sw_dataFail(409, 'ROOMS_DRAFT_UNAVAILABLE', 'Rooms work on the live app only, not in a preview.');
+    }
+    if (request.method !== 'POST')
+        __sw_dataFail(405, 'METHOD_NOT_ALLOWED', 'Use POST /__sw/rooms/ticket.');
+    const origin = request.headers.get('origin');
+    if (!origin)
+        __sw_dataFail(400, 'ORIGIN_REQUIRED', 'Room requests require the app Origin header.');
+    if (origin !== url.origin)
+        __sw_dataFail(403, 'ROOM_ORIGIN_FORBIDDEN', 'Room requests must come from this app origin.');
+    const input = await __sw_dataReadBody(request);
+    if (!input || typeof input !== 'object' || Array.isArray(input))
+        __sw_dataFail(400, 'VALIDATION_ERROR', 'Send { table, id }.');
+    for (const key of Object.keys(input)) {
+        if (key !== 'table' && key !== 'id')
+            __sw_dataFail(400, 'VALIDATION_ERROR', 'A ticket request takes only table and id; ' + key + ' is not accepted.');
+    }
+    let data;
+    try {
+        data = await __sw_roomsDoor.get(sw.rooms).ticket(input.table, input.id);
+    }
+    catch (err) {
+        if (err && typeof err.status === 'number' && err.status >= 400 && err.status < 500)
+            err.__sw_expose = true;
+        throw err;
+    }
+    return new Response(JSON.stringify({ ok: true, data: data }), {
+        status: 200,
+        headers: { 'content-type': 'application/json', 'cache-control': 'no-store' },
     });
-  }
-  if (__sw_artifactExecution !== 'standard') {
-    __sw_dataFail(409, 'ROOMS_DRAFT_UNAVAILABLE', 'Rooms work on the live app only, not in a preview.');
-  }
-  if (request.method !== 'POST') __sw_dataFail(405, 'METHOD_NOT_ALLOWED', 'Use POST /__sw/rooms/ticket.');
-  const origin = request.headers.get('origin');
-  if (!origin) __sw_dataFail(400, 'ORIGIN_REQUIRED', 'Room requests require the app Origin header.');
-  if (origin !== url.origin) __sw_dataFail(403, 'ROOM_ORIGIN_FORBIDDEN', 'Room requests must come from this app origin.');
-  const input = await __sw_dataReadBody(request);
-  if (!input || typeof input !== 'object' || Array.isArray(input)) __sw_dataFail(400, 'VALIDATION_ERROR', 'Send { table, id }.');
-  for (const key of Object.keys(input)) {
-    if (key !== 'table' && key !== 'id') __sw_dataFail(400, 'VALIDATION_ERROR', 'A ticket request takes only table and id; ' + key + ' is not accepted.');
-  }
-  let data;
-  try {
-    data = await __sw_roomsDoor.get(sw.rooms).ticket(input.table, input.id);
-  } catch (err) {
-    if (err && typeof err.status === 'number' && err.status >= 400 && err.status < 500) err.__sw_expose = true;
-    throw err;
-  }
-  return new Response(JSON.stringify({ ok: true, data: data }), {
-    status: 200,
-    headers: { 'content-type': 'application/json', 'cache-control': 'no-store' },
-  });
 }
 `;
-var FUNCTION_TRACE_SOURCE = String.raw `
-/** The trace id for this invocation, or null when tracing did not initialize. */
+
+
+var FUNCTION_TRACE_SOURCE = String.raw`;
 function traceIdOf(platformCtx) {
-  try {
-    const t = platformCtx && platformCtx.__sw_trace;
-    return t ? t.traceId : null;
-  } catch (_) { return null; }
+    try {
+        const t = platformCtx && platformCtx.__sw_trace;
+        return t ? t.traceId : null;
+    }
+    catch (_) {
+        return null;
+    }
 }
-
-/** The developer's next step for a crashed request, kept out of \`message\` (the generated client
- *  shows that to an app's end users). Only a 32-hex trace id is substituted. */
 function functionErrorHint(platformCtx) {
-  const traceId = traceIdOf(platformCtx);
-  return typeof traceId === 'string' && /^[0-9a-f]{32}$/.test(traceId)
-    ? 'For the developer: this request\'s stack is in the project logs. Run somewhere logs --trace ' + traceId + ', or call project_logs with this trace_id.'
-    : 'For the developer: this response has no trace id. The stack is in the project logs: run somewhere logs, or call project_logs.';
+    const traceId = traceIdOf(platformCtx);
+    return typeof traceId === 'string' && /^[0-9a-f]{32}$/.test(traceId)
+        ? 'For the developer: this request\'s stack is in the project logs. Run somewhere logs --trace ' + traceId + ', or call project_logs with this trace_id.'
+        : 'For the developer: this response has no trace id. The stack is in the project logs: run somewhere logs, or call project_logs.';
 }
-
-/** Developer correlation for a failure that WAS reported to the owner's logs. An
- *  expected refusal (wrong password, duplicate email) is not logged, so it never gets these fields:
- *  the hint, plus the 32-hex trace id (same value as X-Trace-Id) and the edge request id when
- *  each is well-formed. Neither is ever invented; an absent one is simply omitted. */
 function reportedFailureFields(platformCtx, requestId) {
-  const out = { hint: functionErrorHint(platformCtx) };
-  if (typeof requestId === 'string' && /^[A-Za-z0-9-]{1,64}$/.test(requestId)) out.request_id = requestId;
-  const traceId = traceIdOf(platformCtx);
-  if (typeof traceId === 'string' && /^[0-9a-f]{32}$/.test(traceId)) out.trace_id = traceId;
-  return out;
+    const out = { hint: functionErrorHint(platformCtx) };
+    if (typeof requestId === 'string' && /^[A-Za-z0-9-]{1,64}$/.test(requestId))
+        out.request_id = requestId;
+    const traceId = traceIdOf(platformCtx);
+    if (typeof traceId === 'string' && /^[0-9a-f]{32}$/.test(traceId))
+        out.trace_id = traceId;
+    return out;
 }
-
-/** Add the correlation handle without changing responses when tracing is absent. handlerResponse is true only
- *  at the handler-success site for a Response the handler itself returned. */
 function attachTraceId(response, platformCtx, handlerResponse) {
-  try {
-    const t = platformCtx && platformCtx.__sw_trace;
-    // X-Sw-Route-Pattern and X-Sw-Response-Source are the PLATFORM's (the edge's completion log): a function's
-    // own copy never passes through, with or without a trace; only the runtime's values are set below.
-    if (!t) {
-      if (!response.headers.has('X-Sw-Route-Pattern') && !response.headers.has('X-Sw-Response-Source') && handlerResponse !== true) return response;
-      const stripped = new Headers(response.headers);
-      stripped.delete('X-Sw-Route-Pattern');
-      stripped.delete('X-Sw-Response-Source');
-      if (handlerResponse === true) stripped.set('X-Sw-Response-Source', 'handler');
-      return new Response(response.body, { status: response.status, statusText: response.statusText, headers: stripped });
+    try {
+        const t = platformCtx && platformCtx.__sw_trace;
+        if (!t) {
+            if (!response.headers.has('X-Sw-Route-Pattern') && !response.headers.has('X-Sw-Response-Source') && handlerResponse !== true)
+                return response;
+            const stripped = new Headers(response.headers);
+            stripped.delete('X-Sw-Route-Pattern');
+            stripped.delete('X-Sw-Response-Source');
+            if (handlerResponse === true)
+                stripped.set('X-Sw-Response-Source', 'handler');
+            return new Response(response.body, { status: response.status, statusText: response.statusText, headers: stripped });
+        }
+        const headers = new Headers(response.headers);
+        headers.delete('X-Sw-Route-Pattern');
+        headers.delete('X-Sw-Response-Source');
+        if (handlerResponse === true)
+            headers.set('X-Sw-Response-Source', 'handler');
+        headers.set('X-Trace-Id', t.traceId);
+        headers.set('traceparent', '00-' + t.traceId + '-' + t.spanId + '-' + (t.sampled ? '01' : '00'));
+        headers.set('X-Trace-Sampling', t.sampled
+            ? 'stored'
+            : response.status >= 400 ? 'stored;reason=error' : 'not-stored');
+        if (t.tracestate)
+            headers.set('tracestate', t.tracestate);
+        if (typeof t.route === 'string' && /^\/[A-Za-z0-9_\-\/:.*\[\]]{0,199}$|^unmatched$/.test(t.route))
+            headers.set('X-Sw-Route-Pattern', t.route);
+        return new Response(response.body, {
+            status: response.status,
+            statusText: response.statusText,
+            headers,
+        });
     }
-    const headers = new Headers(response.headers);
-    headers.delete('X-Sw-Route-Pattern');
-    headers.delete('X-Sw-Response-Source');
-    if (handlerResponse === true) headers.set('X-Sw-Response-Source', 'handler');
-    headers.set('X-Trace-Id', t.traceId);
-    headers.set('traceparent', '00-' + t.traceId + '-' + t.spanId + '-' + (t.sampled ? '01' : '00'));
-    headers.set('X-Trace-Sampling', t.sampled
-      ? 'stored'
-      : response.status >= 400 ? 'stored;reason=error' : 'not-stored');
-    if (t.tracestate) headers.set('tracestate', t.tracestate);
-    // The matched route PATTERN, for the web edge's completion log only (it strips this header before
-    // the response reaches the caller). A pattern-shaped value or nothing; never the concrete path.
-    if (typeof t.route === 'string' && /^\/[A-Za-z0-9_\-\/:.*\[\]]{0,199}$|^unmatched$/.test(t.route)) headers.set('X-Sw-Route-Pattern', t.route);
-    return new Response(response.body, {
-      status: response.status,
-      statusText: response.statusText,
-      headers,
-    });
-  } catch (_) {
-    return response;
-  }
+    catch (_) {
+        return response;
+    }
 }
-
-/** Attach private runtime spans only when the trusted web edge opted in. */
 function attachRuntimeServerTiming(response, platformCtx, handlerStartedAt) {
-  try {
-    const timing = platformCtx && platformCtx.__sw_serverTiming;
-    if (!timing) return response;
-    const metrics = [];
-    if (typeof timing.startupMs === 'number') {
-      metrics.push({ name: 'sw_function_startup', durationMs: timing.startupMs });
+    try {
+        const timing = platformCtx && platformCtx.__sw_serverTiming;
+        if (!timing)
+            return response;
+        const metrics = [];
+        if (typeof timing.startupMs === 'number') {
+            metrics.push({ name: 'sw_function_startup', durationMs: timing.startupMs });
+        }
+        if (typeof handlerStartedAt === 'number') {
+            metrics.push({ name: 'sw_function', durationMs: Date.now() - handlerStartedAt });
+        }
+        for (const metric of timing.entries || [])
+            metrics.push(metric);
+        const encoded = metrics.map(function (metric) {
+            if (!/^[a-z0-9_]+$/.test(metric.name))
+                return null;
+            if (typeof metric.description === 'string' && /^[a-z0-9_]+$/.test(metric.description)) {
+                return metric.name + ';desc=' + metric.description;
+            }
+            if (!Number.isFinite(metric.durationMs) || metric.durationMs < 0)
+                return null;
+            return metric.name + ';dur=' + Number(metric.durationMs).toFixed(3);
+        }).filter(Boolean).join(', ');
+        if (!encoded)
+            return response;
+        const headers = new Headers(response.headers);
+        const existing = headers.get('Server-Timing');
+        headers.set('Server-Timing', existing ? existing + ', ' + encoded : encoded);
+        return new Response(response.body, {
+            status: response.status,
+            statusText: response.statusText,
+            headers: headers,
+        });
     }
-    if (typeof handlerStartedAt === 'number') {
-      metrics.push({ name: 'sw_function', durationMs: Date.now() - handlerStartedAt });
+    catch (_) {
+        return response;
     }
-    for (const metric of timing.entries || []) metrics.push(metric);
-    const encoded = metrics.map(function (metric) {
-      if (!/^[a-z0-9_]+$/.test(metric.name)) return null;
-      if (typeof metric.description === 'string' && /^[a-z0-9_]+$/.test(metric.description)) {
-        return metric.name + ';desc=' + metric.description;
-      }
-      if (!Number.isFinite(metric.durationMs) || metric.durationMs < 0) return null;
-      return metric.name + ';dur=' + Number(metric.durationMs).toFixed(3);
-    }).filter(Boolean).join(', ');
-    if (!encoded) return response;
-    const headers = new Headers(response.headers);
-    const existing = headers.get('Server-Timing');
-    headers.set('Server-Timing', existing ? existing + ', ' + encoded : encoded);
-    return new Response(response.body, {
-      status: response.status,
-      statusText: response.statusText,
-      headers: headers,
-    });
-  } catch (_) {
-    return response;
-  }
 }
-
-/** The platform's TRACE_SAMPLE_RATE as last reported by POST /v1/traces in
- *  this isolate (0 = not learned yet). The platform keeps a trace only when
- *  the last 8 hex digits of its id are divisible by the rate, or when a span
- *  errored (utils/trace.ts traceIdSampledIn + shouldStoreSpan). Once the rate
- *  is known, a post the platform would drop whole is not sent: it stored
- *  nothing and cost a platform crossing plus a key read on every request
- *. Each post that is still sent refreshes the rate. */
 let __sw_knownTraceSampleRate = 0;
-/** When that rate was learned. A learned rate counts for 60 s from the reply
- *  that taught it (each reply resets it; not sliding), then reads as unknown,
- *  and unknown means post. So a capture window that lowers the rate to 1
- *  reaches a warm isolate within 60 s plus one request, at the cost of at
- *  most one extra post per isolate per minute. */
 let __sw_knownTraceSampleRateAt = 0;
 const __sw_TRACE_RATE_TTL_MS = 60000;
-
 function __sw_traceWouldBeDropped(traceId, spans, status) {
-  const rate = __sw_knownTraceSampleRate;
-  if (!(rate > 1) || status >= 400) return false;
-  if (!(Date.now() - __sw_knownTraceSampleRateAt < __sw_TRACE_RATE_TTL_MS)) return false;
-  for (let i = 0; i < spans.length; i++) if (spans[i] && spans[i].status === 'error') return false;
-  const bucket = Number.parseInt(String(traceId).slice(-8), 16);
-  if (!Number.isFinite(bucket)) return false;
-  return bucket % rate !== 0;
+    const rate = __sw_knownTraceSampleRate;
+    if (!(rate > 1) || status >= 400)
+        return false;
+    if (!(Date.now() - __sw_knownTraceSampleRateAt < __sw_TRACE_RATE_TTL_MS))
+        return false;
+    for (let i = 0; i < spans.length; i++)
+        if (spans[i] && spans[i].status === 'error')
+            return false;
+    const bucket = Number.parseInt(String(traceId).slice(-8), 16);
+    if (!Number.isFinite(bucket))
+        return false;
+    return bucket % rate !== 0;
 }
-
-/** Isolated telemetry ingest: ON only when the publisher set SW_TELEMETRY_INGEST (the
- *  telemetry resources exist) AND this is a direct native production bundle, whose private transport
- *  routes the ingest paths to the trusted executor. Then traces and error reports go ONLY there, with
- *  the release attestation; a refusal or failure drops them (no retry, never the API's routes). */
 function __sw_telemetryIngestActive(env) {
-  return !!(env && env.SW_TELEMETRY_INGEST === '1' && env.SW_EXECUTION_ATTESTATION && !env.SW_CODE_RUN_RELEASE
-    && typeof __sw_managedRuntimeFetch !== 'undefined' && __sw_managedRuntimeFetch);
+    return !!(env && env.SW_TELEMETRY_INGEST === '1' && env.SW_EXECUTION_ATTESTATION && !env.SW_CODE_RUN_RELEASE
+        && typeof __sw_managedRuntimeFetch !== 'undefined' && __sw_managedRuntimeFetch);
 }
-
-/** Fire-and-forget this invocation's root and platform-call spans. */
 function reportTrace(env, ctx, platformCtx, request, match, startedAt, status, platformFetch) {
-  try {
-    const t = platformCtx && platformCtx.__sw_trace;
-    if (!t || (!t.sampled && status < 400) || !env.PROJECT_ID || !env.PROJECT_API_KEY) return;
-    let method = '';
-    let route = '';
-    try { method = request.method; } catch (_) {}
-    // The route PATTERN only: an unmatched request's concrete pathname is
-    // customer content and never names a stored span.
-    route = (match && typeof match.path === 'string' && match.path) || 'unmatched';
-    const rootSpan = {
-      span_id: t.spanId,
-      trace_id: t.traceId,
-      parent_span_id: t.parentSpanId,
-      name: (method ? method + ' ' : '') + route,
-      kind: 'server',
-      started_at: startedAt,
-      duration_ms: Date.now() - startedAt,
-      status: status >= 400 ? 'error' : 'ok',
-      error_code: status >= 400 ? 'HTTP_' + status : null,
-      attributes: Object.assign(
-        { 'http.method': method, 'http.route': route, 'http.status_code': status },
-        t.dropped > 0 ? { 'trace.dropped_spans': t.dropped } : {},
-        // A caller's own trace context, recorded as a link only; never this request's id.
-        t.callerTraceId ? { 'trace.caller_trace_id': t.callerTraceId } : {},
-        // Which Cloudflare location received this request, so distance can be told apart from
-        // work in stored traces. A dispatched worker has no request.cf, so the web edge forwards
-        // request.cf.colo as X-Sw-Edge-Colo (caller copies stripped there); request.cf wins.
-        (function () {
-          try {
-            const colo = (request && request.cf && typeof request.cf.colo === 'string' && request.cf.colo)
-              || (request && request.headers && request.headers.get('X-Sw-Edge-Colo')) || '';
-            return /^[A-Z]{3}$/.test(colo) ? { 'cf.colo': colo } : {};
-          } catch (_) { return {}; }
-        })(),
-      ),
-    };
-    t.respondedAt = Date.now();
-    if (status >= 400) {
-      // An error response reports the platform calls it did not wait for: a call
-      // cut off by its caller's deadline (for example a managed write's 20 s
-      // bound) settles only after this report, so its span was lost and the trace
-      // showed the root alone. Error traces are always stored, so
-      // this adds no crossing and no sampling change; it adds up to 16 span rows
-      // to an error trace.
-      const spans = [rootSpan].concat(t.spans);
-      if (Array.isArray(t.open) && t.open.length) {
-        const now = Date.now();
-        for (const o of t.open.slice(0, 16)) {
-          spans.push({ span_id: o.span_id, trace_id: t.traceId, parent_span_id: t.spanId, name: o.name, kind: 'client',
-            started_at: o.started_at, duration_ms: now - o.started_at, status: 'error', error_code: 'UNFINISHED_AT_RESPONSE',
-            attributes: { 'http.method': o.method, 'sw.unfinished': true } });
+    try {
+        const t = platformCtx && platformCtx.__sw_trace;
+        if (!t || (!t.sampled && status < 400) || !env.PROJECT_ID || !env.PROJECT_API_KEY)
+            return;
+        let method = '';
+        let route = '';
+        try {
+            method = request.method;
         }
-      }
-      __sw_postTrace(env, ctx, t, spans, status, platformFetch);
-      return;
+        catch (_) { }
+        route = (match && typeof match.path === 'string' && match.path) || 'unmatched';
+        const rootSpan = {
+            span_id: t.spanId,
+            trace_id: t.traceId,
+            parent_span_id: t.parentSpanId,
+            name: (method ? method + ' ' : '') + route,
+            kind: 'server',
+            started_at: startedAt,
+            duration_ms: Date.now() - startedAt,
+            status: status >= 400 ? 'error' : 'ok',
+            error_code: status >= 400 ? 'HTTP_' + status : null,
+            attributes: Object.assign({ 'http.method': method, 'http.route': route, 'http.status_code': status }, t.dropped > 0 ? { 'trace.dropped_spans': t.dropped } : {}, t.callerTraceId ? { 'trace.caller_trace_id': t.callerTraceId } : {}, (function () {
+                try {
+                    const colo = (request && request.cf && typeof request.cf.colo === 'string' && request.cf.colo)
+                        || (request && request.headers && request.headers.get('X-Sw-Edge-Colo')) || '';
+                    return /^[A-Z]{3}$/.test(colo) ? { 'cf.colo': colo } : {};
+                }
+                catch (_) {
+                    return {};
+                }
+            })()),
+        };
+        t.respondedAt = Date.now();
+        if (status >= 400) {
+            const spans = [rootSpan].concat(t.spans);
+            if (Array.isArray(t.open) && t.open.length) {
+                const now = Date.now();
+                for (const o of t.open.slice(0, 16)) {
+                    spans.push({ span_id: o.span_id, trace_id: t.traceId, parent_span_id: t.spanId, name: o.name, kind: 'client',
+                        started_at: o.started_at, duration_ms: now - o.started_at, status: 'error', error_code: 'UNFINISHED_AT_RESPONSE',
+                        attributes: { 'http.method': o.method, 'sw.unfinished': true } });
+                }
+            }
+            __sw_postTrace(env, ctx, t, spans, status, platformFetch);
+            return;
+        }
+        if (__sw_traceWouldBeDropped(t.traceId, [rootSpan].concat(t.spans), status)) {
+            __sw_traceClose(t);
+            return;
+        }
+        const background = Array.isArray(t.background) ? t.background : [];
+        t.background = null;
+        if (background.length === 0 && !(Array.isArray(t.open) && t.open.length)) {
+            __sw_postTrace(env, ctx, t, [rootSpan].concat(t.spans), status, platformFetch);
+            return;
+        }
+        ctx.waitUntil(__sw_traceQuiet(t, background, __sw_TRACE_AFTER_RESPONSE_MS).then(function () {
+            const spans = [rootSpan].concat(t.spans);
+            const now = Date.now();
+            for (const o of (Array.isArray(t.open) ? t.open : []).slice(0, 16)) {
+                spans.push({ span_id: o.span_id, trace_id: t.traceId, parent_span_id: t.spanId, name: o.name, kind: 'client',
+                    started_at: o.started_at, duration_ms: now - o.started_at, status: 'ok', error_code: null,
+                    attributes: { 'http.method': o.method, 'sw.unfinished': true, 'sw.after_response': true } });
+            }
+            __sw_postTrace(env, ctx, t, spans, status, platformFetch);
+        }).catch(function () { }));
     }
-    // A success response: a trace the platform would drop whole is not sent and
-    // not waited for (as before). Otherwise the post waits until the request's
-    // drained background work and every open platform call have settled, or
-    // __sw_TRACE_AFTER_RESPONSE_MS pass, then posts ONCE: calls that settled
-    // after the response carry sw.after_response; a call still open at the bound
-    // is posted as unfinished with status ok, so sampling and storage of a
-    // success trace are unchanged. The answer is not delayed:
-    // this runs in waitUntil after the response.
-    if (__sw_traceWouldBeDropped(t.traceId, [rootSpan].concat(t.spans), status)) { __sw_traceClose(t); return; }
-    const background = Array.isArray(t.background) ? t.background : [];
-    t.background = null;
-    if (background.length === 0 && !(Array.isArray(t.open) && t.open.length)) {
-      __sw_postTrace(env, ctx, t, [rootSpan].concat(t.spans), status, platformFetch);
-      return;
-    }
-    ctx.waitUntil(__sw_traceQuiet(t, background, __sw_TRACE_AFTER_RESPONSE_MS).then(function () {
-      const spans = [rootSpan].concat(t.spans);
-      const now = Date.now();
-      for (const o of (Array.isArray(t.open) ? t.open : []).slice(0, 16)) {
-        spans.push({ span_id: o.span_id, trace_id: t.traceId, parent_span_id: t.spanId, name: o.name, kind: 'client',
-          started_at: o.started_at, duration_ms: now - o.started_at, status: 'ok', error_code: null,
-          attributes: { 'http.method': o.method, 'sw.unfinished': true, 'sw.after_response': true } });
-      }
-      __sw_postTrace(env, ctx, t, spans, status, platformFetch);
-    }).catch(function () {}));
-  } catch (_) {}
+    catch (_) { }
 }
-
-/** How long a success response's trace post waits for after-response platform
- *  work. Covers the 5 s query-observation window (context-head). */
 const __sw_TRACE_AFTER_RESPONSE_MS = 10000;
-
-/** No more spans or open calls are collected for this request's trace. */
 function __sw_traceClose(t) {
-  t.posted = true;
-  t.spans = [];
-  if (Array.isArray(t.open)) t.open = [];
-  t.onSettle = null;
-  t.background = null;
+    t.posted = true;
+    t.spans = [];
+    if (Array.isArray(t.open))
+        t.open = [];
+    t.onSettle = null;
+    t.background = null;
 }
-
-/** Resolves when the background work has settled and no platform call is open,
- *  re-checked one microtask after each settle (the settled span is recorded in
- *  that turn), or when the bound passes. Never rejects. */
 function __sw_traceQuiet(t, background, boundMs) {
-  return new Promise(function (resolve) {
-    let done = false;
-    let backgroundDone = background.length === 0;
-    let timer = null;
-    const finish = function () {
-      if (done) return;
-      done = true; t.onSettle = null;
-      if (timer !== null) clearTimeout(timer);
-      resolve();
-    };
-    const check = function () {
-      Promise.resolve().then(function () {
-        if (backgroundDone && !(Array.isArray(t.open) && t.open.length)) finish();
-      });
-    };
-    timer = setTimeout(finish, boundMs);
-    t.onSettle = check;
-    if (!backgroundDone) {
-      Promise.allSettled(background.map(function (p) { return Promise.resolve(p); })).then(function () { backgroundDone = true; check(); });
-    }
-    check();
-  });
+    return new Promise(function (resolve) {
+        let done = false;
+        let backgroundDone = background.length === 0;
+        let timer = null;
+        const finish = function () {
+            if (done)
+                return;
+            done = true;
+            t.onSettle = null;
+            if (timer !== null)
+                clearTimeout(timer);
+            resolve();
+        };
+        const check = function () {
+            Promise.resolve().then(function () {
+                if (backgroundDone && !(Array.isArray(t.open) && t.open.length))
+                    finish();
+            });
+        };
+        timer = setTimeout(finish, boundMs);
+        t.onSettle = check;
+        if (!backgroundDone) {
+            Promise.allSettled(background.map(function (p) { return Promise.resolve(p); })).then(function () { backgroundDone = true; check(); });
+        }
+        check();
+    });
 }
-
-/** Send one trace post (or skip it when the platform would drop it whole). */
 function __sw_postTrace(env, ctx, t, spans, status, platformFetch) {
-  try {
-    __sw_traceClose(t);
-    if (__sw_traceWouldBeDropped(t.traceId, spans, status)) return;
-    const platformDomain = env.PLATFORM_DOMAIN || 'somewhere.cloud';
-    const platformBase = env.PLATFORM_API_BASE || ('https://api.' + platformDomain);
-    const ingest = __sw_telemetryIngestActive(env);
-    ctx.waitUntil(
-      platformFetch(platformBase + (ingest ? '/v1/executor/telemetry/traces' : '/v1/traces'), {
-        method: 'POST',
-        headers: {
-          'Authorization': 'Bearer ' + env.PROJECT_API_KEY,
-          'Content-Type': 'application/json',
-          'traceparent': '00-' + t.traceId + '-' + t.spanId + '-' + (t.sampled ? '01' : '00'),
-          ...(t.tracestate ? { 'tracestate': t.tracestate } : {}),
-          ...(t.baggage ? { 'baggage': t.baggage } : {}),
-          ...(ingest ? { 'X-Sw-Execution-Attestation': env.SW_EXECUTION_ATTESTATION } : {}),
-        },
-        body: JSON.stringify({ project_id: env.PROJECT_ID, spans }),
-      }).then(function (response) {
-        return response.json().then(function (body) {
-          // Legacy route: { data: { sample_rate } }; executor ingest: { sample_rate }.
-          const rate = body && ((body.data && body.data.sample_rate) || body.sample_rate);
-          if (Number.isInteger(rate) && rate >= 1) { __sw_knownTraceSampleRate = rate; __sw_knownTraceSampleRateAt = Date.now(); }
-        });
-      }).catch(function () {})
-    );
-  } catch (_) {}
+    try {
+        __sw_traceClose(t);
+        if (__sw_traceWouldBeDropped(t.traceId, spans, status))
+            return;
+        const platformDomain = env.PLATFORM_DOMAIN || 'somewhere.cloud';
+        const platformBase = env.PLATFORM_API_BASE || ('https://api.' + platformDomain);
+        const ingest = __sw_telemetryIngestActive(env);
+        ctx.waitUntil(platformFetch(platformBase + (ingest ? '/v1/executor/telemetry/traces' : '/v1/traces'), {
+            method: 'POST',
+            headers: {
+                'Authorization': 'Bearer ' + env.PROJECT_API_KEY,
+                'Content-Type': 'application/json',
+                'traceparent': '00-' + t.traceId + '-' + t.spanId + '-' + (t.sampled ? '01' : '00'),
+                ...(t.tracestate ? { 'tracestate': t.tracestate } : {}),
+                ...(t.baggage ? { 'baggage': t.baggage } : {}),
+                ...(ingest ? { 'X-Sw-Execution-Attestation': env.SW_EXECUTION_ATTESTATION } : {}),
+            },
+            body: JSON.stringify({ project_id: env.PROJECT_ID, spans }),
+        }).then(function (response) {
+            return response.json().then(function (body) {
+                const rate = body && ((body.data && body.data.sample_rate) || body.sample_rate);
+                if (Number.isInteger(rate) && rate >= 1) {
+                    __sw_knownTraceSampleRate = rate;
+                    __sw_knownTraceSampleRateAt = Date.now();
+                }
+            });
+        }).catch(function () { }));
+    }
+    catch (_) { }
 }
-
-/** The executor ingest bounds an error report's data at 16 KB of JSON BYTES and refuses (drops) a larger one
- *. A stack trimmed to 8000 CHARS can still exceed that once it is non-ASCII or escape-heavy, so in
- *  ingest mode the data is fitted in bytes: shorten the stack until it fits, then drop it, then keep only the
- *  identifying fields. Never lose the report for its size. Legacy mode is unchanged. */
 const __sw_ERROR_DATA_BUDGET_BYTES = 15 * 1024;
 function __sw_jsonBytes(value) {
-  try { return new TextEncoder().encode(JSON.stringify(value)).length; } catch (_) { return Infinity; }
+    try {
+        return new TextEncoder().encode(JSON.stringify(value)).length;
+    }
+    catch (_) {
+        return Infinity;
+    }
 }
 function __sw_fitErrorData(data, ingest) {
-  if (!ingest || __sw_jsonBytes(data) <= __sw_ERROR_DATA_BUDGET_BYTES) return data;
-  const fitted = Object.assign({}, data, { stack_truncated: true });
-  let stack = typeof data.stack === 'string' ? data.stack : '';
-  while (stack.length > 0) {
-    stack = stack.slice(0, Math.floor(stack.length * 0.7));
-    fitted.stack = stack;
-    if (__sw_jsonBytes(fitted) <= __sw_ERROR_DATA_BUDGET_BYTES) return fitted;
-  }
-  fitted.stack = null;
-  if (__sw_jsonBytes(fitted) <= __sw_ERROR_DATA_BUDGET_BYTES) return fitted;
-  return { code: data.code, response_code: data.response_code, request_id: data.request_id, status: data.status, slot: data.slot, data_truncated: true };
+    if (!ingest || __sw_jsonBytes(data) <= __sw_ERROR_DATA_BUDGET_BYTES)
+        return data;
+    const fitted = Object.assign({}, data, { stack_truncated: true });
+    let stack = typeof data.stack === 'string' ? data.stack : '';
+    while (stack.length > 0) {
+        stack = stack.slice(0, Math.floor(stack.length * 0.7));
+        fitted.stack = stack;
+        if (__sw_jsonBytes(fitted) <= __sw_ERROR_DATA_BUDGET_BYTES)
+            return fitted;
+    }
+    fitted.stack = null;
+    if (__sw_jsonBytes(fitted) <= __sw_ERROR_DATA_BUDGET_BYTES)
+        return fitted;
+    return { code: data.code, response_code: data.response_code, request_id: data.request_id, status: data.status, slot: data.slot, data_truncated: true };
 }
-
-/** Best-effort function exception reporting correlated to the same trace. */
 async function reportFunctionError(env, request, code, err, responseStatus, requestId, routePath, platformFetch, platformCtx, responseCode) {
-  try {
-    const platformDomain = env.PLATFORM_DOMAIN || 'somewhere.cloud';
-    const platformBase = env.PLATFORM_API_BASE || ('https://api.' + platformDomain);
-    const apiKey = env.PROJECT_API_KEY;
-    if (!apiKey || !env.PROJECT_ID) return;
-    const stack = (err && err.stack) || null;
-    const errMessage = (err && err.message) || String(err);
-    const trace = platformCtx && platformCtx.__sw_trace;
-    let pathname = '';
-    let method = '';
-    try { pathname = new URL(request.url).pathname; } catch (_) {}
-    try { method = request.method; } catch (_) {}
-    const ingest = __sw_telemetryIngestActive(env);
-    const data = __sw_fitErrorData({
-      code,
-      // The code this runtime ANSWERED (closed set, server-chosen); code above is the owner's own.
-      response_code: responseCode || code,
-      stack: ingest && typeof stack === 'string' ? stack.slice(0, 8000) : stack,
-      request_id: requestId,
-      method,
-      path: pathname,
-      route: routePath || null,
-      slot: env.PROJECT_ENV || null,
-      status: responseStatus,
-      table: (err && err.table) || null,
-      owner_column: (err && err.owner_column) || null,
-      binding: (err && err.binding) || null,
-    }, ingest);
-    await platformFetch(platformBase + (ingest ? '/v1/executor/telemetry/errors' : '/v1/logs'), {
-      method: 'POST',
-      headers: {
-        'Authorization': 'Bearer ' + apiKey,
-        'Content-Type': 'application/json',
-        ...(ingest ? { 'X-Sw-Execution-Attestation': env.SW_EXECUTION_ATTESTATION } : {}),
-        ...(trace ? { 'traceparent': '00-' + trace.traceId + '-' + trace.spanId + '-' + (trace.sampled ? '01' : '00') } : {}),
-        ...(trace && trace.tracestate ? { 'tracestate': trace.tracestate } : {}),
-        ...(trace && trace.baggage ? { 'baggage': trace.baggage } : {}),
-      },
-      body: JSON.stringify({
-        project_id: env.PROJECT_ID,
-        level: 'error',
-        // The executor ingest bounds a report (message 8 KB, data 16 KB) and drops an oversized one whole,
-        // so in ingest mode the text is trimmed to fit instead of losing the report.
-        message: ingest ? (code + ': ' + errMessage).slice(0, 8000) : code + ': ' + errMessage,
-        data: data,
-        source: 'function',
-      }),
-    });
-  } catch (_) {}
+    try {
+        const platformDomain = env.PLATFORM_DOMAIN || 'somewhere.cloud';
+        const platformBase = env.PLATFORM_API_BASE || ('https://api.' + platformDomain);
+        const apiKey = env.PROJECT_API_KEY;
+        if (!apiKey || !env.PROJECT_ID)
+            return;
+        const stack = (err && err.stack) || null;
+        const errMessage = (err && err.message) || String(err);
+        const trace = platformCtx && platformCtx.__sw_trace;
+        let pathname = '';
+        let method = '';
+        try {
+            pathname = new URL(request.url).pathname;
+        }
+        catch (_) { }
+        try {
+            method = request.method;
+        }
+        catch (_) { }
+        const ingest = __sw_telemetryIngestActive(env);
+        const data = __sw_fitErrorData({
+            code,
+            response_code: responseCode || code,
+            stack: ingest && typeof stack === 'string' ? stack.slice(0, 8000) : stack,
+            request_id: requestId,
+            method,
+            path: pathname,
+            route: routePath || null,
+            slot: env.PROJECT_ENV || null,
+            status: responseStatus,
+            table: (err && err.table) || null,
+            owner_column: (err && err.owner_column) || null,
+            binding: (err && err.binding) || null,
+        }, ingest);
+        await platformFetch(platformBase + (ingest ? '/v1/executor/telemetry/errors' : '/v1/logs'), {
+            method: 'POST',
+            headers: {
+                'Authorization': 'Bearer ' + apiKey,
+                'Content-Type': 'application/json',
+                ...(ingest ? { 'X-Sw-Execution-Attestation': env.SW_EXECUTION_ATTESTATION } : {}),
+                ...(trace ? { 'traceparent': '00-' + trace.traceId + '-' + trace.spanId + '-' + (trace.sampled ? '01' : '00') } : {}),
+                ...(trace && trace.tracestate ? { 'tracestate': trace.tracestate } : {}),
+                ...(trace && trace.baggage ? { 'baggage': trace.baggage } : {}),
+            },
+            body: JSON.stringify({
+                project_id: env.PROJECT_ID,
+                level: 'error',
+                message: ingest ? (code + ': ' + errMessage).slice(0, 8000) : code + ': ' + errMessage,
+                data: data,
+                source: 'function',
+            }),
+        });
+    }
+    catch (_) { }
 }
 `;
+
+
 function isHelperModulePath(path) {
-    return path.replace(/^\/+/, "").split("/").some((segment) => segment.startsWith("_"));
+  return path.replace(/^\/+/, "").split("/").some((segment) => segment.startsWith("_"));
 }
 function isRoutedFunctionPath(path) {
-    if (isHelperModulePath(path))
-        return false;
-    return path.startsWith("api/") || !path.includes("/") && /\[/.test(path);
+  if (isHelperModulePath(path)) return false;
+  return path.startsWith("api/") || !path.includes("/") && /\[/.test(path);
 }
+
+
 var ENDPOINT_AUTH_MODES = ["required", "optional", "none"];
 var ENDPOINT_AUTH_MODE_INVALID = "ENDPOINT_AUTH_MODE_INVALID";
 var ENDPOINT_AUTH_MODES_HINT = "Supported modes: 'required' (caller must be signed in), 'optional' (user when signed in, otherwise null), 'none' (public).";
 var MODES = new Set(ENDPOINT_AUTH_MODES);
+
+
 var ENDPOINT_RATE_LIMIT_INVALID = "ENDPOINT_RATE_LIMIT_INVALID";
 var ENDPOINT_RATE_LIMIT_MAX_COUNT = 1e6;
-var ENDPOINT_RATE_LIMIT_HINT = `rateLimit accepts '<count>/<unit>' with a whole count from 1 to ${ENDPOINT_RATE_LIMIT_MAX_COUNT} and a unit of second, minute, hour or day, for example '30/minute'; without rateLimit there is no limit.`;
-var ENDPOINT_RATE_LIMIT_JS = `
-/** Parse "10/minute" / "60/hour" / "1000/day" into { max, windowSeconds }, or null. */
-function __sw_parseRateLimit(spec) {
-  if (typeof spec !== 'string') return null;
-  var m = spec.match(/^\\s*(\\d+)\\s*\\/\\s*(second|minute|hour|day)s?\\s*$/i);
-  if (!m) return null;
-  var max = Number(m[1]);
-  if (!Number.isSafeInteger(max) || max < 1 || max > ${ENDPOINT_RATE_LIMIT_MAX_COUNT}) return null;
-  var window = { second: 1, minute: 60, hour: 3600, day: 86400 }[m[2].toLowerCase()];
-  return { max: max, windowSeconds: window };
+var ENDPOINT_RATE_LIMIT_HINT = `;
+rateLimit;
+accepts;
+'<count>/<unit>';
+with (a)
+    whole;
+count;
+from;
+1;
+to;
+$;
+{
+    ENDPOINT_RATE_LIMIT_MAX_COUNT;
 }
-
-/** { limit } for an omitted or supported rateLimit; { refuse } for any other value. */
+and;
+a;
+unit;
+of;
+second, minute, hour;
+or;
+day, ;
+for (example; '30/minute'; without)
+    rateLimit;
+there;
+is;
+no;
+limit. `;
+var ENDPOINT_RATE_LIMIT_JS = `;
+function __sw_parseRateLimit(spec) {
+    if (typeof spec !== 'string')
+        return null;
+    var m = spec.match(/^\\s*(\\d+)\\s*\\/, s * (second | minute | hour | day), s ?  : , s * $ / i);
+    if (!m)
+        return null;
+    var max = Number(m[1]);
+    if (!Number.isSafeInteger(max) || max < 1 || max > $) {
+        ENDPOINT_RATE_LIMIT_MAX_COUNT;
+    }
+    return null;
+    var window = { second: 1, minute: 60, hour: 3600, day: 86400 }[m[2].toLowerCase()];
+    return { max: max, windowSeconds: window };
+}
 function __sw_endpointRateLimit(spec) {
-  if (spec === undefined) return { limit: null, refuse: null };
-  var limit = __sw_parseRateLimit(spec);
-  if (limit) return { limit: limit, refuse: null };
-  var shown = typeof spec === 'string' ? "'" + spec + "'"
-    : (spec === null || typeof spec === 'boolean' || typeof spec === 'number') ? String(spec)
-    : 'a ' + typeof spec + ' value';
-  var message = 'sw.endpoint rateLimit: ' + shown + ' is not a supported limit. ' + ${JSON.stringify(ENDPOINT_RATE_LIMIT_HINT)};
-  console.error(message);
-  return {
+    if (spec === undefined)
+        return { limit: null, refuse: null };
+    var limit = __sw_parseRateLimit(spec);
+    if (limit)
+        return { limit: limit, refuse: null };
+    var shown = typeof spec === 'string' ? "'" + spec + "'"
+        : (spec === null || typeof spec === 'boolean' || typeof spec === 'number') ? String(spec)
+            : 'a ' + typeof spec + ' value';
+    var message = 'sw.endpoint rateLimit: ' + shown + ' is not a supported limit. ' + $, { JSON, stringify };
+    (ENDPOINT_RATE_LIMIT_HINT);
+}
+;
+console.error(message);
+return {
     limit: null,
     refuse: async function invalidRateLimitEndpoint() {
-      return __sw_jsonError(500, ${JSON.stringify(ENDPOINT_RATE_LIMIT_INVALID)}, message);
+        return __sw_jsonError(500, $, { JSON, : .stringify(ENDPOINT_RATE_LIMIT_INVALID) }, message);
     },
-  };
-}
+};
 `;
+
+
 function isCanonicalBigintText(value) {
-    if (!/^(0|-?[1-9][0-9]*)$/.test(value))
-        return false;
-    const negative = value.startsWith("-");
-    const digits = negative ? value.slice(1) : value;
-    const limit = negative ? "9223372036854775808" : "9223372036854775807";
-    return digits.length < limit.length || digits.length === limit.length && digits <= limit;
+  if (!/^(0|-?[1-9][0-9]*)$/.test(value)) return false;
+  const negative = value.startsWith("-");
+  const digits = negative ? value.slice(1) : value;
+  const limit = negative ? "9223372036854775808" : "9223372036854775807";
+  return digits.length < limit.length || digits.length === limit.length && digits <= limit;
 }
+
+
 function tableAllowsClientWrites(table) {
-    return Boolean(table.client && (table.client.create !== null || table.client.update !== null || table.client.delete || table.client.intake !== void 0));
+  return Boolean(table.client && (table.client.create !== null || table.client.update !== null || table.client.delete || table.client.intake !== void 0));
 }
 function parseClientPermissions(value, columns, scope) {
-    const fail = (message) => ({ ok: false, message });
-    if (!value || typeof value !== "object" || Array.isArray(value)) {
-        return fail("client must be an object declaring read, publicRead, create, update, delete, or identity.");
+  const fail = (message) => ({ ok: false, message });
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return fail("client must be an object declaring read, publicRead, create, update, delete, or identity.");
+  }
+  const input = value;
+  for (const key of Object.keys(input)) {
+    if (!["identity", "read", "publicRead", "create", "update", "delete", "links", "intake"].includes(key)) {
+      return fail(`;
+Unknown;
+client;
+permission;
+"${key}". `);
     }
-    const input = value;
-    for (const key of Object.keys(input)) {
-        if (!["identity", "read", "publicRead", "create", "update", "delete", "links", "intake"].includes(key)) {
-            return fail(`Unknown client permission "${key}".`);
-        }
+  }
+  if (!["owner", "member", "shared", "policy"].includes(scope.kind)) {
+    return fail("serverOnly() tables cannot declare client access; their rows are reached only from server functions.");
+  }
+  if (scope.policy?.kind === "all_of") {
+    if (input.publicRead !== void 0 && input.publicRead !== false) return fail("allOf() tables cannot declare client.publicRead; their rows are reachable only by current members.");
+    if (input.links !== void 0) return fail("allOf() tables cannot declare client.links yet; a link would bypass current membership.");
+    if (input.intake !== void 0) return fail("allOf() tables cannot accept client.intake; public intake targets a plain owner() table.");
+  }
+  const identity = scope.kind === "owner" && scope.visitors === true ? "visitor" : "authenticated";
+  if (input.identity !== void 0 && input.identity !== "authenticated" && input.identity !== "visitor") {
+    return fail('client.identity must be "authenticated" or "visitor".');
+  }
+  if (input.identity !== void 0 && input.identity !== identity) {
+    return fail("client.identity must match the owner() declaration. Visitor access requires owner({ visitors: true }); owner() and other scopes require authenticated identity.");
+  }
+  let read = input.read ?? false;
+  const rawPublicRead = input.publicRead ?? false;
+  let publicRead;
+  if (typeof rawPublicRead === "boolean") publicRead = rawPublicRead;
+  else {
+    if (!rawPublicRead || typeof rawPublicRead !== "object" || Array.isArray(rawPublicRead) || Object.keys(rawPublicRead).some((key) => key !== "where")) {
+      return fail("client.publicRead must be true, false, or { where: { field: literal } }.");
     }
-    if (!["owner", "member", "shared", "policy"].includes(scope.kind)) {
-        return fail("serverOnly() tables cannot declare client access; their rows are reached only from server functions.");
+    const where = parseEqualityWhere(rawPublicRead.where, columns, "client.publicRead.where");
+    if (typeof where === "string") return fail(where);
+    publicRead = { where };
+  }
+  if (read !== true && read !== false && !Array.isArray(read)) return fail("client.read must list readable fields, or be true or false.");
+  if (publicRead && (!Array.isArray(read) || read.length === 0)) {
+    return fail("client.publicRead requires an explicit non-empty client.read field list.");
+  }
+  const remove = input.delete ?? false;
+  if (typeof remove !== "boolean") return fail("client.delete must be true or false.");
+  const fields = new Map(columns.map((column) => [column.name, column]));
+  if (Array.isArray(read)) {
+    const names = [];
+    for (const entry of read) {
+      if (typeof entry === "string" && ((scope.kind === "owner" || scope.kind === "policy") && entry.toLowerCase() === scope.column || entry.toLowerCase() === SHARED_AUTHOR_COLUMN)) {
+        return fail(`;
+client.read;
+cannot;
+list;
+"${entry}";
+the;
+platform;
+assigns;
+who;
+created;
+each;
+row;
+and;
+never;
+sends;
+that;
+identity;
+to;
+the;
+browser.To;
+show;
+the;
+signed -  in user;
+which;
+rows;
+are;
+theirs, read;
+with ({ can: true })
+    : each;
+row;
+then;
+carries;
+mine(true);
+for (rows; this; user)
+    created;
+and;
+can.update / can.delete. `);
+      }
+      if (typeof entry !== "string" || !fields.has(entry.toLowerCase())) return fail("client.read must contain only declared column names.");
+      const name = entry.toLowerCase();
+      if (names.includes(name)) return fail(`;
+client.read;
+declares;
+field;
+"${entry}";
+twice. `);
+      names.push(name);
     }
-    if (scope.policy?.kind === "all_of") {
-        if (input.publicRead !== void 0 && input.publicRead !== false)
-            return fail("allOf() tables cannot declare client.publicRead; their rows are reachable only by current members.");
-        if (input.links !== void 0)
-            return fail("allOf() tables cannot declare client.links yet; a link would bypass current membership.");
-        if (input.intake !== void 0)
-            return fail("allOf() tables cannot accept client.intake; public intake targets a plain owner() table.");
-    }
-    const identity = scope.kind === "owner" && scope.visitors === true ? "visitor" : "authenticated";
-    if (input.identity !== void 0 && input.identity !== "authenticated" && input.identity !== "visitor") {
-        return fail('client.identity must be "authenticated" or "visitor".');
-    }
-    if (input.identity !== void 0 && input.identity !== identity) {
-        return fail("client.identity must match the owner() declaration. Visitor access requires owner({ visitors: true }); owner() and other scopes require authenticated identity.");
-    }
-    let read = input.read ?? false;
-    const rawPublicRead = input.publicRead ?? false;
-    let publicRead;
-    if (typeof rawPublicRead === "boolean")
-        publicRead = rawPublicRead;
-    else {
-        if (!rawPublicRead || typeof rawPublicRead !== "object" || Array.isArray(rawPublicRead) || Object.keys(rawPublicRead).some((key) => key !== "where")) {
-            return fail("client.publicRead must be true, false, or { where: { field: literal } }.");
-        }
-        const where = parseEqualityWhere(rawPublicRead.where, columns, "client.publicRead.where");
-        if (typeof where === "string")
-            return fail(where);
-        publicRead = { where };
-    }
-    if (read !== true && read !== false && !Array.isArray(read))
-        return fail("client.read must list readable fields, or be true or false.");
-    if (publicRead && (!Array.isArray(read) || read.length === 0)) {
-        return fail("client.publicRead requires an explicit non-empty client.read field list.");
-    }
-    const remove = input.delete ?? false;
-    if (typeof remove !== "boolean")
-        return fail("client.delete must be true or false.");
-    const fields = new Map(columns.map((column) => [column.name, column]));
-    if (Array.isArray(read)) {
-        const names = [];
-        for (const entry of read) {
-            if (typeof entry === "string" && ((scope.kind === "owner" || scope.kind === "policy") && entry.toLowerCase() === scope.column || entry.toLowerCase() === SHARED_AUTHOR_COLUMN)) {
-                return fail(`client.read cannot list "${entry}": the platform assigns who created each row and never sends that identity to the browser. To show the signed-in user which rows are theirs, read with { can: true }: each row then carries mine (true for rows this user created) and can.update / can.delete.`);
-            }
-            if (typeof entry !== "string" || !fields.has(entry.toLowerCase()))
-                return fail("client.read must contain only declared column names.");
-            const name = entry.toLowerCase();
-            if (names.includes(name))
-                return fail(`client.read declares field "${entry}" twice.`);
-            names.push(name);
-        }
-        if (names.length === 0)
-            return fail("client.read must name at least one field, or be false.");
-        read = names.sort();
-    }
-    const writes = { create: null, update: null };
-    for (const operation of ["create", "update"]) {
-        const declared = input[operation];
-        if (declared === void 0 || declared === false || declared === null)
-            continue;
-        if (!Array.isArray(declared))
-            return fail(`client.${operation} must list the writable fields, or be false.`);
-        const allowed = [];
-        for (const entry of declared) {
-            if (typeof entry !== "string")
-                return fail(`client.${operation} fields must be column names.`);
-            const name = entry.toLowerCase();
-            const column = fields.get(name);
-            if (!column)
-                return fail(`client.${operation} names undeclared or platform-managed field "${entry}".`);
-            if (column.helper === "id" || (scope.kind === "owner" || scope.kind === "policy") && name === scope.column) {
-                return fail(`client.${operation} cannot write the platform-assigned identity field "${entry}".`);
-            }
-            if (column.helper === "blob")
-                return fail(`client.${operation} cannot write binary field "${entry}"; uploads go to project files.`);
-            if (typeof publicRead === "object" && Object.prototype.hasOwnProperty.call(publicRead.where, name)) {
-                return fail(`client.${operation} cannot write publication field "${entry}"; rows are published by a server operation.`);
-            }
-            if (operation === "update" && (scope.kind === "member" || scope.kind === "policy") && scope.group?.includes(name)) {
-                return fail(`client.update cannot move a row between membership groups by changing "${entry}".`);
-            }
-            if (allowed.includes(name))
-                return fail(`client.${operation} declares field "${entry}" twice.`);
-            allowed.push(name);
-        }
-        if (operation === "update" && allowed.length === 0)
-            return fail("client.update must name at least one writable field, or be false.");
-        writes[operation] = allowed.sort();
-    }
-    if (writes.create !== null) {
-        if (typeof publicRead === "object" && !privateByDefault(publicRead.where, fields)) {
-            return fail("client.create has no fixed publication-field default that guarantees a private row. It is accepted when at least one predicate field has a private default; otherwise rows are created by a server operation.");
-        }
-        for (const column of columns) {
-            if (column.helper !== "id" && !column.nullable && !column.hasDefault && !column.autoNow && !writes.create.includes(column.name)) {
-                return fail(`client.create must include required field "${column.name}", or that field needs a declared default.`);
-            }
-        }
-    }
-    let links;
-    if (input.links !== void 0) {
-        const parsed = parseLinkPermissions(input.links, read, writes.update, writes.create, columns, scope);
-        if (typeof parsed === "string")
-            return fail(parsed);
-        links = parsed;
-    }
-    let intake;
-    if (input.intake !== void 0) {
-        const parsed = parseIntakePermissions(input.intake, columns, scope, publicRead);
-        if (typeof parsed === "string")
-            return fail(parsed);
-        intake = parsed;
-    }
-    return { ok: true, permissions: { identity, read, publicRead, ...writes, delete: remove, ...links ? { links } : {}, ...intake ? { intake } : {} } };
+    if (names.length === 0) return fail("client.read must name at least one field, or be false.");
+    read = names.sort();
+  }
+  const writes = { create: null, update: null };
+  for (const operation of ["create", "update"]) {
+    const declared = input[operation];
+    if (declared === void 0 || declared === false || declared === null) continue;
+    if (!Array.isArray(declared)) return fail(`;
+client.$;
+{
+    operation;
 }
-function parseEqualityWhere(where, columns, label) {
-    if (!where || typeof where !== "object" || Array.isArray(where))
-        return `${label} must be a non-empty object.`;
-    const entries2 = Object.entries(where);
-    if (entries2.length === 0 || entries2.length > 8)
-        return `${label} must declare 1 to 8 equality fields.`;
-    const normalized = {};
-    for (const [rawName, literal2] of entries2) {
-        const name = rawName.toLowerCase();
-        const column = columns?.find((candidate) => candidate.name === name);
-        if (Object.prototype.hasOwnProperty.call(normalized, name))
-            return `${label} declares field "${rawName}" twice.`;
-        if (columns && (!column || ["json", "blob"].includes(column.helper)))
-            return `${label} names undeclared or non-scalar field "${rawName}".`;
-        if (!(literal2 === null || typeof literal2 === "boolean" || typeof literal2 === "string" || typeof literal2 === "number" && Number.isFinite(literal2)))
-            return `${label} field "${rawName}" must equal a literal scalar.`;
-        if (typeof literal2 === "string" && literal2.length > 256)
-            return `${label} field "${rawName}" exceeds 256 characters.`;
-        if (column && literal2 === null && !column.nullable)
-            return `${label} field "${rawName}" cannot equal null because it is required.`;
-        if (column && literal2 !== null && (column.helper === "boolean" && typeof literal2 !== "boolean" || ["integer", "number"].includes(column.helper) && typeof literal2 !== "number" || column.helper === "integer" && !Number.isSafeInteger(literal2) || column.helper === "bigint" && (typeof literal2 !== "string" || !isCanonicalBigintText(literal2)) || ["text", "timestamp"].includes(column.helper) && typeof literal2 !== "string")) {
-            return `${label} field "${rawName}" must match its declared type.`;
-        }
-        normalized[name] = literal2;
-    }
-    return Object.fromEntries(Object.entries(normalized).sort(([a], [b]) => a.localeCompare(b)));
+must;
+list;
+the;
+writable;
+fields, or;
+be;
+false. `);
+    const allowed = [];
+    for (const entry of declared) {
+      if (typeof entry !== "string") return fail(`;
+client.$;
+{
+    operation;
 }
-function privateByDefault(where, fields) {
-    for (const [name, publishedValue] of Object.entries(where)) {
-        const column = fields.get(name);
-        if (column.autoNow)
-            continue;
-        const defaultValue = column.hasDefault ? column.default : column.nullable ? null : void 0;
-        if (defaultValue !== void 0 && defaultValue !== publishedValue)
-            return true;
-    }
-    return false;
+fields;
+must;
+be;
+column;
+names. `);
+      const name = entry.toLowerCase();
+      const column = fields.get(name);
+      if (!column) return fail(`;
+client.$;
+{
+    operation;
 }
-function parseIntakePermissions(value, columns, scope, publicRead) {
-    if (!value || typeof value !== "object" || Array.isArray(value))
-        return "client.intake must be an object: { target: { table, field }, fields, where? }.";
-    const input = value;
-    for (const key of Object.keys(input)) {
-        if (!["target", "fields", "where"].includes(key))
-            return `Unknown client.intake option "${key}". Allowed: target, fields, where.`;
+names;
+undeclared;
+or;
+platform - managed;
+field;
+"${entry}". `);
+      if (column.helper === "id" || (scope.kind === "owner" || scope.kind === "policy") && name === scope.column) {
+        return fail(`;
+client.$;
+{
+    operation;
+}
+cannot;
+write;
+the;
+platform - assigned;
+identity;
+field;
+"${entry}". `);
+      }
+      if (column.helper === "blob") return fail(`;
+client.$;
+{
+    operation;
+}
+cannot;
+write;
+binary;
+field;
+"${entry}";
+uploads;
+go;
+to;
+project;
+files. `);
+      if (typeof publicRead === "object" && Object.prototype.hasOwnProperty.call(publicRead.where, name)) {
+        return fail(`;
+client.$;
+{
+    operation;
+}
+cannot;
+write;
+publication;
+field;
+"${entry}";
+rows;
+are;
+published;
+by;
+a;
+server;
+operation. `);
+      }
+      if (operation === "update" && (scope.kind === "member" || scope.kind === "policy") && scope.group?.includes(name)) {
+        return fail(`;
+client.update;
+cannot;
+move;
+a;
+row;
+between;
+membership;
+groups;
+by;
+changing;
+"${entry}". `);
+      }
+      if (allowed.includes(name)) return fail(`;
+client.$;
+{
+    operation;
+}
+declares;
+field;
+"${entry}";
+twice. `);
+      allowed.push(name);
     }
-    if (scope.kind !== "owner" || scope.visitors === true)
-        return "client.intake needs owner() without visitors: each accepted row belongs to the target row's owner.";
-    const id = columns.find((column) => column.helper === "id");
-    if (!id || id.uuid === true)
-        return "client.intake needs an integer key: declare id({ uuid: false }).";
-    if (publicRead === true)
-        return "client.intake cannot accept rows into a table whose rows are all public (client.publicRead: true).";
-    const target = input.target;
-    if (!target || typeof target !== "object" || Array.isArray(target) || Object.keys(target).sort().join() !== "field,table") {
-        return "client.intake.target must be { table, field }: the public table and its unique reference field.";
-    }
-    const { table, field } = target;
-    if (typeof table !== "string" || !/^[A-Za-z_][A-Za-z0-9_]{0,63}$/.test(table) || typeof field !== "string" || !/^[A-Za-z_][A-Za-z0-9_]{0,63}$/.test(field)) {
-        return "client.intake.target must name a table and one of its fields.";
-    }
-    if (!Array.isArray(input.fields) || input.fields.length === 0)
-        return "client.intake.fields must list at least one field a submission supplies.";
-    const byName2 = new Map(columns.map((column) => [column.name, column]));
-    const fields = [];
-    for (const entry of input.fields) {
-        if (typeof entry !== "string")
-            return "client.intake.fields must be column names.";
-        const name = entry.toLowerCase();
-        const column = byName2.get(name);
-        if (!column)
-            return `client.intake.fields names undeclared or platform-managed field "${entry}".`;
-        if (column.helper === "id" || name === scope.column)
-            return `client.intake.fields cannot set the platform-assigned identity field "${entry}".`;
-        if (column.helper === "blob")
-            return `client.intake.fields cannot accept binary field "${entry}"; uploads go to project files.`;
-        if (column.autoNow)
-            return `client.intake.fields cannot set "${entry}", which the platform fills in.`;
-        if (typeof publicRead === "object" && Object.prototype.hasOwnProperty.call(publicRead.where, name)) {
-            return `client.intake.fields cannot set publication field "${entry}".`;
-        }
-        if (fields.includes(name))
-            return `client.intake.fields declares field "${entry}" twice.`;
-        fields.push(name);
+    if (operation === "update" && allowed.length === 0) return fail("client.update must name at least one writable field, or be false.");
+    writes[operation] = allowed.sort();
+  }
+  if (writes.create !== null) {
+    if (typeof publicRead === "object" && !privateByDefault(publicRead.where, fields)) {
+      return fail("client.create has no fixed publication-field default that guarantees a private row. It is accepted when at least one predicate field has a private default; otherwise rows are created by a server operation.");
     }
     for (const column of columns) {
-        if (column.helper !== "id" && !column.nullable && !column.hasDefault && !column.autoNow && !fields.includes(column.name)) {
-            return `client.intake.fields must include required field "${column.name}", or that field needs a declared default.`;
-        }
+      if (column.helper !== "id" && !column.nullable && !column.hasDefault && !column.autoNow && !writes.create.includes(column.name)) {
+        return fail(`;
+client.create;
+must;
+include;
+required;
+field;
+"${column.name}", or;
+that;
+field;
+needs;
+a;
+declared;
+`);
+      }
     }
-    if (typeof publicRead === "object" && !privateByDefault(publicRead.where, byName2)) {
-        return "client.intake has no fixed publication-field default that guarantees a private row; it is accepted when at least one predicate field has a private default.";
+  }
+  let links;
+  if (input.links !== void 0) {
+    const parsed = parseLinkPermissions(input.links, read, writes.update, writes.create, columns, scope);
+    if (typeof parsed === "string") return fail(parsed);
+    links = parsed;
+  }
+  let intake;
+  if (input.intake !== void 0) {
+    const parsed = parseIntakePermissions(input.intake, columns, scope, publicRead);
+    if (typeof parsed === "string") return fail(parsed);
+    intake = parsed;
+  }
+  return { ok: true, permissions: { identity, read, publicRead, ...writes, delete: remove, ...links ? { links } : {}, ...intake ? { intake } : {} } };
+}
+function parseEqualityWhere(where, columns, label) {
+  if (!where || typeof where !== "object" || Array.isArray(where)) return `;
+$;
+{
+    label;
+}
+must;
+be;
+a;
+non - empty;
+object. `;
+  const entries2 = Object.entries(where);
+  if (entries2.length === 0 || entries2.length > 8) return `;
+$;
+{
+    label;
+}
+must;
+declare;
+1;
+to;
+8;
+equality;
+fields. `;
+  const normalized = {};
+  for (const [rawName, literal2] of entries2) {
+    const name = rawName.toLowerCase();
+    const column = columns?.find((candidate) => candidate.name === name);
+    if (Object.prototype.hasOwnProperty.call(normalized, name)) return `;
+$;
+{
+    label;
+}
+declares;
+field;
+"${rawName}";
+twice. `;
+    if (columns && (!column || ["json", "blob"].includes(column.helper))) return `;
+$;
+{
+    label;
+}
+names;
+undeclared;
+or;
+non - scalar;
+field;
+"${rawName}". `;
+    if (!(literal2 === null || typeof literal2 === "boolean" || typeof literal2 === "string" || typeof literal2 === "number" && Number.isFinite(literal2))) return `;
+$;
+{
+    label;
+}
+field;
+"${rawName}";
+must;
+equal;
+a;
+literal;
+scalar. `;
+    if (typeof literal2 === "string" && literal2.length > 256) return `;
+$;
+{
+    label;
+}
+field;
+"${rawName}";
+exceeds;
+256;
+characters. `;
+    if (column && literal2 === null && !column.nullable) return `;
+$;
+{
+    label;
+}
+field;
+"${rawName}";
+cannot;
+equal;
+null;
+because;
+it;
+is;
+required. `;
+    if (column && literal2 !== null && (column.helper === "boolean" && typeof literal2 !== "boolean" || ["integer", "number"].includes(column.helper) && typeof literal2 !== "number" || column.helper === "integer" && !Number.isSafeInteger(literal2) || column.helper === "bigint" && (typeof literal2 !== "string" || !isCanonicalBigintText(literal2)) || ["text", "timestamp"].includes(column.helper) && typeof literal2 !== "string")) {
+      return `;
+$;
+{
+    label;
+}
+field;
+"${rawName}";
+must;
+match;
+its;
+declared;
+type. `;
     }
-    let where;
-    if (input.where !== void 0) {
-        const parsed = parseEqualityWhere(input.where, null, "client.intake.where");
-        if (typeof parsed === "string")
-            return parsed;
-        where = parsed;
+    normalized[name] = literal2;
+  }
+  return Object.fromEntries(Object.entries(normalized).sort(([a], [b]) => a.localeCompare(b)));
+}
+function privateByDefault(where, fields) {
+  for (const [name, publishedValue] of Object.entries(where)) {
+    const column = fields.get(name);
+    if (column.autoNow) continue;
+    const defaultValue = column.hasDefault ? column.default : column.nullable ? null : void 0;
+    if (defaultValue !== void 0 && defaultValue !== publishedValue) return true;
+  }
+  return false;
+}
+function parseIntakePermissions(value, columns, scope, publicRead) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return "client.intake must be an object: { target: { table, field }, fields, where? }.";
+  const input = value;
+  for (const key of Object.keys(input)) {
+    if (!["target", "fields", "where"].includes(key)) return `;
+Unknown;
+client.intake;
+option;
+"${key}".Allowed;
+target, fields, where. `;
+  }
+  if (scope.kind !== "owner" || scope.visitors === true) return "client.intake needs owner() without visitors: each accepted row belongs to the target row's owner.";
+  const id = columns.find((column) => column.helper === "id");
+  if (!id || id.uuid === true) return "client.intake needs an integer key: declare id({ uuid: false }).";
+  if (publicRead === true) return "client.intake cannot accept rows into a table whose rows are all public (client.publicRead: true).";
+  const target = input.target;
+  if (!target || typeof target !== "object" || Array.isArray(target) || Object.keys(target).sort().join() !== "field,table") {
+    return "client.intake.target must be { table, field }: the public table and its unique reference field.";
+  }
+  const { table, field } = target;
+  if (typeof table !== "string" || !/^[A-Za-z_][A-Za-z0-9_]{0,63}$/.test(table) || typeof field !== "string" || !/^[A-Za-z_][A-Za-z0-9_]{0,63}$/.test(field)) {
+    return "client.intake.target must name a table and one of its fields.";
+  }
+  if (!Array.isArray(input.fields) || input.fields.length === 0) return "client.intake.fields must list at least one field a submission supplies.";
+  const byName2 = new Map(columns.map((column) => [column.name, column]));
+  const fields = [];
+  for (const entry of input.fields) {
+    if (typeof entry !== "string") return "client.intake.fields must be column names.";
+    const name = entry.toLowerCase();
+    const column = byName2.get(name);
+    if (!column) return `;
+client.intake.fields;
+names;
+undeclared;
+or;
+platform - managed;
+field;
+"${entry}". `;
+    if (column.helper === "id" || name === scope.column) return `;
+client.intake.fields;
+cannot;
+set;
+the;
+platform - assigned;
+identity;
+field;
+"${entry}". `;
+    if (column.helper === "blob") return `;
+client.intake.fields;
+cannot;
+accept;
+binary;
+field;
+"${entry}";
+uploads;
+go;
+to;
+project;
+files. `;
+    if (column.autoNow) return `;
+client.intake.fields;
+cannot;
+set;
+"${entry}", which;
+the;
+platform;
+fills in . `;
+    if (typeof publicRead === "object" && Object.prototype.hasOwnProperty.call(publicRead.where, name)) {
+      return `;
+client.intake.fields;
+cannot;
+set;
+publication;
+field;
+"${entry}". `;
     }
-    return { target: { table: table.toLowerCase(), field: field.toLowerCase() }, fields: fields.sort(), ...where ? { where } : {} };
+    if (fields.includes(name)) return `;
+client.intake.fields;
+declares;
+field;
+"${entry}";
+twice. `;
+    fields.push(name);
+  }
+  for (const column of columns) {
+    if (column.helper !== "id" && !column.nullable && !column.hasDefault && !column.autoNow && !fields.includes(column.name)) {
+      return `;
+client.intake.fields;
+must;
+include;
+required;
+field;
+"${column.name}", or;
+that;
+field;
+needs;
+a;
+declared;
+`;
+    }
+  }
+  if (typeof publicRead === "object" && !privateByDefault(publicRead.where, byName2)) {
+    return "client.intake has no fixed publication-field default that guarantees a private row; it is accepted when at least one predicate field has a private default.";
+  }
+  let where;
+  if (input.where !== void 0) {
+    const parsed = parseEqualityWhere(input.where, null, "client.intake.where");
+    if (typeof parsed === "string") return parsed;
+    where = parsed;
+  }
+  return { target: { table: table.toLowerCase(), field: field.toLowerCase() }, fields: fields.sort(), ...where ? { where } : {} };
 }
 function parseLinkPermissions(value, read, update, create, columns, scope) {
-    if (!value || typeof value !== "object" || Array.isArray(value))
-        return "client.links must be an object: { read, edit?, children?, maxDays?, anonymousCreate? }.";
-    const input = value;
-    for (const key2 of Object.keys(input)) {
-        if (!["read", "edit", "children", "maxDays", "anonymousCreate"].includes(key2))
-            return `Unknown client.links option "${key2}". Allowed: read, edit, children, maxDays, anonymousCreate.`;
-    }
-    const owned = scope.kind === "owner" && scope.visitors !== true || scope.kind === "policy" && typeof scope.column === "string";
-    if (!owned)
-        return "client.links needs rows with one signed-in owner: owner() (without visitors) or anyOf(owner(), ...).";
-    if (read === false)
-        return "client.links needs client.read: a link can only read fields the app data client reads.";
-    const readable = read === true ? columns.filter((column) => column.helper !== "blob").map((column) => column.name) : read;
-    const list = (raw, label, allowed, allowedLabel) => {
-        if (!Array.isArray(raw))
-            return `client.links.${label} must list field names.`;
-        const names = [];
-        for (const entry of raw) {
-            if (typeof entry !== "string")
-                return `client.links.${label} fields must be column names.`;
-            const name = entry.toLowerCase();
-            if (!allowed.includes(name))
-                return `client.links.${label} names "${entry}", which is not in ${allowedLabel}.`;
-            if (names.includes(name))
-                return `client.links.${label} declares field "${entry}" twice.`;
-            names.push(name);
-        }
-        return names.sort();
-    };
-    const linkRead = input.read === true ? [...readable].sort() : list(input.read, "read", readable, "client.read");
-    if (typeof linkRead === "string")
-        return linkRead;
-    if (linkRead.length === 0)
-        return "client.links.read must name at least one field, or be true.";
-    const key = columns.find((column) => column.helper === "id")?.name;
-    if (!key || !linkRead.includes(key))
-        return "client.links.read must include the primary key.";
-    let edit = [];
-    if (input.edit !== void 0 && input.edit !== false) {
-        if (!update)
-            return "client.links.edit needs client.update: a link can only update fields the app data client updates.";
-        const parsed = list(input.edit, "edit", update, "client.update");
-        if (typeof parsed === "string")
-            return parsed;
-        if (parsed.length === 0)
-            return "client.links.edit must name at least one field, or be false.";
-        if (scope.column && parsed.includes(scope.column))
-            return `client.links.edit cannot write the owner field "${scope.column}".`;
-        edit = parsed;
-    }
-    let children = [];
-    if (input.children !== void 0) {
-        if (!Array.isArray(input.children) || input.children.some((entry) => typeof entry !== "string" || !/^[A-Za-z_][A-Za-z0-9_]{0,63}$/.test(entry))) {
-            return "client.links.children must list relation names declared on this table.";
-        }
-        children = [...new Set(input.children.map((entry) => entry.toLowerCase()))].sort();
-        if (children.length !== input.children.length)
-            return "client.links.children names a relation twice.";
-    }
-    let maxDays = null;
-    if (input.maxDays !== void 0) {
-        if (typeof input.maxDays !== "number" || !Number.isSafeInteger(input.maxDays) || input.maxDays < 1 || input.maxDays > 365) {
-            return "client.links.maxDays must be a whole number of days from 1 to 365.";
-        }
-        maxDays = input.maxDays;
-    }
-    if (input.anonymousCreate !== void 0 && typeof input.anonymousCreate !== "boolean")
-        return "client.links.anonymousCreate must be true or false.";
-    if (input.anonymousCreate === true) {
-        if (scope.kind !== "owner" || scope.visitors === true)
-            return "client.links.anonymousCreate needs owner() without visitors.";
-        if (!create || create.length === 0)
-            return "client.links.anonymousCreate needs client.create: it creates rows with the fields the app data client creates.";
-        if (columns.find((column) => column.helper === "id")?.uuid === true)
-            return "client.links.anonymousCreate needs an integer key: declare id({ uuid: false }).";
-        if (columns.some((column) => column.helper === "blob"))
-            return "client.links.anonymousCreate is not available on a table with a blob() column.";
-    }
-    return { read: linkRead, edit, children, maxDays, ...input.anonymousCreate === true ? { anonymousCreate: true } : {} };
+  if (!value || typeof value !== "object" || Array.isArray(value)) return "client.links must be an object: { read, edit?, children?, maxDays?, anonymousCreate? }.";
+  const input = value;
+  for (const key2 of Object.keys(input)) {
+    if (!["read", "edit", "children", "maxDays", "anonymousCreate"].includes(key2)) return `;
+Unknown;
+client.links;
+option;
+"${key2}".Allowed;
+read, edit, children, maxDays, anonymousCreate. `;
+  }
+  const owned = scope.kind === "owner" && scope.visitors !== true || scope.kind === "policy" && typeof scope.column === "string";
+  if (!owned) return "client.links needs rows with one signed-in owner: owner() (without visitors) or anyOf(owner(), ...).";
+  if (read === false) return "client.links needs client.read: a link can only read fields the app data client reads.";
+  const readable = read === true ? columns.filter((column) => column.helper !== "blob").map((column) => column.name) : read;
+  const list = (raw, label, allowed, allowedLabel) => {
+    if (!Array.isArray(raw)) return `;
+client.links.$;
+{
+    label;
 }
+must;
+list;
+field;
+names. `;
+    const names = [];
+    for (const entry of raw) {
+      if (typeof entry !== "string") return `;
+client.links.$;
+{
+    label;
+}
+fields;
+must;
+be;
+column;
+names. `;
+      const name = entry.toLowerCase();
+      if (!allowed.includes(name)) return `;
+client.links.$;
+{
+    label;
+}
+names;
+"${entry}", which;
+is;
+not in $;
+{
+    allowedLabel;
+}
+`;
+      if (names.includes(name)) return `;
+client.links.$;
+{
+    label;
+}
+declares;
+field;
+"${entry}";
+twice. `;
+      names.push(name);
+    }
+    return names.sort();
+  };
+  const linkRead = input.read === true ? [...readable].sort() : list(input.read, "read", readable, "client.read");
+  if (typeof linkRead === "string") return linkRead;
+  if (linkRead.length === 0) return "client.links.read must name at least one field, or be true.";
+  const key = columns.find((column) => column.helper === "id")?.name;
+  if (!key || !linkRead.includes(key)) return "client.links.read must include the primary key.";
+  let edit = [];
+  if (input.edit !== void 0 && input.edit !== false) {
+    if (!update) return "client.links.edit needs client.update: a link can only update fields the app data client updates.";
+    const parsed = list(input.edit, "edit", update, "client.update");
+    if (typeof parsed === "string") return parsed;
+    if (parsed.length === 0) return "client.links.edit must name at least one field, or be false.";
+    if (scope.column && parsed.includes(scope.column)) return `;
+client.links.edit;
+cannot;
+write;
+the;
+owner;
+field;
+"${scope.column}". `;
+    edit = parsed;
+  }
+  let children = [];
+  if (input.children !== void 0) {
+    if (!Array.isArray(input.children) || input.children.some((entry) => typeof entry !== "string" || !/^[A-Za-z_][A-Za-z0-9_]{0,63}$/.test(entry))) {
+      return "client.links.children must list relation names declared on this table.";
+    }
+    children = [...new Set(input.children.map((entry) => entry.toLowerCase()))].sort();
+    if (children.length !== input.children.length) return "client.links.children names a relation twice.";
+  }
+  let maxDays = null;
+  if (input.maxDays !== void 0) {
+    if (typeof input.maxDays !== "number" || !Number.isSafeInteger(input.maxDays) || input.maxDays < 1 || input.maxDays > 365) {
+      return "client.links.maxDays must be a whole number of days from 1 to 365.";
+    }
+    maxDays = input.maxDays;
+  }
+  if (input.anonymousCreate !== void 0 && typeof input.anonymousCreate !== "boolean") return "client.links.anonymousCreate must be true or false.";
+  if (input.anonymousCreate === true) {
+    if (scope.kind !== "owner" || scope.visitors === true) return "client.links.anonymousCreate needs owner() without visitors.";
+    if (!create || create.length === 0) return "client.links.anonymousCreate needs client.create: it creates rows with the fields the app data client creates.";
+    if (columns.find((column) => column.helper === "id")?.uuid === true) return "client.links.anonymousCreate needs an integer key: declare id({ uuid: false }).";
+    if (columns.some((column) => column.helper === "blob")) return "client.links.anonymousCreate is not available on a table with a blob() column.";
+  }
+  return { read: linkRead, edit, children, maxDays, ...input.anonymousCreate === true ? { anonymousCreate: true } : {} };
+}
+
+
 var STALE_JOB_WINDOW_MS = 45 * 60 * 1e3;
+
+
 var BINDING_OPERATIONS = ["read", "create", "update", "delete"];
 var ROW_OPERATIONS = ["read", "update", "delete"];
 var MAX_JOB_BINDING_SECONDS = STALE_JOB_WINDOW_MS / 1e3;
 var NAME = /^[a-z][a-z0-9_]{0,63}$/;
 var BUILT_IN_GROUP_ROLES = ["admin", "member", "owner"];
-var lines = new WeakMap();
+var lines = /* @__PURE__ */ new WeakMap();
 var byName = (list) => list.sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
 function readString(r, fail, ctx) {
-    const t = r.next();
-    if (t.kind !== "string")
-        fail(t.line, `${ctx} must be a quoted literal string.`);
-    return t;
+  const t = r.next();
+  if (t.kind !== "string") fail(t.line, `;
+$;
+{
+    ctx;
+}
+must;
+be;
+a;
+quoted;
+literal;
+string. `);
+  return t;
 }
 function readStrings(r, fail, ctx) {
-    const open = r.next();
-    if (open.kind !== "punct" || open.value !== "[")
-        fail(open.line, `${ctx} must be a list of quoted literal strings, such as ['read'].`);
-    const out = [];
-    while (!r.tryPunct("]")) {
-        const t = r.next();
-        if (t.kind !== "string")
-            fail(t.line, `${ctx} must be a list of quoted literal strings.`);
-        if (out.some((seen) => seen.value === t.value))
-            fail(t.line, `${ctx} lists "${t.value}" twice.`);
-        out.push(t);
-        if (!r.tryPunct(",")) {
-            r.expectPunct("]", `closing ${ctx}`);
-            break;
-        }
+  const open = r.next();
+  if (open.kind !== "punct" || open.value !== "[") fail(open.line, `;
+$;
+{
+    ctx;
+}
+must;
+be;
+a;
+list;
+of;
+quoted;
+literal;
+strings, such as [
+    'read'
+];
+`);
+  const out = [];
+  while (!r.tryPunct("]")) {
+    const t = r.next();
+    if (t.kind !== "string") fail(t.line, `;
+$;
+{
+    ctx;
+}
+must;
+be;
+a;
+list;
+of;
+quoted;
+literal;
+strings. `);
+    if (out.some((seen) => seen.value === t.value)) fail(t.line, `;
+$;
+{
+    ctx;
+}
+lists;
+"${t.value}";
+twice. `);
+    out.push(t);
+    if (!r.tryPunct(",")) {
+      r.expectPunct("]", `;
+closing;
+$;
+{
+    ctx;
+}
+`);
+      break;
     }
-    return out;
+  }
+  return out;
 }
 function readOperations(r, fail, ctx, allowed) {
-    const list = readStrings(r, fail, ctx);
-    if (list.length === 0)
-        fail(r.peek().line, `${ctx} must name at least one operation.`);
-    for (const t of list) {
-        if (!allowed.includes(t.value))
-            fail(t.line, `${ctx} has an unknown operation "${t.value}". Allowed: ${allowed.join(", ")}.`);
-    }
-    const ops = BINDING_OPERATIONS.filter((op) => list.some((t) => t.value === op));
-    if (!ops.includes("read") && (ops.includes("update") || ops.includes("delete"))) {
-        fail(list[0].line, `${ctx} allows ${ops.filter((op) => op !== "create").join(" and ")} without read. Update and delete return the existing row, so they also need read; create alone is allowed because it returns only the row it created.`);
-    }
-    return ops;
+  const list = readStrings(r, fail, ctx);
+  if (list.length === 0) fail(r.peek().line, `;
+$;
+{
+    ctx;
+}
+must;
+name;
+at;
+least;
+one;
+operation. `);
+  for (const t of list) {
+    if (!allowed.includes(t.value)) fail(t.line, `;
+$;
+{
+    ctx;
+}
+has;
+an;
+unknown;
+operation;
+"${t.value}".Allowed;
+$;
+{
+    allowed.join(", ");
+}
+`);
+  }
+  const ops = BINDING_OPERATIONS.filter((op) => list.some((t) => t.value === op));
+  if (!ops.includes("read") && (ops.includes("update") || ops.includes("delete"))) {
+    fail(list[0].line, `;
+$;
+{
+    ctx;
+}
+allows;
+$;
+{
+    ops.filter((op) => op !== "create").join(" and ");
+}
+without;
+read.Update;
+and;
+delete ;
+return the;
+existing;
+row, so;
+they;
+also;
+need;
+read;
+create;
+alone;
+is;
+allowed;
+because;
+it;
+returns;
+only;
+the;
+row;
+it;
+created. `);
+  }
+  return ops;
 }
 function readNamed(r, fail, option, kind, keys, readField) {
-    r.expectPunct("{", `opening schema option ${option}`);
-    const out = [];
+  r.expectPunct("{", `;
+opening;
+schema;
+option;
+$;
+{
+    option;
+}
+`);
+  const out = [];
+  while (!r.tryPunct("}")) {
+    const key = r.readKey(`;
+for (a; $; { kind })
+    name `);
+    if (!NAME.test(key.name)) fail(key.line, `;
+$;
+{
+    kind;
+}
+name;
+"${key.name}";
+must;
+be;
+lowercase;
+letters, digits;
+and;
+underscores, starting;
+with (a)
+    letter(at, most, 64). `);
+    if (out.some((entry) => entry.name === key.name)) fail(key.line, `;
+$;
+{
+    kind;
+}
+"${key.name}";
+is;
+declared;
+twice. `);
+    r.expectPunct(":", `;
+after;
+$;
+{
+    kind;
+}
+"${key.name}" `);
+    r.expectPunct("{", `;
+opening;
+$;
+{
+    kind;
+}
+"${key.name}" `);
+    const fields = {};
+    const fieldLines = { "": key.line };
+    const seen = /* @__PURE__ */ new Set();
     while (!r.tryPunct("}")) {
-        const key = r.readKey(`for a ${kind} name`);
-        if (!NAME.test(key.name))
-            fail(key.line, `${kind} name "${key.name}" must be lowercase letters, digits and underscores, starting with a letter (at most 64).`);
-        if (out.some((entry) => entry.name === key.name))
-            fail(key.line, `${kind} "${key.name}" is declared twice.`);
-        r.expectPunct(":", `after ${kind} "${key.name}"`);
-        r.expectPunct("{", `opening ${kind} "${key.name}"`);
-        const fields = {};
-        const fieldLines = { "": key.line };
-        const seen = new Set();
-        while (!r.tryPunct("}")) {
-            const opt = r.readKey(`for an option of ${kind} "${key.name}"`);
-            if (!keys.includes(opt.name))
-                fail(opt.line, `${kind} "${key.name}" has an unknown option "${opt.name}". Allowed: ${keys.join(", ")}.`);
-            if (seen.has(opt.name))
-                fail(opt.line, `${kind} "${key.name}" declares ${opt.name} twice.`);
-            seen.add(opt.name);
-            r.expectPunct(":", `after ${option}.${key.name}.${opt.name}`);
-            fieldLines[opt.name] = r.peek().line;
-            readField(opt.name, fields, key.name);
-            if (!r.tryPunct(",")) {
-                r.expectPunct("}", `closing ${kind} "${key.name}"`);
-                break;
-            }
-        }
-        const missing = keys.filter((k) => !seen.has(k));
-        if (missing.length)
-            fail(key.line, `${kind} "${key.name}" is missing ${missing.join(", ")}.`);
-        lines.set(fields, fieldLines);
-        out.push({ name: key.name, line: key.line, fields });
-        if (!r.tryPunct(",")) {
-            r.expectPunct("}", `closing schema option ${option}`);
-            break;
-        }
+      const opt = r.readKey(`;
+for (an; option; of)
+    $;
+{
+    kind;
+}
+"${key.name}" `);
+      if (!keys.includes(opt.name)) fail(opt.line, `;
+$;
+{
+    kind;
+}
+"${key.name}";
+has;
+an;
+unknown;
+option;
+"${opt.name}".Allowed;
+$;
+{
+    keys.join(", ");
+}
+`);
+      if (seen.has(opt.name)) fail(opt.line, `;
+$;
+{
+    kind;
+}
+"${key.name}";
+declares;
+$;
+{
+    opt.name;
+}
+twice. `);
+      seen.add(opt.name);
+      r.expectPunct(":", `;
+after;
+$;
+{
+    option;
+}
+$;
+{
+    key.name;
+}
+$;
+{
+    opt.name;
+}
+`);
+      fieldLines[opt.name] = r.peek().line;
+      readField(opt.name, fields, key.name);
+      if (!r.tryPunct(",")) {
+        r.expectPunct("}", `;
+closing;
+$;
+{
+    kind;
+}
+"${key.name}" `);
+        break;
+      }
     }
-    return out;
+    const missing = keys.filter((k) => !seen.has(k));
+    if (missing.length) fail(key.line, `;
+$;
+{
+    kind;
+}
+"${key.name}";
+is;
+missing;
+$;
+{
+    missing.join(", ");
+}
+`);
+    lines.set(fields, fieldLines);
+    out.push({ name: key.name, line: key.line, fields });
+    if (!r.tryPunct(",")) {
+      r.expectPunct("}", `;
+closing;
+schema;
+option;
+$;
+{
+    option;
+}
+`);
+      break;
+    }
+  }
+  return out;
 }
 function readPaymentBindings(r, fail) {
-    const entries2 = readNamed(r, fail, "payments", "payment binding", ["table", "amount", "currency", "onPaid"], (key, fields, name) => {
-        if (key !== "onPaid") {
-            fields[key] = readString(r, fail, `payments.${name}.${key}`).value.toLowerCase();
-            return;
-        }
-        r.expectPunct("{", `opening payments.${name}.onPaid, which takes one transition: { status: { from: [...], to: '...' } }`);
-        const column = r.readKey(`for the status column in payments.${name}.onPaid`);
-        r.expectPunct(":", `after payments.${name}.onPaid.${column.name}`);
-        r.expectPunct("{", `opening payments.${name}.onPaid.${column.name}, which takes { from: [...], to: '...' }`);
-        const transition = {};
-        while (!r.tryPunct("}")) {
-            const opt = r.readKey(`for an option of payments.${name}.onPaid.${column.name}`);
-            if (opt.name !== "from" && opt.name !== "to")
-                fail(opt.line, `payments.${name}.onPaid.${column.name} has an unknown option "${opt.name}". Allowed: from, to.`);
-            if (transition[opt.name])
-                fail(opt.line, `payments.${name}.onPaid.${column.name} declares ${opt.name} twice.`);
-            r.expectPunct(":", `after ${opt.name}`);
-            if (opt.name === "from")
-                transition.from = readStrings(r, fail, `payments.${name}.onPaid.${column.name}.from`);
-            else
-                transition.to = readString(r, fail, `payments.${name}.onPaid.${column.name}.to`);
-            if (!r.tryPunct(",")) {
-                r.expectPunct("}", `closing payments.${name}.onPaid.${column.name}`);
-                break;
-            }
-        }
-        if (!transition.from || !transition.to)
-            fail(column.line, `payments.${name}.onPaid.${column.name} needs both from and to.`);
-        r.tryPunct(",");
-        if (!r.tryPunct("}")) {
-            const extra = r.peek();
-            fail(extra.line, `payments.${name}.onPaid declares one status transition only; this one has a second entry. Other paid effects run from the signed payment event.`);
-        }
-        const values = [...transition.from, transition.to];
-        for (const t of values) {
-            if (t.value.length < 1 || t.value.length > 64 || /[\u0000-\u001f]/.test(t.value))
-                fail(t.line, `payments.${name}.onPaid.${column.name} status values must be 1 to 64 characters, without control characters.`);
-        }
-        if (transition.from.length === 0)
-            fail(column.line, `payments.${name}.onPaid.${column.name}.from must list at least one unpaid state.`);
-        if (transition.from.some((t) => t.value === transition.to.value))
-            fail(transition.to.line, `payments.${name}.onPaid.${column.name}.to must differ from every from state.`);
-        fields.status = { column: column.name.toLowerCase(), from: transition.from.map((t) => t.value).sort(), to: transition.to.value };
-    });
-    return byName(entries2.map(({ name, fields }) => {
-        const binding = { name, ...fields };
-        lines.set(binding, lines.get(fields));
-        return binding;
-    }));
+  const entries2 = readNamed(r, fail, "payments", "payment binding", ["table", "amount", "currency", "onPaid"], (key, fields, name) => {
+    if (key !== "onPaid") {
+      fields[key] = readString(r, fail, `;
+payments.$;
+{
+    name;
+}
+$;
+{
+    key;
+}
+`).value.toLowerCase();
+      return;
+    }
+    r.expectPunct("{", `;
+opening;
+payments.$;
+{
+    name;
+}
+onPaid, which;
+takes;
+one;
+transition: {
+    status: {
+        from: [...], to;
+        '...';
+    }
+}
+`);
+    const column = r.readKey(`;
+for (the; status; column in payments.$) {
+    name;
+}
+onPaid `);
+    r.expectPunct(":", `;
+after;
+payments.$;
+{
+    name;
+}
+onPaid.$;
+{
+    column.name;
+}
+`);
+    r.expectPunct("{", `;
+opening;
+payments.$;
+{
+    name;
+}
+onPaid.$;
+{
+    column.name;
+}
+which;
+takes;
+{
+    from: [...], to;
+    '...';
+}
+`);
+    const transition = {};
+    while (!r.tryPunct("}")) {
+      const opt = r.readKey(`;
+for (an; option; of)
+    payments.$;
+{
+    name;
+}
+onPaid.$;
+{
+    column.name;
+}
+`);
+      if (opt.name !== "from" && opt.name !== "to") fail(opt.line, `;
+payments.$;
+{
+    name;
+}
+onPaid.$;
+{
+    column.name;
+}
+has;
+an;
+unknown;
+option;
+"${opt.name}".Allowed;
+from, to. `);
+      if (transition[opt.name]) fail(opt.line, `;
+payments.$;
+{
+    name;
+}
+onPaid.$;
+{
+    column.name;
+}
+declares;
+$;
+{
+    opt.name;
+}
+twice. `);
+      r.expectPunct(":", `;
+after;
+$;
+{
+    opt.name;
+}
+`);
+      if (opt.name === "from") transition.from = readStrings(r, fail, `;
+payments.$;
+{
+    name;
+}
+onPaid.$;
+{
+    column.name;
+}
+from `);
+      else transition.to = readString(r, fail, `;
+payments.$;
+{
+    name;
+}
+onPaid.$;
+{
+    column.name;
+}
+to `);
+      if (!r.tryPunct(",")) {
+        r.expectPunct("}", `;
+closing;
+payments.$;
+{
+    name;
+}
+onPaid.$;
+{
+    column.name;
+}
+`);
+        break;
+      }
+    }
+    if (!transition.from || !transition.to) fail(column.line, `;
+payments.$;
+{
+    name;
+}
+onPaid.$;
+{
+    column.name;
+}
+needs;
+both;
+from;
+and;
+to. `);
+    r.tryPunct(",");
+    if (!r.tryPunct("}")) {
+      const extra = r.peek();
+      fail(extra.line, `;
+payments.$;
+{
+    name;
+}
+onPaid;
+declares;
+one;
+status;
+transition;
+only;
+this;
+one;
+has;
+a;
+second;
+entry.Other;
+paid;
+effects;
+run;
+from;
+the;
+signed;
+payment;
+event. `);
+    }
+    const values = [...transition.from, transition.to];
+    for (const t of values) {
+      if (t.value.length < 1 || t.value.length > 64 || /[\u0000-\u001f]/.test(t.value)) fail(t.line, `;
+payments.$;
+{
+    name;
+}
+onPaid.$;
+{
+    column.name;
+}
+status;
+values;
+must;
+be;
+1;
+to;
+64;
+characters, without;
+control;
+characters. `);
+    }
+    if (transition.from.length === 0) fail(column.line, `;
+payments.$;
+{
+    name;
+}
+onPaid.$;
+{
+    column.name;
+}
+from;
+must;
+list;
+at;
+least;
+one;
+unpaid;
+state. `);
+    if (transition.from.some((t) => t.value === transition.to.value)) fail(transition.to.line, `;
+payments.$;
+{
+    name;
+}
+onPaid.$;
+{
+    column.name;
+}
+to;
+must;
+differ;
+from;
+every;
+from;
+state. `);
+    fields.status = { column: column.name.toLowerCase(), from: transition.from.map((t) => t.value).sort(), to: transition.to.value };
+  });
+  return byName(entries2.map(({ name, fields }) => {
+    const binding = { name, ...fields };
+    lines.set(binding, lines.get(fields));
+    return binding;
+  }));
 }
 function readJobBindings(r, fail) {
-    const entries2 = readNamed(r, fail, "jobs", "job binding", ["table", "operations", "maxDurationSeconds"], (key, fields, name) => {
-        if (key === "table")
-            fields.table = readString(r, fail, `jobs.${name}.table`).value.toLowerCase();
-        else if (key === "operations")
-            fields.operations = readOperations(r, fail, `jobs.${name}.operations`, ROW_OPERATIONS);
-        else {
-            const t = r.next();
-            if (t.kind !== "number" || !/^[1-9][0-9]{0,9}$/.test(t.value) || Number(t.value) > MAX_JOB_BINDING_SECONDS) {
-                fail(t.line, `jobs.${name}.maxDurationSeconds must be a whole number of seconds from 1 to ${MAX_JOB_BINDING_SECONDS}: how long the row grant lasts from the job's scheduled start, retries included.`);
-            }
-            fields.maxDurationSeconds = Number(t.value);
-        }
-    });
-    return byName(entries2.map(({ name, fields }) => {
-        const binding = { name, ...fields };
-        lines.set(binding, lines.get(fields));
-        return binding;
-    }));
+  const entries2 = readNamed(r, fail, "jobs", "job binding", ["table", "operations", "maxDurationSeconds"], (key, fields, name) => {
+    if (key === "table") fields.table = readString(r, fail, `;
+jobs.$;
+{
+    name;
 }
+table `).value.toLowerCase();
+    else if (key === "operations") fields.operations = readOperations(r, fail, `;
+jobs.$;
+{
+    name;
+}
+operations `, ROW_OPERATIONS);
+    else {
+      const t = r.next();
+      if (t.kind !== "number" || !/^[1-9][0-9]{0,9}$/.test(t.value) || Number(t.value) > MAX_JOB_BINDING_SECONDS) {
+        fail(t.line, `;
+jobs.$;
+{
+    name;
+}
+maxDurationSeconds;
+must;
+be;
+a;
+whole;
+number;
+of;
+seconds;
+from;
+1;
+to;
+$;
+{
+    MAX_JOB_BINDING_SECONDS;
+}
+how;
+long;
+the;
+row;
+grant;
+lasts;
+from;
+the;
+job;
+'s scheduled start, retries included.`);;
+fields.maxDurationSeconds = Number(t.value);
+;
+return byName(entries2.map(({ name, fields }) => {
+    const binding = { name, ...fields };
+    lines.set(binding, lines.get(fields));
+    return binding;
+}));
 function readServiceRoles(r, fail) {
     const entries2 = readNamed(r, fail, "serviceRoles", "service role", ["tables"], (_key, fields, name) => {
         r.expectPunct("{", `opening serviceRoles.${name}.tables, which takes { table: ['read', ...] }`);
@@ -19358,18 +20273,18 @@ function displayRouteForFunctionFile(file) {
     }
 }
 var SW_INIT_JS = `
-// Generated by somewhere.tech deploy pipeline. Sets up the global
-// surfaces user modules need at module-load time.
+
+
 globalThis.sw = globalThis.sw || {};
 ${DB_OUTCOME_ERROR_JS}
 
-// Responses this runtime made (sw.endpoint refusals and caught throws). index.mjs captures the reader and
-// removes its public hook before any user module loads, so customer code can neither read nor change it.
+
+
 const __sw_runtimeMadeResponses = new WeakSet();
 globalThis.sw.__isRuntimeMadeResponse = function (response) { return __sw_runtimeMadeResponses.has(response); };
 
-// Legacy USER_ENV supplies customer-only process.env after native reflection is denied.
-// index.mjs captures this initializer before lazy module load and removes its public hook.
+
+
 globalThis.sw.__wireProcessEnv = function __sw_wireProcessEnv(runtimeEnv) {
   if (typeof process !== 'object' || process === null ||
       typeof process.env !== 'object' || process.env === null) {
@@ -19469,9 +20384,9 @@ function __sw_corsHeaders(corsCfg, request) {
   return {
     'Access-Control-Allow-Origin': allowed,
     'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
-    // Pragma/Cache-Control: headless browsers + CI automation attach
-    // "Pragma: no-cache" to every fetch; omitting them fails the preflight
-    // for those clients only.
+
+
+
     'Access-Control-Allow-Headers': 'Content-Type, Authorization, Pragma, Cache-Control',
     'Vary': 'Origin',
   };
@@ -19500,7 +20415,7 @@ function __sw_mergeHeaders(response, extra) {
     statusText: response.statusText,
     headers: headers,
   });
-  // The copy keeps the original's provenance.
+
   if (__sw_runtimeMadeResponses.has(response)) __sw_runtimeMadeResponses.add(merged);
   return merged;
 }
@@ -19524,8 +20439,8 @@ globalThis.sw.endpoint = function (config) {
   if (typeof config.handler !== 'function') {
     throw new Error('sw.endpoint: handler is required (an async function).');
   }
-  // An omitted auth is public; any value outside the supported modes fails
-  // closed \u2014 never read as 'none'.
+
+
   var auth = config.auth === undefined ? 'none' : config.auth;
   if (${JSON.stringify(ENDPOINT_AUTH_MODES)}.indexOf(auth) === -1) {
     var shownAuth = typeof auth === 'string' ? "'" + auth + "'"
@@ -19550,7 +20465,7 @@ globalThis.sw.endpoint = function (config) {
       return __sw_runtimeMade(new Response(null, { status: 204, headers: corsHeaders }));
     }
 
-    // Auth.
+
     var user = null;
     if (auth === 'required') {
       try {
@@ -19565,9 +20480,9 @@ globalThis.sw.endpoint = function (config) {
       try { user = await sw.auth.fromRequest(request); } catch (_) { /* swallow */ }
     }
 
-    // Body validation. A declared schema means the handler always gets the
-    // validated body: GET/HEAD cannot carry one and are refused with 405;
-    // every other method must send valid JSON.
+
+
+
     var body = null;
     if (bodySchema && (request.method === 'GET' || request.method === 'HEAD')) {
       return __sw_mergeHeaders(
@@ -19592,17 +20507,17 @@ globalThis.sw.endpoint = function (config) {
       }
     }
 
-    // Rate limit. Key by user id when authed (sticky across IPs);
-    // by client IP otherwise. Path is included so two endpoints don't
-    // share a bucket.
+
+
+
     if (rateLimit) {
       var pathname = '';
       try { pathname = new URL(request.url).pathname; } catch (_) {}
       var rlKey = 'endpoint:' + (user?.id || __sw_clientIp(request)) + ':' + pathname;
       try {
         var r = await sw.rateLimit.check(rlKey, rateLimit.max, rateLimit.windowSeconds);
-        // A handler check does not count requests; every response below
-        // carries corsHeaders, so the note reaches the check result.
+
+
         if (r && r.evaluated === false) corsHeaders['X-Somewhere-Rate-Limit'] = 'not-evaluated';
         if (!r || r.allowed === false) {
           var retry = rateLimit.windowSeconds;
@@ -19619,15 +20534,15 @@ globalThis.sw.endpoint = function (config) {
           );
         }
       } catch (rlErr) {
-        // fail-loudly + fail-CLOSED: if the rate-limit check
-        // itself errors we used to let the request through \u2014 silently
-        // disabling the limiter. Block instead. A rate-limited endpoint
-        // must never serve unthrottled just because the limiter hiccuped.
-        // Log the underlying failure \u2014 swallowing it hid a 403
-        // capability denial behind "temporarily unavailable" for 9 days
-        //. A 403 here means the runtime key was minted
-        // without project:rate-limit; that is permanent until redeploy,
-        // not transient.
+
+
+
+
+
+
+
+
+
         console.error(
           'sw.endpoint rate-limit check failed (failing closed with 503 RATE_LIMIT_UNAVAILABLE):',
           rlErr && rlErr.code, rlErr && rlErr.status, rlErr && rlErr.message
@@ -19642,9 +20557,9 @@ globalThis.sw.endpoint = function (config) {
       }
     }
 
-    // Handler. Catches any throw, surfacing { status, code } when
-    // present so handler code can throw rich errors without manual
-    // Response building.
+
+
+
     try {
       var result = await config.handler(
         { body: body, user: user, headers: request.headers, params: request.params || {}, request: request },
@@ -19663,11 +20578,11 @@ globalThis.sw.endpoint = function (config) {
       }
       return __sw_mergeHeaders(response, corsHeaders);
     } catch (e) {
-      // Same trusted boundary as the bare handler shim: only a runtime-marked
-      // (__sw_expose) 4xx, or a listed runtime-service 5xx, keeps its message.
-      // A status field alone does not make an error's text safe, so any other
-      // 4xx keeps only its status and an identifier-shaped code; everything
-      // else is an opaque 500. Unexposed detail goes to the function logs.
+
+
+
+
+
       var status = e && typeof e.status === 'number' ? e.status : 0;
       var code = e && typeof e.code === 'string' && /^[A-Z][A-Z0-9_]{0,63}$/.test(e.code) ? e.code : '';
       var clientError = status >= 400 && status < 500;

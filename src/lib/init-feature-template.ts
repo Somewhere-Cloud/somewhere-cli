@@ -425,14 +425,14 @@ export interface LinkProps {
   onClick(event: MouseEvent<HTMLAnchorElement>): void;
 }
 
-export function navigate(path: RoutePath): void {
+export function navigate(path: string): void {
   if (window.location.pathname === path) return;
   window.history.pushState(null, '', path);
   window.dispatchEvent(new PopStateEvent('popstate'));
 }
 
 /** Props for an <a> that navigates in-app and keeps new-tab behaviour. */
-export function linkTo(path: RoutePath): LinkProps {
+export function linkTo(path: string): LinkProps {
   return {
     href: path,
     onClick(event) {
@@ -459,6 +459,7 @@ const APP = `import type { User } from '../types/auth';
 import { useAuthState } from './auth/hooks';
 import { APP_NAME } from './config';
 import { HomePage } from './pages/HomePage';
+import { DetailPage } from './pages/DetailPage';
 import { NotFoundPage } from './pages/NotFoundPage';
 import { SignInPage } from './pages/SignInPage';
 import { linkTo, ROUTES, usePathname } from './routes';
@@ -499,6 +500,8 @@ export function App() {
 
 function PrivateRoutes({ user }: { user: User }) {
   const pathname = usePathname();
+  const detail = /^\\/things\\/([^/]+)\\/?$/.exec(pathname);
+  if (detail) return <DetailPage user={user} id={detail[1]} />;
   switch (pathname) {
     case ROUTES.home:
       return <HomePage user={user} />;
@@ -1945,96 +1948,34 @@ export function HomePage({ user }: { user: User }) {
 }
 `;
   }
-  return `import { useState, type FormEvent } from 'react';
-import type { User } from '../../types/auth';
-import { Badge, type Tone } from '../ui/Badge';
-import { Button } from '../ui/Button';
-import { Card } from '../ui/Card';
-import { Dialog } from '../ui/Dialog';
-import { FormRow, SelectField, TextField } from '../ui/Field';
-import { Grid, PageHeader, Stack } from '../ui/layout';
-import { Stat } from '../ui/Stat';
-import { Table } from '../ui/Table';
+  return `import type { User } from '../../types/auth';
+import { linkTo } from '../routes';
+import { PageHeader } from '../ui/layout';
 import { SignedInLayout } from './SignedInLayout';
 
-// Your app starts here. This page is a worked example of the pieces in
-// src/ui: a header with the one main action, a few stats, a table in a card,
-// and a dialog form. Replace the sample data with your tables (db/schema.ts)
-// and keep the shape, or delete it all and start clean.
-
-type Status = 'active' | 'paused' | 'done';
-interface Item { id: string; name: string; assignee: string; status: Status; updated: string; amount: number }
-
-const STATUS_TONE: Record<Status, Tone> = { active: 'success', paused: 'warning', done: 'neutral' };
-const STATUS_OPTIONS = [{ value: 'active', label: 'Active' }, { value: 'paused', label: 'Paused' }, { value: 'done', label: 'Done' }];
-
-const SAMPLE: Item[] = [
-  { id: '1', name: 'Launch checklist', assignee: 'Sam', status: 'active', updated: 'Today', amount: 1240 },
-  { id: '2', name: 'Pricing page copy', assignee: 'Riley', status: 'paused', updated: 'Yesterday', amount: 380 },
-  { id: '3', name: 'Onboarding emails', assignee: 'Sam', status: 'done', updated: '3 days ago', amount: 2150 },
-];
-
+// Build your app here.
 export function HomePage({ user }: { user: User }) {
-  const [items, setItems] = useState(SAMPLE);
-  const [adding, setAdding] = useState(false);
-  const [name, setName] = useState('');
-  const [status, setStatus] = useState<Status>('active');
-
-  const active = items.filter((item) => item.status === 'active').length;
-  const total = items.reduce((sum, item) => sum + item.amount, 0);
-
-  function add(event: FormEvent) {
-    event.preventDefault();
-    if (!name.trim()) return;
-    setItems((rows) => [{ id: String(Date.now()), name: name.trim(), assignee: 'You', status, updated: 'Just now', amount: 0 }, ...rows]);
-    setName('');
-    setAdding(false);
-  }
-
-  return (
-    <SignedInLayout user={user}>
-      <PageHeader eyebrow="Overview" title="Good to see you"
-        description="A worked example of the pieces in src/ui. Replace it with your app."
-        actions={<Button onClick={() => setAdding(true)}>New item</Button>} />
-
-      <Stack gap={6}>
-        <Grid min={200}>
-          <Stat label="Active" value={active} suffix={\`/ \${items.length}\`} detail="items in progress" progress={items.length ? active / items.length : 0} />
-          <Stat label="Total" value={\`$\${total.toLocaleString()}\`} detail="+12% vs last week" detailTone="success" />
-          <Stat label="People" value={new Set(items.map((item) => item.assignee)).size} detail="with items assigned" />
-        </Grid>
-
-        <Card title="Items" description="Everything in one table, newest first." flush
-          actions={<Button variant="secondary" size="sm" onClick={() => setItems(SAMPLE)}>Reset</Button>}>
-          <Table rows={items} rowKey={(item) => item.id} caption="Items" columns={[
-            { key: 'name', header: 'Name', render: (item) => <strong>{item.name}</strong> },
-            { key: 'assignee', header: 'Assignee' },
-            { key: 'status', header: 'Status', render: (item) => <Badge tone={STATUS_TONE[item.status]} dot>{item.status}</Badge> },
-            { key: 'updated', header: 'Updated' },
-            { key: 'amount', header: 'Amount', numeric: true, render: (item) => \`$\${item.amount.toLocaleString()}\` },
-            { key: 'actions', header: <span className="visually-hidden">Actions</span>, numeric: true, width: '1%', render: (item) => (
-              <Button variant="quiet" size="sm" onClick={() => setItems((rows) => rows.filter((row) => row.id !== item.id))}>Remove</Button>
-            ) },
-          ]} />
-        </Card>
-      </Stack>
-
-      <Dialog open={adding} title="New item" onClose={() => setAdding(false)}
-        actions={<Button type="submit" form="new-item" disabled={!name.trim()}>Add item</Button>}>
-        <form id="new-item" onSubmit={add} noValidate>
-          <Stack>
-            <TextField id="item-name" label="Name" autoFocus value={name} onChange={(event) => setName(event.target.value)} placeholder="What is it?" />
-            <FormRow>
-              <SelectField id="item-status" label="Status" options={STATUS_OPTIONS} value={status} onChange={(event) => setStatus(event.target.value as Status)} />
-            </FormRow>
-          </Stack>
-        </form>
-      </Dialog>
-    </SignedInLayout>
-  );
+  return <SignedInLayout user={user}>
+    <PageHeader title="Your app" description="Start building here." />
+    <a {...linkTo('/things/example')}>Open an example detail page</a>
+  </SignedInLayout>;
 }
 `;
 }
+
+const DETAIL_PAGE = `import type { User } from '../../types/auth';
+import { linkTo } from '../routes';
+import { PageHeader } from '../ui/layout';
+import { SignedInLayout } from './SignedInLayout';
+
+export function DetailPage({ user, id }: { user: User; id: string }) {
+  return <SignedInLayout user={user}>
+    <PageHeader title={<>Thing {id}</>} />
+    <p>The path parameter is {id}. Load this item's data here.</p>
+    <a {...linkTo('/')}>Back to home</a>
+  </SignedInLayout>;
+}
+`;
 
 const NOT_FOUND_PAGE = `import type { User } from '../../types/auth';
 import { linkTo, ROUTES } from '../routes';
@@ -2974,8 +2915,8 @@ function authCard(styled: boolean): string {
  *  the person is not signed in yet when an emailed sign-in or invitation
  *  link, or a social sign-in's return, opens them. */
 function appTsx(): string {
-  let out = replaceOnce(APP, "import { HomePage } from './pages/HomePage';\n",
-    "import { AuthCallbackPage } from './pages/AuthCallbackPage';\nimport { HomePage } from './pages/HomePage';\nimport { MagicLinkPage } from './pages/MagicLinkPage';\nimport { ForgotPasswordPage, ResetPasswordPage } from './pages/PasswordResetPage';\n");
+  let out = replaceOnce(APP, "import { HomePage } from './pages/HomePage';\nimport { DetailPage } from './pages/DetailPage';\n",
+    "import { AuthCallbackPage } from './pages/AuthCallbackPage';\nimport { HomePage } from './pages/HomePage';\nimport { DetailPage } from './pages/DetailPage';\nimport { MagicLinkPage } from './pages/MagicLinkPage';\nimport { ForgotPasswordPage, ResetPasswordPage } from './pages/PasswordResetPage';\n");
   out = replaceOnce(out, '  const session = useAuthState();\n\n',
     "  const pathname = usePathname();\n  const session = useAuthState();\n\n  // An emailed sign-in or invitation link lands here before a session exists.\n  if (pathname === '/auth/magic') return <MagicLinkPage />;\n  // Password reset works signed out; the reset email links to /reset-password.\n  if (pathname === '/forgot-password') return <ForgotPasswordPage />;\n  if (pathname === '/reset-password') return <ResetPasswordPage />;\n  // A social sign-in (src/config.ts SIGN_IN_PROVIDERS) returns here with ?code=.\n  if (pathname === '/auth/callback') return <AuthCallbackPage />;\n");
   return out;
@@ -3162,8 +3103,7 @@ function readme(selection: InitSelection): string {
       '## Look',
       '',
       'The starter is a small design system, and pages built with it look finished;',
-      'pages built around it look like a form from 2009. `src/pages/HomePage.tsx` is',
-      'a worked example: copy its shape.',
+      'Use `src/pages/HomePage.tsx` to build and `DetailPage.tsx` for a path parameter.',
       '',
       '- Build with `src/ui`: `Button`, `TextField`, `SelectField`, `TextareaField`,',
       '  `CheckboxField`, `FormRow`, `Card`, `Table`, `Stat`, `Badge`, `Tabs`, `Dialog`,',
@@ -3369,6 +3309,7 @@ After edits:`) },
     { path: 'src/auth/useEmailVerification.ts', content: VERIFY_EMAIL_HOOK },
     { path: 'src/ui/VerifyEmail.tsx', content: styled ? STYLED_VERIFY_EMAIL : PLAIN_VERIFY_EMAIL },
     { path: 'src/pages/HomePage.tsx', content: homePage(privateData, agent) },
+    { path: 'src/pages/DetailPage.tsx', content: DETAIL_PAGE },
     { path: 'src/pages/NotFoundPage.tsx', content: NOT_FOUND_PAGE },
     { path: 'src/ui/feedback.tsx', content: styled ? STYLED_FEEDBACK : PLAIN_FEEDBACK },
     { path: 'src/ui/AuthCard.tsx', content: authCard(styled) },

@@ -93,9 +93,10 @@ export function nextActions(ctx: NextActionContext): NextAction[] {
       ];
 
     case 'deploy': {
-      if (ctx.temporary) return ctx.liveUrl ? [seeItByUrl(ctx.liveUrl)] : [];
-      if (ctx.projectLinked) return [SEE_IT_LINKED, CHECK_IT_LINKED];
-      if (ctx.liveUrl) return [seeItByUrl(ctx.liveUrl)];
+      const test = { command: 'somewhere test', why: 'run project tests against production origin' }; 
+      if (ctx.temporary) return ctx.liveUrl ? [seeItByUrl(ctx.liveUrl), test] : [test];
+      if (ctx.projectLinked) return [SEE_IT_LINKED, CHECK_IT_LINKED, test];
+      if (ctx.liveUrl) return [seeItByUrl(ctx.liveUrl), test];
       return [];
     }
   }

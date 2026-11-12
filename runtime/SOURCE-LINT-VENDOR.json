@@ -8,7 +8,7 @@
     "shared/draft-execution-authority.ts": "607db6162732cc55798f1b871103c49b246f6667c1e4c7526abd85416a50abf6",
     "shared/public-result.ts": "85ba1a6dd4136fd7362cf7f38b3042b1cacfc389af8c28343398c1ba83d26298",
     "shared/types/placeholder-identity.ts": "089a46e2474a21193d3611eddd9c94b6bbe62441b3039ed80fc8499bada447ca",
-    "worker/containers/compile/declared-data-contract.cjs": "47ab54cbf6fb20b77e00b2f06e0d283733ee1f3774459f2a6f82c77042c1c93a",
+    "worker/containers/compile/declared-data-contract.cjs": "6694576f4d2d19d4a1c4d5c1651b68510fb869da8186ea2a8a7bb58b26e8e46f",
     "worker/containers/compile/function-route.cjs": "e7faf1104ba95e27921901b4619bd98aa6a2be47cc10af00097fd4957744606b",
     "worker/node_modules/acorn/dist/acorn.mjs": "b4c8c70200e72bae33cf1085e0ecb1e792c1b6924ed50cab817caf14f51bb249",
     "worker/src/lib/platform-mailboxes.ts": "c64262a7ee2feeb0135e6fa7badb895bb1f3f0af4f9ec787e574963872c61589",

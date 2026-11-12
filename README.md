@@ -242,3 +242,29 @@ Node.js >= 22.19.0. On an older Node.js every command stops with a message namin
 ## License
 
 MIT © Somewhere HQ, Inc.
+
+## Test any Somewhere app
+
+Add the CLI with `npm install --save-dev @somewhere-cloud/cli`, then import
+`createUser`, `signIn`, `UserSession`, `expectRefusal`, and `waitForApp` from
+`@somewhere-cloud/cli/testing` in Node tests. No starter is required.
+
+```ts
+import { createUser, expectStatus } from '@somewhere-cloud/cli/testing';
+const user = await createUser(process.env.APP_URL!);
+await expectStatus(await user.request('/api/auth/me'), 200);
+```
+
+The app must mount the packaged auth handler at `/api/auth`. `createUser` creates
+an independent throwaway user at the platform test domain; it does not use admin
+credentials. `signIn(url, email, password)` supports an existing test user.
+Sessions retain cookies and send the app Origin. `session.data(table, contract,
+{ operation: 'list' })` posts the browser runtime shape; supply the deployed
+browser client's contract digest. `expectRefusal(response, 403, 'DATA_ACCESS_DENIED')`
+requires both the exact status and code: malformed 400 requests fail.
+
+Browser tests can call `waitForApp(page, 'signed-in')` or `'signed-out'`; omit the
+state for either ready state. Add `data-app-state` to your own app's confirmed auth
+boundary (the starter already does). Do not mark loading or unconfirmed logout ready.
+Each test owns its fixture. Rerun only a failing test with `--test-name-pattern`;
+one full passing run is the stop rule. Test your app's declared rules once.

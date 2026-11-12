@@ -103,7 +103,8 @@ test('authenticated create retains remote creation, linking and install behavior
 test('authenticated link uses only owned project lookup; server denial writes nothing', async () => {
   const linked = await run(['--link', '--project', 'fixture', '--json'], { token: 'smt_fixture' });
   assert.equal(linked.status, 0, linked.stderr); assert.deepEqual(requests, ['GET /projects', 'GET /projects/fixture-project/urls']);
-  assert.equal(existsSync(join(linked.cwd, 'index.html')), false);
+  assert.equal(existsSync(join(linked.cwd, 'index.html')), true);
+  assert.ok(existsSync(join(linked.cwd, 'install-called')));
   assertNoInitHooks(linked.cwd);
   assert.equal(JSON.parse(linked.stdout).hooks, undefined);
   refuse = true;

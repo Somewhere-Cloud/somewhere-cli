@@ -1,6 +1,6 @@
 {
   "name": "@somewhere-cloud/cli",
-  "version": "0.38.45",
+  "version": "0.38.46",
   "description": "CLI for somewhere.cloud — auth, projects, deploy, pull, promote, db, logs, env, MCP bridge.",
   "keywords": [
     "somewhere",
@@ -32,7 +32,8 @@
     "bin",
     "dist",
     "npm-shrinkwrap.json",
-    "runtime"
+    "runtime",
+    "src/testing.ts"
   ],
   "scripts": {
     "build": "tsc",
@@ -70,5 +71,11 @@
     "@types/prompts": "^2.4.0",
     "@types/semver": "^7.5.8",
     "typescript": "^5.4.0"
+  },
+  "exports": {
+    "./testing": {
+      "types": "./src/testing.ts",
+      "import": "./dist/testing.js"
+    }
   }
 }

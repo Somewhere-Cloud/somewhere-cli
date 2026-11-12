@@ -119,7 +119,7 @@ async function prepareStarter(ui) {
     writeFileSync(pkgPath, JSON.stringify(pkg, null, 2));
   }
   const checked = await runTypecheck(dir, { installTypePackages: installStarter });
-  assert.equal(checked.ok, true, checked.raw);
+  assert.equal(checked.ok, true, JSON.stringify(checked));
   const sdkAuth = join(dir, 'node_modules', '@somewhere-cloud', 'sdk', 'dist', 'esm', 'auth', 'index.js');
   assert.ok(existsSync(sdkAuth), 'the starter installs its pinned SDK');
   const out = join(dir, '.journey');

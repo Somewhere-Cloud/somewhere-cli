@@ -222,7 +222,7 @@ test('every auth starter routes /auth/magic before the gate; magic-link adds onl
       assert.equal(hooks.match(/auth\.verifyMagicLink\(/g)?.length, 1, 'one verify call site');
       assert.match(hooks, /sent\.current/, 'the one-time token is sent once, even on a double press');
       assert.doesNotMatch(hooks, /useEffect/, 'opening the page sends nothing: no effect redeems the token (tsk_74d3bf0e)');
-      assert.match(hooks, /async function confirm\(\)[^]*auth\.verifyMagicLink\(/, 'only the Continue press verifies');
+      assert.match(hooks, /async function confirm\(shown: string\)[^]*auth\.verifyMagicLink\(/, 'only the Continue press verifies');
       assert.match(hooks, /history\.replaceState/, 'the token is removed from the address bar');
       assert.match(starter.read('src/ui/MagicLink.tsx'), /landing\.confirm\(\)/, 'the landing view has the Continue button');
       assert.match(starter.read('src/ui/MagicLink.tsx'), /export function MagicLinkStatus/);

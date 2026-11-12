@@ -39,7 +39,7 @@ function project(schema) {
 
 test('the vendored bundle carries the consumer contract it actually implements', () => {
   assert.ok(CLI && Number.isInteger(CLI.version) && /^[0-9a-f]{64}$/.test(CLI.digest), JSON.stringify(CLI));
-  const components = vendor.consumerContractComponents(vendor, lintVendor.SOURCE_LINT_VERSION, sha256);
+  const components = vendor.consumerContractComponents(vendor, lintVendor.SOURCE_LINT_VERSION, sha256, readFileSync(new URL('../runtime/source-lint.cjs', import.meta.url), 'utf8').replace(/^.*\n/, ''));
   assert.equal(sha256(vendor.consumerContractFingerprint(components)), CLI.digest, 'the recorded digest is the fingerprint of these vendored bytes');
 });
 

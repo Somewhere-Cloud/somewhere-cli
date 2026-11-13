@@ -8,6 +8,14 @@ Republish the platform contract 6 CLI after npm accepted earlier uploads without
 
 # Changelog
 
+## 0.38.83
+
+- somewhere test: expectRefused(person, table or 'METHOD /path', request) proves a refusal in one call and knows every refusal shape; a malformed request or stale contract fails with the reason.
+- somewhere test: newPage() for a second person; --phone runs every test again at 390x844.
+- Warnings and notices go to stderr, so somewhere api and --json output stay parseable.
+- typecheck: a rateLimit written as an object gets the hint rateLimit: '30/minute'.
+- Starter: the signed-in email stays visible on phones; AGENTS.md grants a role inside the sign-up route.
+
 ## 0.38.82
 
 - somewhere test: under a required email-code policy, signIn waits out the platform's one-code-a-minute limit (for example right after signUp) instead of failing.

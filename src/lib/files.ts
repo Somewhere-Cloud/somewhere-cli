@@ -298,9 +298,7 @@ export function classifyKey(relPath: string): { kind: FileKind; key: string } {
   if (isFunctionPath(relPath)) {
     return { kind: 'function', key: relPath };
   }
-  const staticPath = relPath.startsWith('public/')
-    ? relPath.slice('public/'.length)
-    : relPath;
+  const staticPath = relPath;
   if (isBinaryPath(staticPath)) {
     return { kind: 'binary', key: staticPath };
   }

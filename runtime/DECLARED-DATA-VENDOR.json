@@ -6,7 +6,7 @@
     "shared/d1-session.ts": "2ae29b74bba68016c86d25fa2a58f8c2fce4aca8fe57fafc253d380c47a3c0ab",
     "shared/types/placeholder-identity.ts": "089a46e2474a21193d3611eddd9c94b6bbe62441b3039ed80fc8499bada447ca",
     "worker/containers/compile/checker-contract.cjs": "c6d4ebc9ec058b3562655cc4f18dc1cea7e4492eb35b7f0fd0d87e974c26b492",
-    "worker/containers/compile/consumer-contract.cjs": "0ca346aefc46fcdb5034dc357313ae683939636b9e54a1a0cd746052f5811812",
+    "worker/containers/compile/consumer-contract.cjs": "f9d1386b1ab4163238df5cd8c07b3aa416b8b4f4a899cc4e429c336b2089a97e",
     "worker/containers/compile/declared-data-contract.cjs": "cd63f117c495d24a1346df95858f162ad09b3fea3654a6ad8cef8ec612482092",
     "worker/containers/compile/generated-declarations-render.cjs": "7ffdb34645cc9eccac6eba39dc86b646a41c4de8a1a038d2b5b46f42df9f1157",
     "worker/containers/compile/generated-declarations.cjs": "6e9902e054c5c784fd9b3c3fafc1869e79954100a45014e1132247cd82833ec4",
@@ -58,5 +58,5 @@
     "worker/src/utils/telegram-attempt-receipts.ts": "a9ba55ae71f63ada44a105f1ceae04b0491bda0d6e77e5762db2dbecdd2981dd",
     "worker/src/utils/telegram.ts": "dfbc9e756b44b445b3c3504c90a1094a94e6f9853ff9c0e0a84fba0e8c4518da"
   },
-  "sha256": "49b38c1b0b24bd17e31f69228fb1600f4310fd15aaeb4e828ecbf161ca4823a7"
+  "sha256": "623509ba649985ff6e5af73594de3b266895447842f66aaf137d8a110aa7befa"
 }

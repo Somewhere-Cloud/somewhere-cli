@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.38.86
+
+- Release notes list every change since the previous version.
+- The starter's Table stacks rows on phones, and every release has notes, newest first.
+
 ## 0.38.85
 
 - somewhere init: the starters ship working journeys to adapt: tests/account (sign up, out, in), tests/phone (one 390 px pass) and tests/access (two people; a role-holder and a non-holder). People are made at once; newUser({ role }) grants a declared app role.

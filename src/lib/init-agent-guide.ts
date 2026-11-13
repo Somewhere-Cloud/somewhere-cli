@@ -129,7 +129,7 @@ export const DELETE = sw.endpoint({
 });
 \`\`\`
 
-Server sw.db applies caller scopes; sw.db.server bypasses them: authorize first.
+Structured sw.db calls apply caller scopes; sw.db.server bypasses them: authorize first.
 Reads: from(table, { where, columns, order: [['id', 'asc']], limit, offset }).
 Filters include { id: { in: ids } }; schema uniqueness is unique: [['a', 'b']].
 Writes: insert(table, values), update(table, { where, set }), remove(table, { where }).

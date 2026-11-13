@@ -12,6 +12,11 @@ test('every TypeScript guidance snippet checks against generated starter declara
     mkdirSync(join(dir, 'db'));
     const schema = [...INIT_AGENTS_MD.matchAll(/```ts\n([\s\S]*?)```/g)].find(match => match[1].includes('export default schema('));
     assert.ok(schema);
+    for (const shape of ['notes', 'team_members', 'tickets', 'messages', 'staff_notes', 'pages', 'note_shares']) assert.ok(schema[1].includes(shape + ': table('));
+    const firstEndpoint = INIT_AGENTS_MD.slice(INIT_AGENTS_MD.indexOf('// api/teams.ts')).split('```')[0];
+    assert.match(firstEndpoint, /handler: async \((?:\{ user, params, body \}), sw\)/);
+    assert.match(firstEndpoint, /user\.id/);
+    assert.match(firstEndpoint, /user\.email/);
     writeFileSync(join(dir, 'db/schema.ts'), schema[1]);
     writeFileSync(join(dir, 'tsconfig.json'), JSON.stringify({ compilerOptions: { target: 'ES2022', module: 'ESNext', moduleResolution: 'bundler', strict: true, skipLibCheck: true }, include: ['*.ts'] }));
     const snippets = [...INIT_AGENTS_MD.matchAll(/```ts\n([\s\S]*?)```/g)];

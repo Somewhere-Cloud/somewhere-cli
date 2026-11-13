@@ -39,7 +39,7 @@
     "worker/src/utils/db-schema-deploy/extract-schema-parents.ts": "4fd79529b301b04581aa91fd9a3af846c85c15311cea717b2873021ce66486ff",
     "worker/src/utils/db-schema-deploy/extract-schema-relations.ts": "f5deac350ee915758f61d4be33711d23bad51ab20abcf153a463f0c90bfc3e27",
     "worker/src/utils/db-schema-deploy/extract-schema-roles.ts": "809950f841146d24de179012be8a57fe4953ce148c604608818ee2adb0a1f8d8",
-    "worker/src/utils/db-schema-deploy/extract-schema-ts.ts": "2f7b937eb3092573f6a3d430a7a2569cb19776b2609b656c4af663400b5899e0",
+    "worker/src/utils/db-schema-deploy/extract-schema-ts.ts": "19c7dbcff729e14f2071a228d4ec231690b57a9b8697dd234406625213a8cdcc",
     "worker/src/utils/db-schema-deploy/schema-constants.ts": "9742bc649f494963af4ae2039a1d6062cc6dbe087285bdf470f6ee71d9f76aac",
     "worker/src/utils/db-schema-deploy/schema-ownership.ts": "e6c811a87bc657707be3518dfe547c6d97718ac073108b126eb7f791c9c08202",
     "worker/src/utils/dev-health-class.ts": "fd430f31b9c8469f3d90e118fd8c75d1836ebcf705c1f9e93915ffa53a4cb066",
@@ -58,5 +58,5 @@
     "worker/src/utils/telegram-attempt-receipts.ts": "a9ba55ae71f63ada44a105f1ceae04b0491bda0d6e77e5762db2dbecdd2981dd",
     "worker/src/utils/telegram.ts": "dfbc9e756b44b445b3c3504c90a1094a94e6f9853ff9c0e0a84fba0e8c4518da"
   },
-  "sha256": "ee1d5061babbbbe1f88c4cd6d2c34a3e21b61cfb7c830e152eae15b1db91802c"
+  "sha256": "49b38c1b0b24bd17e31f69228fb1600f4310fd15aaeb4e828ecbf161ca4823a7"
 }

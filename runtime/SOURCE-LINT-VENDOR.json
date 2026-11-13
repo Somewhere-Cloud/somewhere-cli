@@ -21,7 +21,7 @@
     "worker/src/runtime/auth-managed-visitor.ts": "f0ca8253a9cb5b89bd70fdfb9dbf3df02b52c12a14a08a0c4d8bfe061de57118",
     "worker/src/runtime/auth-refresh-response.ts": "90dcc38a5666c6f6124c53e1e311012b2104115e970217f829c9c90f3d7c3325",
     "worker/src/runtime/auth-response.ts": "f435243139504d71621f0da9737cd049e99681b516ccae50248642da32b412c2",
-    "worker/src/runtime/auth-server.ts": "d3230af7b64a097662eb55a1b14d543cc2d4d8792d5c7d03d3978b7ffd06743d",
+    "worker/src/runtime/auth-server.ts": "64a5f6ed96dee03665018ca6b175a8148cec52a4fa04e254f2b8c152683caa6f",
     "worker/src/runtime/auth.ts": "3f9d78721eaa93fbf98696a4c3d0e1c538107009ad036227611d633276d5ed86",
     "worker/src/runtime/billing.ts": "1402812ce082564bb5cb520c99a657f076d356f090e600b1ff7a8bd90bdb4206",
     "worker/src/runtime/calendar.ts": "483a7e0151b5cff2b0cccadc52da2a32d547c87a565edbbe66d7a2a26b537371",
@@ -126,7 +126,7 @@
     "worker/src/utils/db-schema-deploy/extract-schema-parents.ts": "4fd79529b301b04581aa91fd9a3af846c85c15311cea717b2873021ce66486ff",
     "worker/src/utils/db-schema-deploy/extract-schema-relations.ts": "f5deac350ee915758f61d4be33711d23bad51ab20abcf153a463f0c90bfc3e27",
     "worker/src/utils/db-schema-deploy/extract-schema-roles.ts": "809950f841146d24de179012be8a57fe4953ce148c604608818ee2adb0a1f8d8",
-    "worker/src/utils/db-schema-deploy/extract-schema-ts.ts": "2f7b937eb3092573f6a3d430a7a2569cb19776b2609b656c4af663400b5899e0",
+    "worker/src/utils/db-schema-deploy/extract-schema-ts.ts": "19c7dbcff729e14f2071a228d4ec231690b57a9b8697dd234406625213a8cdcc",
     "worker/src/utils/db-schema-deploy/retention-naming.ts": "54d3da5dafdaf98bd9eb7e0117de213aeeb1b91e7016d81694632c0dd7e6ab4b",
     "worker/src/utils/db-schema-deploy/retired-table.ts": "3675b8f1cfb48591b4741a4d45d8915cc36901fc68b64769bc1922f9aae11b07",
     "worker/src/utils/db-schema-deploy/schema-constants.ts": "9742bc649f494963af4ae2039a1d6062cc6dbe087285bdf470f6ee71d9f76aac",
@@ -162,6 +162,6 @@
     "worker/src/utils/telegram.ts": "dfbc9e756b44b445b3c3504c90a1094a94e6f9853ff9c0e0a84fba0e8c4518da",
     "worker/src/vendor/neondatabase-serverless/source.generated.ts": "96a3c18fde7d8888fdb53a4d7cd0721c238a234521d2084d1e66868a8df8e69c"
   },
-  "sha256": "1ad8bf75657c89d514b904118001e756842ab07e752c10caad15f77075f97117",
+  "sha256": "102243fe3d98c763d84e178a8629d49fd1c63b07db20b06c448a8420d7d32504",
   "fixtures_sha256": "908827d1430f4af5a83cae59ed476abc51dc9648757eac0089fe6e6db95f66c5"
 }

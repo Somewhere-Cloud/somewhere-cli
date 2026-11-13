@@ -12847,8 +12847,7 @@ var AUTH_SERVER_JS = `        server: (function () {
             const headers = await __sw_runtimeSubjectHeaders('X-Somewhere-Managed-Authority', 'none', true);
             headers['X-Sw-Execution-Attestation'] = env.SW_EXECUTION_ATTESTATION;
             headers['Content-Type'] = 'application/json';
-            let path = '';
-            try { path = new URL(__sw_authSnapshotRequest.url).pathname; } catch (_) {}
+            const path = typeof __sw_trace !== 'undefined' && typeof __sw_trace.route === 'string' ? __sw_trace.route : 'deployed-function';
             const answer = await reply.fetch(function () {
               return platformFetch('/v1/db/managed/server-roles', { method: 'POST', headers: headers, body: JSON.stringify({ userId: userId, changes: changes, functionPath: path }) });
             }, 20000);
@@ -27411,6 +27410,7 @@ function readAnyOfScope(r, tableName, line) {
     if (a.read || b.read) throw new SchemaTsError("Two member branches cannot declare separate read projections.");
     const restricted = a.restriction ? a : b, ordinary = a.restriction ? b : a;
     const ordinaryOps = ordinary.operations ?? [...MEMBER_OPERATIONS];
+    if (!ordinaryOps.includes("read") && (ordinaryOps.includes("update") || ordinaryOps.includes("delete"))) throw new SchemaTsError("An unrestricted member update/delete branch must independently include unrestricted read.");
     const combined = MEMBER_OPERATIONS.filter((op) => ordinaryOps.includes(op) || (restricted.operations ?? MEMBER_OPERATIONS).includes(op));
     const narrow = restricted.restriction;
     secondPolicy = { ...a, operations: combined, restriction: { ...narrow, operations: narrow.operations.filter((op) => !ordinaryOps.includes(op)) } };

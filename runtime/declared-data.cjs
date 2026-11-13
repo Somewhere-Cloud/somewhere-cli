@@ -7600,6 +7600,7 @@ function readAnyOfScope(r, tableName, line) {
     if (a.read || b.read) throw new SchemaTsError("Two member branches cannot declare separate read projections.");
     const restricted = a.restriction ? a : b, ordinary = a.restriction ? b : a;
     const ordinaryOps = ordinary.operations ?? [...MEMBER_OPERATIONS];
+    if (!ordinaryOps.includes("read") && (ordinaryOps.includes("update") || ordinaryOps.includes("delete"))) throw new SchemaTsError("An unrestricted member update/delete branch must independently include unrestricted read.");
     const combined = MEMBER_OPERATIONS.filter((op) => ordinaryOps.includes(op) || (restricted.operations ?? MEMBER_OPERATIONS).includes(op));
     const narrow = restricted.restriction;
     secondPolicy = { ...a, operations: combined, restriction: { ...narrow, operations: narrow.operations.filter((op) => !ordinaryOps.includes(op)) } };

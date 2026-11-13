@@ -354,8 +354,8 @@ export function renderDocsIndex(pages: PublicDocsPage[], groups: PublicDocsGroup
     '',
     'Requirement | Declaration (complete examples in generated AGENTS.md)',
     'Own rows | owner()',
-    'Team: owner adds members; members read/write; creator rights | own membership table + member() + owner()',
-    'Owner/staff record, staff-only child notes | owner() or appRole(); parent() thread; appRole() notes',
+    'Team: owner adds members; members read/write; creator rights | own membership table + member() + owner(); role-owner delete restriction',
+    'Owner/staff record, staff-only child notes | owner() or server-assigned appRole(); parent() thread; appRole() notes',
     'Team example: somewhere docs sw.groups --section teams-without-email-verification',
     'Record/thread example: somewhere docs sw.db --section membership-and-parent-examples',
     '', 'Public topics:'];

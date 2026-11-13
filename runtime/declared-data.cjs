@@ -1537,7 +1537,7 @@ interface SomewhereRuntimeAuthModeration {
     user: { id: string; email: string; role: SomewhereAuthRole };
   }>;
 }
-// Email sign-in codes (tsk_8fe91eb5). Authenticator-app activation (reauthenticate*) answers 501 AUTH_FEATURE_UNAVAILABLE.
+// Email sign-in codes. Authenticator-app activation (reauthenticate*) answers 501 AUTH_FEATURE_UNAVAILABLE.
 type SomewhereMfaDelivery = 'sent' | 'pending' | 'unknown';
 interface SomewhereMfaCodeSent { challenge_id: string; delivery: SomewhereMfaDelivery; expires_in: number }
 type SomewhereMfaRecovery =
@@ -3491,7 +3491,7 @@ interface SomewhereRuntimePush {
   deliveries(options?: SomewherePushHistoryOptions): Promise<{ deliveries: SomewherePushDelivery[] }>;
 }
 
-// The push browser helper (tsk_80c0ed92). The compiler maps this specifier to
+// The push browser helper. The compiler maps this specifier to
 // the same-origin /__sw/push/client.js the project origin serves.
 declare module 'somewhere:push' {
   export interface PushDeviceResult {
@@ -3891,7 +3891,7 @@ interface SomewhereRuntimeTasks {
   };
 }
 
-// \u2500\u2500 sw.rooms (tsk_4e67d49d) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+// \u2500\u2500 sw.rooms \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
 type SomewhereRoomWho = { user: string } | { visitor: string } | { anonymous: true } | 'server';
 interface SomewhereRoomEvent {
   type: 'join' | 'leave' | 'action' | 'timer';
@@ -4476,8 +4476,8 @@ var require_consumer_contract = __commonJS({
   "worker/containers/compile/consumer-contract.cjs"(exports2, module2) {
     "use strict";
     var CONSUMER_CONTRACT2 = Object.freeze({
-      version: 13,
-      digest: "710925c27f431929318c5bcecc3da5e4111c854fc5d875b689b4f0ffb1649440"
+      version: 14,
+      digest: "92b47a5245577bef6493de2e1346abd35c493c7c0e2d181d742dc98369f6e2d0"
     });
     var MEMBERSHIPS = "memberships: table({ id: id(), team_id: text(), member_id: text() }, { scope: owner(), client: { read: true } }),";
     var SHARES = "shares: table({ id: id(), grantee_id: text() }, { scope: owner(), client: { read: true, create: ['grantee_id'], delete: true }, unique: [['user_id', 'grantee_id']] }),";

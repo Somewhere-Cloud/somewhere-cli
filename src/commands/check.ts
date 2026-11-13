@@ -1,3 +1,4 @@
+import { declaredAccessNotice } from '../lib/declared-data.js';
 import { Command } from 'commander';
 import { existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -332,6 +333,11 @@ export function registerCheck(program: Command) {
             process.exit(1);
           }
           const collectedLocal = collectFiles(targetDir);
+          const accessNotice = declaredAccessNotice(collectedLocal.files);
+          if (accessNotice) {
+            if (opts.json) process.stderr.write(accessNotice + '\n');
+            else info(accessNotice);
+          }
           if (collectedLocal.excluded.length && !opts.json) {
             printExcludedFiles(collectedLocal.excluded, targetDir);
           }
@@ -346,6 +352,11 @@ export function registerCheck(program: Command) {
 
       const client = new ApiClient(getToken());
       const collected = collectFiles(targetDir);
+      const accessNotice = declaredAccessNotice(collected.files);
+      if (accessNotice) {
+        if (opts.json) process.stderr.write(accessNotice + '\n');
+        else info(accessNotice);
+      }
       const sensitiveRefusal = sensitiveReferenceRefusal(collected);
       if (sensitiveRefusal) {
         if (opts.json) printJson({ ok: false, error: 'SENSITIVE_FILE_REFERENCED', message: sensitiveRefusal });

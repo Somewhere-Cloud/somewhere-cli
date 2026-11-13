@@ -1,77 +1,144 @@
-import { BUNDLED_SKILLS_PACK } from './skills-pack.generated.js';
-import { SKILLS_DIR, skillNames } from './skills-pack.js';
+import { SKILLS_DIR } from './skills-pack.js';
 
 // Generated mirror of somewhere.cloud/docs/agent-workflow.md. The platform
 // docs lint byte-compares this value when SOMEWHERE_CLI_REPO points here.
 export const AGENT_WORKFLOW = `## Build, deploy, test
 
-Declare access rules in db/schema.ts; use the schema-generated browser client
-for ordinary app reads and writes. The platform enforces those rules on every call.
-Start with owner() for personal rows:
+This core holds the call shapes and access patterns for a typical app; docs are for
+exceptions. Declare access and use the generated browser client. Pick your shape:
 
-Schema: db/schema.ts is declaration only: imports and a default schema export.
-No helper functions or arbitrary TypeScript expressions. Named declarative
-constants and spreads of those constants are supported.
-id() is a random text key; references use text(). owner() adds/fills user_id.
+| Requirement | Declaration below |
+| --- | --- |
+| Each user sees only their own rows | notes: owner() |
+| Team: owner adds members; members read/write; per-row creator rights | teams/team_members/tasks: member() + owner() |
+| Owner and staff see a record; staff-only child notes | tickets: owner() or appRole(); messages: parent(); staff_notes: appRole() |
+| Public pages from private drafts | pages: owner(), publicRead with published condition |
+| Share one record read-only with another account | shared_notes + note_shares: owner() or read-only grant() |
+
+db/schema.ts: declarations only (imports, constants/spreads, default schema); no
+helpers/expressions. id() is random text; owner() stamps user_id. Include the key in
+client.read. Also: timestamp({ default: 'now' }), text({ nullable: true }), indexes: [['team_id']].
 
 \`\`\`ts
-import { schema, table, id, text, owner } from 'somewhere/db';
+import { schema, table, id, text, owner, member, anyOf, serverOnly, parent, appRole, boolean, grant } from 'somewhere/db';
 export default schema({
-  notes: table({ id: id(), title: text() }, {
-    scope: owner(),
-    client: { read: ['id', 'title'], create: ['title'], update: ['title'], delete: true },
+  notes: table({ id: id(), title: text() }, { scope: owner(), client: { read: ['id', 'title'], create: ['title'], update: ['title'], delete: true },
   }),
-});
+  teams: table({ id: id(), name: text(), owner_id: text() }, {
+    scope: member({ group: 'id', membership: 'team_members', member_user: 'user_id', member_group: 'team_id' }),
+    client: { read: ['id', 'name'] },
+  }),
+  team_members: table({ id: id(), team_id: text(), user_id: text() }, {
+    scope: serverOnly(), unique: [['team_id', 'user_id']],
+  }),
+  tasks: table({ id: id(), team_id: text({ references: 'teams' }), title: text() }, {
+    scope: anyOf(owner(), member({ group: 'team_id', membership: 'team_members',
+      member_user: 'user_id', member_group: 'team_id', operations: ['read', 'create', 'update'] })),
+    client: { read: ['id', 'team_id', 'title'], create: ['team_id', 'title'], update: ['title'], delete: true },
+  }),
+  tickets: table({ id: id(), subject: text() }, {
+    scope: anyOf(owner(), appRole({ roles: { read: ['staff'], create: ['staff'], update: ['staff'] } })),
+    client: { read: ['id', 'subject'], create: ['subject'], update: ['subject'] },
+  }),
+  messages: table({ id: id(), ticket_id: text({ references: 'tickets' }), body: text() }, {
+    scope: parent({ via: 'ticket_id' }),
+    client: { read: ['id', 'ticket_id', 'body'], create: ['ticket_id', 'body'] },
+  }),
+  staff_notes: table({ id: id(), ticket_id: text({ references: 'tickets' }), body: text() }, {
+    scope: appRole({ roles: { read: ['staff'], create: ['staff'] } }),
+    client: { read: ['id', 'ticket_id', 'body'], create: ['ticket_id', 'body'] },
+  }),
+  pages: table({ id: id(), title: text(), published: boolean({ default: false }) }, {
+    scope: owner(), client: { read: ['id', 'title'], create: ['title'], update: ['title'],
+      publicRead: { where: { published: true } } },
+  }),
+  note_shares: table({ id: id(), grantee_id: text(), note_id: text({ references: 'shared_notes', onDelete: 'cascade' }) }, {
+    scope: owner(), unique: [['note_id', 'grantee_id']],
+  }),
+  shared_notes: table({ id: id(), title: text() }, {
+    scope: anyOf(owner(), grant({ table: 'note_shares', grantee: 'grantee_id', row: 'note_id', operations: ['read'] })),
+    client: { read: ['id', 'title'], create: ['title'], update: ['title'] },
+  }),
+}, { appRoles: { staff: { emailDomain: 'staff.example.com' } } });
 \`\`\`
 
-Browser data is generated from the schema. list returns at most 100 rows, no
-order option: sort in the client or use a server endpoint for ordered queries.
+messages inherit ticket access: owner() would hide a staff reply from the customer.
+Staff roles here require verified domain email; never infer roles from unverified email.
+Publish pages through an owner-checked endpoint setting published; not a browser write.
+Share through an endpoint using caller-scoped sw.db.insert('note_shares', { grantee_id,
+note_id }); the declaration checks ownership. Never grant browser writes to ledgers.
+
+Browser data comes from the schema. list: max 100, after cursor, no order; sort
+in the browser or an endpoint.
 
 \`\`\`ts
 import { data } from 'somewhere:data';
-async function useNotesData() {
+async function notes() {
   const { data: note } = await data.notes.create({ title: 'Hello' });
   if (note) await data.notes.update(note.id, { title: 'Updated' });
   const page = await data.notes.list({ limit: 100 });
-  if (page.has_more && page.next) return data.notes.list({ limit: 100, after: page.next });
+  if (page.has_more && page.next) return data.notes.list({ after: page.next });
   return page;
 }
 \`\`\`
 
+Teams without verification: own membership table + member(); sw.groups and domain
+roles need VERIFIED emails. Members read/create/update tasks; creators delete while
+members. A team-owner delete is one checked endpoint; keep other access declared.
+Create the team and its owner membership atomically:
 
-Use serverOnly() and endpoint checks only when a required rule cannot be expressed
-by the declared scopes: compare the required identities and relationships with
-the supported owner, membership, parent and role policies before choosing the fallback.
-Built-in groups and email-domain roles require VERIFIED email. If the app must
-work before verification, use its own membership/role table and server checks.
-Never grant privilege solely because an unverified address claims a domain.
+\`\`\`ts
+// api/teams.ts
+export default sw.endpoint({
+  auth: 'required', body: { name: 'string' },
+  handler: async ({ user, params, body }, sw) => {
+    const creatorEmail = user.email; // required auth supplies id and email
+    const id = crypto.randomUUID();
+    await sw.db.server.tx([
+      { op: 'insert', table: 'teams', values: { id, name: body.name, owner_id: user.id } },
+      { op: 'insert', table: 'team_members', values: { id: crypto.randomUUID(), team_id: id, user_id: user.id } },
+    ]);
+    return { id, creatorEmail };
+  },
+});
+\`\`\`
 
-Starter map:
-- src/App.tsx + src/routes.ts: route selection, including a detail path parameter;
-  navigate/linkTo accept string paths. Extensionless paths serve index.html.
-- src/pages/HomePage.tsx: build here; src/pages/SignedInLayout.tsx: signed-in layout;
-  src/ui/AppShell.tsx: account/sign-out; src/ui/layout.tsx: PageHeader (React-node title).
-- src/auth/hooks.ts: existing useAuthState/useSignOut; src/services/auth.ts: errors.
-  In components, useAuth from @somewhere-cloud/sdk/react exposes signIn/signUp
-  ({ email, password }); both throw readable errors. Sign-up signs in immediately;
-  unverified users pass auth: 'required'. Keep api/auth/[...path].ts and the session gate.
-- src/config.ts: app name, SIGN_IN_PROVIDERS, SHOW_EMAIL_VERIFICATION.
+\`\`\`ts
+// api/teams/[id]/members.ts — only the team owner adds a member
+export default sw.endpoint({
+  auth: 'required', body: { email: 'string' },
+  handler: async ({ user, params, body }, sw) => {
+    const { data: teams } = await sw.db.from('teams', { where: { id: params.id, owner_id: user.id }, limit: 1 });
+    if (!teams[0]) return Response.json({ error: 'Team owner required' }, { status: 403 });
+    const { users: [target] } = await sw.auth.server.listUsers({ emails: [body.email] });
+    if (!target) return Response.json({ error: 'Account not found' }, { status: 404 });
+    await sw.db.server.insert('team_members', {
+      id: crypto.randomUUID(), team_id: params.id, user_id: target.id,
+    }, { onConflict: 'ignore' });
+    return { ok: true };
+  },
+});
+\`\`\`
 
-Endpoint files: api/notes.ts → /api/notes; api/notes/[id].ts → params.id;
-api/notes/[id]/sub.ts → /api/notes/:id/sub; underscore-prefixed files are helpers.
-The global sw only declares endpoints; the handler's second argument is the runtime.
-Method-named exports select GET/DELETE; default export handles POST with a body.
-Declare auth on every endpoint; declare body fields before reading JSON. GET has no body.
-Plain objects become JSON 200; return Response.json(value, { status }) for other statuses.
+Do not mark app-read/write data serverOnly() and hand-write access checks: declare
+who may read/write it; the platform enforces it. Server-only fits job/import/audit/
+counter state, membership ledgers, and undeclarable rules: arbitrary predicates
+(e.g. expiry), or different writable fields per role (split tables or check that write).
+Grant ledgers need owner() scope and no browser writes. Keep other access declared.
+
+Starter: src/pages/HomePage.tsx; routes src/App.tsx + src/routes.ts; layout
+src/pages/SignedInLayout.tsx. Auth hooks: src/auth/hooks.ts; useAuth from
+@somewhere-cloud/sdk/react: signIn/signUp({ email, password }); sign-up signs in.
+Keep api/auth/[...path].ts. src/config.ts controls providers/verification.
+
+Files: api/notes.ts → /api/notes; api/notes/[id]/sub.ts → /api/notes/:id/sub
+(params.id). Underscore-prefixed files are helpers. GET/DELETE: named exports;
+POST: default export. Objects return JSON 200; Response.json sets other statuses.
 
 \`\`\`ts
 export const GET = sw.endpoint({
   auth: 'required',
-  handler: async ({ params }, sw) => sw.db.from('notes', { limit: 100 }),
-});
-export default sw.endpoint({
-  auth: 'required', body: { title: 'string' },
-  handler: async ({ body }, sw) => sw.db.insert('notes', { title: body.title }),
+  handler: async (_, sw) => sw.db.from('notes', { limit: 100 }),
 });
 export const DELETE = sw.endpoint({
   auth: 'required',
@@ -79,81 +146,40 @@ export const DELETE = sw.endpoint({
 });
 \`\`\`
 
+Structured sw.db calls apply caller scopes; sw.db.server bypasses them: authorize first.
+Reads: from(table, { where, columns, order: [['id', 'asc']], limit, offset }).
+Filters include { id: { in: ids } }; schema uniqueness is unique: [['a', 'b']].
+Writes: insert(table, values), update(table, { where, set }), remove(table, { where }).
+Transactions are ARRAYs of write intents (above), never callbacks; pre-generate
+IDs.
 
-Scopes:
-- owner(): personal rows, caller ownership applied by the platform.
-- member(): your membership table controls shared rows; parent(): inherit a related row's access.
-- serverOnly(): functions authorize every read/write; no browser data access.
-- publicRead: { where }: visitor reads of explicitly selected rows/columns.
-client grants browser operations/columns; read must include the primary key.
-Omitted browser write grants prevent direct writes; use endpoints for validation.
-
-Server calls return { data: rows, count, changes }. sw.db applies caller scopes;
-sw.db.server bypasses them, so authorize first and supply trusted ownership on insert.
-update takes TWO arguments: table and { where, set }. Transactions take an ARRAY
-of write intents, never a callback; pre-generate related IDs. No reads or result
-references inside tx; a zero-match update does not abort it. Use unique constraints
-for concurrent uniqueness, not a read-then-insert check.
-
-\`\`\`ts
-async function writeNotes(sw: SomewhereRuntimeContext, ownerId: string) {
-  // ownerId must come from the caller or an authorized lookup, never unchecked input.
-  const id = crypto.randomUUID();
-  await sw.db.server.tx([
-    { op: 'insert', table: 'notes', values: { id, user_id: ownerId, title: 'Hello' } },
-    { op: 'update', table: 'notes', where: { id }, set: { title: 'Updated' } },
-  ]);
-  await sw.db.from('notes', { where: { id }, limit: 1 });
-  await sw.db.insert('notes', { title: 'Hello' });
-  await sw.db.update('notes', { where: { id }, set: { title: 'Updated' } });
-  await sw.db.remove('notes', { where: { id } });
-  // Server directory: authorize the caller before looking up another account.
-  const { users: [user] } = await sw.auth.server.listUsers({ emails: ['person@example.com'] });
-  return user; // undefined when no eligible account matches
-}
-\`\`\`
-
-
-Call your API with fetch(path, { method: 'POST', credentials: 'same-origin',
+Browser: fetch(path, { method: 'POST', credentials: 'same-origin',
 headers: { 'content-type': 'application/json' }, body: JSON.stringify(values) }).
-The short-lived access cookie refreshes automatically; do not store tokens.
-Scripts sending cookie-authenticated POST/PATCH/DELETE must send Origin equal to
-the app URL. UI rendering/session checks are asynchronous: wait for loaded UI.
-Test with throwaway users at <name>@<subdomain>.test.somewhere.site.
+Access cookies refresh automatically. Cookie-auth POST/PATCH/DELETE from scripts
+need Origin equal to the app URL.
 
-Publish: somewhere typecheck → somewhere deploy → somewhere test.
-Deploy raw source; do not run a frontend build. Type errors stop before upload;
-explicit override: somewhere deploy --allow-type-errors. Deploy applies the schema.
-somewhere test runs project tests against production; also test each table's
-access and the affected journey. Diagnose with somewhere errors and somewhere logs.
-RATE_LIMIT_UNAVAILABLE is temporary platform unavailability: the request was not
-admitted; retry it and keep rateLimit protection.
+Publish: somewhere typecheck → npx @somewhere-cloud/cli deploy → somewhere verify → somewhere test.
+Deploy raw source, no frontend build. Type errors stop before upload; explicit
+override: somewhere deploy --allow-type-errors.
+Tests: newUser() gives a signed-in user with its own browser page and API request client; call as many times as needed (owner, member, outsider).
+newUser() accepts no chosen email; grant roles or insert memberships in test setup through your app's own authorized server endpoint.
+Diagnose with somewhere errors and somewhere logs.
 
 On demand:
 - Membership/parent: \`somewhere docs sw.db --section owner-or-member-and-parent-access\`
-- Groups: \`somewhere docs sw.groups --section create-a-group\`
-- Transactions: \`somewhere docs sw.db --section transaction-intents\`
-- Updates: \`somewhere docs sw.db --section update-shape\`
-- Browser limits: \`somewhere docs sw.db --section browser-list-limits\`
+- Server paging: \`somewhere docs sw.db --section server-read-paging\`
 - Direct HTTP data tests: \`somewhere docs declared-data --section calling-the-data-endpoint-directly\`
-- Auth hooks: \`somewhere docs auth-client --section react-auth-state\`
-- Files/background import: \`somewhere docs recipe-csv-import --section larger-files\`
-- Scheduled work: \`somewhere docs cron --section create-a-schedule\`
-- Server-rendered pages: \`somewhere docs recipe-seo --section 5-server-rendered-pages-and-redirects\`
+- Endpoint inputs: \`somewhere docs sw.endpoint --section what-your-handler-receives\`
 `;
 
-export const SKILLS_POINTER = `Skills: \`${SKILLS_DIR}/\` — `
-  + skillNames(BUNDLED_SKILLS_PACK).map((name) => `\`${name}\``).join(', ')
-  + '. Read the skill that matches the task. `somewhere skills status` inspects the installed pack; `somewhere skills update` updates unmodified files.';
+export const SKILLS_POINTER = `Task-specific skills: \`${SKILLS_DIR}/\`. Inspect/update with somewhere skills status/update.`;
 
 export const DECLARED_ACCESS_POINTER = '';
 
 /** One line telling agents the app's data and code can leave:
  *  an evaluating agent concluded the platform had no exits. Kept outside
  *  AGENT_WORKFLOW, which is a byte mirror of the platform's agent workflow. */
-export const PORTABILITY_POINTER = 'Your data and code are yours: `somewhere pull` (source), `somewhere db dump` (raw SQL database as one .sql file), '
-  + 'one-table CSV export and attaching PostgreSQL in your own Neon account; managed-database tables are not in the dump or CSV yet. '
-  + 'Limits per path: `somewhere docs portability`.';
+export const PORTABILITY_POINTER = 'Data/code export limits: `somewhere docs portability`.';
 
-export const INIT_AGENTS_MD = `# somewhere.cloud project contract\n${SKILLS_POINTER}\n${DECLARED_ACCESS_POINTER}\n${PORTABILITY_POINTER}\n${AGENT_WORKFLOW}\n`;
+export const INIT_AGENTS_MD = `# somewhere.cloud project contract\n${AGENT_WORKFLOW}\n${SKILLS_POINTER}\n${PORTABILITY_POINTER}\n`;
 export const INIT_CLAUDE_MD = 'Read AGENTS.md for project instructions.\n';

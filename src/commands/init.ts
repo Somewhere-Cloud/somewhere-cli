@@ -74,7 +74,7 @@ interface LinkProject {
 export function registerInit(program: Command) {
   program
     .command('init')
-    .description('Write a local starter; when signed in, also create a project and link this directory')
+    .description('Run somewhere init first, then read generated AGENTS.md: call shapes and access patterns for a typical app; docs are for exceptions.')
     .option('--name <name>', 'Project name (skip prompt); sign-in and invitation emails show it')
     .option('--subdomain <slug>', 'Subdomain for the new project; default: derived from --name')
     .option('--link', 'Scaffold an empty directory and link an existing project; non-empty directories are link-only')

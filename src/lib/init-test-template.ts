@@ -1,6 +1,6 @@
 import type { InitScaffoldFile } from './init-scaffold.js';
 
-const session = `import { test, expect, data, expectRefused, ready } from '@somewhere-cloud/cli/testing';
+const session = `import { test, expect, ready } from '@somewhere-cloud/cli/testing';
 
 test('session and sign-out', async ({ newUser }) => {
   const user = await newUser();
@@ -13,11 +13,6 @@ test('session and sign-out', async ({ newUser }) => {
   expect((await (await user.request.get('/api/auth/me')).json()).user).toBeNull();
   await user.page.reload();
   await ready(user.page, 'signed-out');
-});
-`;
-const closed = `
-test('browser data is closed', async ({ anonymous }) => {
-  await expectRefused(await data(anonymous, 'notes', { operation: 'list' }), 403, 'DATA_ACCESS_DENIED');
 });
 `;
 const isolation = `
@@ -50,5 +45,5 @@ test('owners can read only their own notes', async ({ newUser }) => {
 });
 `;
 export function starterTests(privateData = false): InitScaffoldFile[] {
-  return [{ path: 'tests/app.spec.ts', content: session + (privateData ? isolation : closed) }];
+  return [{ path: 'tests/app.spec.ts', content: session.replace('test, expect, ready', privateData ? 'test, expect, ready, data, expectRefused' : 'test, expect, ready') + (privateData ? isolation : '') }];
 }

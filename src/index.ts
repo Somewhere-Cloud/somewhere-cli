@@ -84,7 +84,7 @@ const pkg = JSON.parse(
 
 const program = new Command()
   .name('somewhere')
-  .description('CLI for somewhere.cloud')
+  .description('CLI for somewhere.cloud. Run somewhere init first, then read generated AGENTS.md: call shapes and access patterns for a typical app; docs are for exceptions.')
   .version(pkg.version);
 
 recordLastRun(pkg.version);

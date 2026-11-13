@@ -32,6 +32,7 @@ export interface DeclaredDataClient {
 const require = createRequire(import.meta.url);
 
 interface DeclaredDataGenerator {
+  allTablesServerOnlyWithoutClient(files: Record<string, string>): boolean;
   generateFromFiles(files: Record<string, string>): DeclaredDataClient | undefined;
   localDeclarationFromFiles(files: Record<string, string>): string | undefined;
   declaredTablesFromFiles(files: Record<string, string>): string;
@@ -165,4 +166,12 @@ export function declaredDataPlugin(projectDir: string) {
     },
     closeBundle() { cleanup?.(); },
   };
+}
+
+/** Advisory from the canonical schema parser, not source-text guesses. */
+export function declaredAccessNotice(files: Record<string, string>): string | undefined {
+  const generator = require('../../runtime/declared-data.cjs') as DeclaredDataGenerator;
+  return generator.allTablesServerOnlyWithoutClient(files)
+    ? 'Access is entirely hand-written in this app; declare ordinary app data instead: somewhere docs declared-data --section declare-a-table-and-use-it'
+    : undefined;
 }

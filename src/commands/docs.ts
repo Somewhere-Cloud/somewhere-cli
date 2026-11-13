@@ -349,7 +349,16 @@ export function renderDocsIndex(pages: PublicDocsPage[], groups: PublicDocsGroup
   const rest = pages.filter((page) => !listed.has(page.id));
   if (rest.length) blocks.push({ title: groups.length ? 'Other topics' : 'Topics', pages: rest });
   const width = Math.max(0, ...pages.map(({ id }) => id.length));
-  const lines = ['Platform docs — no login needed.', '', 'Public topics:'];
+  const lines = ['Platform docs — no login needed.',
+    'Run somewhere init first, then read generated AGENTS.md: call shapes and access patterns for a typical app; docs are for exceptions.',
+    '',
+    'Requirement | Declaration (complete examples in generated AGENTS.md)',
+    'Own rows | owner()',
+    'Team: owner adds members; members read/write; creator rights | own membership table + member() + owner()',
+    'Owner/staff record, staff-only child notes | owner() or appRole(); parent() thread; appRole() notes',
+    'Team example: somewhere docs sw.groups --section teams-without-email-verification',
+    'Record/thread example: somewhere docs sw.db --section membership-and-parent-examples',
+    '', 'Public topics:'];
   for (const block of blocks) {
     lines.push('', `${block.title}`);
     for (const page of block.pages) lines.push(`  ${page.id.padEnd(width)}  ${page.title}`);

@@ -76,6 +76,10 @@ test('bare docs prints the grouped topic index and how to open, never the manual
     const result = await run(['docs'], { SOMEWHERE_DOCS_BASE: base });
     assert.equal(result.status, 0, result.stderr);
     assert.deepEqual(requests, ['/docs-manifest.json'], 'the full manual (/docs.txt) is not fetched');
+    assert.match(result.stdout.slice(0, 1100), /Run somewhere init first.*AGENTS\.md/);
+    assert.match(result.stdout.slice(0, 1100), /Own rows \| owner\(\)/);
+    assert.match(result.stdout.slice(0, 1100), /Team: owner adds members.*member\(\)/);
+    assert.match(result.stdout.slice(0, 1100), /Owner\/staff record.*parent\(\)/);
     assert.match(result.stdout, /Primitives\n {2}sw\.auth\s+Auth — sign-in for your users/);
     assert.match(result.stdout, /Open a section: {3}somewhere docs <topic> --section <id>/);
     assert.match(result.stdout, /Search all docs: {2}somewhere docs search <term>/);
@@ -144,4 +148,14 @@ test('index and search helpers: ungrouped manifests still list every topic', () 
   assert.match(index, / {2}search +Search — full-text search/);
   assert.deepEqual(searchPublicDocs(pages, '   '), []);
   assert.equal(searchPublicDocs(pages, 'PASSWORD')[0].section, 'passwords', 'case-insensitive, innermost section');
+});
+
+test('root and init help lead new apps to the generated contract', async () => {
+  for (const args of [['--help'], ['init', '--help']]) {
+    const result = await run(args);
+    assert.equal(result.status, 0, result.stderr);
+    const firstScreen = result.stdout.slice(0, 550).replace(/\s+/g, ' ');
+    assert.match(firstScreen, /Run somewhere init first/);
+    assert.match(firstScreen, /AGENTS\.md.*call shapes and access patterns.*docs are for exceptions/);
+  }
 });

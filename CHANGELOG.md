@@ -8,6 +8,11 @@ Republish the platform contract 6 CLI after npm accepted earlier uploads without
 
 # Changelog
 
+## 0.38.81
+
+- somewhere test signs up through the app's own form: signUp(page) returns { id, email, password, verified } for an ordinary, unverified account at a reserved address (example.com by default; a chosen domain or address must be example.com/.org/.net or end in .example or .test). verify(page, person) enters the emailed code through the app; signIn(page, person) and signOut(page) use the app's form. Under a required email-code policy, signUp and signIn enter the emailed code. Accounts are deleted by the exact id their sign-up returned, never by address; an interrupted run is finished by the next one.
+- The auth starter's form, code step and sign-out button carry data-sw-auth hooks, and its sample test signs up, signs out and signs back in through the form. The generated AGENTS.md says what one run covers.
+
 ## 0.38.80
 
 - Starter: the MCP sign-in return now checks every remembered value, not only the address bar, with the same exact-path check again just before it is followed. It is kept in a __Host- cookie that other sites cannot set, duplicates are refused, and a page left open past ten minutes refuses plainly instead of following an expired request.

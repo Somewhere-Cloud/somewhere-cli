@@ -2148,7 +2148,7 @@ export function printExcludedFiles(
     dim(
       'Notes, logs and scratch files in your project root that nothing in your app uses stay on your machine, ' +
         'and so do *.test.* and *.spec.* source files and anything in a tests/ or __tests__/ folder. ' +
-        'Every other file in this folder, subfolders included, is uploaded with your app. ' +
+        'Unreferenced operational folders (scripts, fixtures, e2e, tooling, tools, design-v2, build, out, storybook-static, artifacts, reports), fixture/test-output folders, and logs stay local too. App references and explicit includes retain files; all other files are uploaded. ' +
         'To publish one of these files on purpose: somewhere deploy --include <file>, or add a "!<file>" line to .somewhereignore.',
     ),
   );

@@ -1,3 +1,4 @@
+import { operationalExclusionReason, operationalReferenceMatcher } from './operational-files.js';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { extname, isAbsolute, join, relative } from 'node:path';
 import { DATA_DECLARATION_FILE, FILES_DECLARATION_FILE, GENERATED_DATA_HEADER } from './declared-data.js';
@@ -154,6 +155,7 @@ export function collectFiles(baseDir: string, options: CollectOptions = {}): Col
   );
   const publish: string[] = [];
   const deferred: string[] = [];
+  const operational = new Map<string, string>();
   for (const relPath of candidates) {
     // Tests are not part of the app (, ): a test
     // source file (`*.test.ts`, `*.spec.tsx`, …) under api/ would deploy as a
@@ -168,6 +170,8 @@ export function collectFiles(baseDir: string, options: CollectOptions = {}): Col
       out.excluded.push({ path: relPath, reason: testReason });
       continue;
     }
+    const operationalReason = operationalExclusionReason(relPath, (path, directory) => optIn.has(path) || ignore.reincludes(path, directory));
+    if (operationalReason) { operational.set(relPath, operationalReason); continue; }
     const isRootFile = !relPath.includes('/');
     if (
       !isRootFile ||
@@ -197,6 +201,19 @@ export function collectFiles(baseDir: string, options: CollectOptions = {}): Col
       else out.excluded.push({ path: relPath, reason: excludedRootFileReason(relPath) });
     }
   }
+  // Retain operational-looking files that this app actually names, including
+  // transitive imports from a retained script. Everything else stays local.
+  let retained = true;
+  while (retained && operational.size) {
+    retained = false;
+    const referenced = operationalReferenceMatcher(corpusFiles(publish));
+    for (const [path] of operational) {
+      if (referenced(path)) {
+        publish.push(path); operational.delete(path); retained = true;
+      }
+    }
+  }
+  for (const [path, reason] of operational) out.excluded.push({ path, reason });
   out.excluded.sort((a, b) => a.path.localeCompare(b.path));
 
   if (out.sensitive.length > 0) {

@@ -163,10 +163,15 @@ Access cookies refresh automatically. Cookie-auth POST/PATCH/DELETE from scripts
 need Origin equal to the app URL.
 
 Publish: npx @somewhere-cloud/cli deploy, then somewhere test for the rules you changed.
+One somewhere test run drives the UI and calls the API: signUp(page) uses your sign-up form
+(then signOut, signIn with its password, verify with the emailed code), newUser() acts as
+several people, and ready(page, 'signed-in' | 'signed-out') waits for the session check.
+You do not need a separate browser script.
 Deploy raw source, no frontend build; type errors stop upload.
 newUser() gives a signed-in page/API client; call N times (owner, member, outsider).
 No chosen email argument: assign roles/memberships through your app's authorized POST setup.
 Test users are verified and visible to this project's server user lookup.
+Email-domain role: signUp(page, { domain: 'staff.example' }), then verify(page, person).
 For the complete owner-adds-member-by-email test and its endpoints, run
 somewhere docs test and follow Two users sharing through the app.
 Diagnose with somewhere errors and somewhere logs.

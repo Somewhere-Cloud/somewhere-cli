@@ -6,10 +6,11 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { appendFileSync, existsSync, readFileSync, readdirSync, rmSync } from 'node:fs';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { ApiClient } from '../lib/client.js';
 import { cliConfigDir, getToken, loadProjectConfig } from '../lib/config.js';
 import { ensurePrivateDir, writePrivateFile } from '../lib/test-identities.js';
+import { describeSweep, sweepAccounts } from '../lib/form-accounts.js';
 
 export function registerTest(program: Command): void {
   program.command('test [file]')
@@ -58,6 +59,9 @@ export function registerTest(program: Command): void {
       const ipv4First = await addressOrder;
       const runnerEnv = { ...process.env, ...(ipv4First ? { NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --dns-result-order=ipv4first` } : {}) }; 
       const subset = Boolean(file || opts.grep || opts.failed);
+      // Form sign-up accounts (signUp fixture) left by an interrupted earlier run are finished first.
+      process.env.SW_TEST_RUN = randomUUID();
+      for (const line of describeSweep(await sweepAccounts(client, root, id), 'Before this run')) process.stderr.write(line + '\n');
       const config = join(dir, 'runner.config.cjs');
       const artifacts = join(dir, createHash('sha256').update(id + origin).digest('hex').slice(0, 16));
       if (opts.failed) {
@@ -69,13 +73,17 @@ export function registerTest(program: Command): void {
       if (file) args.push(file);
       if (opts.grep) args.push('--grep', opts.grep);
       if (opts.failed) args.push('--last-failed');
-      const result = spawnSync(process.execPath, args, { stdio: 'inherit', env: { ...runnerEnv, SW_TEST_TARGET: JSON.stringify(target), SW_TEST_RELEASE: target.releaseId, SW_TEST_ORIGIN: origin, SW_TEST_BROWSER_LAUNCH_MS: String(browserLaunchMs), SW_TEST_BROWSER: `${channel ?? 'chromium'} ${version}`, SW_TEST_SUBSET: String(subset), SW_TEST_JSON: String(Boolean(opts.json)), SW_TEST_RESULTS: join(dir, 'results.json') } });
+      const result = spawnSync(process.execPath, args, { stdio: 'inherit', env: { ...runnerEnv, SW_TEST_TARGET: JSON.stringify(target), SW_TEST_RELEASE: target.releaseId, SW_TEST_ORIGIN: origin, SW_TEST_BROWSER_LAUNCH_MS: String(browserLaunchMs), SW_TEST_BROWSER: `${channel ?? 'chromium'} ${version}`, SW_TEST_SUBSET: String(subset), SW_TEST_JSON: String(Boolean(opts.json)), SW_TEST_RESULTS: join(dir, 'results.json'), SW_TEST_RUN: process.env.SW_TEST_RUN, SW_TEST_RUN_PID: String(process.pid) } });
+      // Anything a test's own cleanup could not finish (its record is kept) is retried once more here.
+      const after = await sweepAccounts(client, root, id).catch(error => { process.stderr.write(`Could not finish form sign-up cleanup: ${error instanceof Error ? error.message : String(error)}\n`); return null; });
+      const leftover = after ? describeSweep(after, 'After this run') : [];
+      for (const line of leftover) process.stderr.write(line + '\n');
       // Playwright may create raw error-context text; retain only screenshots and rerun state.
       const cleanArtifacts = (path: string): void => {
         if (!existsSync(path)) return;
         for (const entry of readdirSync(path, { withFileTypes: true })) { const file = join(path, entry.name); if (entry.isDirectory()) cleanArtifacts(file); else if (entry.name !== '.last-run.json' && !entry.name.endsWith('.png')) rmSync(file); }
       };
       cleanArtifacts(artifacts);
-      process.exitCode = result.status ?? 1;
+      process.exitCode = result.status === null ? 1 : result.status || (after === null || after.failed.length || after.unknownId.length ? 1 : 0);
     });
 }

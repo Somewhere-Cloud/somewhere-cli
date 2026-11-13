@@ -2,6 +2,14 @@ import type { InitScaffoldFile } from './init-scaffold.js';
 
 const session = `import { test, expect, ready } from '@somewhere-cloud/cli/testing';
 
+test('a new person signs up through the form, signs out and signs back in', async ({ page, signUp, signOut, signIn }) => {
+  const person = await signUp(page);
+  await expect(page.getByText(person.email)).toBeVisible();
+  await signOut(page);
+  await signIn(page, person);
+  await expect(page.getByText(person.email)).toBeVisible();
+});
+
 test('session and sign-out', async ({ newUser }) => {
   const user = await newUser();
   const me = await user.request.get('/api/auth/me');

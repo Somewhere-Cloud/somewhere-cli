@@ -248,7 +248,14 @@ test('default starter is the auth module: SDK client, packaged handler, hooks, r
   assert.ok(!result.created.includes('db/schema.ts'), 'private data is opt-in');
   const appTests = readFileSync(join(dir, 'tests/app.spec.ts'), 'utf8');
   assert.match(appTests, /session and sign-out/);
+  assert.match(appTests, /await signUp\(page\)[\s\S]*await signOut\(page\)[\s\S]*await signIn\(page, person\)/, 'the first sample signs up through the real form');
   assert.doesNotMatch(appTests, /notes|data\(/, 'default tests must not refer to an absent table');
+  // The hooks signUp/signIn/signOut drive, on the starter's own form, code step and sign-out button.
+  const authCard = readFileSync(join(dir, 'src/ui/AuthCard.tsx'), 'utf8');
+  for (const hook of ['form', 'email', 'password', 'submit', 'mode', 'error']) assert.match(authCard, new RegExp(`data-sw-auth="${hook}"`), hook);
+  assert.match(authCard, /data-sw-auth-mode=\{form\.mode\}/);
+  for (const hook of ['mfa-code', 'mfa-submit']) assert.match(readFileSync(join(dir, 'src/ui/MfaStep.tsx'), 'utf8'), new RegExp(`data-sw-auth="${hook}"`), hook);
+  assert.match(readFileSync(join(dir, 'src/ui/AppShell.tsx'), 'utf8'), /data-sw-auth="sign-out"/);
   // The auth route is ONE line: the SDK's maintained handler, no pasted logic.
   assert.equal(
     readFileSync(join(dir, 'api/auth/[...path].ts'), 'utf8'),

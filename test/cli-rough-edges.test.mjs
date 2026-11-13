@@ -272,7 +272,7 @@ test('run --timeout above the limit says it was capped; within the limit it is s
     const cwd = linkedDir();
     const capped = await run(['run', 'script.js', '--timeout', '60000'], { cwd, env });
     assert.equal(capped.status, 0, capped.stderr);
-    assert.match(capped.stdout, /--timeout 60000 is above the 30000 ms limit for `somewhere run`; the script runs with 30000 ms\./);
+    assert.match(capped.stderr, /--timeout 60000 is above the 30000 ms limit for `somewhere run`; the script runs with 30000 ms\./);
 
     const cappedJson = await run(['run', 'script.js', '--timeout', '60000', '--json'], { cwd, env });
     assert.equal(cappedJson.status, 0, cappedJson.stderr);

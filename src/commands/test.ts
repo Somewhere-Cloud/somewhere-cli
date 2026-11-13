@@ -19,8 +19,9 @@ export function registerTest(program: Command): void {
     .option('--failed', 'Run last failures only (subset)')
     .option('--grep <name>', 'Filter test names (subset)')
     .option('--url <url>', 'Unsupported in phase 1')
+    .option('--phone', 'Run every test again in a 390x844 phone viewport ([phone] in results)')
     .option('--json', 'Print structured results')
-    .action(async (file: string | undefined, opts: { workers: string; failed?: boolean; grep?: string; url?: string; json?: boolean }) => {
+    .action(async (file: string | undefined, opts: { workers: string; failed?: boolean; grep?: string; url?: string; json?: boolean; phone?: boolean }) => {
       if (opts.url) throw new Error('--url is unsupported: tests use the linked project canonical production origin only.');
       if (!/^[1-9]\d*$/.test(opts.workers)) throw new Error('--workers must be a positive integer');
       const root = process.cwd();
@@ -68,7 +69,7 @@ export function registerTest(program: Command): void {
         const lastRun = join(artifacts, '.last-run.json');
         if (!existsSync(lastRun) || !(JSON.parse(readFileSync(lastRun, 'utf8')) as { failedTests?: string[] }).failedTests?.length) throw new Error('No previous failed tests for this project and target; run somewhere test in full.');
       }
-      writePrivateFile(config, `module.exports = ${JSON.stringify({ testDir: join(root, 'tests'), testMatch: '**/*.spec.ts', fullyParallel: true, forbidOnly: !subset, retries: 0, workers: Number(opts.workers), outputDir: artifacts, reporter: [[join(dirname(fileURLToPath(import.meta.url)), '../lib/test-reporter.js')]], use: { baseURL: origin, channel, trace: 'off', video: 'off', screenshot: 'off' } })};\n`);
+      writePrivateFile(config, `module.exports = ${JSON.stringify({ testDir: join(root, 'tests'), testMatch: '**/*.spec.ts', fullyParallel: true, forbidOnly: !subset, retries: 0, workers: Number(opts.workers), outputDir: artifacts, reporter: [[join(dirname(fileURLToPath(import.meta.url)), '../lib/test-reporter.js')]], use: { baseURL: origin, channel, trace: 'off', video: 'off', screenshot: 'off' }, ...(opts.phone ? { projects: [{ name: 'desktop' }, { name: 'phone', use: { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true } }] } : {}) })};\n`);
       const args = [cli, 'test', '--config', config];
       if (file) args.push(file);
       if (opts.grep) args.push('--grep', opts.grep);

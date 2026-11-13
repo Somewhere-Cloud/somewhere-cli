@@ -10,7 +10,7 @@ Enough to start a typical app: declare access and use the browser client; docs a
 | --- | --- |
 | Each user sees only their own rows | notes: owner() |
 | Team: owner adds members; members read/write; creator rights | teams/team_members/tasks: owner() + member(); role-owner delete branch |
-| Owner/staff record with staff-only child notes | tickets: owner() or appRole(); parent() thread; staff-only notes; POST setup below |
+| Owner/staff record with staff-only child notes | tickets: owner() or appRole(); parent() thread; staff-only notes; role granted in sign-up below |
 | Public pages from private drafts | pages: conditional publicRead |
 | Share one record read-only | shared_notes/note_shares: read-only grant() |
 
@@ -66,9 +66,9 @@ export default schema({
 }, { appRoles: { staff: { assignedBy: 'server' } } });
 \`\`\`
 
-POST role setup once after sign-up/profile completion, not GET/every request:
-cookie-authenticated GET cannot mutate roles.
-Check admin here, or your own assignment rule.
+Your app's code decides who gets a role; the platform enforces what the role may do.
+Grant it inside your sign-up route, before the response is sent (example below), so
+the new person's first request already holds it; never in a second request after sign-up.
 messages use parent(): owner() would hide staff replies from the customer.
 Use emailDomain for staff at your verified domain; assignedBy: 'server' when the
 app decides (promotion, payment, invitation). An email ending proves identity only
@@ -90,7 +90,7 @@ export const list = (after?: string) => data.notes.list({ limit: 100, after });
 Teams without verification: own membership table + member(); sw.groups and domain
 roles need VERIFIED emails. Members read/create/update tasks; creators or team owners delete while members.
 Restrictions narrow operations, not grant read.
-Comment-author-or-team-owner deletion stays a small endpoint.
+Comment author or team owner deletes: declare it as tasks do (owner() plus member() where role owner, delete).
 Create the team and its owner membership atomically:
 
 \`\`\`ts
@@ -126,15 +126,18 @@ export default sw.endpoint({
 \`\`\`
 
 \`\`\`ts
-// api/complete-profile.ts — POST once when an admin assigns staff after sign-up
-export default sw.endpoint({
-  auth: 'required', body: { userId: 'string' },
-  handler: async ({ request, body }, sw) => {
-    await sw.auth.requireUser(request, { role: 'admin' });
-    await sw.auth.server.setRoles(body.userId, { add: ['staff'] });
-    return { ok: true };
-  },
-});
+// api/auth/[...path].ts — the starter's auth route, plus this app's staff rule
+import { somewhereAuth } from '@somewhere-cloud/sdk/server';
+export default async function (request: Request, sw: SomewhereRuntimeContext): Promise<Response> {
+  const response = await somewhereAuth(request, sw);
+  if (response.ok && request.method === 'POST' && new URL(request.url).pathname.endsWith('/signup')) {
+    const body = await response.clone().json() as { user?: { id?: string; email?: string } };
+    if (body.user?.id && body.user.email?.toLowerCase().endsWith('@staff.example')) {
+      await sw.auth.server.setRoles(body.user.id, { add: ['staff'] });
+    }
+  }
+  return response;
+}
 \`\`\`
 
 Do not hand-write access to app-read/write data: declare who may read/write it.
@@ -152,6 +155,7 @@ export const GET = sw.endpoint({ auth: 'required', handler: async (_, sw) => sw.
 \`\`\`
 
 sw.db applies caller scopes; sw.db.server bypasses them: authorize first.
+Caller-scoped sw.db.insert needs no client.create grant: client limits only the browser.
 Reads: from(table, { where, columns, order: [['id', 'asc']], limit, offset }).
 Filter: { id: { in: ids } }; unique: [['a', 'b']] in schema.
 Writes: insert(table, values), update(table, { where, set }), remove(table, { where }).
@@ -169,9 +173,12 @@ several people, and ready(page, 'signed-in' | 'signed-out') waits for the sessio
 You do not need a separate browser script.
 Deploy raw source, no frontend build; type errors stop upload.
 newUser() gives a signed-in page/API client; call N times (owner, member, outsider).
-No chosen email argument: assign roles/memberships through your app's authorized POST setup.
-Test users are verified and visible to this project's server user lookup.
+newUser() takes no chosen email; for a role your sign-up grants, signUp(page, { domain: 'staff.example' }),
+and newPage() for a second person. Test users are verified and visible to this project's server user lookup.
 Email-domain role: signUp(page, { domain: 'staff.example' }), then verify(page, person).
+Refusals: await expectRefused(person, 'notes', { operation: 'update', id, values }) or
+expectRefused(person, 'POST /api/x', body); it knows every refusal shape. person: page, newUser() or anonymous.
+somewhere test --phone runs every test again at 390x844.
 For the complete owner-adds-member-by-email test and its endpoints, run
 somewhere docs test and follow Two users sharing through the app.
 Diagnose with somewhere errors and somewhere logs.

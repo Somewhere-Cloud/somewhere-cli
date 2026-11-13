@@ -115,8 +115,8 @@ test('a deploy the platform marks retry:true is sent again, and the second attem
       });
       assert.equal(result.status, 0, `stdout:\n${result.stdout}\nstderr:\n${result.stderr}`);
       assert.equal(deployCalls, 2, 'the platform said retry; the CLI must retry exactly once');
-      assert.match(result.stdout, /retryable failure \(PUBLISH_FROZEN\)/);
-      assert.match(result.stdout, /retrying once/);
+      assert.match(result.stderr, /retryable failure \(PUBLISH_FROZEN\)/);
+      assert.match(result.stderr, /retrying once/);
       assert.match(result.stdout, /Live at https:\/\/retryverdict\.somewhere\.cloud/);
     },
   );

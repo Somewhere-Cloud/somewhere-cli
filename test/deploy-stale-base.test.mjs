@@ -406,7 +406,7 @@ test('pull does not advance state when remote-deleted files remain locally', asy
     });
 
     assert.equal(result.status, 0, `stdout:\n${result.stdout}\nstderr:\n${result.stderr}`);
-    assert.match(result.stdout, /Skipped removing 1 file deleted remotely/);
+    assert.match(result.stderr, /Skipped removing 1 file deleted remotely/);
     assert.equal(readProject(fixtureDir).last_deploy.last_deployed_version, 7);
     assert.equal(existsSync(join(fixtureDir, 'old.html')), true);
   });

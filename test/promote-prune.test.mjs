@@ -116,7 +116,7 @@ test('promote --prune sends replace_functions: true and lists the production fun
   assert.equal(bodies.length, 1);
   assert.equal(bodies[0].replace_functions, true);
   assert.match(
-    result.stdout,
+    result.stderr,
     /Removed 2 production function\(s\) the preview did not include: api\/legacy-webhook, api\/old-report\./,
   );
   assert.doesNotMatch(result.stdout, /Kept \d+ production function/);

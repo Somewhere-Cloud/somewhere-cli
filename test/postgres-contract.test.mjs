@@ -211,7 +211,7 @@ test('attach maps the positional to provider_project_id and --branch to branch_i
   assert.match(result.stdout, /br_fixture/);
   assert.match(result.stdout, /ep-redacted\.us-east-2\.aws\.neon\.tech/);
   // The route's own sentence, not a local paraphrase of it.
-  assert.match(result.stdout, /Releases already deployed keep the connection details they were built with/);
+  assert.match(result.stderr, /Releases already deployed keep the connection details they were built with/);
 });
 
 test('attach omits unset options so the platform resolves them', async (t) => {
@@ -293,7 +293,7 @@ test('create posts {project_id, name, region} and names who is billed', async (t
   assert.match(result.stdout, /Created Neon project np_created/);
   assert.match(result.stdout, /aws-us-east-2/);
   assert.match(result.stdout, /Neon bills you for it/);
-  assert.match(result.stdout, /Releases already deployed keep the connection details/);
+  assert.match(result.stderr, /Releases already deployed keep the connection details/);
 });
 
 test('POSTGRES_CREATE_UNCERTAIN is preserved, never retried, and says do not retry', async (t) => {
@@ -491,8 +491,8 @@ test('disconnect needs --yes, removes only our attachment, and claims no revocat
     body: { project_id: 'fixture-project' },
   });
   assert.match(result.stdout, /Neon database was NOT deleted/);
-  assert.match(result.stdout, /this does not revoke access for them/);
-  assert.match(result.stdout, /Rotate the credential in your provider account/);
+  assert.match(result.stderr, /this does not revoke access for them/);
+  assert.match(result.stderr, /Rotate the credential in your provider account/);
   assert.doesNotMatch(result.stdout, /revoked immediately|access is now cut off/i);
   // key_removed:false must not be reported as a key removal, and the default
   // must not silently send forget_key.
@@ -524,7 +524,7 @@ test('a disconnect that only cleared a stuck create does not claim a detach', as
   // The recovery handle must survive in normal human output: after this the
   // platform no longer stores it.
   assert.match(result.stdout, /Unresolved:\s+np_orphan/);
-  assert.match(result.stdout, /it will keep billing until you do/);
+  assert.match(result.stderr, /it will keep billing until you do/);
   // requires_redeploy:false — nothing was detached, so no release changes.
   assert.doesNotMatch(result.stdout, /Takes effect on the next deploy/);
 });

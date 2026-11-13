@@ -94,7 +94,7 @@ for (const mode of ['failed', 'transport', 'malformed']) for (const json of [fal
       assert.match(output.next_steps.join('\n'), /somewhere verify --project <PROJECT>/);
     } else {
       assert.match(result.stdout, /Live at https:\/\/verify-outcome.somewhere.cloud/);
-      assert.match(result.stdout, /The deploy is live, but verification/);
+      assert.match(result.stderr, /The deploy is live, but verification/);
       assert.match(result.stdout, /somewhere verify --project <PROJECT>/);
     }
   });
@@ -136,5 +136,5 @@ for (const json of [false, true]) test(`passing verification keeps its success e
     const output = JSON.parse(result.stdout);
     assert.equal(output.verification.passed, true); assert.equal(output.deployment_outcome, 'live');
     assert.equal(output.next_steps, undefined); assert.equal(output.verification_error, undefined);
-  } else assert.doesNotMatch(result.stdout, /The deploy is live, but verification/);
+  } else assert.doesNotMatch(result.stdout + result.stderr, /The deploy is live, but verification/);
 });

@@ -128,8 +128,10 @@ export function printSupportPacketRecovery(cause: unknown): void {
   console.error(`  Recovery: somewhere support packet --request ${value} --json`);
 }
 
+/** Notices and warnings go to stderr: stdout carries only the output a command was asked for,
+ *  so `somewhere api … | jq` and every --json command stay parseable. */
 export function warn(msg: string) {
-  console.log(`${yellow('!')} ${msg}`);
+  console.error(`${yellow('!')} ${msg}`);
 }
 
 export function info(msg: string) {

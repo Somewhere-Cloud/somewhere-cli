@@ -44,6 +44,8 @@ const APP_ROOT_FILES = new Set([
   'sitemap.xml', 'sitemap-index.xml', 'rss.xml', 'atom.xml', 'feed.xml',
   'browserconfig.xml', 'favicon.ico', 'manifest.json', 'manifest.webmanifest',
   'site.webmanifest', '_redirects', '_headers',
+  // Platform config read at deploy: where a connecting MCP client's user signs in
+  'somewhere.auth.json',
 ]);
 
 /** Root filename patterns that are app surface (config files, mostly). */

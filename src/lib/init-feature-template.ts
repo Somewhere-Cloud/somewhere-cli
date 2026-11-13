@@ -458,8 +458,10 @@ export function usePathname(): string {
 }
 `;
 
-const APP = `import type { User } from '../types/auth';
+const APP = `import { useEffect } from 'react';
+import type { User } from '../types/auth';
 import { useAuthState } from './auth/hooks';
+import { authReturn, returnToConnection } from './auth/connection-return';
 import { APP_NAME } from './config';
 import { HomePage } from './pages/HomePage';
 import { DetailPage } from './pages/DetailPage';
@@ -467,12 +469,23 @@ import { NotFoundPage } from './pages/NotFoundPage';
 import { SignInPage } from './pages/SignInPage';
 import { linkTo, ROUTES, usePathname } from './routes';
 import { AppShell } from './ui/AppShell';
-import { SessionUnavailable } from './ui/feedback';
+import { Alert, SessionUnavailable } from './ui/feedback';
 
 // Routing and the sign-in boundary. This gate is UX: the server and
 // db/schema.ts decide what each request may read or write.
 export function App() {
   const session = useAuthState();
+
+  // Connecting an MCP client (for example Claude) sends a signed-out person
+  // here to sign in, then back to approve it (src/auth/connection-return.ts).
+  const back = authReturn();
+  if (back.status === 'refused') {
+    return (
+      <AppShell appName={APP_NAME} homeLink={linkTo(ROUTES.home)}>
+        <Alert action={<a href="/">Continue to the app</a>}>{back.message}</Alert>
+      </AppShell>
+    );
+  }
 
   // Before the server has answered, the app's frame shows at once, with no
   // account and no full-page loading screen; the page fills in on the answer.
@@ -488,6 +501,7 @@ export function App() {
     return <SessionUnavailable keepsWork={false} checkStatus={session.checkStatus} retrying={session.retrying} onRetry={session.retry} />;
   }
   const suspended = session.status === 'suspended';
+  if (back.status === 'pending' && !suspended) return <ReturnToConnection path={back.path} />;
   return (
     <>
       {suspended ? <SessionUnavailable keepsWork checkStatus={session.checkStatus} retrying={session.retrying} onRetry={session.retry} /> : null}
@@ -498,6 +512,15 @@ export function App() {
         <PrivateRoutes key={session.user.id} user={session.user} />
       </div>
     </>
+  );
+}
+
+function ReturnToConnection({ path }: { path: string }) {
+  useEffect(() => returnToConnection(path), [path]);
+  return (
+    <AppShell appName={APP_NAME} homeLink={linkTo(ROUTES.home)} busy>
+      <p role="status">Signed in. Returning to the connection request…</p>
+    </AppShell>
   );
 }
 
@@ -2593,6 +2616,89 @@ export function useMagicLinkLanding(): MagicLinkLanding {
 }
 `;
 
+/**
+ * src/auth/connection-return.ts. Connecting an MCP client (for example Claude)
+ * to this app happens as the app's own signed-in user. A signed-out person is
+ * sent to somewhere.auth.json's signInPath with
+ * ?sw_auth_return=/mcp/consent?signin=<id>; after signing in (password, social
+ * or a sign-in link in this browser) the app sends them back to approve.
+ */
+const CONNECTION_RETURN = `// Return from signing in to an MCP connection (somewhere.auth.json names the
+// page). Only the platform's own consent path on this origin is followed;
+// anything else is refused, and a request older than ten minutes has expired
+// on the platform too.
+const PARAM = 'sw_auth_return';
+const KEY = 'sw_connection_return';
+const LIFETIME_MS = 10 * 60 * 1000;
+const CONSENT = /^\\/mcp\\/consent\\?signin=[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+
+export interface PendingReturn { path: string; at: number; sent: boolean }
+export type AuthReturn =
+  | { status: 'none' }
+  | { status: 'pending'; path: string }
+  | { status: 'refused'; message: string };
+
+/** Pure decision: the address bar's request, the remembered one, and now. */
+export function decideReturn(requested: string | null, kept: PendingReturn | null, now: number): { result: AuthReturn; keep: PendingReturn | null } {
+  const refused = (message: string) => ({ result: { status: 'refused', message } as AuthReturn, keep: null });
+  if (requested !== null) {
+    if (!CONSENT.test(requested)) return refused('This sign-in link does not lead back to a connection request from this app, so it was not followed.');
+    // Sent back to sign in for the same request we already returned to: the
+    // platform did not see this sign-in. Stop instead of looping.
+    if (kept?.path === requested && kept.sent) return refused('The connection could not confirm your sign-in. Sign out, sign in again, then start connecting again.');
+    kept = { path: requested, at: now, sent: false };
+  }
+  if (!kept || kept.sent) return { result: { status: 'none' }, keep: null };
+  if (now - kept.at > LIFETIME_MS || now < kept.at) return refused('That connection request expired. Start connecting again from the app that asked.');
+  return { result: { status: 'pending', path: kept.path }, keep: kept };
+}
+
+// Kept in a short-lived cookie so it survives a social sign-in's round trip
+// or a sign-in link opened in another tab. It holds only the consent path,
+// never a credential.
+const COOKIE_MAX_AGE_S = 60 * 60;
+
+function readKept(): PendingReturn | null {
+  const entry = document.cookie.split('; ').find((part) => part.startsWith(KEY + '='));
+  if (!entry) return null;
+  try {
+    const value = JSON.parse(decodeURIComponent(entry.slice(KEY.length + 1)));
+    return value && typeof value.path === 'string' && typeof value.at === 'number' && typeof value.sent === 'boolean' ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeKept(value: PendingReturn | null) {
+  const body = value ? encodeURIComponent(JSON.stringify(value)) + '; Max-Age=' + COOKIE_MAX_AGE_S : '; Max-Age=0';
+  document.cookie = KEY + '=' + body + '; Path=/; SameSite=Lax; Secure';
+}
+
+let decided: AuthReturn | null = null;
+
+/** Read once per page load. Takes ?sw_auth_return out of the address bar and
+ *  keeps it across a social sign-in's round trip. */
+export function authReturn(): AuthReturn {
+  if (decided) return decided;
+  const url = new URL(window.location.href);
+  const requested = url.searchParams.get(PARAM);
+  if (requested !== null) {
+    url.searchParams.delete(PARAM);
+    window.history.replaceState(window.history.state, '', url.pathname + url.search + url.hash);
+  }
+  const { result, keep } = decideReturn(requested, readKept(), Date.now());
+  writeKept(keep);
+  decided = result;
+  return result;
+}
+
+/** Signed in: go back to the platform's consent page, once. */
+export function returnToConnection(path: string) {
+  writeKept({ ...(readKept() ?? { path, at: Date.now() }), path, sent: true });
+  window.location.replace(path);
+}
+`;
+
 const MAGIC_LINK_PAGE = `import { useMagicLinkLanding } from '../auth/magic-link';
 import { MfaStep } from '../ui/MfaStep';
 import { MagicLinkStatus } from '../ui/MagicLink';
@@ -3299,6 +3405,9 @@ After edits:`) },
     { path: 'types/auth.ts', content: AUTH_TYPES },
     { path: 'src/main.tsx', content: mainTsx(styled, agent) },
     { path: 'src/App.tsx', content: appTsx() },
+    { path: 'src/auth/connection-return.ts', content: CONNECTION_RETURN },
+    // Where a signed-out person connecting an MCP client signs in (docs: sw.endpoint, MCP tools).
+    { path: 'somewhere.auth.json', content: '{ "version": 1, "signInPath": "/" }\n' },
     { path: 'src/config.ts', content: configTs(options.appName) },
     { path: 'src/routes.ts', content: ROUTES },
     { path: 'src/services/auth.ts', content: AUTH_SERVICE },

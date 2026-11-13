@@ -713,18 +713,14 @@ export function registerDeploy(program: Command) {
       // start-up cost (runtime boot + module load) before the command ran.
       const startupMs = performance.now();
       const targetDir = resolveTargetDir(dir);
-      if (existsSync(join(targetDir, 'tsconfig.json'))) {
-        const checked = await runTypecheck(targetDir);
-        if (!checked.ok) {
-          reportTypecheck(checked);
-          if (!opts.allowTypeErrors) {
-            error('Deploy stopped before upload. To proceed anyway: somewhere deploy --allow-type-errors');
-            process.exitCode = 1;
-            return;
-          }
-          warn('Proceeding with type errors (--allow-type-errors).');
-        }
-      }
+      let typecheckMs = 0;
+      const typecheckStartedAt = performance.now();
+      // Collection, authentication and packaging can proceed while tsc runs.
+      // Observe rejection immediately, then enforce the result before upload.
+      const typecheck = existsSync(join(targetDir, 'tsconfig.json'))
+        ? runTypecheck(targetDir).then(value => ({ value }), (error: unknown) => ({ error }))
+          .finally(() => { typecheckMs = performance.now() - typecheckStartedAt; })
+        : Promise.resolve(null);
       // A bad local flow must not publish source or mint a temporary account.
       const verifyFlow = opts.verify && !opts.dryRun
         ? loadVerifyFlow(typeof opts.verify === 'string' ? opts.verify : undefined, targetDir)
@@ -1316,6 +1312,19 @@ export function registerDeploy(program: Command) {
         body.source = 'cli';
         if (opts.force) body.force = true;
 
+        const checked = await typecheck;
+        if (checked && 'error' in checked) throw checked.error;
+        if (checked && !checked.value.ok) {
+          reportTypecheck(checked.value);
+          if (!opts.allowTypeErrors) {
+            stopPrestart();
+            spinner?.stop();
+            error('Deploy stopped before upload. To proceed anyway: somewhere deploy --allow-type-errors');
+            process.exitCode = 1;
+            return;
+          }
+          warn('Proceeding with type errors (--allow-type-errors).');
+        }
         if (opts.dryRun) {
           const plan = await callDeployWithRetry<DryRunResult>(client, body, {
             spinner,
@@ -1352,11 +1361,13 @@ export function registerDeploy(program: Command) {
         // records the release as its base: a blank page throws the same
         // DEPLOY_BLANK_PAGE a gated deploy does.
         if (spinner) spinner.text = 'Checking the live page...';
+        const postLiveStartedAt = performance.now();
         const postLive = await awaitPostLiveRender(client, result.project_id ?? projectId ?? undefined, result);
         if (postLive.kind === 'settled') {
           result.post_live_render = postLive.post_live_render;
           result.blank_page_check = postLive.blank_page_check;
         }
+        const postLiveWaitMs = performance.now() - postLiveStartedAt;
         const renderLine = formatPostLiveRenderLine(postLive);
         spinner?.stop();
         await settleNotices();
@@ -1392,7 +1403,7 @@ export function registerDeploy(program: Command) {
           linkedProject: await linkedProjectWithSubdomain(client, result, targetProjectConfig),
         });
         if (opts.timing && !opts.json) {
-          printDeployTiming({ startupMs, collectionMs, preparationMs, requestMs, stageTimingMs: result.stage_timing_ms });
+          printDeployTiming({ startupMs, preCollectionMs: collectionStartedAt - startupMs, collectionMs, preparationMs, requestMs, afterUploadMs: performance.now() - requestStartedAt - requestMs, typecheckMs, postLiveWaitMs, stageTimingMs: result.stage_timing_ms });
         }
         let verification: VerifyReport | undefined;
         let verificationError: { code: string; message: string } | undefined;
@@ -1748,14 +1759,22 @@ export function formatDeployTiming(input: {
   collectionMs: number;
   preparationMs: number;
   requestMs: number;
+  preCollectionMs?: number;
+  afterUploadMs?: number;
+  typecheckMs?: number;
+  postLiveWaitMs?: number;
   stageTimingMs?: Record<string, number> | null;
 }): string[] {
   const stage = input.stageTimingMs ?? {};
   const rows: Array<[string, number]> = [
     ['cli start-up', input.startupMs],
+    ...(input.preCollectionMs === undefined ? [] : [['cli before collection', input.preCollectionMs] as [string, number]]),
     ['cli file collection', input.collectionMs],
     ['cli sign-in, project and packaging', input.preparationMs],
     ['upload + server total', input.requestMs],
+    ...(input.afterUploadMs === undefined ? [] : [['cli after-upload checks and state', input.afterUploadMs] as [string, number]]),
+    ...(input.typecheckMs === undefined ? [] : [['cli typecheck (overlaps preparation)', input.typecheckMs] as [string, number]]),
+    ...(input.postLiveWaitMs === undefined ? [] : [['cli render-check wait (inside after-upload)', input.postLiveWaitMs] as [string, number]]),
     // A stage the server did not measure is left out rather than shown as 0s.
     ...Object.entries(stage)
       .filter((entry): entry is [string, number] => typeof entry[1] === 'number' && Number.isFinite(entry[1]))
@@ -1769,6 +1788,10 @@ function printDeployTiming(input: {
   collectionMs: number;
   preparationMs: number;
   requestMs: number;
+  preCollectionMs?: number;
+  afterUploadMs?: number;
+  typecheckMs?: number;
+  postLiveWaitMs?: number;
   stageTimingMs?: Record<string, number> | null;
 }): void {
   console.log(`\n${dim('Timing')}`);

@@ -365,11 +365,15 @@ async function signUp(run: FormRun, page: Page, options: SignUpOptions): Promise
     });
     const result = await step(page, 'signUp: wait for the sign-up response', () => outcome(signedUp, 'sign-up'));
     if (!result.ok) {
-      attempt.refused = true;
+      // Only "already registered" proves nothing was created. Any other failure can come after the
+      // platform committed the account (the app's own route failing late), so it is reported at
+      // cleanup as possibly existing, never assumed absent and never deleted by address.
+      const exists = result.status === 409 || result.code === 'AUTH_EMAIL_EXISTS';
+      attempt.refused = exists;
       const said = await pageSays(page);
-      throw new StepError(result.status === 409 || result.code === 'AUTH_EMAIL_EXISTS'
+      throw new StepError(exists
         ? `signUp: ${email} is already registered in this project. signUp never uses, resets or deletes an existing account; choose another address.`
-        : `signUp: the app refused the sign-up (HTTP ${result.status} ${result.code})${said ? `; the page says "${said}"` : ''}`);
+        : `signUp: the app answered the sign-up with HTTP ${result.status} ${result.code}${said ? `; the page says "${said}"` : ''}`);
     }
     let id = result.id;
     let verified = false;

@@ -86,13 +86,19 @@ export function entryLines(subjects, changedFiles) {
 
 const git = (...args) => execFileSync('git', args, { cwd: root, encoding: 'utf8' }).trim();
 
-/** The newest commit whose package.json version is not `version`: the previous release. */
+/** The commit that set the previous release's version; its later commits are this release. */
 function previousRelease(version) {
+  // Newest first: skip commits already at `version`, then walk back through the run of commits
+  // at the previous version; the oldest of that run is the commit that set it.
+  let base = null, previous = null;
   for (const sha of git('log', '--first-parent', '--format=%H', '--', 'package.json').split('\n').filter(Boolean)) {
-    const pkg = JSON.parse(git('show', `${sha}:package.json`));
-    if (pkg.version !== version) return sha;
+    const v = JSON.parse(git('show', `${sha}:package.json`)).version;
+    if (v === version) continue;
+    if (previous === null) previous = v;
+    if (v !== previous) break;
+    base = sha;
   }
-  return null;
+  return base;
 }
 
 function main() {

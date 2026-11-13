@@ -28,3 +28,8 @@ export function describeError(error: { message?: string; value?: string; locatio
   const file = error.location.file.startsWith(root + '/') ? error.location.file.slice(root.length + 1) : error.location.file;
   return `${scrub(file)}:${error.location.line}: ${bounded}`;
 }
+
+/** A test title, marked when it ran in the phone pass (somewhere test --phone). */
+export function titled(project: string | undefined, title: string): string {
+  return project === 'phone' ? `[phone] ${title}` : title;
+}

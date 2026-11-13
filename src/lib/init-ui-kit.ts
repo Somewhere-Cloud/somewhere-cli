@@ -390,7 +390,6 @@ code, kbd { font-family: var(--font-mono); font-size: 0.9em; }
   .panel { padding: var(--space-4); }
   .card__header, .card__body, .card__footer { padding-left: var(--space-4); padding-right: var(--space-4); }
   .table th, .table td { padding-left: var(--space-4); padding-right: var(--space-4); }
-  .account__label { display: none; }
 }
 @media (prefers-reduced-motion: reduce) {
   .spinner { animation-duration: 3s; }

@@ -83,7 +83,7 @@ test('logout attempts server revocation and still unlinks config on failure', as
     });
 
     assert.equal(result.status, 0, `stdout:\n${result.stdout}\nstderr:\n${result.stderr}`);
-    assert.match(result.stdout, /Server revocation could not be confirmed/);
+    assert.match(result.stderr, /Server revocation could not be confirmed/);
     assert.equal(existsSync(configPath), false);
   });
 

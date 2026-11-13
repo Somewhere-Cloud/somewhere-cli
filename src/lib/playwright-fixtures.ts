@@ -5,7 +5,7 @@ import { fixtureTestTarget } from './test-target.js';
 import { ApiClient } from './client.js';
 import { getToken, loadProjectConfig } from './config.js';
 import { buildStorageState, createTestIdentities, expiryOf, messagesAfter, type IssuedIdentity, type InboxMessage } from './test-identities.js';
-import { diagnostics, rememberSecrets, scrub, describeError, timed } from './test-diagnostics.js';
+import { diagnostics, rememberSecrets, scrub, describeError, timed, titled } from './test-diagnostics.js';
 import { admitReservedAddress, deleteAccount, forgetRecord, generatedAddress, generatedPassword, recordAttempt, recordId } from './form-accounts.js';
 import type { TestTarget } from './test-target.js';
 import type { TestInfo } from '@playwright/test';
@@ -23,6 +23,8 @@ export interface SignUpOptions { domain?: string; email?: string; steps?: FormSt
 export interface SignInOptions { steps?: FormSteps; codeSteps?: CodeSteps }
 interface Fixtures {
   _evidence: void; newUser: () => Promise<TestUser>; anonymous: APIRequestContext; _forms: FormRun;
+  /** Another signed-out page on the app, in its own browser context (a second person for signUp). */
+  newPage: () => Promise<Page>;
   signUp: (page: Page, options?: SignUpOptions) => Promise<Person>;
   verify: (page: Page, person: Person) => Promise<void>;
   signIn: (page: Page, person: Person, options?: SignInOptions) => Promise<void>;
@@ -42,10 +44,10 @@ function runner() {
     _evidence: [async ({}, use, info) => {
       try { await use(); } finally {
         const report = diagnostics(info);
-        await info.attach('somewhere-diagnostics', { body: Buffer.from(JSON.stringify({ ...report, title: scrub(info.title), errors: info.errors.map(error => describeError(error)), secretAudit: 'issued values scrubbed before reporting' })), contentType: 'application/json' });
+        await info.attach('somewhere-diagnostics', { body: Buffer.from(JSON.stringify({ ...report, title: titled(info.project.name, scrub(info.title)), errors: info.errors.map(error => describeError(error)), secretAudit: 'issued values scrubbed before reporting' })), contentType: 'application/json' });
       }
     }, { auto: true }],
-    newUser: async ({ browser }, use, info) => {
+    newUser: async ({ browser, viewport, isMobile, hasTouch }, use, info) => {
       const projectId = loadProjectConfig()?.project_id;
       if (!projectId) throw new Error('Run somewhere test from a linked project folder.');
       const client = new ApiClient(getToken());
@@ -67,7 +69,7 @@ function runner() {
           owned.push(...created.issued);
           const issued = created.issued[0];
           rememberSecrets(issued.access_token, issued.refresh_token);
-          const context = await browser.newContext({ baseURL: origin, extraHTTPHeaders: { Origin: origin }, storageState: buildStorageState(origin, host, issued, expiryOf(issued, created.receivedAt)) });
+          const context = await browser.newContext({ baseURL: origin, viewport, isMobile, hasTouch, extraHTTPHeaders: { Origin: origin }, storageState: buildStorageState(origin, host, issued, expiryOf(issued, created.receivedAt)) });
           contexts.push(context);
           constrain(context.request, origin, info);
           digests.set(context.request, target.contractDigest);
@@ -112,6 +114,20 @@ function runner() {
       constrain(context.request, origin, info);
       digests.set(context.request, target.contractDigest);
       try { await use(context.request); } finally { rememberSecrets(...(await context.cookies()).map(cookie => cookie.value)); await context.close(); }
+    },
+    newPage: async ({ browser, baseURL, viewport, isMobile, hasTouch, _forms }, use) => {
+      const contexts: BrowserContext[] = [];
+      try {
+        await use(async () => {
+          const context = await browser.newContext({ baseURL, viewport, isMobile, hasTouch });
+          contexts.push(context);
+          const page = await context.newPage();
+          _forms.pages.add(page);
+          return page;
+        });
+      } finally {
+        for (const context of contexts) await context.close().catch(() => {});
+      }
     },
     // Depends on page so its teardown (screenshots, cookie scrubbing) runs while the page is open.
     _forms: async ({ page }, use, info) => {
@@ -163,11 +179,75 @@ export const expect: typeof import('@playwright/test').expect = eager?.expect ??
   apply: (_target, receiver, args) => Reflect.apply(runner().expect, receiver, args),
   get: (_target, key) => Reflect.get(runner().expect, key),
 });
-export async function expectRefused(response: APIResponse, status: number, code: string): Promise<void> {
+type Person_ = Page | { request: APIRequestContext } | APIRequestContext;
+/**
+ * Prove a refusal in one call: act as `person` against a table (with a data request) or an
+ * endpoint ('METHOD /path', with a JSON body), and pass only if it was refused. Knows every shape
+ * a refusal takes: a hidden row reads as 200 data:null, a hidden list as 200 with no rows, a
+ * refused update/delete as 404, a closed table, operation or role as 403, an endpoint as
+ * 401/403/404. A malformed request or stale contract (400/409) never counts.
+ *
+ * The older form expectRefused(response, status, code) checks one exact status and code.
+ */
+export async function expectRefused(person: Person_, target: string, request?: unknown): Promise<void>;
+export async function expectRefused(response: APIResponse, status: number, code: string): Promise<void>;
+export async function expectRefused(first: APIResponse | Person_, second: number | string, third?: unknown): Promise<void> {
+  if (typeof second === 'string') return refusedAs(first as Person_, second, third);
+  const response = first as APIResponse;
+  const status = second, code = third as string;
   const actual = response.status();
   if ([400, 409].includes(actual) || [400, 409].includes(status)) throw new Error(`HTTP ${actual}: malformed request or contract mismatch proves no access refusal`);
   const body = await response.json() as { error?: unknown };
   if (actual !== status || body.error !== code) throw new Error(`Expected HTTP ${status} ${code}; received HTTP ${actual} ${typeof body.error === 'string' && /^[A-Z_]+$/.test(body.error) ? body.error : 'unknown error code'}`);
+}
+function clientOf(person: Person_): APIRequestContext {
+  if (typeof (person as Page).context === 'function' && typeof (person as Page).goto === 'function') return (person as Page).context().request;
+  if ('request' in person && typeof (person as { request: APIRequestContext }).request?.post === 'function' && typeof (person as unknown as APIRequestContext).fetch !== 'function') return (person as { request: APIRequestContext }).request;
+  return person as APIRequestContext;
+}
+const ENDPOINT = /^(GET|POST|PUT|PATCH|DELETE) (\/\S*)$/;
+async function bodyOf(response: APIResponse): Promise<{ code: string; message: string; json: Record<string, unknown> | null }> {
+  let json: Record<string, unknown> | null = null;
+  try { json = await response.json() as Record<string, unknown>; } catch { /* not JSON */ }
+  const raw = typeof json?.error === 'string' ? json.error : '';
+  return { code: /^[A-Z_]+$/.test(raw) ? raw : 'none', message: typeof json?.message === 'string' ? scrub(json.message).slice(0, 300) : '', json };
+}
+async function refusedAs(person: Person_, target: string, request: unknown): Promise<void> {
+  const client = clientOf(person);
+  const endpoint = ENDPOINT.exec(target);
+  if (endpoint) {
+    const [, method, path] = endpoint;
+    const response = await client.fetch(path, { method, ...(method === 'GET' || request === undefined ? {} : { data: request }) });
+    const status = response.status();
+    if ([401, 403, 404].includes(status)) return;
+    const { code, message } = await bodyOf(response);
+    const said = `${target} answered HTTP ${status} ${code}${message ? ` (${message})` : ''}`;
+    if (status < 400) throw new Error(`expectRefused: ${said}: it was allowed, not refused.`);
+    if (status === 400 || status === 422) throw new Error(`expectRefused: ${said}: the endpoint rejected the input, which says nothing about who is asking. Send a body it accepts from someone who may.`);
+    throw new Error(`expectRefused: ${said}: a refusal is 401, 403 or 404.`);
+  }
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(target)) throw new Error(`expectRefused: "${target}" is neither a table name nor 'METHOD /path'.`);
+  if (!request || typeof request !== 'object' || typeof (request as { operation?: unknown }).operation !== 'string') {
+    throw new Error(`expectRefused: pass a data request for table ${target}, for example { operation: 'get', id }.`);
+  }
+  if (!digests.has(client)) throw new Error('expectRefused: act as a page that signed up or signed in (signUp/signIn), a newUser() user, or anonymous.');
+  const operation = (request as { operation: string }).operation;
+  const response = await data(client, target, request as DataRequest);
+  const status = response.status();
+  const { code, message, json } = await bodyOf(response);
+  const said = `${operation} on ${target} answered HTTP ${status} ${code}${message ? ` (${message})` : ''}`;
+  if (status === 400 || status === 409) throw new Error(`expectRefused: ${said}. The request was malformed or the app's data contract changed, so nothing ran and this proves nothing about access.`);
+  if (status === 401 || status === 403) return;
+  if (status === 404 && code === 'DATA_NOT_FOUND') return;
+  if (status === 200) {
+    const rows = json?.data;
+    if ((operation === 'get') && rows === null) return;
+    if ((operation === 'list' || operation === 'relation_list') && Array.isArray(rows) && rows.length === 0) return;
+    if (operation === 'list' || operation === 'relation_list') throw new Error(`expectRefused: ${said}: this person read ${Array.isArray(rows) ? rows.length : 'some'} row(s).`);
+    if (operation === 'get') throw new Error(`expectRefused: ${said}: this person read the row.`);
+    throw new Error(`expectRefused: ${said}: the ${operation} was allowed.`);
+  }
+  throw new Error(`expectRefused: ${said}: not a refusal.`);
 }
 export function data(client: APIRequestContext, table: string, request: DataRequest): Promise<APIResponse> {
   if (!digests.has(client)) throw new Error('Use a newUser or anonymous fixture client');

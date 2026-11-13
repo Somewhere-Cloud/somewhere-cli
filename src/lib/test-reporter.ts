@@ -2,7 +2,7 @@ import { ApiClient } from './client.js';
 import { getToken, loadProjectConfig } from './config.js';
 import type { Reporter, FullResult, Suite, TestCase, TestResult, TestError } from '@playwright/test/reporter';
 import { writePrivateFile } from './test-identities.js';
-import { scrub, describeError, type Diagnostics } from './test-diagnostics.js';
+import { scrub, describeError, titled, type Diagnostics } from './test-diagnostics.js';
 interface Entry extends Diagnostics { title: string; status: string; outcome: string; errors: string[]; step: string }
 export default class TestReporter implements Reporter {
   private total = 0;
@@ -12,7 +12,7 @@ export default class TestReporter implements Reporter {
   onBegin(_config: unknown, suite: Suite): void { this.total = suite.allTests().length; }
   onTestEnd(test: TestCase, result: TestResult): void {
     const attachment = result.attachments.find(item => item.name === 'somewhere-diagnostics');
-    const details = attachment?.body ? JSON.parse(attachment.body.toString()) as Diagnostics & { title: string; errors: string[] } : { title: scrub(test.title), errors: ['Test failed before fixture setup'], timings: {} };
+    const details = attachment?.body ? JSON.parse(attachment.body.toString()) as Diagnostics & { title: string; errors: string[] } : { title: titled(test.parent?.project?.()?.name, scrub(test.title)), errors: ['Test failed before fixture setup'], timings: {} };
     // The assertion with expected/received, scrubbed in the worker that knows the issued secrets;
     // file:line from Playwright's error location. Never reduced to a category.
     const errors = attachment?.body

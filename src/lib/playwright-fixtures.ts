@@ -188,6 +188,9 @@ export async function ready(page: Page, state: 'ready' | 'signed-in' | 'signed-o
 const COMPLETED = 'signed-in';
 const constrained = new WeakSet<APIRequestContext>();
 const marks = new WeakMap<Person, InboxMark>();
+/** When the last emailed sign-in code for a person was read (the platform sends at most one a minute). */
+const lastSignInCode = new WeakMap<Person, number>();
+const CODE_GAP_MS = 61_000;
 interface InboxMark { seen: Set<string>; since: number }
 interface Attempt { email: string; record: string; id: string | null; submitted: boolean; refused: boolean }
 interface Control { client: ApiClient; projectId: string; target: TestTarget }
@@ -395,6 +398,7 @@ async function signUp(run: FormRun, page: Page, options: SignUpOptions): Promise
     await run.attach(page);
     const person: Person = { id, email, password, verified };
     marks.set(person, mark);
+    if (result.mfa) lastSignInCode.set(person, Date.now());
     return person;
   } finally { page.off('request', onRequest); }
 }
@@ -441,18 +445,32 @@ async function signIn(run: FormRun, page: Page, person: Person, options: SignInO
   run.pages.add(page);
   const { target } = await run.control();
   const mark = await inboxMark(run, person.email);
-  const signedIn = authResponse(page, target.origin, '/auth/login');
-  await step(page, 'signIn: fill and submit the sign-in form', async () => {
-    if (options.steps) await options.steps(page, { email: person.email, password: person.password });
-    else { await openStarterForm(page, 'sign-in'); await fillStarterForm(page, person); }
-  });
-  let result = await step(page, 'signIn: wait for the sign-in response', () => outcome(signedIn, 'sign-in'));
+  const submit = async () => {
+    const signedIn = authResponse(page, target.origin, '/auth/login');
+    await step(page, 'signIn: fill and submit the sign-in form', async () => {
+      if (options.steps) await options.steps(page, { email: person.email, password: person.password });
+      else { await openStarterForm(page, 'sign-in'); await fillStarterForm(page, person); }
+    });
+    return step(page, 'signIn: wait for the sign-in response', () => outcome(signedIn, 'sign-in'));
+  };
+  let result = await submit();
+  // A project that requires email codes sends at most one code per account per minute. Signing back
+  // in within a minute of the last code is refused (429) before a code is sent, so wait out the rest
+  // of that minute, as the person would, and submit once more.
+  if (result.status === 429 && (result.code === 'AUTH_MFA_SEND_LIMITED' || /code was sent recently/i.test(await pageSays(page)))) {
+    const wait = Math.max(0, CODE_GAP_MS - (Date.now() - (lastSignInCode.get(person) ?? 0)));
+    const waitMs = Math.min(wait, CODE_GAP_MS);
+    if (run.info.timeout > 0) run.info.setTimeout(run.info.timeout + waitMs + 10_000);
+    await page.waitForTimeout(waitMs);
+    result = await submit();
+  }
   if (!result.ok) {
     const said = await pageSays(page);
     throw new StepError(`signIn: the app refused the sign-in (HTTP ${result.status} ${result.code})${said ? `; the page says "${said}"` : ''}`);
   }
   if (result.mfa) {
     const [code] = await step(page, 'signIn: read the emailed sign-in code', () => freshCodes(run, person.email, mark, 'signIn'));
+    lastSignInCode.set(person, Date.now());
     const challenged = authResponse(page, target.origin, '/auth/mfa/challenge');
     await step(page, 'signIn: enter the emailed sign-in code', () => (options.codeSteps ?? enterStarterCode)(page, code));
     result = await step(page, 'signIn: wait for the code step response', () => outcome(challenged, 'sign-in code'));

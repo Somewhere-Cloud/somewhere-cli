@@ -290,3 +290,16 @@ test('only the exact declared data endpoint crosses the same-origin proxy', () =
   assert.equal(local.headers.authorization, undefined);
   assert.equal(local.headers['x-forwarded-origin'], undefined);
 });
+
+for (const operation of ['update', 'delete']) test(`member ${operation} cannot borrow read from a restricted branch`, t => {
+  const relation = "group: 'team_id', membership: 'team_members', member_user: 'user_id', member_group: 'team_id'";
+  const source = `export default schema({
+    team_members: table({ id: id(), team_id: text(), user_id: text(), role: text() }, { scope: serverOnly() }),
+    tasks: table({ id: id(), team_id: text(), body: text() }, { scope: anyOf(owner(),
+      member({ ${relation}, operations: ['${operation}'] }),
+      member({ ${relation}, where: { role: 'owner' }, operations: ['read'] })),
+      client: { read: true, update: ['body'], delete: true } }),
+  });`;
+  const root = fixture(t, { 'db/schema.ts': source });
+  assert.throws(() => prepareDeclaredData(root), /unrestricted.*independently include unrestricted read/);
+});

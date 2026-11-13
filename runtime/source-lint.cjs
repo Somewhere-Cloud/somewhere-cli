@@ -148,6 +148,12 @@ var require_declared_data_contract = __commonJS({
       if (result.some((field) => typeof field !== "string" || !columns.has(field)) || new Set(result).size !== result.length) fail(name);
       return result.sort();
     }
+    function memberRestriction(w, label) {
+      if (w === void 0) return void 0;
+      record(w, label);
+      if (Object.keys(w).sort().join() !== "c,o,v" || typeof w.c !== "string" || !identifier.test(w.c) || !Array.isArray(w.v) || !w.v.length || w.v.some((v, i) => typeof v !== "string" || i > 0 && w.v[i - 1] >= v) || !Array.isArray(w.o) || JSON.stringify(w.o) !== JSON.stringify(["read", "create", "update", "delete"].filter((op) => w.o.includes(op)))) fail(label);
+      return { c: w.c, v: [...w.v], o: [...w.o] };
+    }
     function policy(value, label, edges = 0) {
       record(value, label);
       const keys = Object.keys(value).sort().join(",");
@@ -155,11 +161,12 @@ var require_declared_data_contract = __commonJS({
       if (value.k === "m" && keys === "k,m") {
         record(value.m, label + ".member");
         const { g, m, u, mg, o, og } = value.m;
-        const memberKeys = Object.keys(value.m).sort().join(",");
+        const w = memberRestriction(value.m.w, label);
+        const memberKeys = Object.keys(value.m).filter((k) => k !== "w").sort().join(",");
         const grant = memberKeys === "g,m,mg,o,og,u" && og === true && Array.isArray(g) && Array.isArray(mg) && g[0] === "user_id" && mg[0] === "user_id" && (g.length === 1 || g.length === 2 && g[1] !== "user_id" && mg[1] !== "user_id" && mg[1] !== u) && u !== "user_id" && (JSON.stringify(o) === '["read"]' || JSON.stringify(o) === '["read","update"]');
         if (!["g,m,mg,u", "g,m,mg,o,u"].includes(memberKeys) && !grant || !identifier.test(m) || !identifier.test(u) || !Array.isArray(g) || !g.length || !Array.isArray(mg) || g.length !== mg.length || [...g, ...mg].some((field) => typeof field !== "string" || !identifier.test(field)) || o !== void 0 && (!Array.isArray(o) || JSON.stringify(o) !== JSON.stringify(["read", "create", "update", "delete"].filter((operation) => o.includes(operation))) || !o.includes("read") && (o.includes("update") || o.includes("delete")))) fail(label);
         const normalizedOperations = o?.length === 4 ? void 0 : o;
-        return { k: "m", m: { g: [...g], m, u, mg: [...mg], ...normalizedOperations !== void 0 ? { o: [...normalizedOperations] } : {}, ...og ? { og: true } : {} } };
+        return { k: "m", m: { g: [...g], m, u, mg: [...mg], ...w ? { w } : {}, ...normalizedOperations !== void 0 ? { o: [...normalizedOperations] } : {}, ...og ? { og: true } : {} } };
       }
       if (value.k === "a" && (keys === "k,p" || keys === "k,p,reads" && edges === 0) && Array.isArray(value.p) && value.p.length === 2) {
         const left = policy(value.p[0], label), right = policy(value.p[1], label);
@@ -317,13 +324,14 @@ var require_declared_data_contract = __commonJS({
         if (intent === "member") {
           record(table.member, `${name}.member`);
           const { g, m, u, mg, o } = table.member;
+          const w = memberRestriction(table.member.w, `${name}.member.where`);
           if (typeof m !== "string" || typeof u !== "string" || !identifier.test(m) || !identifier.test(u) || !Array.isArray(mg) || mg.some((field) => typeof field !== "string" || !identifier.test(field))) fail(`${name}.member`);
           fields(g, seen, `${name}.member.g`);
           if (g.length !== mg.length || new Set(mg).size !== mg.length) fail(`${name}.member`);
           if ((update || []).some((field) => g.includes(field))) fail(`${name} membership writes`);
           if (o !== void 0 && (!Array.isArray(o) || JSON.stringify(o) !== JSON.stringify(["read", "create", "update", "delete"].filter((operation) => o.includes(operation))) || !o.includes("read") && (o.includes("update") || o.includes("delete")))) fail(`${name}.member operations`);
           const normalizedOperations = o?.length === 4 ? void 0 : o;
-          member = { g: [...g], m, u, mg: [...mg], ...normalizedOperations !== void 0 ? { o: [...normalizedOperations] } : {} };
+          member = { g: [...g], m, u, mg: [...mg], ...w ? { w } : {}, ...normalizedOperations !== void 0 ? { o: [...normalizedOperations] } : {} };
         }
         const normalizedPolicy = intent === "policy" ? policy(table.policy, `${name}.policy`) : null;
         if (normalizedPolicy && !["a", "n", "p", "g", "r"].includes(normalizedPolicy.k)) fail(`${name}.policy root`);
@@ -5255,13 +5263,30 @@ function renderPolicySql(request) {
       for (let i = 0; i < m.o.length; i++) if (m.o[i] === operation) allowed = true;
       if (!allowed) return { sql: "0", params: [] };
     }
+    let restrictionSql = "";
+    const restrictionParams = [];
+    if (operation && m.w) {
+      let restricted = false;
+      for (let i = 0; i < m.w.o.length; i++) if (m.w.o[i] === operation) restricted = true;
+      if (restricted) {
+        if (!m.w.v.length) throw new Error("policy-sql: empty member restriction");
+        let placeholders = "";
+        for (let i = 0; i < m.w.v.length; i++) {
+          if (typeof m.w.v[i] !== "string") throw new Error("policy-sql: invalid member restriction");
+          placeholders += (i ? ", " : "") + "?";
+          restrictionParams.push(m.w.v[i]);
+        }
+        restrictionSql = " AND " + renderPolicySql({ render: "ident", name: m.w.c }).sql + " IN (" + placeholders + ")";
+      }
+    }
     const membership = renderPolicySql({ render: "table", name: m.m, physical: r.physical }).sql;
     const memberUser = renderPolicySql({ render: "ident", name: m.u }).sql;
     if (!proposed) {
       const memberGroups = [];
       for (let i = 0; i < m.mg.length; i++) memberGroups.push(renderPolicySql({ render: "ident", name: m.mg[i] }).sql);
-      const sub = "SELECT " + memberGroups.join(", ") + " FROM " + membership + " WHERE " + memberUser + " = ?";
+      const sub = "SELECT " + memberGroups.join(", ") + " FROM " + membership + " WHERE " + memberUser + " = ?" + restrictionSql;
       params.push(r.principal);
+      for (let i = 0; i < restrictionParams.length; i++) params.push(restrictionParams[i]);
       const groupCols = [];
       for (let i = 0; i < m.g.length; i++) {
         groupCols.push((qualifier ? renderPolicySql({ render: "ident", name: qualifier }).sql + "." : "") + renderPolicySql({ render: "ident", name: m.g[i] }).sql);
@@ -5289,7 +5314,8 @@ function renderPolicySql(request) {
       parts.push(renderPolicySql({ render: "ident", name: m.mg[i] }).sql + " = ?");
       params.push(proposedGroups[i]);
     }
-    return { sql: "EXISTS (SELECT 1 FROM " + membership + " WHERE " + parts.join(" AND ") + ")", params };
+    for (let i = 0; i < restrictionParams.length; i++) params.push(restrictionParams[i]);
+    return { sql: "EXISTS (SELECT 1 FROM " + membership + " WHERE " + parts.join(" AND ") + restrictionSql + ")", params };
   }
   if (policy && policy.k === "a") {
     if (!Array.isArray(policy.p) || policy.p.length !== 2) throw new Error("policy-sql: invalid anyOf policy");
@@ -12808,7 +12834,29 @@ var AUTH_SERVER_JS = `        server: (function () {
             if (!json || typeof json.error !== 'string' || typeof json.message !== 'string') throw unavailable();
             throw refuse(json.error, answer.status, json.message);
           }
-          return Object.freeze({ listUsers: listUsers });
+          async function setRoles(userId, changes) {
+            if (isDraftExecution || projectEnv !== 'prod') throw refuse('DRAFT_CONTEXT_INVALID', 403, 'sw.auth.server works on the live app only. This preview or dev run cannot read app users.');
+            if (env.SW_CODE_RUN_RELEASE || !env.SW_EXECUTION_ATTESTATION) throw refuse('MANAGED_EXECUTION_INVALID', 403, 'sw.auth.server runs only in deployed production functions.');
+            if (__sw_signedDelivery) {
+              const verified = await __sw_verifySignedDelivery();
+              if (verified.state !== 'valid') throw __sw_signedAuthorityError(verified.state);
+              if (verified.data.row_bound !== false) throw refuse('MANAGED_AUTHORITY_UNAVAILABLE', 403, 'A row-bound job cannot use server authority.');
+            }
+            __sw_enforceAmbientCookieCsrf();
+            if (cookieAuthenticated() && !__sw_isUnsafeCookieMethod(__sw_authSnapshotRequest.method || 'GET')) throw refuse('METHOD_NOT_ALLOWED', 405, 'Role changes require POST, PUT, PATCH or DELETE when signed in by cookie.');
+            const headers = await __sw_runtimeSubjectHeaders('X-Somewhere-Managed-Authority', 'none', true);
+            headers['X-Sw-Execution-Attestation'] = env.SW_EXECUTION_ATTESTATION;
+            headers['Content-Type'] = 'application/json';
+            const path = typeof __sw_trace !== 'undefined' && typeof __sw_trace.route === 'string' ? __sw_trace.route : 'deployed-function';
+            const answer = await reply.fetch(function () {
+              return platformFetch('/v1/db/managed/server-roles', { method: 'POST', headers: headers, body: JSON.stringify({ userId: userId, changes: changes, functionPath: path }) });
+            }, 20000);
+            let json;
+            try { json = __sw_jsonParse(answer.text); } catch (_) { throw refuse('OUTCOME_UNKNOWN', 503, 'Role changes could not be confirmed. Read current roles before retrying.'); }
+            if (answer.ok && answer.status >= 200 && answer.status < 300 && json && json.ok === true && json.data) return json.data;
+            throw refuse(json && typeof json.error === 'string' ? json.error : 'OUTCOME_UNKNOWN', answer.status || 503, json && typeof json.message === 'string' ? json.message : 'Role changes could not be confirmed.');
+          }
+          return Object.freeze({ listUsers: listUsers, setRoles: setRoles, grantRole: function (userId, role) { return setRoles(userId, { add: [role] }); }, revokeRole: function (userId, role) { return setRoles(userId, { remove: [role] }); } });
         })(),
 `;
 
@@ -15296,7 +15344,7 @@ var GROUPS_JS = `    groups: (() => {
           return refuse('METHOD_NOT_ALLOWED', 405, 'This request was signed in by a session cookie, so sw.groups can only change groups while handling a POST, PUT, PATCH or DELETE request.');
         }
         const headers = await __sw_runtimeSubjectHeaders('X-Somewhere-Groups-Authority', 'none');
-        if (!headers['X-App-Token']) return refuse('AUTH_REQUIRED', 401, 'sw.groups: sign in first; group operations act as the signed-in user.');
+        if (!headers['X-App-Token']) return refuse('AUTH_REQUIRED', 401, 'sw.groups: sign in first; group operations act as the signed-in user. For server-assigned roles use sw.auth.server.setRoles(userId, { add: [role] }).');
         headers['X-Sw-Execution-Attestation'] = env.SW_EXECUTION_ATTESTATION;
         if (body) headers['Content-Type'] = 'application/json';
         const unconfirmed = function () {
@@ -15357,7 +15405,7 @@ var GROUPS_JS = `    groups: (() => {
         setRole(_req, groupId, userId, role) { return call('POST', '/' + seg(groupId) + '/members/' + seg(userId) + '/role', { role }); },
         appRoles: {
           list(_req, userId, opts) { return call('GET', '/app-roles' + page([['user_id', userId || undefined]], opts)); },
-          grant(_req, userId, role) { return call('POST', '/app-roles/grant', { user_id: userId, role }); },
+          grant(_req, userId, role) { if (role === undefined) return refuse('INVALID_INPUT', 400, 'sw.groups.appRoles.grant requires (request, userId, role). For server assignment use sw.auth.server.setRoles(userId, { add: [role] }).'); return call('POST', '/app-roles/grant', { user_id: userId, role }); },
           revoke(_req, userId, role) { return call('POST', '/app-roles/revoke', { user_id: userId, role }); },
         },
       };
@@ -25357,6 +25405,7 @@ function validateDeclaredMemberships(tables, tableByName, knownColumns, errors) 
   };
   for (const t of tables) {
     for (const sc of memberPolicies(t.scope)) {
+      if (sc.operations && !sc.operations.includes("read") && (sc.operations.includes("update") || sc.operations.includes("delete"))) errors.push("member mutations must include read; use anyOf(owner(), member({ operations: [read, create, update], ... }), member({ where: { role: owner }, operations: [delete], ... })) for operation-specific restrictions.");
       const own = knownColumns(t);
       for (const g of sc.group) {
         if (!own.has(g)) {
@@ -25373,6 +25422,7 @@ function validateDeclaredMemberships(tables, tableByName, knownColumns, errors) 
         continue;
       }
       const membershipCols = knownColumns(membershipTable);
+      if (sc.restriction && !membershipTable.columns.some((c) => c.name === sc.restriction?.column && c.helper === "text")) errors.push(`member where column ${sc.restriction.column} must be a declared text column of ${sc.membership}.`);
       if (sc.ownerGrant) {
         if (membershipTable.scope.kind !== "owner" || membershipTable.scope.column !== "user_id" || membershipTable.scope.visitors) {
           errors.push(`Grant table "${sc.membership}" must use owner() with managed user_id and authenticated owners.`);
@@ -26500,7 +26550,7 @@ function resolveAppRoleScopes(tables, appRoles, errors) {
 
 var EMAIL_DOMAIN = EMAIL_DOMAIN_PATTERN;
 var GROUP_KEYS = ["roles", "adminGrantableRoles"];
-var APP_ROLE_KEYS = ["grantableBy", "emailDomain"];
+var APP_ROLE_KEYS = ["grantableBy", "emailDomain", "assignedBy"];
 function readStringList2(r, fail, ctx) {
   const open = r.peek();
   if (open.kind !== "punct" || open.value !== "[") fail(open.line, `${ctx} must be a list of quoted role names, such as ['viewer'].`);
@@ -26555,7 +26605,11 @@ function readAppRoles(r, fail) {
       if (seen.has(opt.name)) fail(opt.line, `app role "${key.name}" declares ${opt.name} twice.`);
       seen.add(opt.name);
       r.expectPunct(":", `after appRoles.${key.name}.${opt.name}`);
-      if (opt.name === "emailDomain") {
+      if (opt.name === "assignedBy") {
+        const t = r.next();
+        if (t.kind !== "string" || t.value !== "server") fail(t.line, `appRoles.${key.name}.assignedBy must be 'server'.`);
+        role.assignedBy = "server";
+      } else if (opt.name === "emailDomain") {
         const t = r.next();
         if (t.kind !== "string") fail(t.line, `appRoles.${key.name}.emailDomain must be one quoted domain, such as 'example.com'.`);
         if (!EMAIL_DOMAIN.test(t.value)) {
@@ -26592,8 +26646,11 @@ function emailDomainRoleErrors(appRoles) {
   const errors = [];
   const byDomain = new Set(appRoles.filter((role) => role.emailDomain !== void 0).map((role) => role.name));
   for (const role of appRoles) {
+    if (role.assignedBy !== void 0 && role.assignedBy !== "server") errors.push(`appRoles.${role.name}.assignedBy must be 'server'.`);
+    if (role.assignedBy && role.emailDomain) errors.push(`appRoles.${role.name} cannot combine assignedBy and emailDomain.`);
     if (role.emailDomain !== void 0 && !EMAIL_DOMAIN.test(role.emailDomain)) errors.push(`appRoles.${role.name}.emailDomain is not one lowercase domain.`);
     for (const grantor of role.grantableBy) {
+      if (appRoles.some((source) => source.name === grantor && source.assignedBy)) errors.push(`appRoles.${role.name}.grantableBy cannot name server-assigned role "${grantor}".`);
       if (byDomain.has(grantor)) {
         errors.push(`appRoles.${role.name}.grantableBy names "${grantor}", which is held by email domain. A role held by email domain cannot grant other roles; list a role that is granted explicitly.`);
       }
@@ -27175,9 +27232,6 @@ function readMemberOperations(r, tableName) {
     }
   }
   const normalized = MEMBER_OPERATIONS.filter((operation) => seen.has(operation));
-  if (!seen.has("read") && (seen.has("update") || seen.has("delete"))) {
-    throw new SchemaTsError(`member({ operations }) on table "${tableName}" must include 'read' when it includes 'update' or 'delete', because mutations return the affected row.`);
-  }
   return normalized.length === MEMBER_OPERATIONS.length ? void 0 : normalized;
 }
 function readMemberScope(r, tableName, scopeLine) {
@@ -27187,6 +27241,7 @@ function readMemberScope(r, tableName, scopeLine) {
   let memberUser = null;
   let memberGroup = null;
   let operations, operationsSeen = false;
+  let selector;
   let read;
   while (!r.tryPunct("}")) {
     const key = r.readKey(`for a member() option of table "${tableName}"`);
@@ -27203,6 +27258,29 @@ function readMemberScope(r, tableName, scopeLine) {
       if (operationsSeen) throw new SchemaTsError(`line ${key.line}: member() on table "${tableName}" declares operations more than once.`);
       operationsSeen = true;
       operations = readMemberOperations(r, tableName);
+    } else if (key.name === "where") {
+      if (selector) throw new SchemaTsError("member() declares where more than once.");
+      r.expectPunct("{", "opening member where");
+      const column = r.readKey("member where column").name;
+      validateMemberColumns([column], "where", tableName, key.line);
+      r.expectPunct(":", "after member where column");
+      let value;
+      if (r.tryPunct("[")) {
+        const list = [];
+        while (!r.tryPunct("]")) {
+          list.push(r.readLiteral("member where value"));
+          if (!r.tryPunct(",")) {
+            r.expectPunct("]", "closing member where list");
+            break;
+          }
+        }
+        value = list;
+      } else value = r.readLiteral("member where literal");
+      const values = typeof value === "string" ? [value] : value;
+      if (!Array.isArray(values) || !values.length || values.some((v) => typeof v !== "string")) throw new SchemaTsError("member where needs one text column and a nonempty string literal or list.");
+      r.tryPunct(",");
+      r.expectPunct("}", "member where accepts exactly one column");
+      selector = { column, values: [...new Set(values)].sort() };
     } else if (key.name === "read") {
       if (read) throw new SchemaTsError(`line ${key.line}: member() on table "${tableName}" declares read more than once.`);
       read = readBranchReadColumns(r, `member({ read }) on table "${tableName}"`);
@@ -27238,7 +27316,7 @@ function readMemberScope(r, tableName, scopeLine) {
       `line ${scopeLine}: member() on table "${tableName}" has a ${group.length}-column group but a ${memberGroup.length}-column member_group. The group key must have the same number of columns on both sides.`
     );
   }
-  const node = { kind: "member", group, membership, memberUser, memberGroup, ...operations !== void 0 ? { operations } : {}, ...read ? { read } : {} };
+  const node = { kind: "member", group, membership, memberUser, memberGroup, ...selector ? { restriction: { ...selector, operations: operations ?? [...MEMBER_OPERATIONS] } } : {}, ...operations !== void 0 ? { operations } : {}, ...read ? { read } : {} };
   if (operationsSeen) explicitMemberOperations.add(node);
   return node;
 }
@@ -27322,8 +27400,22 @@ function readAnyOfScope(r, tableName, line) {
   r.expectPunct("(", 'after "anyOf"');
   const firstPolicy = readAnyOfBranch(r, tableName, "first");
   r.expectPunct(",", `between the two policies in anyOf() on table "${tableName}"`);
-  const secondPolicy = readAnyOfBranch(r, tableName, "second");
-  r.tryPunct(",");
+  let secondPolicy = readAnyOfBranch(r, tableName, "second");
+  if (r.tryPunct(",") && !(r.peek().kind === "punct" && r.peek().value === ")")) {
+    const third = readAnyOfBranch(r, tableName, "second");
+    if (secondPolicy.kind !== "member" || third.kind !== "member" || firstPolicy.kind !== "owner") throw new SchemaTsError("Three-branch anyOf accepts owner and two same-relation member branches only.");
+    const a = secondPolicy, b = third;
+    if (JSON.stringify([a.group, a.membership, a.memberUser, a.memberGroup]) !== JSON.stringify([b.group, b.membership, b.memberUser, b.memberGroup])) throw new SchemaTsError("Two member branches over different membership relations are not supported.");
+    if (!!a.restriction === !!b.restriction) throw new SchemaTsError("Two member branches need exactly one restricted branch; more than one restricted branch is not supported.");
+    if (a.read || b.read) throw new SchemaTsError("Two member branches cannot declare separate read projections.");
+    const restricted = a.restriction ? a : b, ordinary = a.restriction ? b : a;
+    const ordinaryOps = ordinary.operations ?? [...MEMBER_OPERATIONS];
+    if (!ordinaryOps.includes("read") && (ordinaryOps.includes("update") || ordinaryOps.includes("delete"))) throw new SchemaTsError("An unrestricted member update/delete branch must independently include unrestricted read.");
+    const combined = MEMBER_OPERATIONS.filter((op) => ordinaryOps.includes(op) || (restricted.operations ?? MEMBER_OPERATIONS).includes(op));
+    const narrow = restricted.restriction;
+    secondPolicy = { ...a, operations: combined, restriction: { ...narrow, operations: narrow.operations.filter((op) => !ordinaryOps.includes(op)) } };
+    r.tryPunct(",");
+  }
   r.expectPunct(")", "closing anyOf()");
   const owners = [firstPolicy, secondPolicy].filter((p) => p.kind === "owner");
   if (owners.length !== 1) throw new SchemaTsError(`line ${line}: ${ANY_OF_FORMS}`);

@@ -109,14 +109,18 @@ test('docs search returns topic, section id, snippet and the command that opens 
   });
 });
 
-test('`docs search` with no term still opens the search topic; stray arguments are refused', async () => {
+test('`docs search` with no term still opens the search topic; trailing terms search within a topic', async () => {
   await withServer(async (base) => {
     const topic = await run(['docs', 'search'], { SOMEWHERE_DOCS_BASE: base });
     assert.equal(topic.status, 0, topic.stderr);
     assert.match(topic.stdout, /Index documents with sw\.search/);
     const stray = await run(['docs', 'sw.auth', 'extra'], { SOMEWHERE_DOCS_BASE: base });
-    assert.equal(stray.status, 1);
-    assert.match(stray.stderr, /Unexpected argument "extra".*somewhere docs search extra/);
+    assert.equal(stray.status, 0);
+    assert.match(stray.stdout, /No docs sections in sw.auth mention "extra"/);
+    const scoped = await run(['docs','sw.auth','magic','link','--json'], { SOMEWHERE_DOCS_BASE: base });
+    assert.equal(scoped.status,0);
+    assert.equal(JSON.parse(scoped.stdout).topic,'sw.auth');
+    assert.ok(JSON.parse(scoped.stdout).results.every(r => r.topic === 'sw.auth'));
   });
 });
 

@@ -4,20 +4,21 @@ import { SKILLS_DIR } from './skills-pack.js';
 // docs lint byte-compares this value when SOMEWHERE_CLI_REPO points here.
 export const AGENT_WORKFLOW = `## Build, deploy, test
 
-Enough to start a typical app: declare access, use the generated browser client;
-docs are for exceptions. Complete schema and calls below.
+Enough to start a typical app: declare access and use the browser client; docs are for exceptions.
 
 | Requirement | Declaration below |
 | --- | --- |
 | Each user sees only their own rows | notes: owner() |
 | Team: owner adds members; members read/write; creator rights | teams/team_members/tasks: owner() + member(); role-owner delete branch |
-| Owner/staff record with staff-only child notes | tickets: owner() or server-assigned appRole(); messages: parent(); staff_notes: appRole() |
+| Owner/staff record with staff-only child notes | tickets: owner() or appRole(); parent() thread; staff-only notes; POST setup below |
 | Public pages from private drafts | pages: conditional publicRead |
-| Share one record read-only with another account | shared_notes/note_shares: read-only grant() |
+| Share one record read-only | shared_notes/note_shares: read-only grant() |
 
 db/schema.ts is declaration only: imports, constants/spreads, default schema;
 no helpers/expressions. id() is random text; owner() stamps user_id. client.read
-includes the key. Other fields: timestamp({ default: 'now' }), text({ nullable: true });
+includes the key. Inside anyOf(), owner() takes only column/read: it stamps the
+creator, not create/delete options; member() gates placement (non-member create is
+refused), while creators or the allowed branch can delete. Other fields: timestamp({ default: 'now' }), text({ nullable: true });
 indexes: [['team_id']].
 
 \`\`\`ts
@@ -41,15 +42,15 @@ export default schema({
   }),
   tickets: table({ id: id(), subject: text() }, {
     scope: anyOf(owner(), appRole({ roles: { read: ['staff'], create: ['staff'], update: ['staff'] } })),
-    client: { read: ['id', 'subject'], create: ['subject'], update: ['subject'] },
+    client: { read: true, create: ['subject'], update: ['subject'] },
   }),
   messages: table({ id: id(), ticket_id: text({ references: 'tickets' }), body: text() }, {
     scope: parent({ via: 'ticket_id' }),
-    client: { read: ['id', 'ticket_id', 'body'], create: ['ticket_id', 'body'] },
+    client: { read: true, create: ['ticket_id', 'body'] },
   }),
   staff_notes: table({ id: id(), ticket_id: text({ references: 'tickets' }), body: text() }, {
     scope: appRole({ roles: { read: ['staff'], create: ['staff'] } }),
-    client: { read: ['id', 'ticket_id', 'body'], create: ['ticket_id', 'body'] },
+    client: { read: true, create: ['ticket_id', 'body'] },
   }),
   pages: table({ id: id(), title: text(), published: boolean({ default: false }) }, {
     scope: owner(), client: { read: ['id', 'title'], create: ['title'], update: ['title'],
@@ -65,25 +66,30 @@ export default schema({
 }, { appRoles: { staff: { assignedBy: 'server' } } });
 \`\`\`
 
+POST role setup once after sign-up/profile completion, not GET/every request:
+cookie-authenticated GET cannot mutate roles.
+Check admin here, or your own assignment rule.
 messages use parent(): owner() would hide staff replies from the customer.
 Use emailDomain for staff at your verified domain; assignedBy: 'server' when the
-app decides (admin promotion, payment, invitation); never use an unverified email ending.
+app decides (promotion, payment, invitation). An email ending proves identity only
+when verified; assigning a role anyway is your app's decision, whose permissions the platform enforces.
 Publish pages in an owner-checked endpoint. Share with caller-scoped
 sw.db.insert('note_shares', { grantee_id, note_id }); it checks row ownership.
+Browser calls THROW, not { error }; catch below.
 Browser list: max 100, paginate after; no order (sort locally or in an endpoint).
 
 \`\`\`ts
 import { data } from 'somewhere:data';
-async function notes(after?: string) {
-  const { data: note } = await data.notes.create({ title: 'Hello' });
-  if (note) await data.notes.update(note.id, { title: 'Updated' });
-  return data.notes.list({ limit: 100, after }); // next page: after = previous.next
+export async function save(title: string) {
+  try { await data.notes.create({ title }); return null; }
+  catch (e) { return e instanceof Error ? e.message : 'Save failed'; }
 }
+export const list = (after?: string) => data.notes.list({ limit: 100, after });
 \`\`\`
 
 Teams without verification: own membership table + member(); sw.groups and domain
 roles need VERIFIED emails. Members read/create/update tasks; creators or team owners delete while members.
-A restriction only narrows who may do its operations; it never grants read.
+Restrictions narrow operations, not grant read.
 Comment-author-or-team-owner deletion stays a small endpoint.
 Create the team and its owner membership atomically:
 
@@ -92,13 +98,12 @@ Create the team and its owner membership atomically:
 export default sw.endpoint({
   auth: 'required', body: { name: 'string' },
   handler: async ({ user, params, body }, sw) => {
-    const creatorEmail = user.email; // required auth supplies id and email
     const id = crypto.randomUUID();
     await sw.db.server.tx([
       { op: 'insert', table: 'teams', values: { id, name: body.name, owner_id: user.id } },
       { op: 'insert', table: 'team_members', values: { id: crypto.randomUUID(), team_id: id, user_id: user.id, role: 'owner' } },
     ]);
-    return { id, creatorEmail };
+    return { id, email: user.email };
   },
 });
 \`\`\`
@@ -121,34 +126,29 @@ export default sw.endpoint({
 \`\`\`
 
 \`\`\`ts
-// api/_roles.ts — called by a server endpoint AFTER it authorizes the promotion
-export async function assignStaff(userId: string, sw: SomewhereRuntimeContext) {
-  await sw.auth.server.setRoles(userId, { add: ['staff'] });
-}
+// api/complete-profile.ts — POST once when an admin assigns staff after sign-up
+export default sw.endpoint({
+  auth: 'required', body: { userId: 'string' },
+  handler: async ({ request, body }, sw) => {
+    await sw.auth.requireUser(request, { role: 'admin' });
+    await sw.auth.server.setRoles(body.userId, { add: ['staff'] });
+    return { ok: true };
+  },
+});
 \`\`\`
 
-Do not mark app-read/write data serverOnly() and hand-write access checks: declare
-who may read/write it; the platform enforces it. Server-only fits job/import/audit/
-counter state, membership ledgers, and undeclarable rules: arbitrary predicates
-(e.g. expiry), or different writable fields per role (split tables or check that write).
-Grant ledgers need owner() scope and no browser writes. Keep other access declared.
+Do not hand-write access to app-read/write data: declare who may read/write it.
+serverOnly() fits job/import/audit/counter state and protected membership ledgers.
+Grant ledgers use owner() without browser writes. Undeclarable: arbitrary predicates
+(e.g. expiry) or per-role writable fields (split tables or check that write).
 
-Starter: src/pages/HomePage.tsx; routes src/App.tsx + src/routes.ts; auth hooks
-src/auth/hooks.ts. useAuth from @somewhere-cloud/sdk/react: signIn/signUp({ email,
-password }); sign-up signs in. Keep api/auth/[...path].ts; src/config.ts controls providers.
-api/notes/[id]/sub.ts → /api/notes/:id/sub (params.id); underscore files are helpers.
-POST: default export; GET/DELETE: named exports. Objects return JSON 200;
-Response.json sets status.
+Build src/pages/HomePage.tsx; routes src/App.tsx + src/routes.ts; auth src/auth/hooks.ts.
+Auth is wired: keep api/auth/[...path].ts; src/config.ts controls providers.
+api/notes/[id]/sub.ts → params.id; underscore files are helpers. POST: default export;
+GET/DELETE: named exports.
 
 \`\`\`ts
-export const GET = sw.endpoint({
-  auth: 'required',
-  handler: async (_, sw) => sw.db.from('notes', { limit: 100 }),
-});
-export const DELETE = sw.endpoint({
-  auth: 'required',
-  handler: async ({ params }, sw) => sw.db.remove('notes', { where: { id: params.id } }),
-});
+export const GET = sw.endpoint({ auth: 'required', handler: async (_, sw) => sw.db.from('notes', { limit: 100 }) });
 \`\`\`
 
 sw.db applies caller scopes; sw.db.server bypasses them: authorize first.
@@ -164,13 +164,12 @@ need Origin equal to the app URL.
 
 Publish: somewhere typecheck → npx @somewhere-cloud/cli deploy → somewhere verify → somewhere test.
 Deploy raw source, no frontend build. Type errors stop upload; override: somewhere deploy --allow-type-errors.
-Tests: newUser() gives its own signed-in browser page and API request client; call N times (owner, member, outsider).
-No chosen email argument: grant roles or insert memberships in setup through your app's authorized server endpoint.
+newUser() gives a signed-in page/API client; call N times (owner, member, outsider).
+No chosen email argument: assign roles/memberships through your app's authorized POST setup.
 Diagnose with somewhere errors and somewhere logs.
 
 On demand:
 - Server paging: \`somewhere docs sw.db --section server-read-paging\`
-- Direct HTTP data tests: \`somewhere docs declared-data --section calling-the-data-endpoint-directly\`
 `;
 
 export const SKILLS_POINTER = `Task-specific skills: \`${SKILLS_DIR}/\`. Inspect/update with somewhere skills status/update.`;

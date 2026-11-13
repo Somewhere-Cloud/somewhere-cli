@@ -25,14 +25,12 @@ export default schema({
     scope: member({ group: 'id', membership: 'team_members', member_user: 'user_id', member_group: 'team_id' }),
     client: { read: ['id', 'name'] },
   }),
-  team_members: table({ id: id(), team_id: text(), user_id: text(), role: text() }, {
+  team_members: table({ id: id(), team_id: text(), user_id: text() }, {
     scope: serverOnly(), unique: [['team_id', 'user_id']],
   }),
   tasks: table({ id: id(), team_id: text({ references: 'teams' }), title: text() }, {
     scope: anyOf(owner(), member({ group: 'team_id', membership: 'team_members',
-      member_user: 'user_id', member_group: 'team_id', operations: ['read', 'create', 'update'] }),
-      member({ group: 'team_id', membership: 'team_members', member_user: 'user_id',
-        member_group: 'team_id', where: { role: 'owner' }, operations: ['delete'] })),
+      member_user: 'user_id', member_group: 'team_id', operations: ['read', 'create', 'update'] })),
     client: { read: ['id', 'team_id', 'title'], create: ['team_id', 'title'], update: ['title'], delete: true },
   }),
 });
@@ -54,8 +52,8 @@ async function notes() {
 Teams WITHOUT email verification: use your own membership table with member(),
 as above. Built-in sw.groups and email-domain roles need VERIFIED emails;
 member() over your own table does not. Never let browsers write memberships.
-Members read/create/update tasks; the creator or team owner may delete, only
-while still a member. Team creation must atomically seed its owner's membership:
+Members read/create/update tasks; creators delete their own while still members.
+Keep a team-owner delete as one checked endpoint; other access stays declared. Team creation must atomically seed its owner's membership:
 
 \`\`\`ts
 // api/teams.ts
@@ -65,7 +63,7 @@ export default sw.endpoint({
     const id = crypto.randomUUID();
     await sw.db.server.tx([
       { op: 'insert', table: 'teams', values: { id, name: body.name, owner_id: user.id } },
-      { op: 'insert', table: 'team_members', values: { id: crypto.randomUUID(), team_id: id, user_id: user.id, role: 'owner' } },
+      { op: 'insert', table: 'team_members', values: { id: crypto.randomUUID(), team_id: id, user_id: user.id } },
     ]);
     return { id };
   },
@@ -82,7 +80,7 @@ export default sw.endpoint({
     const { users: [target] } = await sw.auth.server.listUsers({ emails: [body.email] });
     if (!target) return Response.json({ error: 'Account not found' }, { status: 404 });
     await sw.db.server.insert('team_members', {
-      id: crypto.randomUUID(), team_id: params.id, user_id: target.id, role: 'member',
+      id: crypto.randomUUID(), team_id: params.id, user_id: target.id,
     }, { onConflict: 'ignore' });
     return { ok: true };
   },
@@ -99,9 +97,7 @@ access checks. Declare who may read/write it; the platform enforces it. Exceptio
 - Membership/grant ledgers, never browser-written; grant() requires owner() scope.
 - Arbitrary predicates (e.g. access until expiry): check in an endpoint.
 - Different writable fields per role on one table: split tables or check that write.
-Keep other operations declared. App roles: emailDomain for verified-domain staff;
-assignedBy: 'server' when the app decides (admin/payment/invite), never an
-unverified email suffix.
+Keep other operations declared; do not infer staff from an unverified suffix.
 
 Starter: build src/pages/HomePage.tsx. Routes: src/App.tsx + src/routes.ts
 (string navigate/linkTo); layout: src/pages/SignedInLayout.tsx; sign-out:

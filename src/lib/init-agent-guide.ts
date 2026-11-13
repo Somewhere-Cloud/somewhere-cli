@@ -166,10 +166,36 @@ Publish: somewhere typecheck → npx @somewhere-cloud/cli deploy → somewhere v
 Deploy raw source, no frontend build. Type errors stop upload; override: somewhere deploy --allow-type-errors.
 newUser() gives a signed-in page/API client; call N times (owner, member, outsider).
 No chosen email argument: assign roles/memberships through your app's authorized POST setup.
+Test users are verified and visible to this project's server user lookup.
+For the complete owner-adds-member-by-email test and its endpoints, run
+somewhere docs test and follow Two users sharing through the app.
 Diagnose with somewhere errors and somewhere logs.
 
 On demand:
 - Server paging: \`somewhere docs sw.db --section server-read-paging\`
+
+## Testing shared access
+
+With the teams and membership endpoints above, the owner adds a fixture by email
+and that fixture reads the shared team row:
+
+\`\`\`ts
+// tests/team.spec.ts
+import { test, expect, data } from '@somewhere-cloud/cli/testing';
+test('owner adds a second user by email', async ({ newUser }) => {
+  const owner = await newUser();
+  const bob = await newUser();
+  const name = \`Shared team \${crypto.randomUUID()}\`;
+  const created = await owner.request.post('/api/teams', { data: { name } });
+  expect(created.ok()).toBeTruthy();
+  const { id } = await created.json();
+  const added = await owner.request.post(\`/api/teams/\${id}/members\`, { data: { email: bob.email } });
+  expect(added.ok()).toBeTruthy();
+  const response = await data(bob.request, 'teams', { operation: 'get', id });
+  expect(response.ok()).toBeTruthy();
+  expect((await response.json()).data).toMatchObject({ id, name });
+});
+\`\`\`
 `;
 
 export const SKILLS_POINTER = `Task-specific skills: \`${SKILLS_DIR}/\`. Inspect/update with somewhere skills status/update.`;

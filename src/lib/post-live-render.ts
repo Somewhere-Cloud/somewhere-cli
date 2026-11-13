@@ -15,7 +15,7 @@
 import { CliApiError, type ApiClient } from './client.js';
 
 export const POST_LIVE_RENDER_WAIT_MS = 5000;
-export const POST_LIVE_RENDER_POLL_MS = 400;
+export const POST_LIVE_RENDER_POLL_MS = 100;
 export const POST_LIVE_RENDER_STILL_RUNNING = "Render check still running; see its result with: somewhere call project_deploy_log '{}'";
 
 export interface PostLiveRenderRecord {
@@ -49,10 +49,13 @@ export async function awaitPostLiveRender(
   if (result.post_live_render?.status !== 'pending' || !result.release_id || !projectId) return { kind: 'not_pending' };
   const now = opts.now ?? Date.now;
   const sleep = opts.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
-  const pollMs = opts.pollMs ?? POST_LIVE_RENDER_POLL_MS;
+  let pollMs = opts.pollMs ?? POST_LIVE_RENDER_POLL_MS;
+  let nextDelayMs = opts.pollMs ?? 0;
   const deadline = now() + (opts.waitMs ?? POST_LIVE_RENDER_WAIT_MS);
   while (now() < deadline) {
-    await sleep(Math.min(pollMs, Math.max(0, deadline - now())));
+    if (nextDelayMs) await sleep(Math.min(nextDelayMs, Math.max(0, deadline - now())));
+    nextDelayMs = pollMs;
+    pollMs = opts.pollMs ?? Math.min(400, pollMs * 2);
     let read: ReleaseRenderRead;
     try {
       read = await client.call<ReleaseRenderRead>('GET', '/deploy/log', undefined,

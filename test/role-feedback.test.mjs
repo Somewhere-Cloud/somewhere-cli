@@ -21,12 +21,15 @@ test('GET-only role hint parses exports/calls, ignoring comments, defaults and P
  try{
   const examples={
    'get.ts':`export const GET = sw.endpoint({handler: async (_, sw) => sw.auth.server.setRoles('u',{add:['staff']})});`,
-   'alias.ts':`const handler = (_, sw) => sw.auth.server.grantRole('u','staff'); export {handler as GET};`,
+   'alias.ts':`const handler = (_, sw) => sw.auth.server.setRoles('u',{add:['staff']}); export {handler as GET};`,
    'post.ts':`export default (_, sw) => sw.auth.server.setRoles('u',{add:['staff']});`,
-   'mixed.ts':`export const GET=(_,sw)=>sw.auth.server.revokeRole('u','staff');export const POST=()=>({});`,
+   'mixed.ts':`export const GET=(_,sw)=>sw.auth.server.setRoles('u',{remove:['staff']});export const POST=()=>({});`,
    'comment.ts':`// sw.auth.server.setRoles('u',{})\nexport const GET=()=>({});`,
   };
   for(const [file,source] of Object.entries(examples))writeFileSync(join(dir,'api',file),source);
   const hints=roleMethodHints(dir);assert.equal(hints.length,2);assert.ok(hints.every(x=>x.includes('POST setup handler')));
+  writeFileSync(join(dir,'api','old.ts'),`export default (_, sw) => { sw.auth.server.grantRole('u','staff'); return sw.auth.server.revokeRole('u','staff'); };`);
+  const removed=roleMethodHints(dir).filter(x=>x.includes('was removed'));
+  assert.deepEqual(removed,["hint: api/old.ts: sw.auth.server.grantRole was removed; call sw.auth.server.setRoles(userId, { add: [role] }).","hint: api/old.ts: sw.auth.server.revokeRole was removed; call sw.auth.server.setRoles(userId, { remove: [role] })."]);
  }finally{rmSync(dir,{recursive:true,force:true});}
 });

@@ -15,7 +15,7 @@ export function registerTest(program: Command): void {
   program.command('test [file]')
     .description('Run project Playwright tests against its canonical production origin')
     .option('--workers <count>', 'Parallel workers', '5')
-    .option('--failed', 'Run last failures only (subset; a full green is still required)')
+    .option('--failed', 'Run last failures only (subset)')
     .option('--grep <name>', 'Filter test names (subset)')
     .option('--url <url>', 'Unsupported in phase 1')
     .option('--json', 'Print structured results')

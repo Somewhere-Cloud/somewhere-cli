@@ -93,7 +93,7 @@ export function registerInit(program: Command) {
         + '`auth` module): the SDK\'s packaged handler as a one-line api/auth/[...path].ts,\n'
         + 'the SDK client in src/services/auth.ts, hooks in src/auth/, pages in src/pages/,\n'
         + 'replaceable views in src/ui/ and styles in src/styles/, plus an AGENTS.md workflow\n'
-        + '(typecheck, deploy, verify). Sign-in and invitation links (sw.auth.invite) open\n'
+        + '(deploy, then test). Sign-in and invitation links (sw.auth.invite) open\n'
         + '/auth/magic, which the starter routes before the sign-in gate.\n'
         + '`--template minimal` includes the SDK and auth route without sign-in screens.\n'
         + 'Signed in, a new starter\'s pinned dependencies are installed with npm install (network; package install scripts run). Signed out, nothing is installed.\n'

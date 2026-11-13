@@ -62,7 +62,7 @@ test('typecheck verdict is advisory on errors and keeps the clean summary unchan
 
   assert.equal(
     stderr[0],
-    '✗ 2 type errors (via npx tsc) — exit 1. `somewhere deploy` stops before upload; override with --allow-type-errors.',
+    '✗ 2 type errors (via npx tsc) — exit 1. `somewhere deploy` stops before upload.',
   );
   assert.ok(stdout.includes(
     '  src/one.ts:1:2 TS2322 Type number is not assignable to type string.',

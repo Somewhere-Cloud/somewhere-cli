@@ -110,7 +110,7 @@
     "worker/src/utils/authority/role-domain-map.ts": "dc1b6abba79278a970cc5a07c4eb7ea73acac262425b489670e90508b95a5ff1",
     "worker/src/utils/authority/scope-enforcement.ts": "c7b6228f293269bc576bcedbea37209a395b3ea5eec62a106c333ee9b54ce71f",
     "worker/src/utils/code-run-managed-authority.ts": "60ccd920455ec2f03529908bfaacb9327f8371aa730d6c238da7868ff70c8f71",
-    "worker/src/utils/console-privacy.ts": "ff15ce20680875960bddc22f708c0301a3e5b67ed24d8408472d1d66a1d6f1ed",
+    "worker/src/utils/console-privacy.ts": "8c4ebf17543d289749c737bf5dfaa03938bab0f250e7d17892ed93e915852b22",
     "worker/src/utils/database-full.ts": "6b25f74f54d8323167db671aed1cc68a79e380af281afaad6121babf01f0e3f0",
     "worker/src/utils/database-plane-bindings.ts": "fa0d1602658fbc20ddeb0b630776e3f9f80616c9ae40c18259d5b1817040f0fa",
     "worker/src/utils/db-schema-deploy/bigint-text.ts": "ef3f581daeecb234d2c1e288bc09495a6facd7b0354b300134918f6c0cf10cc2",

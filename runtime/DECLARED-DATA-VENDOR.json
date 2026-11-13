@@ -24,7 +24,7 @@
     "worker/src/utils/authority/intake-bake.ts": "7216e288e40673819295d999b3bdbf5e4319e1e21608e3b81eda9d102ff8d636",
     "worker/src/utils/authority/role-domain-map.ts": "dc1b6abba79278a970cc5a07c4eb7ea73acac262425b489670e90508b95a5ff1",
     "worker/src/utils/authority/scope-enforcement.ts": "c7b6228f293269bc576bcedbea37209a395b3ea5eec62a106c333ee9b54ce71f",
-    "worker/src/utils/console-privacy.ts": "ff15ce20680875960bddc22f708c0301a3e5b67ed24d8408472d1d66a1d6f1ed",
+    "worker/src/utils/console-privacy.ts": "8c4ebf17543d289749c737bf5dfaa03938bab0f250e7d17892ed93e915852b22",
     "worker/src/utils/db-schema-deploy/bigint-text.ts": "ef3f581daeecb234d2c1e288bc09495a6facd7b0354b300134918f6c0cf10cc2",
     "worker/src/utils/db-schema-deploy/client-contract-source.ts": "b0a3b5e6e32a3269e6911c4f5c90d93457d8d93d5486678a9be082049f937be8",
     "worker/src/utils/db-schema-deploy/client-permissions.ts": "3db42f781ca6bb4f763a33be9470d43d74c58c7d3339a46d1271689d5100b64e",

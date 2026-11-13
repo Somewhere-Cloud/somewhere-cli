@@ -91,13 +91,14 @@ export function recordId(path: string, id: string): void {
 export function forgetRecord(path: string): void { rmSync(path, { force: true }); }
 
 /** Delete one account this run created, by exact id, with the developer delete. A 404 means it
- *  is already gone. Returns false when the delete could not be confirmed. */
-export async function deleteAccount(client: ApiClient, projectId: string, id: string): Promise<boolean> {
+ *  is already gone. Returns null when deleted, or what the platform answered when it was not. */
+export async function deleteAccount(client: ApiClient, projectId: string, id: string): Promise<string | null> {
   try {
     await client.call('DELETE', `/auth/users/${encodeURIComponent(id)}`, undefined, { project_id: projectId });
-    return true;
+    return null;
   } catch (error) {
-    return error instanceof CliApiError && error.statusCode === 404;
+    if (error instanceof CliApiError && error.statusCode === 404) return null;
+    return error instanceof CliApiError ? `HTTP ${error.statusCode ?? '?'} ${error.code}: ${error.message.slice(0, 200)}` : String(error).slice(0, 200);
   }
 }
 
@@ -122,8 +123,9 @@ export async function sweepAccounts(client: ApiClient, root: string, projectId: 
     if (record.project_id !== projectId) continue;
     if (record.run !== process.env.SW_TEST_RUN && alive(record.pid)) continue;
     if (record.id === null) { result.unknownId.push(record.email); forgetRecord(path); continue; }
-    if (await deleteAccount(client, projectId, record.id)) { result.deleted.push(record.id); forgetRecord(path); }
-    else result.failed.push(record.email);
+    const refused = await deleteAccount(client, projectId, record.id);
+    if (refused === null) { result.deleted.push(record.id); forgetRecord(path); }
+    else result.failed.push(`${record.email} (${refused})`);
   }
   return result;
 }

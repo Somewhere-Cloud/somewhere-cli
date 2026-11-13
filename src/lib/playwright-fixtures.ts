@@ -386,8 +386,9 @@ class FormRun {
       if (attempt.id) {
         const { client, projectId } = await this.control();
         const id = attempt.id;
-        if (await timed(this.info, 'sign-up account deletion', () => deleteAccount(client, projectId, id))) forgetRecord(attempt.record);
-        else failures.push(`Could not delete the form sign-up account ${attempt.email}; its record is kept and the next somewhere test retries`);
+        const refused = await timed(this.info, 'sign-up account deletion', () => deleteAccount(client, projectId, id));
+        if (refused === null) forgetRecord(attempt.record);
+        else failures.push(`Could not delete the form sign-up account ${attempt.email} (${refused}); its record is kept and the next somewhere test retries`);
       } else if (attempt.submitted && !attempt.refused) {
         // Never delete by address: the account may exist, but this run never learned its id.
         failures.push(`A sign-up for ${attempt.email} was submitted but no account id came back, so nothing was deleted; if it exists, delete it from the project's users list`);

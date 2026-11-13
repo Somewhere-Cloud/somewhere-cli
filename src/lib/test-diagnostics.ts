@@ -18,9 +18,13 @@ export async function timed<T>(info: TestInfo, name: string, work: () => Promise
   try { return await work(); } finally { const report = diagnostics(info); report.timings[name] = (report.timings[name] ?? 0) + performance.now() - start; }
 }
 
-export function safeError(value: string): string {
-  const clean = scrub(value);
-  if (['Timeout', 'Module resolution failed', 'Syntax error', 'Assertion failed', 'Focused test forbidden', 'Test or setup failed'].includes(clean)) return clean;
-  const category = /Timeout|timed out/i.test(clean) ? 'Timeout' : /Cannot find module|Cannot resolve|module not found/i.test(clean) ? 'Module resolution failed' : /SyntaxError|Unexpected token/i.test(clean) ? 'Syntax error' : /expect\(|AssertionError|Expected:/i.test(clean) ? 'Assertion failed' : /test.only/i.test(clean) ? 'Focused test forbidden' : 'Test or setup failed';
-  return category;
+/** The failure as Playwright reported it (assertion, expected and received, file:line),
+ *  with issued credentials, capability URLs and tokens scrubbed and its size bounded. */
+export function describeError(error: { message?: string; value?: string; location?: { file: string; line: number; column?: number } }, root = process.cwd()): string {
+  const raw = error.message ?? error.value ?? 'Error with no message';
+  const message = scrub(raw).replace(/\n{3,}/g, '\n\n').trim();
+  const bounded = message.length > 2000 ? message.slice(0, 2000) + ' …(truncated)' : message;
+  if (!error.location) return bounded;
+  const file = error.location.file.startsWith(root + '/') ? error.location.file.slice(root.length + 1) : error.location.file;
+  return `${scrub(file)}:${error.location.line}: ${bounded}`;
 }

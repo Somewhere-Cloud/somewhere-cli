@@ -163,7 +163,7 @@ export function formatCompileOnlySuccess(totalFiles: number, totalBytes: number,
   return [
     `Platform compile passed. ${dim(`(${totalFiles} files, ${formatBytes(totalBytes)})`)}`,
     dim('Runtime behavior, auth, data access, and user flows were not exercised.'),
-    `Next: deploy, then verify the real flow with \`somewhere verify --project ${shellQuote(projectId)} --flow flow.json\`.`,
+    'Next: deploy, then run your app\'s tests with `somewhere test`.',
     dim('Unsure about a platform contract? Run `somewhere advisor "<question>"`.'),
   ];
 }

@@ -8,6 +8,11 @@ Republish the platform contract 6 CLI after npm accepted earlier uploads without
 
 # Changelog
 
+## 0.38.76
+
+- Keep unreferenced operational scripts, fixtures and output local, with app-reference retention and explicit includes.
+- Read pending render results immediately, then use bounded polling without changing blank-page refusal or the wait budget.
+
 ## 0.38.33
 
 ### Changed

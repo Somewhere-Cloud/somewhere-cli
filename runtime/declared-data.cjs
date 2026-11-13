@@ -1522,8 +1522,6 @@ interface SomewhereServerRoleChanges { user_id: string; results: Array<{ user_id
 interface SomewhereRuntimeAuthServer {
   /** Deployed production functions only. Validate the caller before assigning roles. */
   setRoles(userId: string, changes: { add?: readonly string[]; remove?: readonly string[] }): Promise<SomewhereServerRoleChanges>;
-  grantRole(userId: string, role: string): Promise<SomewhereServerRoleChanges>;
-  revokeRole(userId: string, role: string): Promise<SomewhereServerRoleChanges>;
   listUsers(options?: { ids: readonly string[]; emails?: never; limit?: never; cursor?: never } | { emails: readonly string[]; ids?: never; limit?: never; cursor?: never } | { ids?: never; emails?: never; limit?: number; cursor?: string }): Promise<{ users: SomewhereAuthDirectoryUser[]; next_cursor: string | null }>;
 }
 interface SomewhereRuntimeAuthModeration {
@@ -4476,8 +4474,8 @@ var require_consumer_contract = __commonJS({
   "worker/containers/compile/consumer-contract.cjs"(exports2, module2) {
     "use strict";
     var CONSUMER_CONTRACT2 = Object.freeze({
-      version: 14,
-      digest: "92b47a5245577bef6493de2e1346abd35c493c7c0e2d181d742dc98369f6e2d0"
+      version: 15,
+      digest: "1e7d89a9beeb6a433b3e40769a236ea1f716918c257b49f3754d7d1c79d9f528"
     });
     var MEMBERSHIPS = "memberships: table({ id: id(), team_id: text(), member_id: text() }, { scope: owner(), client: { read: true } }),";
     var SHARES = "shares: table({ id: id(), grantee_id: text() }, { scope: owner(), client: { read: true, create: ['grantee_id'], delete: true }, unique: [['user_id', 'grantee_id']] }),";
@@ -4587,7 +4585,6 @@ __export(declared_data_vendor_entry_exports, {
   FILES_DECLARATION_FILE: () => import_typed_files2.CLIENT_FILE,
   RUNTIME_CONTEXT_DECLARATION: () => import_runtime_types3.RUNTIME_CONTEXT_DECLARATION,
   SCHEMA_DECLARATION: () => import_schema_types.SCHEMA_DECLARATION,
-  allTablesServerOnlyWithoutClient: () => allTablesServerOnlyWithoutClient,
   checkerContract: () => checkerContract,
   consumerContractComponents: () => import_consumer_contract.consumerContractComponents,
   consumerContractFingerprint: () => import_consumer_contract.consumerContractFingerprint,
@@ -8307,12 +8304,6 @@ function isRuntimeEndpointGlobal(diag, functions) {
 
 
 var import_consumer_contract = __toESM(require_consumer_contract());
-function allTablesServerOnlyWithoutClient(files) {
-  const source = files["db/schema.ts"];
-  if (source === void 0) return false;
-  const parsed = extractSchemaTs(source);
-  return parsed.ok && parsed.declaration.tables.length > 0 && parsed.declaration.tables.every((table) => table.scope.kind === "server_only" && table.client === void 0);
-}
 function generateFromFiles(files) {
   const authority = clientAuthorityFromSource(files);
   return authority ? (0, import_typed_data.generateDataClient)(authority) : void 0;
@@ -8338,7 +8329,6 @@ function filesDeclarationFromFiles(files) {
   FILES_DECLARATION_FILE,
   RUNTIME_CONTEXT_DECLARATION,
   SCHEMA_DECLARATION,
-  allTablesServerOnlyWithoutClient,
   checkerContract,
   consumerContractComponents,
   consumerContractFingerprint,

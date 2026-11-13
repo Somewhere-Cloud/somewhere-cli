@@ -16,7 +16,7 @@ import { CliApiError, type ApiClient } from './client.js';
 
 export const POST_LIVE_RENDER_WAIT_MS = 5000;
 export const POST_LIVE_RENDER_POLL_MS = 400;
-export const POST_LIVE_RENDER_STILL_RUNNING = 'live; blank-page check still running, see the deploy log';
+export const POST_LIVE_RENDER_STILL_RUNNING = "Render check still running; see its result with: somewhere call project_deploy_log '{}'";
 
 export interface PostLiveRenderRecord {
   status: string;

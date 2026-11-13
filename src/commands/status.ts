@@ -146,6 +146,11 @@ function printProductionDeployment(deployment: Record<string, unknown>): void {
   if (typeof deployment.active_release_id === 'string') {
     info(`Active release: ${dim(deployment.active_release_id)}`);
   }
+  if (isRecord(deployment.post_live_render)) {
+    const render = deployment.post_live_render;
+    const state = render.status === 'error' ? 'failed' : render.status;
+    if (typeof state === 'string') info(`Render check: ${state}${typeof render.message === 'string' ? ` — ${render.message}` : ''}`);
+  }
   const provenance = deploymentProvenanceFromStatus(deployment);
   if (provenance.promotedFromCandidate) {
     info(`Promoted from candidate ${teal(provenance.promotedFromCandidate)}`);

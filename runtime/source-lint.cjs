@@ -16283,6 +16283,8 @@ var CONTEXT_TAIL_JS = `  };
     const draftAuth = draftReadNamespace('auth', sw.auth, {
       fromRequest: sw.auth.fromRequest,
       requireUser: sw.auth.requireUser,
+      // These methods refuse the draft before transport; preserve their typed production-only boundary.
+      server: sw.auth.server,
     });
     const draftBilling = draftReadNamespace('billing', sw.billing, {
       has: sw.billing.has,

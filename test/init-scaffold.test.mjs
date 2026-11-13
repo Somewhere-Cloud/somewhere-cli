@@ -196,6 +196,9 @@ test('default starter is the auth module: SDK client, packaged handler, hooks, r
   assert.ok(result.created.includes('src/auth/hooks.ts'));
   assert.ok(result.created.includes('src/ui/AuthCard.tsx'));
   assert.ok(!result.created.includes('db/schema.ts'), 'private data is opt-in');
+  const appTests = readFileSync(join(dir, 'tests/app.spec.ts'), 'utf8');
+  assert.match(appTests, /session and sign-out/);
+  assert.doesNotMatch(appTests, /notes|data\(/, 'default tests must not refer to an absent table');
   // The auth route is ONE line: the SDK's maintained handler, no pasted logic.
   assert.equal(
     readFileSync(join(dir, 'api/auth/[...path].ts'), 'utf8'),

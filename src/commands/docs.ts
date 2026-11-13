@@ -349,7 +349,10 @@ export function renderDocsIndex(pages: PublicDocsPage[], groups: PublicDocsGroup
   const rest = pages.filter((page) => !listed.has(page.id));
   if (rest.length) blocks.push({ title: groups.length ? 'Other topics' : 'Topics', pages: rest });
   const width = Math.max(0, ...pages.map(({ id }) => id.length));
-  const lines = ['Platform docs — no login needed.', '', 'Public topics:'];
+  const lines = ['Platform docs — no login needed.',
+    'New app: run somewhere init in an empty folder, then read AGENTS.md. Its core is enough to start a typical app.',
+    'Docs are for exceptions: somewhere docs <topic> --section <id> (or somewhere docs search <term>).',
+    '', 'Public topics:'];
   for (const block of blocks) {
     lines.push('', `${block.title}`);
     for (const page of block.pages) lines.push(`  ${page.id.padEnd(width)}  ${page.title}`);

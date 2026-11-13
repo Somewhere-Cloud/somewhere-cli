@@ -178,7 +178,7 @@ export function renderPublicDocsView(page: PublicDocsPage, view: DocsView): Rend
       error: 'DOCS_SECTION_NOT_FOUND',
       message: `No section "${view.id}" in ${page.id}. Valid sections: ${matches.join(', ')}. Use an exact ID; normalized headings must identify one section.`,
       matches,
-      hint: `Run: somewhere docs ${commandArg(page.id)} --section <id>`,
+      hint: `Run: somewhere docs ${commandArg(page.id)} --section <id>. Search this topic: somewhere docs ${commandArg(page.id)} ${commandArg(view.id)}`,
     });
   }
   const text = page.body.slice(match.start, match.end);
@@ -485,7 +485,7 @@ export function registerDocs(program: Command) {
     .command('docs [topic] [terms...]')
     .description(
       'Read platform docs. No login needed — every topic is public. With no topic, prints the topic index. '
-        + 'Search with `somewhere docs search <term>`. Quick topics: '
+        + 'Search with `somewhere docs <topic> <term>` or `somewhere docs search <term>`. Quick topics: '
         + Object.keys(TOPICS).join(', ')
         + '. Example manual topic: `somewhere docs sw.db`.',
     )
@@ -497,6 +497,7 @@ export function registerDocs(program: Command) {
       + '  somewhere docs                         # topic index\n'
       + '  somewhere docs search magic link       # matching sections across every topic\n'
       + '  somewhere docs sw.auth                 # topic summary with section ids\n'
+      + '  somewhere docs sw.auth setRoles        # search within this topic\n'
       + '  somewhere docs sw.auth --section <id>  # one section\n'
       + '  somewhere docs --full                  # the whole manual (very large)\n'
       + '\n`somewhere docs search` with no term opens the search primitive topic.\n')
@@ -510,12 +511,8 @@ export function registerDocs(program: Command) {
         process.exitCode = 1;
         return;
       }
-      const searching = topic === 'search' && terms.length > 0;
-      if (terms.length > 0 && !searching) {
-        error(`Unexpected argument "${terms[0]}". Open one topic at a time, or search: somewhere docs search ${terms.join(' ')}`);
-        process.exitCode = 1;
-        return;
-      }
+      const searching = terms.length > 0;
+      const within = topic && topic !== 'search' ? (ALIASES[topic] ?? topic) : undefined;
       warnIfDocsNewerThanCli();
       if (searching) {
         if (opts.full || opts.section !== undefined || opts.list) {
@@ -525,13 +522,19 @@ export function registerDocs(program: Command) {
         }
         const query = terms.join(' ');
         try {
-          const results = searchPublicDocs(await fetchPublicManifest(), query);
+          const pages = await fetchPublicManifest();
+          if (within && !pages.some(page => page.id === within)) {
+            error(`Unknown docs topic "${within}". Run: somewhere docs`);
+            process.exitCode = 1;
+            return;
+          }
+          const results = searchPublicDocs(within ? pages.filter(page => page.id === within) : pages, query);
           if (opts.json) {
-            printJson({ query, count: results.length, results });
+            printJson({ query, ...(within ? { topic: within } : {}), count: results.length, results });
             return;
           }
           if (!results.length) {
-            console.log(`No docs sections mention "${query}". Browse the index: somewhere docs`);
+            console.log(`No docs sections${within ? ` in ${within}` : ''} mention "${query}". Search all topics: somewhere docs search ${query}`);
             return;
           }
           for (const result of results) {

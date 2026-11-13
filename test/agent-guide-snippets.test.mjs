@@ -18,7 +18,7 @@ test('every TypeScript guidance snippet checks against generated starter declara
     assert.match(firstEndpoint, /user\.id/);
     assert.match(firstEndpoint, /user\.email/);
     writeFileSync(join(dir, 'db/schema.ts'), schema[1]);
-    writeFileSync(join(dir, 'tsconfig.json'), JSON.stringify({ compilerOptions: { target: 'ES2022', module: 'ESNext', moduleResolution: 'bundler', strict: true, skipLibCheck: true }, include: ['*.ts'] }));
+    writeFileSync(join(dir, 'tsconfig.json'), JSON.stringify({ compilerOptions: { target: 'ES2022', module: 'ESNext', moduleResolution: 'bundler', strict: true, skipLibCheck: true, paths: { '@somewhere-cloud/cli/testing': [join(process.cwd(), 'dist/testing.d.ts')] } }, include: ['*.ts'] }));
     const snippets = [...INIT_AGENTS_MD.matchAll(/```ts\n([\s\S]*?)```/g)];
     assert.ok(snippets.length > 0);
     snippets.forEach((match, index) => writeFileSync(join(dir, `snippet-${index}.ts`), match[1] + '\nexport {};\n'));

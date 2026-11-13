@@ -68,4 +68,4 @@ export function waitForApp(page: BrowserPage, state: 'ready' | 'signed-in' | 'si
 }
 
 // Lazy project-local Playwright resolution keeps UserSession dependency-free.
-export { test, expect, expectRefused, data, ready, type RefusalOptions, type TestUser, type Person, type SignUpOptions, type SignInOptions, type FormSteps, type CodeSteps } from './lib/playwright-fixtures.js';
+export { test, expect, expectRefused, data, ready, type RefusalOptions, type TestUser, type NewUserOptions, type Person, type SignUpOptions, type SignInOptions, type FormSteps, type CodeSteps } from './lib/playwright-fixtures.js';

@@ -156,8 +156,13 @@ One somewhere test run drives the UI and calls the API: signUp(page) uses your s
 (then signOut, signIn with its password, verify with the emailed code), newUser() acts as
 several people, and ready(page, 'signed-in' | 'signed-out') waits for the session check.
 You do not need a separate browser script.
+Start from the starter's tests/account, phone and access specs: one journey per test, its own people.
+One somewhere test runs every spec, old and new together; somewhere deploy --test deploys, then runs them once.
+After fixing a test, run only what failed: somewhere test --failed (passed results on this release are kept).
+Do not rerun a suite that is already green on this release.
 Deploy raw source, no frontend build; type errors stop upload.
-newUser() gives a signed-in page/API client; call N times (owner, member, outsider).
+newUser() gives a signed-in page/API client; make people at once: await Promise.all([newUser(), newUser()]).
+newUser({ role: 'staff' }) holds a role declared in appRoles, granted with your developer key.
 newUser() takes no chosen email. Test users are verified and visible to this project's server user lookup.
 Email-domain role: signUp(page, { domain: 'staff.example' }), then verify(page, person); newPage() for a second person.
 Refusals: await expectRefused(person, 'notes', { operation: 'update', id, values }, { allowed: owner }) or

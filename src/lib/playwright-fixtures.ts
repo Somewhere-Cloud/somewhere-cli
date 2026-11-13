@@ -13,6 +13,9 @@ import type { TestInfo } from '@playwright/test';
 import type { DataRequest } from '../testing.js';
 
 export interface TestUser { id: string; email: string; page: Page; request: APIRequestContext }
+/** `role`: an app role declared in db/schema.ts appRoles, granted to this user with your developer
+ *  credential (the same grant as somewhere's app-roles grant) before newUser returns. */
+export interface NewUserOptions { role?: string }
 /** An ordinary account made through the app's own sign-up form. `verified` is true once its
  *  address was verified with a captured code (verify(), or a project that requires email codes). */
 export interface Person { id: string; email: string; password: string; verified: boolean }
@@ -23,7 +26,10 @@ export type CodeSteps = (page: Page, code: string) => Promise<void>;
 export interface SignUpOptions { domain?: string; email?: string; steps?: FormSteps; codeSteps?: CodeSteps }
 export interface SignInOptions { steps?: FormSteps; codeSteps?: CodeSteps }
 interface Fixtures {
-  _evidence: void; newUser: () => Promise<TestUser>; anonymous: APIRequestContext; _forms: FormRun;
+  _evidence: void; anonymous: APIRequestContext; _forms: FormRun;
+  /** A fresh signed-in test user. Make several at once: `await Promise.all([newUser(), newUser()])`.
+   *  `{ role }` grants that app role (declared in db/schema.ts appRoles) before it returns. */
+  newUser: (options?: NewUserOptions) => Promise<TestUser>;
   /** Another signed-out page on the app, in its own browser context (a second person for signUp). */
   newPage: () => Promise<Page>;
   signUp: (page: Page, options?: SignUpOptions) => Promise<Person>;
@@ -59,7 +65,8 @@ function runner() {
       const contexts: BrowserContext[] = [];
       const partialIds: string[] = [];
       try {
-        await use(async () => {
+        await use(async (options = {}) => {
+          if (options.role !== undefined && (typeof options.role !== 'string' || !/^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(options.role))) throw new Error('newUser({ role }): name a role declared in db/schema.ts appRoles.');
           let created: Awaited<ReturnType<typeof createTestIdentities>>;
           try { created = await timed(info, 'test-user creation', () => createTestIdentities(client, projectId, 'user', 1, 'pw')); }
           catch (error) {
@@ -70,8 +77,11 @@ function runner() {
           owned.push(...created.issued);
           const issued = created.issued[0];
           rememberSecrets(issued.access_token, issued.refresh_token);
+          const granted = options.role === undefined ? undefined : timed(info, 'role grant', () => client.call('POST', '/auth/app-roles/grant', { project_id: projectId, user_id: issued.user.id, role: options.role }))
+            .catch((error: unknown) => { throw new Error(`newUser({ role: '${options.role}' }): the role was not granted: ${error instanceof Error ? scrub(error.message) : String(error)}`); });
           const context = await browser.newContext({ baseURL: origin, viewport, isMobile, hasTouch, extraHTTPHeaders: { Origin: origin }, storageState: buildStorageState(origin, host, issued, expiryOf(issued, created.receivedAt)) });
           contexts.push(context);
+          await granted;
           constrain(context.request, origin, info);
           digests.set(context.request, target.contractDigest);
           const page = await timed(info, 'page creation', () => context.newPage());
@@ -83,7 +93,7 @@ function runner() {
         const failures: string[] = [];
         for (const context of contexts) try {
           rememberSecrets(...(await context.cookies()).map(cookie => cookie.value));
-          if (info.status !== info.expectedStatus) {
+          if (info.status !== info.expectedStatus && !diagnostics(info).screenshot) {
             const page = context.pages()[0];
             if (page && !/auth|login|signup|reset/i.test(new URL(page.url()).pathname)) {
               const path = info.outputPath('failure.png');
@@ -91,17 +101,21 @@ function runner() {
               diagnostics(info).screenshot = path;
             }
           }
-        } catch { failures.push('Failure screenshot capture failed'); } finally {
-          try { await context.close(); } catch { failures.push('Browser context cleanup failed'); }
-        }
+        } catch { failures.push('Failure screenshot capture failed'); }
         const ids = [...new Set([...owned.map(identity => identity.user.id), ...partialIds])];
-        if (ids.length) {
-          try {
-            await timed(info, 'test-user deletion', () => client.call('DELETE', '/auth/test-users', { project_id: projectId, ids }));
-            const remaining = await timed(info, 'cleanup confirmation', () => client.call<{ identities: { id: string }[] }>('GET', '/auth/test-users', undefined, { project_id: projectId }));
-            if (remaining.identities.some(identity => ids.includes(identity.id))) failures.push('Test user cleanup unconfirmed');
-          } catch { failures.push('Test user cleanup unconfirmed; app rows remain'); }
-        }
+        // Contexts close while the exact ids are deleted. The DELETE answer names the ids it removed;
+        // only when it does not name every one is the list read back to confirm.
+        await Promise.all([
+          ...contexts.map(context => context.close().catch(() => { failures.push('Browser context cleanup failed'); })),
+          ids.length ? (async () => {
+            try {
+              const deleted = await timed(info, 'test-user deletion', () => client.call<{ ids?: string[] }>('DELETE', '/auth/test-users', { project_id: projectId, ids }));
+              if (ids.every(id => deleted.ids?.includes(id))) return;
+              const remaining = await timed(info, 'cleanup confirmation', () => client.call<{ identities: { id: string }[] }>('GET', '/auth/test-users', undefined, { project_id: projectId }));
+              if (remaining.identities.some(identity => ids.includes(identity.id))) failures.push('Test user cleanup unconfirmed');
+            } catch { failures.push('Test user cleanup unconfirmed; app rows remain'); }
+          })() : Promise.resolve(),
+        ]);
         if (failures.length) throw new Error(failures.join('; '));
       }
     },
@@ -367,7 +381,8 @@ class FormRun {
         diagnostics(this.info).screenshot = path;
       } catch { failures.push('Failure screenshot capture failed'); }
     }
-    for (const attempt of this.attempts) {
+    // Each account is deleted by its exact id; the deletions run at the same time.
+    await Promise.all(this.attempts.map(async attempt => {
       if (attempt.id) {
         const { client, projectId } = await this.control();
         const id = attempt.id;
@@ -378,7 +393,7 @@ class FormRun {
         failures.push(`A sign-up for ${attempt.email} was submitted but no account id came back, so nothing was deleted; if it exists, delete it from the project's users list`);
         forgetRecord(attempt.record);
       } else forgetRecord(attempt.record);
-    }
+    }));
     if (failures.length) throw new Error(failures.join('; '));
   }
 }

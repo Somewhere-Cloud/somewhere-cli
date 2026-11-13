@@ -120,12 +120,12 @@ test('still pending after 5 s: live, with the still-running line, exit 0', async
   await withServer(srv.handler, async (apiUrl) => {
     const human = await deploy(f, apiUrl);
     assert.equal(human.status, 0, human.stderr);
-    assert.match(human.stdout + human.stderr, /live; blank-page check still running, see the deploy log/);
+    assert.match(human.stdout + human.stderr, /Render check still running; see its result with: somewhere call project_deploy_log/);
     assert.ok(human.ms >= 4500 && human.ms < 12000, `waited about 5 s (${human.ms} ms)`);
     assert.ok(srv.reads.length >= 3, `polled the log (${srv.reads.length} reads)`);
     const json = await deploy(f, apiUrl, ['--json']);
     assert.equal(json.status, 0);
-    assert.deepEqual(JSON.parse(json.stdout).post_live_render, { status: 'pending', note: 'live; blank-page check still running, see the deploy log' });
+    assert.deepEqual(JSON.parse(json.stdout).post_live_render, { status: 'pending', note: "Render check still running; see its result with: somewhere call project_deploy_log '{}'" });
   });
 });
 

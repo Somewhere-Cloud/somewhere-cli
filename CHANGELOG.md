@@ -1,11 +1,3 @@
-## 0.38.36
-
-Republish the platform contract 6 CLI after npm accepted earlier uploads without making their tarballs installable. Publication now checks the exact registry version and latest tag once.
-
-## 0.38.35
-
-- Allow tasks delete to accept up to 200 IDs, returning a result for each task.
-
 # Changelog
 
 ## 0.38.85
@@ -48,10 +40,177 @@ Republish the platform contract 6 CLI after npm accepted earlier uploads without
 - The auth starter returns someone who signs in while connecting an MCP client (for example Claude) to the consent page, and refuses foreign or expired return values plainly.
 - The generated AGENTS.md points to the MCP tools recipe.
 
+## 0.38.78
+
+- somewhere test shows the failing assertion and can run a single file.
+
+## 0.38.77
+
+- Shorter agent guidance; somewhere deploy no longer prints the access notice for apps whose tables are all server-only.
+- somewhere typecheck and lint match the platform's current rules.
+
 ## 0.38.76
 
 - Keep unreferenced operational scripts, fixtures and output local, with app-reference retention and explicit includes.
 - Read pending render results immediately, then use bounded polling without changing blank-page refusal or the wait budget.
+
+## 0.38.75
+
+- AGENTS.md shows how to write a test where two people share data, and somewhere typecheck compiles it.
+
+## 0.38.74
+
+- somewhere deploy type-checks while it prepares the upload, so deploys finish sooner, and reports the full time taken.
+- somewhere deploy shows render checks that are still running and the final verification error.
+
+## 0.38.73
+
+- A refusal because of a role says which method the role allows; a role granted only GET is pointed out.
+- somewhere docs <topic> <words> searches within that topic.
+
+## 0.38.72
+
+- somewhere browser and somewhere verify use the platform's current page checks.
+
+## 0.38.71
+
+- somewhere typecheck and lint match the platform's current rules.
+
+## 0.38.70
+
+- Starter: the access patterns in AGENTS.md show server roles.
+
+## 0.38.69
+
+- Starter and AGENTS.md: how to declare team access, and what to read first when writing code.
+- somewhere typecheck checks db/schema.ts with the platform's current rules.
+
+## 0.38.68
+
+- somewhere typecheck and lint match the platform's current rules.
+
+## 0.38.67
+
+- Lint checks match the platform's current rules.
+
+## 0.38.66
+
+- somewhere typecheck and lint match the platform's current rules.
+
+## 0.38.65
+
+- somewhere typecheck understands server roles and per-member restrictions in db/schema.ts.
+- Lint checks match the platform's current rules.
+
+## 0.38.64
+
+- Public files keep their paths so browsers and caches can keep them.
+- Lint checks match the platform's current rules.
+
+## 0.38.63
+
+- The agent guide's examples were corrected.
+
+## 0.38.62
+
+- Starter: simpler file layout and a shorter core app contract.
+- somewhere typecheck and lint match the platform's current rules.
+
+## 0.38.61
+
+- Starter: clearer app contract and deployment guidance in AGENTS.md.
+- somewhere typecheck and lint match the platform's current rules.
+
+## 0.38.60
+
+- Maintenance release: commands work as in the previous version.
+
+## 0.38.59
+
+- somewhere test (preview): fixes to choosing the app to test and to failure reports.
+- The agent guide shows current browser data and sign-in examples.
+- somewhere typecheck, lint, deploy file selection, error guidance and the browser page checks match the platform's current rules.
+
+## 0.38.57
+
+- somewhere test (preview): the starter's sample test and the failure report were improved.
+
+## 0.38.56
+
+- somewhere test (preview): checks the connection to the app before running and reports failures more clearly.
+- somewhere deploy file selection and error guidance match the platform's current rules.
+
+## 0.38.54
+
+- somewhere test (preview): fixes to the browser test fixtures.
+
+## 0.38.53
+
+- somewhere test (preview): clearer results and failure details.
+- somewhere deploy file selection and error guidance match the platform's current rules.
+
+## 0.38.51
+
+- somewhere test (preview): run the project's Playwright tests in a browser against the live app.
+- Lint, deploy file selection and error guidance match the platform's current rules.
+
+## 0.38.49
+
+- The testing helper accepts a number as a list cursor.
+- somewhere deploy file selection and error guidance match the platform's current rules.
+
+## 0.38.48
+
+- somewhere init can always read the package details it needs to write a starter.
+
+## 0.38.47
+
+- Testing helpers for signed-in users are exported, and the starter's example test runs on its own.
+- somewhere deploy file selection and error guidance match the platform's current rules.
+
+## 0.38.45
+
+- somewhere init --link in an empty folder writes the starter as well as linking the project.
+- somewhere deploy file selection and error guidance match the platform's current rules.
+
+## 0.38.43
+
+- Starter: the sign-in landing page refuses to send people to an address outside the app after sign-in.
+- somewhere deploy file selection and error guidance match the platform's current rules.
+
+## 0.38.41
+
+- Starter: a sign-in link opens a page with a Continue button, and the link is used only when the person presses it.
+- somewhere deploy file selection and error guidance match the platform's current rules.
+
+## 0.38.39
+
+- Database export uses the export path that matches how the project's database is run.
+- somewhere deploy file selection and error guidance match the platform's current rules.
+
+## 0.38.38
+
+- A CLI that is behind the platform's rules warns and keeps working instead of stopping the command.
+- somewhere typecheck, lint, deploy file selection and error guidance match the platform's current rules.
+
+## 0.38.37
+
+- somewhere browser --json keeps the platform's refusal (its code and reason) instead of a generic error.
+
+## 0.38.36
+
+Republish the platform contract 6 CLI after npm accepted earlier uploads without making their tarballs installable. Publication now checks the exact registry version and latest tag once.
+
+## 0.38.35
+
+- Allow tasks delete to accept up to 200 IDs, returning a result for each task.
+
+## 0.38.34
+
+- somewhere typecheck checks db/schema.ts with the platform's current rules.
+- Lint checks match the platform's current rules.
+- somewhere deploy chooses the files to publish with the platform's current rules.
+- Error guidance matches the platform's current messages.
 
 ## 0.38.33
 
@@ -903,7 +1062,6 @@ Republish the platform contract 6 CLI after npm accepted earlier uploads without
 - `somewhere init` keeps AGENTS.md and useful skills without installing command-running agent hooks or MCP registration. Existing local and global agent configuration stays unchanged.
 - The generated project guide asks agents to run `somewhere typecheck` after edits. Optional post-edit deploy-reference hooks remain available through explicit `somewhere hooks install --host <host>`; MCP setup remains explicit through `somewhere mcp install <host>`.
 
-
 ## 0.37.9
 
 ### Added
@@ -1530,7 +1688,6 @@ Republish the platform contract 6 CLI after npm accepted earlier uploads without
   platform. For the local loop this brings `owner()` scoping on visitor-mode
   projects, exact 64-bit integer fidelity on structured writes and batches, and
   the plan-derived local-database answer above.
-
 
 ## 0.29.1
 

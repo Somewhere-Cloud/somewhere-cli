@@ -281,7 +281,7 @@ code, kbd { font-family: var(--font-mono); font-size: 0.9em; }
 .meter__fill { height: 100%; border-radius: inherit; background: var(--color-accent); transition: width 240ms ease; }
 
 /* ---------- Table (src/ui/Table.tsx) ---------- */
-.table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; container-type: inline-size; }
 .table { width: 100%; border-collapse: collapse; font-size: var(--text-sm); font-variant-numeric: tabular-nums; }
 .table th, .table td { padding: var(--space-3) var(--space-5); text-align: left; vertical-align: middle; border-bottom: 1px solid var(--color-border); }
 .table th { color: var(--color-muted); font-size: var(--text-xs); font-weight: 600; letter-spacing: var(--tracking-label); text-transform: uppercase; white-space: nowrap; background: var(--color-surface-2); }
@@ -289,6 +289,19 @@ code, kbd { font-family: var(--font-mono); font-size: 0.9em; }
 .table tbody tr:hover td { background: var(--color-surface-2); }
 .table .is-numeric { text-align: right; }
 .table__empty { padding: var(--space-8) var(--space-5); text-align: center; color: var(--color-muted); }
+/* A narrow card (a phone): each row becomes a block of label and value lines, so nothing scrolls sideways. */
+@container (max-width: 560px) {
+  .table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .table, .table tbody, .table tr { display: block; width: 100%; }
+  .table tr { padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--color-border); }
+  .table tbody tr:last-child { border-bottom: 0; }
+  .table td { display: flex; gap: var(--space-3); align-items: baseline; padding: var(--space-1) 0; border-bottom: 0; text-align: left; overflow-wrap: anywhere; }
+  .table td::before { content: attr(data-label); flex: 0 0 38%; color: var(--color-muted); font-size: var(--text-xs); font-weight: 600; letter-spacing: var(--tracking-label); text-transform: uppercase; }
+  .table td.is-numeric { text-align: left; }
+  .table tbody tr:hover td { background: transparent; }
+  .table .table__empty { display: block; padding: var(--space-6) 0; text-align: center; }
+  .table .table__empty::before { content: none; }
+}
 
 /* ---------- Notice (src/ui/Notice.tsx) ---------- */
 .notice { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: center; padding: var(--space-3) var(--space-4); border: 1px solid var(--color-border); border-left-width: 4px; border-radius: var(--radius-control); background: var(--color-surface); font-size: var(--text-sm); }
@@ -350,6 +363,7 @@ code, kbd { font-family: var(--font-mono); font-size: 0.9em; }
 .auth__providers { display: grid; gap: var(--space-2); }
 .auth__switch { margin: 0; text-align: center; color: var(--color-muted); font-size: var(--text-sm); }
 .auth__forgot { margin: 0; text-align: right; font-size: var(--text-sm); }
+.auth__forgot a { display: inline-flex; align-items: center; min-height: 44px; }
 .divider { display: flex; align-items: center; gap: var(--space-3); color: var(--color-muted); font-size: var(--text-sm); }
 .divider::before, .divider::after { content: ""; flex: 1; height: 1px; background: var(--color-border); }
 .provider-icon { width: 18px; height: 18px; flex: none; }
@@ -806,6 +820,8 @@ export interface Column<Row> {
   render?(row: Row): ReactNode;
   numeric?: boolean;
   width?: string;
+  /** The cell's label when a narrow screen stacks each row; defaults to a text header. */
+  label?: string;
 }
 
 interface TableProps<Row> {
@@ -818,7 +834,9 @@ interface TableProps<Row> {
 }
 
 /** Rows of like things. Put it in a <Card flush> so the header sits on the
- *  card edge. For actions per row, add a column that renders quiet buttons. */
+ *  card edge. For actions per row, add a column that renders quiet buttons.
+ *  In a card narrower than 560 px (a phone) each row stacks as label and value
+ *  lines, so the table never scrolls sideways. */
 export function Table<Row extends object>({ columns, rows, rowKey, empty = 'Nothing here yet.', caption }: TableProps<Row>) {
   return (
     <div className="table-wrap">
@@ -839,7 +857,7 @@ export function Table<Row extends object>({ columns, rows, rowKey, empty = 'Noth
           ) : rows.map((row) => (
             <tr key={rowKey(row)}>
               {columns.map((column) => (
-                <td key={column.key} className={column.numeric ? 'is-numeric' : undefined}>
+                <td key={column.key} className={column.numeric ? 'is-numeric' : undefined} data-label={column.label ?? (typeof column.header === 'string' ? column.header : undefined)}>
                   {column.render ? column.render(row) : String((row as Record<string, unknown>)[column.key] ?? '')}
                 </td>
               ))}

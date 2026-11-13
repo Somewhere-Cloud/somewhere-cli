@@ -95,7 +95,7 @@ test('the run record is private, never holds a secret, and cleanup is by exact i
     `DELETE /auth/users/user-1 ${project}`, `DELETE /auth/users/user-3 ${project}`, `DELETE /auth/users/user-4 ${project}`]);
   assert.ok(calls.every(call => call.body === undefined), 'deletion is by id only, never by address');
   assert.deepEqual(result.deleted.sort(), ['user-1', 'user-3']);
-  assert.deepEqual(result.failed, ['sw-4@example.com']);
+  assert.deepEqual(result.failed, ['sw-4@example.com (HTTP 500 INTERNAL_ERROR: boom)'], 'a failed delete says what the platform answered');
   assert.deepEqual(result.unknownId, ['sw-2@staff.example']);
   const left = readdirSync(dir).map(name => JSON.parse(readFileSync(join(dir, name), 'utf8')).email).sort();
   assert.deepEqual(left, ['sw-4@example.com', 'sw-5@example.com'], 'a failed delete keeps its record for the next run; a live run keeps its own');

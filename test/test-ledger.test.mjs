@@ -2,8 +2,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { scanSpec, hashesOf, recordRun, failedOnRelease } from '../dist/lib/test-ledger.js';
-import { formatDeployTestsLine } from '../dist/lib/deploy-tests.js';
+import { scanSpec, hashesOf, recordRun, owedFor, projectFiles } from '../dist/lib/test-ledger.js';
+import { formatDeployTestsLine, deployTestStatus } from '../dist/lib/deploy-tests.js';
+import { confirmedRelease } from '../dist/lib/test-reporter.js';
 import { starterTests } from '../dist/lib/init-test-template.js';
 
 const SPEC = `import { test, expect } from '@somewhere-cloud/cli/testing';
@@ -20,11 +21,15 @@ test(\`second\`, async () => {
 function project() {
   const root = mkdtempSync(join(process.env.TMPDIR, 'ledger-'));
   mkdirSync(join(root, 'tests'));
+  mkdirSync(join(root, 'src'));
   writeFileSync(join(root, 'tests/a.spec.ts'), SPEC);
   writeFileSync(join(root, 'tests/helpers.ts'), 'export const x = 1;\n');
+  writeFileSync(join(root, 'src/test-support.ts'), 'export const y = 1;\n');
   return root;
 }
 const ran = (status, title = 'first') => ({ id: 'id-' + title, file: 'tests/a.spec.ts', line: title === 'first' ? 3 : 7, titlePath: [title], project: '', status });
+const base = { project: 'p', api: 'https://api.example/v1', origin: 'https://app.example', release: 'rel_1', platform: 'v1 1', env: 'e1', runner: '0.38.86 r1', browser: 'chrome 157', playwright: '1.65.0' };
+const inputsOf = (root, over = {}) => ({ ...base, ...projectFiles(root), ...over });
 
 test('scanning finds each test call through strings, regexes and templates', () => {
   const scanned = scanSpec(SPEC);
@@ -39,57 +44,99 @@ test('a test hash changes with its own body or the shared code, not with another
   writeFileSync(join(root, 'tests/a.spec.ts'), SPEC.replace("page.goto('/')", "page.goto('/x')"));
   assert.notEqual(hashesOf(root, 'tests/a.spec.ts', 'first').testHash, before.first.testHash);
   assert.equal(hashesOf(root, 'tests/a.spec.ts', 'second').testHash, before.second.testHash);
-  writeFileSync(join(root, 'tests/a.spec.ts'), SPEC.replace("x + ')'", "x + ']'"));
-  assert.notEqual(hashesOf(root, 'tests/a.spec.ts', 'second').testHash, before.second.testHash, 'shared spec code counts for every test');
   assert.equal(hashesOf(root, 'tests/a.spec.ts', 'missing'), null);
 });
 
-test('a focused rerun keeps passes on the same release and reruns only what failed', () => {
+test('a focused rerun keeps passes with the same inputs and reruns only what is owed', () => {
   const root = project();
-  recordRun(root, { projectId: 'p', release: 'rel_1', ran: [ran('failed', 'first'), ran('passed', 'second')] });
-  const focus = failedOnRelease(root, 'p', 'rel_1');
-  assert.deepEqual(focus.ids, ['id-first']);
+  recordRun(root, { inputs: inputsOf(root), ran: [ran('failed', 'first'), ran('passed', 'second')], full: true });
+  assert.deepEqual(owedFor(root, inputsOf(root)).ids, ['id-first']);
   writeFileSync(join(root, 'tests/a.spec.ts'), SPEC.replace("page.goto('/')", "page.goto('/fixed')"));
-  const after = recordRun(root, { projectId: 'p', release: 'rel_1', ran: [ran('passed', 'first')] });
-  assert.deepEqual(after.kept.map(entry => [entry.title, entry.status, entry.release]), [['second', 'passed', 'rel_1']]);
-  assert.deepEqual(after.dropped, []);
-  assert.equal(after.all.every(entry => entry.status === 'passed'), true);
-  assert.match(failedOnRelease(root, 'p', 'rel_1').ids.length === 0 ? 'none' : 'some', /none/);
+  const after = recordRun(root, { inputs: inputsOf(root), ran: [ran('passed', 'first')], full: false });
+  // The sibling's spec file changed, so it is owed a run too (never kept across a spec edit).
+  assert.deepEqual(after.kept, []);
+  assert.deepEqual(after.owed.map(entry => [entry.title, entry.status]), [['second', 'needs-run']]);
+  assert.equal(after.complete, true);
+  const again = recordRun(root, { inputs: inputsOf(root), ran: [ran('passed', 'second')], full: false });
+  assert.deepEqual(again.owed, []);
+  assert.deepEqual(again.kept.map(entry => entry.title), ['first']);
+  assert.equal(again.complete, true);
 });
 
-test('a new release, a shared helper or a changed test drops kept results and says why', () => {
+test('Astra M2.1-2.3: a helper outside tests/, the runner, the environment or the platform drops kept results', () => {
+  for (const [what, change, says] of [
+    ['helper in src/', root => writeFileSync(join(root, 'src/test-support.ts'), 'export const y = 2;\n'), /project files changed: src\/test-support\.ts/],
+    ['dependency lock', root => writeFileSync(join(root, 'package-lock.json'), '{}'), /project files changed: package-lock\.json/],
+    ['runner', () => ({ runner: '0.38.87 r2' }), /somewhere CLI that runs the tests changed/],
+    ['environment variables', () => ({ env: 'e2' }), /environment variables changed/],
+    ['platform', () => ({ platform: 'v2 2' }), /platform version changed/],
+    ['API environment', () => ({ api: 'https://staging.example/v1' }), /API environment changed/],
+    ['browser', () => ({ browser: 'chrome 158' }), /browser changed/],
+  ]) {
+    const root = project();
+    recordRun(root, { inputs: inputsOf(root), ran: [ran('passed', 'first'), ran('failed', 'second')], full: true });
+    const over = change(root) ?? {};
+    const outcome = recordRun(root, { inputs: inputsOf(root, over), ran: [ran('passed', 'second')], full: false });
+    assert.equal(outcome.kept.length, 0, what);
+    assert.match(outcome.dropped.join(' | '), says, what);
+    assert.equal(outcome.complete, false, `${what}: a subset after an input change is not a full result`);
+  }
+});
+
+test('Astra M2.4: a failing test edited and not rerun stays owed; --failed still finds it', () => {
   const root = project();
-  recordRun(root, { projectId: 'p', release: 'rel_1', ran: [ran('passed', 'first'), ran('passed', 'second')] });
-  const released = recordRun(root, { projectId: 'p', release: 'rel_2', ran: [ran('passed', 'first')] });
-  assert.equal(released.kept.length, 0);
-  assert.match(released.dropped[0], /release changed \(rel_1 → rel_2\)/);
-  assert.match(failedOnRelease(root, 'p', 'rel_3').stale, /release changed/);
-
-  recordRun(root, { projectId: 'p', release: 'rel_2', ran: [ran('passed', 'first'), ran('passed', 'second')] });
-  writeFileSync(join(root, 'tests/helpers.ts'), 'export const x = 2;\n');
-  const helper = recordRun(root, { projectId: 'p', release: 'rel_2', ran: [ran('passed', 'first')] });
-  assert.equal(helper.kept.length, 0);
-  assert.match(helper.dropped[0], /shared test files changed: tests\/helpers\.ts/);
-
-  recordRun(root, { projectId: 'p', release: 'rel_2', ran: [ran('passed', 'first'), ran('passed', 'second')] });
+  recordRun(root, { inputs: inputsOf(root), ran: [ran('passed', 'first'), ran('failed', 'second')], full: true });
   writeFileSync(join(root, 'tests/a.spec.ts'), SPEC.replace('template', 'changed template'));
-  const changed = recordRun(root, { projectId: 'p', release: 'rel_2', ran: [ran('passed', 'first')] });
-  assert.equal(changed.kept.length, 0);
-  assert.deepEqual(changed.changedFiles, ['tests/a.spec.ts']);
-  assert.match(changed.dropped[0], /a\.spec\.ts › second/);
+  recordRun(root, { inputs: inputsOf(root), ran: [ran('passed', 'first')], full: false });
+  const owed = owedFor(root, inputsOf(root));
+  assert.deepEqual(owed.ids, ['id-second']);
 });
 
-test('a run whose release could not be confirmed records nothing', () => {
+test('Astra M2.5: a subset on a fresh ledger is not a complete result', () => {
   const root = project();
-  const outcome = recordRun(root, { projectId: 'p', release: null, ran: [ran('passed')] });
+  const outcome = recordRun(root, { inputs: inputsOf(root), ran: [ran('passed', 'first')], full: false });
+  assert.equal(outcome.complete, false);
+  const owed = owedFor(root, inputsOf(root));
+  assert.equal(owed.complete, false, '--failed must not say "do not run the suite again"');
+});
+
+test('a spec added after the full run makes the suite incomplete', () => {
+  const root = project();
+  recordRun(root, { inputs: inputsOf(root), ran: [ran('passed', 'first'), ran('passed', 'second')], full: true });
+  writeFileSync(join(root, 'tests/b.spec.ts'), "test('third', async () => {});\n");
+  assert.equal(recordRun(root, { inputs: inputsOf(root), ran: [ran('passed', 'first')], full: false }).complete, false);
+});
+
+test('kept results expire after the keep window', () => {
+  const root = project();
+  recordRun(root, { inputs: inputsOf(root), ran: [ran('passed', 'first'), ran('failed', 'second')], full: true, now: Date.now() - 31 * 60_000 });
+  const outcome = recordRun(root, { inputs: inputsOf(root), ran: [ran('passed', 'second')], full: false });
+  assert.equal(outcome.kept.length, 0);
+  assert.match(outcome.dropped.join(' '), /older than 30 minutes/);
+  assert.match(owedFor(root, inputsOf(root)).stale ?? 'not stale', /older than|not stale/);
+});
+
+test('Astra M1: a run whose release was not confirmed records nothing and keeps nothing', () => {
+  const root = project();
+  const outcome = recordRun(root, { inputs: null, ran: [ran('passed')], full: true });
   assert.equal(outcome.kept.length, 0);
   assert.throws(() => readFileSync(join(root, '.somewhere/tests/ledger.json')), /ENOENT/);
+  assert.equal(confirmedRelease('rel_1', ['rel_1'], 'rel_2'), null, 'R1 at start, R2 at the end');
+  assert.equal(confirmedRelease('rel_1', ['rel_1'], null), null, 'final lookup failed');
+  assert.equal(confirmedRelease('rel_1', ['rel_1', 'rel_2'], 'rel_1'), null, 'a fixture saw another release');
+  assert.equal(confirmedRelease('rel_1', ['rel_1'], 'rel_1'), 'rel_1');
+  // deploy --test: an exit code of 0 with a changed or unconfirmed release is never passed.
+  assert.equal(deployTestStatus(0, { release: 'release changed during run', releaseConfirmed: false }, 'rel_1').status, 'failed');
+  assert.equal(deployTestStatus(0, { release: 'rel_2', releaseConfirmed: true }, 'rel_1').status, 'failed');
+  assert.equal(deployTestStatus(0, { release: 'rel_1', releaseConfirmed: true }, 'rel_1').status, 'passed');
+  assert.equal(deployTestStatus(1, { release: 'rel_1', releaseConfirmed: true }, 'rel_1').status, 'failed');
 });
 
 test('deploy --test never reports a failed or skipped test run as green', () => {
   assert.match(formatDeployTestsLine({ status: 'failed', release: 'rel_1', results: { passed: 3, failed: 1 } }), /^The deploy is live\. Its tests FAILED: 1 failed, 3 passed/);
   assert.match(formatDeployTestsLine({ status: 'not_run', release: 'rel_1', reason: 'x' }), /^The deploy is live\. Its tests did NOT run: x/);
   assert.match(formatDeployTestsLine({ status: 'passed', release: 'rel_1', results: { passed: 4 } }), /live and its tests passed: 4 passed/);
+  assert.match(formatDeployTestsLine({ status: 'passed', release: 'rel_1', results: { passed: 2, skipped: 2 } }), /2 passed, 2 skipped \(a skipped test proves nothing\)/);
 });
 
 test('starter journeys: private data runs, other access journeys wait to be filled in, refusals carry a positive control', () => {

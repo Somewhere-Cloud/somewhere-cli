@@ -71,7 +71,8 @@ First choice, as above: emailDomain. The role holds once the person verifies an 
 at that domain; no grant code. An email ending alone proves nothing: anyone can sign up
 as anyone@your-domain without owning that mailbox. Without verification, grant only from
 something the visitor cannot choose, such as an invitation your app issued, checked inside
-the sign-up route: somewhere docs sw.auth --section server-assigned-app-roles-setroles.
+the sign-up route: single use, bound to one account, its link delivered only to that person:
+somewhere docs sw.auth --section server-assigned-app-roles-setroles.
 messages use parent(): owner() would hide staff replies from the customer.
 Publish pages in an owner-checked endpoint. Share with caller-scoped
 sw.db.insert('note_shares', { grantee_id, note_id }); it checks row ownership.
@@ -158,11 +159,12 @@ several people, and ready(page, 'signed-in' | 'signed-out') waits for the sessio
 You do not need a separate browser script.
 Start from the starter's tests/account, phone and access specs: one journey per test, its own people.
 One somewhere test runs every spec, old and new together; somewhere deploy --test deploys, then runs them once.
-After fixing a test, run only what failed: somewhere test --failed (passed results on this release are kept).
+After fixing a test, run only what is owed: somewhere test --failed (results that still hold are kept).
 Do not rerun a suite that is already green on this release.
 Deploy raw source, no frontend build; type errors stop upload.
 newUser() gives a signed-in page/API client; make people at once: await Promise.all([newUser(), newUser()]).
-newUser({ role: 'staff' }) holds a role declared in appRoles, granted with your developer key.
+newUser({ role: 'staff' }) holds a role declared in appRoles, granted with your developer key;
+it tests what staff may do, not how someone becomes staff.
 newUser() takes no chosen email. Test users are verified and visible to this project's server user lookup.
 Email-domain role: signUp(page, { domain: 'staff.example' }), then verify(page, person); newPage() for a second person.
 Refusals: await expectRefused(person, 'notes', { operation: 'update', id, values }, { allowed: owner }) or

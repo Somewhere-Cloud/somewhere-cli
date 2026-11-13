@@ -1428,9 +1428,13 @@ export function registerDeploy(program: Command) {
         }
         const verificationFailed = verification?.passed === false || Boolean(verificationError);
         // --test runs only once the release is live and confirmed: never before, never on a failed deploy.
-        const runReleaseTests = (): Promise<DeployTests | undefined> => testRunner && !hasFunctionErrors && !verificationFailed
-          ? runDeployTests({ client, root: deployStateEntry?.dir ?? targetDir, projectId: result.project_id ?? projectId ?? undefined, temporary: Boolean(tempSession), json: Boolean(opts.json), release: result.active_release_id ?? result.release_id, renderPending: postLive.kind === 'timeout', prepared: testRunner })
-          : Promise.resolve(undefined);
+        const runReleaseTests = async (): Promise<DeployTests | undefined> => {
+          if (!testRunner) return undefined;
+          const release = result.active_release_id ?? result.release_id ?? null;
+          if (hasFunctionErrors) return { status: 'not_run', release, reason: 'functions failed to deploy' };
+          if (verificationFailed) return { status: 'not_run', release, reason: 'the deploy verification did not pass' };
+          return runDeployTests({ client, root: deployStateEntry?.dir ?? targetDir, projectId: result.project_id ?? projectId ?? undefined, temporary: Boolean(tempSession), json: Boolean(opts.json), release: release ?? undefined, renderPending: postLive.kind === 'timeout', prepared: testRunner });
+        };
         const verificationNextSteps = besideRealLogin ? [
           'Inspect the live URL; keep this project and its claim URL.',
           'After claiming and connecting this project, run: somewhere verify --project <PROJECT>',
@@ -1626,7 +1630,6 @@ export function registerDeploy(program: Command) {
         if (hasFunctionErrors) {
           process.exit(1);
         }
-        if (tests && tests.status !== 'passed') process.exit(1);
         if (verificationFailed) {
           warn(verificationError
             ? `The deploy is live, but verification could not finish: ${verificationError.message} [${verificationError.code}]`
@@ -1634,6 +1637,7 @@ export function registerDeploy(program: Command) {
           for (const step of verificationNextSteps) info(step);
           process.exit(1);
         }
+        if (tests && tests.status !== 'passed') process.exit(1);
       } catch (err) {
         spinner?.stop();
         await settleNotices();

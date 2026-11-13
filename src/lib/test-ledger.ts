@@ -1,61 +1,99 @@
 import { createHash } from 'node:crypto';
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 import { ensurePrivateDir, writePrivateFile } from './test-identities.js';
 
-// What each test last did on the live release, so a focused rerun after a test-only fix keeps the
-// results that still hold. A kept result is identified by release, spec-file hash and test hash.
-// Everything is dropped, and said so, when the release changes (a deploy: app, schema or auth),
-// when a shared test file changes (anything under tests/ that is not a spec, or the test packages),
-// and per test when that test's own code or its spec's shared code changes. No dependency graph.
+// What each test last did, so a focused rerun after a test-only fix keeps the results that still
+// hold. A kept result belongs to one exact set of inputs: the project, API, origin, release,
+// platform version, environment-variable listing, the somewhere CLI that ran it, the browser and
+// Playwright, and every project file outside node_modules (spec files are tracked per test: its
+// spec file and its own test must be unchanged). If any input differs, everything is dropped and the
+// run says which. Kept results also expire after KEEP_MS, because an environment value can change
+// without any visible version. When in doubt a result is dropped and the test runs again.
+// No dependency graph.
 
-const sha = (text: string): string => createHash('sha256').update(text).digest('hex').slice(0, 16);
+const sha = (text: string): string => createHash('sha256').update(text).digest('hex').slice(0, 32);
+export const KEEP_MS = 30 * 60_000;
 
-export interface LedgerEntry { id: string; file: string; line: number; title: string; project: string; status: string; specHash: string; testHash: string; at: string }
-export interface Ledger { version: 1; projectId: string; release: string; shared: Record<string, string>; tests: Record<string, LedgerEntry> }
+export type Inputs = Record<string, string>;
+export interface LedgerEntry { id: string; file: string; line: number; title: string; project: string; status: string; specHash: string; testHash: string; at: string; was?: string }
+interface FullRun { at: string; keys: string[]; specs: string }
+export interface Ledger { version: 2; inputs: Inputs; tests: Record<string, LedgerEntry>; full: FullRun | null }
 export interface Kept extends LedgerEntry { release: string }
 export interface LedgerOutcome {
-  /** Results from earlier runs on this release that still hold (tests not in this run). */
+  /** Results from earlier runs with the same inputs that still hold (tests not in this run). */
   kept: Kept[];
   /** Why earlier results stopped counting, if they did. */
   dropped: string[];
-  /** Every test the ledger knows on this release, after this run. */
+  /** Every test the ledger knows for these inputs, after this run. */
   all: LedgerEntry[];
-  /** Spec files holding tests whose kept results were dropped because they changed. */
+  /** Tests that must run before the suite is green: failed, or changed since their result. */
+  owed: LedgerEntry[];
+  /** Spec files holding tests that changed since their result. */
   changedFiles: string[];
+  /** True only when the last full run's tests are all known for these inputs and no spec was added or removed since. */
+  complete: boolean;
 }
 
 export const ledgerPath = (root: string): string => join(root, '.somewhere', 'tests', 'ledger.json');
 export const keyOf = (project: string, file: string, title: string): string => `${project}␟${file}␟${title}`;
+const NOT_RUN = new Set(['passed', 'skipped']);
+const isOwed = (entry: LedgerEntry): boolean => !NOT_RUN.has(entry.status);
 
 export function readLedger(root: string): Ledger | null {
   const path = ledgerPath(root);
   if (!existsSync(path)) return null;
   const parsed = JSON.parse(readFileSync(path, 'utf8')) as Ledger;
-  return parsed.version === 1 ? parsed : null;
+  return parsed.version === 2 ? parsed : null;
 }
 
-/** Hashes of the files every spec may share: non-spec files under tests/ and the test packages' versions. */
-export function sharedState(root: string): Record<string, string> {
-  const out: Record<string, string> = {};
+const SKIP_DIRS = new Set(['node_modules', '.git', '.somewhere', 'test-results', 'playwright-report', 'dist', 'build']);
+/** One entry per project file outside node_modules and generated folders: `file:<path>` → content
+ *  hash (a file over 2 MB hashes its size and modification time). Spec files are tracked per test. */
+export function projectFiles(root: string): Inputs {
+  const out: Inputs = {};
+  const walk = (dir: string): void => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      if (entry.name === '.DS_Store') continue;
+      const path = join(dir, entry.name);
+      if (entry.isDirectory()) { if (!SKIP_DIRS.has(entry.name)) walk(path); continue; }
+      if (!entry.isFile() || entry.name.endsWith('.spec.ts')) continue;
+      const stat = statSync(path);
+      out['file:' + relative(root, path)] = stat.size > 2_000_000 ? `size ${stat.size} mtime ${stat.mtimeMs}` : sha(readFileSync(path, 'utf8'));
+    }
+  };
+  walk(root);
+  return out;
+}
+
+/** The spec files the full suite collects, as one hash: a spec added or removed means the last full run no longer covers the suite. */
+export function specSet(root: string): string {
+  const specs: string[] = [];
   const walk = (dir: string): void => {
     if (!existsSync(dir)) return;
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
       const path = join(dir, entry.name);
-      if (entry.isDirectory()) { if (entry.name !== 'node_modules') walk(path); }
-      else if (!entry.name.endsWith('.spec.ts')) out[relative(root, path)] = sha(readFileSync(path, 'utf8'));
+      if (entry.isDirectory()) { if (!SKIP_DIRS.has(entry.name)) walk(path); }
+      else if (entry.name.endsWith('.spec.ts')) specs.push(relative(root, path));
     }
   };
   walk(join(root, 'tests'));
-  for (const pkg of ['@playwright/test', '@somewhere-cloud/cli']) {
-    const manifest = join(root, 'node_modules', pkg, 'package.json');
-    out[`package ${pkg}`] = existsSync(manifest) ? (JSON.parse(readFileSync(manifest, 'utf8')) as { version?: string }).version ?? 'unknown' : 'absent';
-  }
-  return out;
+  return sha(specs.sort().join('\n'));
 }
 
-export function changedShared(before: Record<string, string>, now: Record<string, string>): string[] {
-  return [...new Set([...Object.keys(before), ...Object.keys(now)])].filter(name => before[name] !== now[name]).sort();
+const LABELS: Record<string, string> = {
+  project: 'the project', api: 'the API environment', origin: 'the app origin', platform: 'the platform version',
+  env: "the project's environment variables", runner: 'the somewhere CLI that runs the tests', browser: 'the browser', playwright: 'Playwright',
+};
+/** Which inputs differ, in words; files are named. */
+export function changedInputs(before: Inputs, now: Inputs): string[] {
+  const names = [...new Set([...Object.keys(before), ...Object.keys(now)])].filter(name => before[name] !== now[name]).sort();
+  const words: string[] = [];
+  if (names.includes('release')) words.push(`the release changed (${before.release ?? 'none'} → ${now.release ?? 'none'}): a deploy or rollback changed the app, schema or auth`);
+  for (const name of names) if (LABELS[name]) words.push(`${LABELS[name]} changed`);
+  const files = names.filter(name => name.startsWith('file:')).map(name => name.slice(5));
+  if (files.length) words.push(`project files changed: ${files.slice(0, 6).join(', ')}${files.length > 6 ? ` and ${files.length - 6} more` : ''}`);
+  return words;
 }
 
 // ------------------------------------------------------------------ spec scanning
@@ -169,53 +207,75 @@ export function hashesOf(root: string, file: string, title: string): { specHash:
 
 export interface RanTest { id: string; file: string; line: number; titlePath: string[]; project: string; status: string }
 
-/** Record this run and work out what earlier results still hold. A run whose release changed while
- *  it ran records nothing. */
-export function recordRun(root: string, input: { projectId: string; release: string | null; ran: RanTest[] }): LedgerOutcome {
+/** Record this run and work out what earlier results still hold. `inputs` is null when this run's
+ *  release or inputs could not be confirmed from start to end: then nothing is recorded or kept. */
+export function recordRun(root: string, input: { inputs: Inputs | null; ran: RanTest[]; full: boolean; now?: number }): LedgerOutcome {
+  const now = input.now ?? Date.now();
+  const empty: LedgerOutcome = { kept: [], dropped: [], all: [], owed: [], changedFiles: [], complete: false };
+  if (!input.inputs) return { ...empty, dropped: ['this run could not be tied to one release and one set of inputs, so its results are not kept'] };
   const previous = readLedger(root);
-  const shared = sharedState(root);
   const dropped: string[] = [];
   let tests: Record<string, LedgerEntry> = {};
-  if (previous && previous.projectId === input.projectId) {
-    if (!input.release) dropped.push('the release could not be confirmed for this run');
-    else if (previous.release !== input.release) dropped.push(`the release changed (${previous.release} → ${input.release}): a deploy changed the app, schema or auth`);
-    else {
-      const changed = changedShared(previous.shared, shared);
-      if (changed.length) dropped.push(`shared test files changed: ${changed.join(', ')}`);
-      else tests = { ...previous.tests };
-    }
+  let full: FullRun | null = null;
+  if (previous) {
+    const changed = changedInputs(previous.inputs, input.inputs);
+    if (changed.length) dropped.push(...changed);
+    else { tests = { ...previous.tests }; full = previous.full; }
   }
-  const now = new Date().toISOString();
+  for (const [key, entry] of Object.entries(tests)) {
+    if (now - Date.parse(entry.at) > KEEP_MS) { delete tests[key]; dropped.push(`older than ${KEEP_MS / 60_000} minutes: ${entry.file} › ${entry.title}`); }
+  }
+  if (input.full) { tests = {}; full = null; }
+  const at = new Date(now).toISOString();
   const ranKeys = new Set<string>();
   for (const test of input.ran) {
     const title = test.titlePath.join(' › ');
     const key = keyOf(test.project, test.file, title);
     ranKeys.add(key);
     const hashes = hashesOf(root, test.file, test.titlePath[test.titlePath.length - 1]);
-    tests[key] = { id: test.id, file: test.file, line: test.line, title, project: test.project, status: test.status, specHash: hashes?.specHash ?? 'unknown', testHash: hashes?.testHash ?? 'unknown', at: now };
+    tests[key] = { id: test.id, file: test.file, line: test.line, title, project: test.project, status: test.status, specHash: hashes?.specHash ?? 'unknown', testHash: hashes?.testHash ?? 'unknown', at };
   }
+  if (input.full) full = { at, keys: [...ranKeys].sort(), specs: specSet(root) };
   const kept: Kept[] = [];
-  const changedTests: string[] = [];
   const changedFiles = new Set<string>();
+  const removed: string[] = [];
   for (const [key, entry] of Object.entries(tests)) {
     if (ranKeys.has(key)) continue;
     const hashes = hashesOf(root, entry.file, entry.title.split(' › ').pop()!);
-    if (!hashes || hashes.testHash !== entry.testHash) { changedTests.push(`${entry.file} › ${entry.title}`); if (hashes) changedFiles.add(entry.file); delete tests[key]; continue; }
-    kept.push({ ...entry, release: input.release! });
+    if (!hashes) { removed.push(`${entry.file} › ${entry.title}`); delete tests[key]; continue; }
+    // Any change to its spec file, not only to the test itself, means the result no longer holds:
+    // the test is owed a run (a failure stays owed; it is never forgotten).
+    if (hashes.specHash !== entry.specHash || hashes.testHash !== entry.testHash) {
+      if (entry.status !== 'needs-run') tests[key] = { ...entry, status: 'needs-run', was: entry.status };
+      changedFiles.add(entry.file);
+      continue;
+    }
+    if (entry.status === 'needs-run') { changedFiles.add(entry.file); continue; }
+    kept.push({ ...entry, release: input.inputs.release });
   }
-  if (changedTests.length) dropped.push(`changed or removed since they ran, so not kept: ${changedTests.join('; ')}`);
-  if (input.release) ensurePrivateDir(dirname(ledgerPath(root)));
-  if (input.release) writePrivateFile(ledgerPath(root), JSON.stringify({ version: 1, projectId: input.projectId, release: input.release, shared, tests } satisfies Ledger) + '\n');
-  return { kept, dropped, all: Object.values(tests), changedFiles: [...changedFiles].sort() };
+  if (removed.length) dropped.push(`no longer in their spec files: ${removed.join('; ')}`);
+  if (changedFiles.size) dropped.push(`changed since they ran, so they must run again: ${[...changedFiles].sort().join(', ')}`);
+  ensurePrivateDir(dirname(ledgerPath(root)));
+  writePrivateFile(ledgerPath(root), JSON.stringify({ version: 2, inputs: input.inputs, tests, full } satisfies Ledger) + '\n');
+  const all = Object.values(tests);
+  const complete = Boolean(full && full.specs === specSet(root) && full.keys.every(key => tests[key]));
+  return { kept, dropped, all, owed: all.filter(isOwed), changedFiles: [...changedFiles].sort(), complete };
 }
 
-/** The earlier failures on this release that a focused rerun should run, or why there are none. */
-export function failedOnRelease(root: string, projectId: string, release: string): { ids: string[]; entries: LedgerEntry[] } | { stale: string } {
+/** The tests a focused rerun must run (failed, or changed since their result), or why earlier
+ *  results no longer count. */
+export function owedFor(root: string, inputs: Inputs): { ids: string[]; entries: LedgerEntry[]; complete: boolean } | { stale: string } {
   const ledger = readLedger(root);
-  if (!ledger || ledger.projectId !== projectId) return { stale: 'no earlier run of this project is recorded' };
-  if (ledger.release !== release) return { stale: `the release changed since the last run (${ledger.release} → ${release}): a deploy changed the app, schema or auth` };
-  const changed = changedShared(ledger.shared, sharedState(root));
-  if (changed.length) return { stale: `shared test files changed since the last run: ${changed.join(', ')}` };
-  const entries = Object.values(ledger.tests).filter(entry => entry.status !== 'passed' && entry.status !== 'skipped');
-  return { ids: entries.map(entry => entry.id), entries };
+  if (!ledger) return { stale: 'no earlier run is recorded here' };
+  const changed = changedInputs(ledger.inputs, inputs);
+  if (changed.length) return { stale: changed.join('; ') };
+  const now = Date.now();
+  if (Object.values(ledger.tests).some(entry => now - Date.parse(entry.at) > KEEP_MS)) return { stale: `earlier results are older than ${KEEP_MS / 60_000} minutes` };
+  const entries: LedgerEntry[] = [];
+  for (const entry of Object.values(ledger.tests)) {
+    const hashes = hashesOf(root, entry.file, entry.title.split(' › ').pop()!);
+    if (isOwed(entry) || (hashes && (hashes.specHash !== entry.specHash || hashes.testHash !== entry.testHash))) entries.push(entry);
+  }
+  const complete = Boolean(ledger.full && ledger.full.specs === specSet(root) && ledger.full.keys.every(key => ledger.tests[key]));
+  return { ids: entries.map(entry => entry.id), entries, complete };
 }

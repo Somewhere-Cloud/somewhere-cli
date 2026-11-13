@@ -43,17 +43,25 @@ export async function runDeployTests(input: {
   mark('deploy-test:start');
   try {
     const outcome = await runTests({ root: input.root, client: input.client, projectId: input.projectId, prepared: prepared.value, options: { workers: '5', json: input.json }, expectRelease: input.release, toStderr: input.json });
-    const passed = outcome.exitCode === 0 && outcome.results !== null;
-    return { status: passed ? 'passed' : 'failed', release, results: outcome.results, ...(outcome.results ? {} : { reason: 'the runner wrote no results' }) };
+    return { ...deployTestStatus(outcome.exitCode, outcome.results, input.release), release, results: outcome.results };
   } catch (error) {
     return notRun(error instanceof Error ? error.message : String(error));
   } finally { mark('deploy-test:end'); }
 }
 
+/** Passed only when the runner passed AND confirmed, at the end, that the release it tested is the
+ *  one this deploy published. */
+export function deployTestStatus(exitCode: number, results: Record<string, unknown> | null, expected: string): { status: 'passed' | 'failed'; reason?: string } {
+  if (!results) return { status: 'failed', reason: 'the runner wrote no results' };
+  if (results.releaseConfirmed !== true || results.release !== expected) return { status: 'failed', reason: `the tests did not run against ${expected} from start to end (${String(results.release)})` };
+  return exitCode === 0 ? { status: 'passed' } : { status: 'failed' };
+}
+
 /** The plain closing line: the deploy and its tests are reported separately, never as one green. */
 export function formatDeployTestsLine(tests: DeployTests): string {
-  const r = tests.results as { passed?: number; failed?: number; setupErrors?: number; notRun?: number } | null | undefined;
-  if (tests.status === 'passed') return `The deploy is live and its tests passed: ${r?.passed ?? 0} passed on ${tests.release}.`;
-  if (tests.status === 'failed') return `The deploy is live. Its tests FAILED: ${r?.failed ?? 0} failed, ${r?.passed ?? 0} passed${r?.setupErrors ? `, ${r.setupErrors} setup errors` : ''}${tests.reason ? ` (${tests.reason})` : ''} on ${tests.release}. After fixing a test: somewhere test --failed. After fixing the app: somewhere deploy --test.`;
+  const r = tests.results as { passed?: number; failed?: number; skipped?: number; setupErrors?: number; notRun?: number } | null | undefined;
+  const skipped = r?.skipped ? `, ${r.skipped} skipped (a skipped test proves nothing)` : '';
+  if (tests.status === 'passed') return `The deploy is live and its tests passed: ${r?.passed ?? 0} passed${skipped} on ${tests.release}.`;
+  if (tests.status === 'failed') return `The deploy is live. Its tests FAILED: ${r?.failed ?? 0} failed, ${r?.passed ?? 0} passed${skipped}${r?.setupErrors ? `, ${r.setupErrors} setup errors` : ''}${tests.reason ? ` (${tests.reason})` : ''} on ${tests.release}. After fixing a test: somewhere test --failed. After fixing the app: somewhere deploy --test.`;
   return `The deploy is live. Its tests did NOT run: ${tests.reason}.`;
 }

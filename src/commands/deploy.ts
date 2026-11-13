@@ -45,6 +45,9 @@ import { ensureClaimHandoff } from '../lib/claim-handoff.js';
 import { dim, error, green, info, platformErrorEnvelope, printJson, printJsonError, red, success, teal, warn, yellow } from '../lib/output.js';
 import type { CliConfig, ProjectConfig } from '../types.js';
 import { showProjectNotices } from '../lib/project-notices.js';
+import { prepareRunner } from '../lib/test-run.js';
+import { formatDeployTestsLine, prepareDeployTests, runDeployTests, type DeployTests } from '../lib/deploy-tests.js';
+import { mark as timelineMark, markProcessStart } from '../lib/test-timeline.js';
 import { formatNextActions, nextActions } from '../lib/next-actions.js';
 import { countFromResponse, countFunctionRoutes, formatPublishSurface, formatUploadInventory, uploadInventory } from '../lib/surface-counts.js';
 import {
@@ -705,6 +708,7 @@ export function registerDeploy(program: Command) {
       '--verify [flow.json]',
       'After the deploy is live, run one browser verification flow at desktop and phone size. Omit the file for the default health check.',
     )
+    .option('--test', 'After the deploy is live, run the project tests (tests/*.spec.ts) once against the new release and report their results with the deploy')
     .option('--json', 'Print the raw deploy response as JSON on stdout; files left out locally are listed on stderr by path and reason')
     .option('--allow-type-errors', 'Upload even when the local TypeScript check fails')
     .option('--timing', 'Print collection, upload, release, activation, and verification timings')
@@ -713,6 +717,10 @@ export function registerDeploy(program: Command) {
       // start-up cost (runtime boot + module load) before the command ran.
       const startupMs = performance.now();
       const targetDir = resolveTargetDir(dir);
+      markProcessStart('cli');
+      timelineMark('cli:action');
+      // --test: the runner is prepared (local only: Playwright, browser check) while the deploy runs.
+      const testRunner = opts.test && !opts.dryRun ? prepareDeployTests(() => prepareRunner(targetDir)) : undefined;
       let typecheckMs = 0;
       const typecheckStartedAt = performance.now();
       // Collection, authentication and packaging can proceed while tsc runs.
@@ -1419,6 +1427,10 @@ export function registerDeploy(program: Command) {
           }
         }
         const verificationFailed = verification?.passed === false || Boolean(verificationError);
+        // --test runs only once the release is live and confirmed: never before, never on a failed deploy.
+        const runReleaseTests = (): Promise<DeployTests | undefined> => testRunner && !hasFunctionErrors && !verificationFailed
+          ? runDeployTests({ client, root: deployStateEntry?.dir ?? targetDir, projectId: result.project_id ?? projectId ?? undefined, temporary: Boolean(tempSession), json: Boolean(opts.json), release: result.active_release_id ?? result.release_id, renderPending: postLive.kind === 'timeout', prepared: testRunner })
+          : Promise.resolve(undefined);
         const verificationNextSteps = besideRealLogin ? [
           'Inspect the live URL; keep this project and its claim URL.',
           'After claiming and connecting this project, run: somewhere verify --project <PROJECT>',
@@ -1443,14 +1455,16 @@ export function registerDeploy(program: Command) {
             : result;
           (output as DeployResult & { uploaded?: typeof inventory }).uploaded = inventory;
           if (postLive.kind === 'timeout') output.post_live_render = { status: 'pending', note: POST_LIVE_RENDER_STILL_RUNNING };
-          printJson(verification || verificationError ? {
+          const tests = await runReleaseTests();
+          printJson(verification || verificationError || tests ? {
             ...output,
             deployment_outcome: 'live',
             ...(verification ? { verification } : {}),
             ...(verificationError ? { verification_error: verificationError } : {}),
             ...(verificationFailed ? { next_steps: verificationNextSteps } : {}),
+            ...(tests ? { tests: { status: tests.status, release: tests.release, ...(tests.reason ? { reason: tests.reason } : {}), summary: formatDeployTestsLine(tests), results: tests.results ?? null } } : {}),
           } : output);
-          if (hasFunctionErrors || verificationFailed) {
+          if (hasFunctionErrors || verificationFailed || (tests && tests.status !== 'passed')) {
             process.exit(1);
           }
           return;
@@ -1601,12 +1615,18 @@ export function registerDeploy(program: Command) {
           console.log('');
           for (const line of formatVerifyOutput(verification)) console.log(line);
         }
+        const tests = await runReleaseTests();
+        if (tests) {
+          if (tests.status === 'passed') success(formatDeployTestsLine(tests));
+          else error(formatDeployTestsLine(tests));
+        }
 
         // Exit non-zero if any function failed to deploy — a CI step that
         // shells out to `somewhere deploy` should fail, not pass green.
         if (hasFunctionErrors) {
           process.exit(1);
         }
+        if (tests && tests.status !== 'passed') process.exit(1);
         if (verificationFailed) {
           warn(verificationError
             ? `The deploy is live, but verification could not finish: ${verificationError.message} [${verificationError.code}]`

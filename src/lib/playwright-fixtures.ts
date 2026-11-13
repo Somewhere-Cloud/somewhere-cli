@@ -6,12 +6,16 @@ import { ApiClient } from './client.js';
 import { getToken, loadProjectConfig } from './config.js';
 import { buildStorageState, createTestIdentities, expiryOf, messagesAfter, type IssuedIdentity, type InboxMessage } from './test-identities.js';
 import { diagnostics, rememberSecrets, scrub, describeError, timed, titled } from './test-diagnostics.js';
+import { mark as timelineMark, markProcessStart, span, trackPage } from './test-timeline.js';
 import { admitReservedAddress, deleteAccount, forgetRecord, generatedAddress, generatedPassword, recordAttempt, recordId } from './form-accounts.js';
 import type { TestTarget } from './test-target.js';
 import type { TestInfo } from '@playwright/test';
 import type { DataRequest } from '../testing.js';
 
 export interface TestUser { id: string; email: string; page: Page; request: APIRequestContext }
+/** `role`: an app role declared in db/schema.ts appRoles, granted to this user with your developer
+ *  credential (the same grant as somewhere's app-roles grant) before newUser returns. */
+export interface NewUserOptions { role?: string }
 /** An ordinary account made through the app's own sign-up form. `verified` is true once its
  *  address was verified with a captured code (verify(), or a project that requires email codes). */
 export interface Person { id: string; email: string; password: string; verified: boolean }
@@ -22,7 +26,10 @@ export type CodeSteps = (page: Page, code: string) => Promise<void>;
 export interface SignUpOptions { domain?: string; email?: string; steps?: FormSteps; codeSteps?: CodeSteps }
 export interface SignInOptions { steps?: FormSteps; codeSteps?: CodeSteps }
 interface Fixtures {
-  _evidence: void; newUser: () => Promise<TestUser>; anonymous: APIRequestContext; _forms: FormRun;
+  _evidence: void; anonymous: APIRequestContext; _forms: FormRun;
+  /** A fresh signed-in test user. Make several at once: `await Promise.all([newUser(), newUser()])`.
+   *  `{ role }` grants that app role (declared in db/schema.ts appRoles) before it returns. */
+  newUser: (options?: NewUserOptions) => Promise<TestUser>;
   /** Another signed-out page on the app, in its own browser context (a second person for signUp). */
   newPage: () => Promise<Page>;
   signUp: (page: Page, options?: SignUpOptions) => Promise<Person>;
@@ -58,7 +65,8 @@ function runner() {
       const contexts: BrowserContext[] = [];
       const partialIds: string[] = [];
       try {
-        await use(async () => {
+        await use(async (options = {}) => {
+          if (options.role !== undefined && (typeof options.role !== 'string' || !/^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(options.role))) throw new Error('newUser({ role }): name a role declared in db/schema.ts appRoles.');
           let created: Awaited<ReturnType<typeof createTestIdentities>>;
           try { created = await timed(info, 'test-user creation', () => createTestIdentities(client, projectId, 'user', 1, 'pw')); }
           catch (error) {
@@ -69,11 +77,15 @@ function runner() {
           owned.push(...created.issued);
           const issued = created.issued[0];
           rememberSecrets(issued.access_token, issued.refresh_token);
+          const granted = options.role === undefined ? undefined : timed(info, 'role grant', () => client.call('POST', '/auth/app-roles/grant', { project_id: projectId, user_id: issued.user.id, role: options.role }))
+            .catch((error: unknown) => { throw new Error(`newUser({ role: '${options.role}' }): the role was not granted: ${error instanceof Error ? scrub(error.message) : String(error)}`); });
           const context = await browser.newContext({ baseURL: origin, viewport, isMobile, hasTouch, extraHTTPHeaders: { Origin: origin }, storageState: buildStorageState(origin, host, issued, expiryOf(issued, created.receivedAt)) });
           contexts.push(context);
+          await granted;
           constrain(context.request, origin, info);
           digests.set(context.request, target.contractDigest);
           const page = await timed(info, 'page creation', () => context.newPage());
+          trackPage(page, titled(info.project.name, info.title));
           page.on('load', () => { void page.evaluate<number>("performance.getEntriesByType('navigation')[0]?.duration ?? 0").then(ms => { diagnostics(info).timings['page load'] = ms; }).catch(() => {}); });
           return { id: issued.user.id, email: issued.user.email, page, request: context.request };
         });
@@ -81,7 +93,7 @@ function runner() {
         const failures: string[] = [];
         for (const context of contexts) try {
           rememberSecrets(...(await context.cookies()).map(cookie => cookie.value));
-          if (info.status !== info.expectedStatus) {
+          if (info.status !== info.expectedStatus && !diagnostics(info).screenshot) {
             const page = context.pages()[0];
             if (page && !/auth|login|signup|reset/i.test(new URL(page.url()).pathname)) {
               const path = info.outputPath('failure.png');
@@ -89,17 +101,21 @@ function runner() {
               diagnostics(info).screenshot = path;
             }
           }
-        } catch { failures.push('Failure screenshot capture failed'); } finally {
-          try { await context.close(); } catch { failures.push('Browser context cleanup failed'); }
-        }
+        } catch { failures.push('Failure screenshot capture failed'); }
         const ids = [...new Set([...owned.map(identity => identity.user.id), ...partialIds])];
-        if (ids.length) {
-          try {
-            await timed(info, 'test-user deletion', () => client.call('DELETE', '/auth/test-users', { project_id: projectId, ids }));
-            const remaining = await timed(info, 'cleanup confirmation', () => client.call<{ identities: { id: string }[] }>('GET', '/auth/test-users', undefined, { project_id: projectId }));
-            if (remaining.identities.some(identity => ids.includes(identity.id))) failures.push('Test user cleanup unconfirmed');
-          } catch { failures.push('Test user cleanup unconfirmed; app rows remain'); }
-        }
+        // Contexts close while the exact ids are deleted. The DELETE answer names the ids it removed;
+        // only when it does not name every one is the list read back to confirm.
+        await Promise.all([
+          ...contexts.map(context => context.close().catch(() => { failures.push('Browser context cleanup failed'); })),
+          ids.length ? (async () => {
+            try {
+              const deleted = await timed(info, 'test-user deletion', () => client.call<{ ids?: string[] }>('DELETE', '/auth/test-users', { project_id: projectId, ids }));
+              if (ids.every(id => deleted.ids?.includes(id))) return;
+              const remaining = await timed(info, 'cleanup confirmation', () => client.call<{ identities: { id: string }[] }>('GET', '/auth/test-users', undefined, { project_id: projectId }));
+              if (remaining.identities.some(identity => ids.includes(identity.id))) failures.push('Test user cleanup unconfirmed');
+            } catch { failures.push('Test user cleanup unconfirmed; app rows remain'); }
+          })() : Promise.resolve(),
+        ]);
         if (failures.length) throw new Error(failures.join('; '));
       }
     },
@@ -115,13 +131,14 @@ function runner() {
       digests.set(context.request, target.contractDigest);
       try { await use(context.request); } finally { rememberSecrets(...(await context.cookies()).map(cookie => cookie.value)); await context.close(); }
     },
-    newPage: async ({ browser, baseURL, viewport, isMobile, hasTouch, _forms }, use) => {
+    newPage: async ({ browser, baseURL, viewport, isMobile, hasTouch, _forms }, use, info) => {
       const contexts: BrowserContext[] = [];
       try {
         await use(async () => {
           const context = await browser.newContext({ baseURL, viewport, isMobile, hasTouch });
           contexts.push(context);
           const page = await context.newPage();
+          trackPage(page, titled(info.project.name, info.title));
           _forms.pages.add(page);
           return page;
         });
@@ -132,13 +149,14 @@ function runner() {
     // Depends on page so its teardown (screenshots, cookie scrubbing) runs while the page is open.
     _forms: async ({ page }, use, info) => {
       const run = new FormRun(info);
+      trackPage(page, titled(info.project.name, info.title));
       run.pages.add(page);
       try { await use(run); } finally { await run.finish(); }
     },
-    signUp: async ({ _forms }, use) => { await use((page, options) => signUp(_forms, page, options ?? {})); },
-    verify: async ({ _forms }, use) => { await use((page, person) => verify(_forms, page, person)); },
-    signIn: async ({ _forms }, use) => { await use((page, person, options) => signIn(_forms, page, person, options ?? {})); },
-    signOut: async ({ _forms }, use) => { await use((page, options) => signOut(_forms, page, options ?? {})); },
+    signUp: async ({ _forms }, use, info) => { await use((page, options) => span('signUp', { test: titled(info.project.name, info.title) }, () => signUp(_forms, page, options ?? {}))); },
+    verify: async ({ _forms }, use, info) => { await use((page, person) => span('verify', { test: titled(info.project.name, info.title) }, () => verify(_forms, page, person))); },
+    signIn: async ({ _forms }, use, info) => { await use((page, person, options) => span('signIn', { test: titled(info.project.name, info.title) }, () => signIn(_forms, page, person, options ?? {}))); },
+    signOut: async ({ _forms }, use, info) => { await use((page, options) => span('signOut', { test: titled(info.project.name, info.title) }, () => signOut(_forms, page, options ?? {}))); },
   });
   loaded = { test, expect: pw.expect };
   return loaded;
@@ -161,6 +179,7 @@ function constrain(client: APIRequestContext, origin: string, info: TestInfo): v
         try { const body = await response.json() as { error?: unknown }; if (typeof body.error === 'string' && /^[A-Z_]+$/.test(body.error)) code = body.error; } catch {}
       }
       diagnostics(info).request = { method: String(options.method ?? 'GET').toUpperCase(), path: scrub(url.pathname), status: response.status(), code };
+      timelineMark('app-request', { test: titled(info.project.name, info.title), method: String(options.method ?? 'GET').toUpperCase(), path: scrub(url.pathname), status: response.status() });
       return response;
     } });
   }
@@ -171,6 +190,7 @@ function constrain(client: APIRequestContext, origin: string, info: TestInfo): v
 // and `somewhere test <file>` would match none. The lazy wrapper remains only for plain Node imports
 // without @playwright/test, where test() is never called.
 const eager = (() => { try { return runner(); } catch { return undefined; } })();
+if (eager) { markProcessStart('playwright'); timelineMark('fixtures:loaded'); }
 export const test: RunnerTest = eager?.test ?? new Proxy((() => {}) as unknown as RunnerTest, {
   apply: (_target, receiver, args) => Reflect.apply(runner().test, receiver, args),
   get: (_target, key) => Reflect.get(runner().test, key),
@@ -302,7 +322,7 @@ export function data(client: APIRequestContext, table: string, request: DataRequ
 }
 export async function ready(page: Page, state: 'ready' | 'signed-in' | 'signed-out' | Locator = 'ready'): Promise<void> {
   const locator = typeof state === 'string' ? page.locator(state === 'ready' ? '[data-app-state="signed-in"], [data-app-state="signed-out"]' : `[data-app-state="${state}"]`) : state;
-  await locator.waitFor({ state: 'visible' });
+  await span('ready', { state: typeof state === 'string' ? state : 'locator' }, () => locator.waitFor({ state: 'visible' }));
 }
 
 // ---------------------------------------------------------------- sign-up through the app's form
@@ -361,18 +381,20 @@ class FormRun {
         diagnostics(this.info).screenshot = path;
       } catch { failures.push('Failure screenshot capture failed'); }
     }
-    for (const attempt of this.attempts) {
+    // Each account is deleted by its exact id; the deletions run at the same time.
+    await Promise.all(this.attempts.map(async attempt => {
       if (attempt.id) {
         const { client, projectId } = await this.control();
         const id = attempt.id;
-        if (await timed(this.info, 'sign-up account deletion', () => deleteAccount(client, projectId, id))) forgetRecord(attempt.record);
-        else failures.push(`Could not delete the form sign-up account ${attempt.email}; its record is kept and the next somewhere test retries`);
+        const refused = await timed(this.info, 'sign-up account deletion', () => deleteAccount(client, projectId, id));
+        if (refused === null) forgetRecord(attempt.record);
+        else failures.push(`Could not delete the form sign-up account ${attempt.email} (${refused}); its record is kept and the next somewhere test retries`);
       } else if (attempt.submitted && !attempt.refused) {
         // Never delete by address: the account may exist, but this run never learned its id.
         failures.push(`A sign-up for ${attempt.email} was submitted but no account id came back, so nothing was deleted; if it exists, delete it from the project's users list`);
         forgetRecord(attempt.record);
       } else forgetRecord(attempt.record);
-    }
+    }));
     if (failures.length) throw new Error(failures.join('; '));
   }
 }
@@ -390,7 +412,7 @@ async function pageSays(page: Page): Promise<string> {
 
 /** Run one named step; a failure says which step, what the page showed, and the cause, scrubbed. */
 async function step<T>(page: Page, name: string, work: () => Promise<T>): Promise<T> {
-  try { return await work(); }
+  try { return await span(name, {}, work); }
   catch (error) {
     if (error instanceof StepError) throw error;
     const said = await pageSays(page);
@@ -549,6 +571,7 @@ async function verify(run: FormRun, page: Page, person: Person): Promise<void> {
     // a wrong or expired code (401/400) is never retried.
     let confirmed = await step(page, 'verify: enter the code in the app', () => page.request.post('/api/auth/verify-email', { data: { code } }));
     for (let wait = 0; confirmed.status() === 404 && wait < 8; wait++) {
+      timelineMark('wait', { ms: 250, why: 'verify: code not installed yet (404)' });
       await new Promise(resolve => setTimeout(resolve, 250));
       confirmed = await step(page, 'verify: enter the code in the app', () => page.request.post('/api/auth/verify-email', { data: { code } }));
     }
@@ -588,6 +611,7 @@ async function signIn(run: FormRun, page: Page, person: Person, options: SignInO
     const wait = Math.max(0, CODE_GAP_MS - (Date.now() - (lastSignInCode.get(person) ?? 0)));
     const waitMs = Math.min(wait, CODE_GAP_MS);
     if (run.info.timeout > 0) run.info.setTimeout(run.info.timeout + waitMs + 10_000);
+    timelineMark('wait', { ms: waitMs, why: 'signIn: one emailed code a minute' });
     await page.waitForTimeout(waitMs);
     result = await submit();
   }

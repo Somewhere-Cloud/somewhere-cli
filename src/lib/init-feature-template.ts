@@ -3421,13 +3421,13 @@ export function createFeatureTemplate(
   const agent = selection.modules.includes('agent');
   const magicLink = selection.modules.includes('magic-link');
   const files: InitScaffoldFile[] = [
-    ...starterTests(privateData),
+    ...starterTests({ privateData }),
     { path: '.gitignore', content: 'node_modules\ndist\nbuild\n.env\n# Generated from db/schema.ts by somewhere typecheck, dev and deploy.\n__somewhere_data.d.ts\n__somewhere_files.d.ts\n' },
     { path: 'AGENTS.md', content: INIT_AGENTS_MD.replace(/## Getting started[^]*?After edits:/, `## Testing
-Write tests/*.spec.ts importing test, expect from @somewhere-cloud/cli/testing.
-Each test creates its own users with newUser() and unique row values.
-Run somewhere test against the linked production app (five workers).
-After a failure, fix it and run somewhere test --failed.
+tests/account, phone and access specs are working journeys: adapt them, one journey per test.
+Each test makes its own people at once (Promise.all of newUser()) and unique row values.
+Run somewhere test (or somewhere deploy --test): every spec, old and new, in one run.
+After fixing a test, run only what failed: somewhere test --failed. Never rerun a green suite on one release.
 A pass means the checks you wrote passed; say which requirements they do not cover.
 Use ready(page) for starter session readiness, or an explicit locator.
 Test users are removed afterwards; rows, files and mail they created remain.

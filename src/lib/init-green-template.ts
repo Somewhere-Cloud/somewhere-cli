@@ -2,6 +2,7 @@ import { CLI_VERSION } from './version.js';
 import type { InitScaffoldFile } from './init-scaffold.js';
 import { INIT_AGENTS_MD, INIT_CLAUDE_MD } from './init-agent-guide.js';
 import { ASSET_TYPES_FILE } from './init-asset-types.js';
+import { starterTests } from './init-test-template.js';
 
 const PACKAGE_JSON = `{
   "name": "somewhere-starter",
@@ -19,6 +20,7 @@ const PACKAGE_JSON = `{
   },
   "devDependencies": {
     "@somewhere-cloud/cli": "${CLI_VERSION}",
+    "@playwright/test": "1.65.0",
     "@types/react": "19.2.2",
     "@types/react-dom": "19.2.2",
     "typescript": "5.9.3",
@@ -179,6 +181,7 @@ Deploy the raw source. The platform compiles it; do not create or deploy a
 
 export function createGreenTemplate(): InitScaffoldFile[] {
   return [
+    ...starterTests({ minimal: true }),
     { path: '.gitignore', content: 'node_modules\ndist\nbuild\n.env\n# Generated from db/schema.ts by somewhere typecheck, dev and deploy.\n__somewhere_data.d.ts\n__somewhere_files.d.ts\n' },
     { path: 'AGENTS.md', content: INIT_AGENTS_MD },
     { path: 'CLAUDE.md', content: INIT_CLAUDE_MD },

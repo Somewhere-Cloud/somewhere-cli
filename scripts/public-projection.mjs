@@ -62,6 +62,9 @@ export function assertPublicPackage(root) {
   const result = spawnSync('npm', ['pack', '--dry-run', '--json', '--ignore-scripts'], { cwd: root, encoding: 'utf8' });
   if (result.status !== 0) throw new Error('Cannot enumerate public package files');
   const [{ files }] = JSON.parse(result.stdout);
-  for (const { path } of files) assertPublicArtifact(readFileSync(join(root, path)).toString('utf8'), path);
+  for (const { path } of files) {
+    assertPublicArtifact(path, path);
+    assertPublicArtifact(readFileSync(join(root, path)).toString('utf8'), path);
+  }
   return { files_scanned: files.length };
 }

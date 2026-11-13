@@ -18,6 +18,10 @@ test('the npm shipped-file list is scanned without file-type exclusions', t => {
     assert.throws(() => assertPublicPackage(root), /internal task or feedback reference/);
     writeFileSync(path, 'public example');
   }
+  const named = join(root, 'files/templates/tsk_abcd1234.template');
+  writeFileSync(named, 'public example');
+  assert.throws(() => assertPublicPackage(root), /internal task or feedback reference/);
+  rmSync(named);
   assert.equal(assertPublicPackage(root).files_scanned, 9);
 });
 

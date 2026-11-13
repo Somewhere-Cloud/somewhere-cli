@@ -22,6 +22,9 @@ const PACKAGE_JSON = `{
     "@types/react-dom": "19.2.2",
     "typescript": "5.9.3",
     "vite": "7.2.2"
+  },
+  "allowScripts": {
+    "esbuild": true
   }
 }
 `;

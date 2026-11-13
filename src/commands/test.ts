@@ -56,7 +56,6 @@ export function registerTest(program: Command): void {
       const browserLaunchMs = performance.now() - launchStart;
       await browser.close();
       const ipv4First = await addressOrder;
-      if (ipv4First) process.stderr.write('IPv6 did not answer within 300 ms; using IPv4 first\n');
       const runnerEnv = { ...process.env, ...(ipv4First ? { NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --dns-result-order=ipv4first` } : {}) }; 
       const subset = Boolean(file || opts.grep || opts.failed);
       const config = join(dir, 'runner.config.cjs');

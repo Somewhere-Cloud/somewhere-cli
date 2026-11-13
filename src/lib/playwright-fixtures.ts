@@ -5,7 +5,7 @@ import { fixtureTestTarget } from './test-target.js';
 import { ApiClient } from './client.js';
 import { getToken, loadProjectConfig } from './config.js';
 import { buildStorageState, createTestIdentities, expiryOf, type IssuedIdentity } from './test-identities.js';
-import { diagnostics, rememberSecrets, scrub, safeError, timed } from './test-diagnostics.js';
+import { diagnostics, rememberSecrets, scrub, describeError, timed } from './test-diagnostics.js';
 import type { TestInfo } from '@playwright/test';
 import type { DataRequest } from '../testing.js';
 
@@ -25,7 +25,7 @@ function runner() {
     _evidence: [async ({}, use, info) => {
       try { await use(); } finally {
         const report = diagnostics(info);
-        await info.attach('somewhere-diagnostics', { body: Buffer.from(JSON.stringify({ ...report, title: scrub(info.title), errors: info.errors.map(error => safeError(error.message ?? 'Test failed')), secretAudit: 'issued values scrubbed before reporting' })), contentType: 'application/json' });
+        await info.attach('somewhere-diagnostics', { body: Buffer.from(JSON.stringify({ ...report, title: scrub(info.title), errors: info.errors.map(error => describeError(error)), secretAudit: 'issued values scrubbed before reporting' })), contentType: 'application/json' });
       }
     }, { auto: true }],
     newUser: async ({ browser }, use, info) => {
@@ -123,11 +123,16 @@ function constrain(client: APIRequestContext, origin: string, info: TestInfo): v
   }
 }
 
-export const test: RunnerTest = new Proxy((() => {}) as unknown as RunnerTest, {
+// Export Playwright's own test object whenever the project can load it: Playwright records a test's
+// file from the frame that calls test(), so a forwarding wrapper would place every test in this file
+// and `somewhere test <file>` would match none. The lazy wrapper remains only for plain Node imports
+// without @playwright/test, where test() is never called.
+const eager = (() => { try { return runner(); } catch { return undefined; } })();
+export const test: RunnerTest = eager?.test ?? new Proxy((() => {}) as unknown as RunnerTest, {
   apply: (_target, receiver, args) => Reflect.apply(runner().test, receiver, args),
   get: (_target, key) => Reflect.get(runner().test, key),
 });
-export const expect: typeof import('@playwright/test').expect = new Proxy((() => {}) as unknown as typeof import('@playwright/test').expect, {
+export const expect: typeof import('@playwright/test').expect = eager?.expect ?? new Proxy((() => {}) as unknown as typeof import('@playwright/test').expect, {
   apply: (_target, receiver, args) => Reflect.apply(runner().expect, receiver, args),
   get: (_target, key) => Reflect.get(runner().expect, key),
 });

@@ -69,3 +69,21 @@ test('server paging example checks against starter declarations', { skip: !platf
     assert.equal(result.ok, true, JSON.stringify(result, null, 2));
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
+
+for (const ledger of ['shares', 'article_shares']) {
+  test(`${ledger} example compiles and has no browser write API`, { skip: !platform }, async () => {
+    const body = readFileSync(join(platform, 'docs/mcp-topics/declared-data.md'), 'utf8');
+    const code = [...body.matchAll(/```ts\n([\s\S]*?)```/g)].map(m => m[1]).find(code => code.includes(`  ${ledger}: table(`));
+    assert.ok(code);
+    const dir = mkdtempSync(join(tmpdir(), 'grant-ledger-snippet-'));
+    try {
+      mkdirSync(join(dir, 'db'));
+      writeFileSync(join(dir, 'db/schema.ts'), code);
+      const readable = ledger === 'shares' ? 'contacts' : 'articles';
+      writeFileSync(join(dir, 'probe.ts'), `import { data } from 'somewhere:data';\nvoid data.${readable}.list();\n// @ts-expect-error grant ledgers are not browser writable\nvoid data.${ledger}.create({ grantee_id: 'another-user' });\n`);
+      writeFileSync(join(dir, 'tsconfig.json'), JSON.stringify({ compilerOptions: { target: 'ES2022', module: 'ESNext', moduleResolution: 'bundler', strict: true, skipLibCheck: true }, include: ['*.ts'] }));
+      const result = await runTypecheck(dir);
+      assert.equal(result.ok, true, JSON.stringify(result, null, 2));
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+}

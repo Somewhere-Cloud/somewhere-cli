@@ -4,15 +4,15 @@ import { SKILLS_DIR } from './skills-pack.js';
 // docs lint byte-compares this value when SOMEWHERE_CLI_REPO points here.
 export const AGENT_WORKFLOW = `## Build, deploy, test
 
-This core is enough to start a typical app: write the schema, endpoint and browser
-call below; use docs for exceptions. Declare access rules and use the generated
-browser client for normal reads/writes. Start with owner() for personal rows.
+This core is enough to start a typical app. Start coding here; docs are for
+exceptions. Declare access rules; use the generated browser client for normal
+reads/writes. Start with owner() for personal rows.
 
-Schema: db/schema.ts is declaration only; imports, named declarative constants,
-spreads of those constants and the default schema export. No helper functions or
-arbitrary expressions. id() is a random text key; references use text().
-owner() fills user_id (or its named column). client.read includes the key.
-Columns: timestamp({ default: 'now' }), text({ nullable: true }); indexes: [['team_id']].
+Schema: db/schema.ts accepts imports, named declarative constants/spreads and a
+default schema export; no helpers or arbitrary expressions. id() is a random
+text key; references use text(). owner() fills user_id (or its named column).
+client.read includes the key. Columns: timestamp({ default: 'now' }),
+text({ nullable: true }); indexes: [['team_id']].
 
 \`\`\`ts
 import { schema, table, id, text, owner, member, anyOf, serverOnly } from 'somewhere/db';
@@ -88,19 +88,26 @@ export default sw.endpoint({
 });
 \`\`\`
 
-Scopes: owner() personal rows; member() membership-table rows; parent({ table,
-via }) inherits a related row's access; publicRead: { where } exposes selected
-rows/columns. serverOnly() is the fallback when a required identity/relationship
-cannot be declared, not a reason to move every table behind endpoints. Keep
-supported rules declared; check only the exceptional operation in an endpoint.
+Scopes: owner() private rows; member() team rows;
+parent({ table: 'tickets', via: 'ticket_id' }) gives messages their ticket's access;
+publicRead: { where } exposes selected rows/columns.
 
-Starter: build src/pages/HomePage.tsx; src/App.tsx + src/routes.ts select routes
-and params (navigate/linkTo accept string paths); SignedInLayout.tsx is in pages/;
-src/ui/AppShell.tsx has sign-out; src/ui/layout.tsx has PageHeader (React-node title).
-src/auth/hooks.ts has useAuthState/useSignOut. useAuth from @somewhere-cloud/sdk/react
-has signIn/signUp({ email, password }); both throw readable errors. Sign-up signs
-in immediately; auth: 'required' accepts unverified users. Keep api/auth/[...path].ts.
-src/config.ts controls SIGN_IN_PROVIDERS and SHOW_EMAIL_VERIFICATION.
+Do not mark data people read or change in your app serverOnly() and hand-write
+access checks. Declare who may read/write it; the platform enforces it. Exceptions:
+- Server-only job state, import staging, audit records and counters.
+- Membership/grant ledgers, never browser-written; grant() requires owner() scope.
+- Unverified-email role acquisition: server checks/provisioning.
+- A role predicate in published member(): separate ledger or checked endpoint.
+- Different writable fields per role on one table: split tables or check that write.
+Keep other operations declared, even when one operation needs an endpoint.
+
+Starter: build src/pages/HomePage.tsx. Routes: src/App.tsx + src/routes.ts
+(string navigate/linkTo); layout: src/pages/SignedInLayout.tsx; sign-out:
+src/ui/AppShell.tsx; PageHeader (React-node title): src/ui/layout.tsx.
+src/auth/hooks.ts: useAuthState/useSignOut. SDK/react useAuth: signIn/signUp({ email,
+password }), readable thrown errors; sign-up signs in immediately. Required auth
+accepts unverified users. Keep api/auth/[...path].ts. src/config.ts controls
+SIGN_IN_PROVIDERS and SHOW_EMAIL_VERIFICATION.
 
 Endpoint files: api/notes.ts → /api/notes; api/notes/[id].ts → params.id;
 api/notes/[id]/sub.ts → /api/notes/:id/sub; underscore-prefixed files are helpers.
@@ -114,10 +121,6 @@ Plain objects become JSON 200; return Response.json(value, { status }) otherwise
 export const GET = sw.endpoint({
   auth: 'required',
   handler: async ({ user, params }, sw) => sw.db.from('notes', { limit: 100 }),
-});
-export default sw.endpoint({
-  auth: 'required', body: { title: 'string' },
-  handler: async ({ body }, sw) => sw.db.insert('notes', { title: body.title }),
 });
 export const DELETE = sw.endpoint({
   auth: 'required',
@@ -140,9 +143,8 @@ POST/PATCH/DELETE from scripts need Origin equal to the app URL.
 
 Publish: somewhere typecheck → somewhere deploy → somewhere test.
 Deploy raw source, no frontend build. Type errors stop before upload; explicit
-override: somewhere deploy --allow-type-errors. Test the affected journey and access.
-RATE_LIMIT_UNAVAILABLE: temporary platform condition; request not admitted; retry,
-keep rateLimit. Diagnose with somewhere errors and somewhere logs.
+override: somewhere deploy --allow-type-errors. Tests: newUser() gives a signed-in page/request; call twice for access tests.
+Diagnose with somewhere errors and somewhere logs.
 
 On demand:
 - Membership/parent: \`somewhere docs sw.db --section owner-or-member-and-parent-access\`

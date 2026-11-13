@@ -4587,6 +4587,7 @@ __export(declared_data_vendor_entry_exports, {
   FILES_DECLARATION_FILE: () => import_typed_files2.CLIENT_FILE,
   RUNTIME_CONTEXT_DECLARATION: () => import_runtime_types3.RUNTIME_CONTEXT_DECLARATION,
   SCHEMA_DECLARATION: () => import_schema_types.SCHEMA_DECLARATION,
+  allTablesServerOnlyWithoutClient: () => allTablesServerOnlyWithoutClient,
   checkerContract: () => checkerContract,
   consumerContractComponents: () => import_consumer_contract.consumerContractComponents,
   consumerContractFingerprint: () => import_consumer_contract.consumerContractFingerprint,
@@ -8306,6 +8307,12 @@ function isRuntimeEndpointGlobal(diag, functions) {
 
 
 var import_consumer_contract = __toESM(require_consumer_contract());
+function allTablesServerOnlyWithoutClient(files) {
+  const source = files["db/schema.ts"];
+  if (source === void 0) return false;
+  const parsed = extractSchemaTs(source);
+  return parsed.ok && parsed.declaration.tables.length > 0 && parsed.declaration.tables.every((table) => table.scope.kind === "server_only" && table.client === void 0);
+}
 function generateFromFiles(files) {
   const authority = clientAuthorityFromSource(files);
   return authority ? (0, import_typed_data.generateDataClient)(authority) : void 0;
@@ -8331,6 +8338,7 @@ function filesDeclarationFromFiles(files) {
   FILES_DECLARATION_FILE,
   RUNTIME_CONTEXT_DECLARATION,
   SCHEMA_DECLARATION,
+  allTablesServerOnlyWithoutClient,
   checkerContract,
   consumerContractComponents,
   consumerContractFingerprint,

@@ -1,3 +1,4 @@
+import { declaredAccessNotice } from '../lib/declared-data.js';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { runTypecheck } from '../lib/typecheck.js';
@@ -742,6 +743,11 @@ export function registerDeploy(program: Command) {
       const collectionEndedAt = performance.now();
       const collectionMs = collectionEndedAt - collectionStartedAt;
       const { files, binaryFiles, functions, skipped, excluded, sensitive } = collected;
+      const accessNotice = declaredAccessNotice(files);
+      if (accessNotice) {
+        if (opts.json) process.stderr.write(accessNotice + '\n');
+        else info(accessNotice);
+      }
       // A credentials file the source names: refuse before any request, with
       // nothing sent (the deploy API refuses these paths too, after upload).
       const sensitiveRefusal = sensitiveReferenceRefusal(collected);

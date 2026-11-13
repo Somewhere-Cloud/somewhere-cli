@@ -25,12 +25,14 @@ export default schema({
     scope: member({ group: 'id', membership: 'team_members', member_user: 'user_id', member_group: 'team_id' }),
     client: { read: ['id', 'name'] },
   }),
-  team_members: table({ id: id(), team_id: text(), user_id: text() }, {
+  team_members: table({ id: id(), team_id: text(), user_id: text(), role: text() }, {
     scope: serverOnly(), unique: [['team_id', 'user_id']],
   }),
   tasks: table({ id: id(), team_id: text({ references: 'teams' }), title: text() }, {
     scope: anyOf(owner(), member({ group: 'team_id', membership: 'team_members',
-      member_user: 'user_id', member_group: 'team_id', operations: ['read', 'create', 'update'] })),
+      member_user: 'user_id', member_group: 'team_id', operations: ['read', 'create', 'update'] }),
+      member({ group: 'team_id', membership: 'team_members', member_user: 'user_id',
+        member_group: 'team_id', where: { role: 'owner' }, operations: ['delete'] })),
     client: { read: ['id', 'team_id', 'title'], create: ['team_id', 'title'], update: ['title'], delete: true },
   }),
 });
@@ -52,9 +54,8 @@ async function notes() {
 Teams WITHOUT email verification: use your own membership table with member(),
 as above. Built-in sw.groups and email-domain roles need VERIFIED emails;
 member() over your own table does not. Never let browsers write memberships.
-Here members read/create/update tasks; only each task's creator deletes it while
-still a member. A team-owner delete can be one checked server operation; keep the
-other operations declared. Team creation must atomically seed its owner's membership:
+Members read/create/update tasks; the creator or team owner may delete, only
+while still a member. Team creation must atomically seed its owner's membership:
 
 \`\`\`ts
 // api/teams.ts
@@ -64,7 +65,7 @@ export default sw.endpoint({
     const id = crypto.randomUUID();
     await sw.db.server.tx([
       { op: 'insert', table: 'teams', values: { id, name: body.name, owner_id: user.id } },
-      { op: 'insert', table: 'team_members', values: { id: crypto.randomUUID(), team_id: id, user_id: user.id } },
+      { op: 'insert', table: 'team_members', values: { id: crypto.randomUUID(), team_id: id, user_id: user.id, role: 'owner' } },
     ]);
     return { id };
   },
@@ -81,7 +82,7 @@ export default sw.endpoint({
     const { users: [target] } = await sw.auth.server.listUsers({ emails: [body.email] });
     if (!target) return Response.json({ error: 'Account not found' }, { status: 404 });
     await sw.db.server.insert('team_members', {
-      id: crypto.randomUUID(), team_id: params.id, user_id: target.id,
+      id: crypto.randomUUID(), team_id: params.id, user_id: target.id, role: 'member',
     }, { onConflict: 'ignore' });
     return { ok: true };
   },
@@ -90,21 +91,22 @@ export default sw.endpoint({
 
 Scopes: owner() private rows; member() team rows;
 parent({ table: 'tickets', via: 'ticket_id' }) gives messages their ticket's access;
-publicRead: { where } exposes selected rows/columns.
+client.publicRead: { where } exposes selected rows/columns.
 
 Do not mark data people read or change in your app serverOnly() and hand-write
 access checks. Declare who may read/write it; the platform enforces it. Exceptions:
 - Server-only job state, import staging, audit records and counters.
 - Membership/grant ledgers, never browser-written; grant() requires owner() scope.
-- Unverified-email role acquisition: server checks/provisioning.
-- A role predicate in published member(): separate ledger or checked endpoint.
+- Arbitrary predicates (e.g. access until expiry): check in an endpoint.
 - Different writable fields per role on one table: split tables or check that write.
-Keep other operations declared, even when one operation needs an endpoint.
+Keep other operations declared. App roles: emailDomain for verified-domain staff;
+assignedBy: 'server' when the app decides (admin/payment/invite), never an
+unverified email suffix.
 
 Starter: build src/pages/HomePage.tsx. Routes: src/App.tsx + src/routes.ts
 (string navigate/linkTo); layout: src/pages/SignedInLayout.tsx; sign-out:
-src/ui/AppShell.tsx; PageHeader (React-node title): src/ui/layout.tsx.
-src/auth/hooks.ts: useAuthState/useSignOut. SDK/react useAuth: signIn/signUp({ email,
+src/ui/AppShell.tsx; PageHeader: src/ui/layout.tsx.
+src/auth/hooks.ts: useAuthState/useSignOut. @somewhere-cloud/sdk/react useAuth: signIn/signUp({ email,
 password }), readable thrown errors; sign-up signs in immediately. Required auth
 accepts unverified users. Keep api/auth/[...path].ts. src/config.ts controls
 SIGN_IN_PROVIDERS and SHOW_EMAIL_VERIFICATION.
@@ -112,10 +114,9 @@ SIGN_IN_PROVIDERS and SHOW_EMAIL_VERIFICATION.
 Endpoint files: api/notes.ts → /api/notes; api/notes/[id].ts → params.id;
 api/notes/[id]/sub.ts → /api/notes/:id/sub; underscore-prefixed files are helpers.
 GET/DELETE use method-named exports; POST with JSON uses default export.
-The handler receives { user, params, body, request }; its second argument is the
-runtime (the global sw only declares endpoints). auth: 'required' supplies user.id
-and user.email (string). Declare auth and JSON body fields.
-Plain objects become JSON 200; return Response.json(value, { status }) otherwise.
+The handler gets { user, params, body, request } plus its sw runtime; global sw
+only declares endpoints. Required auth gives user.id and user.email (string).
+Declare JSON body fields. Objects return JSON 200; Response.json sets other statuses.
 
 \`\`\`ts
 export const GET = sw.endpoint({
@@ -141,14 +142,14 @@ headers: { 'content-type': 'application/json' }, body: JSON.stringify(values) })
 The short access cookie refreshes automatically; do not store tokens. Cookie-auth
 POST/PATCH/DELETE from scripts need Origin equal to the app URL.
 
-Publish: somewhere typecheck → somewhere deploy → somewhere test.
+Publish: somewhere typecheck → npx @somewhere-cloud/cli deploy → somewhere verify → somewhere test.
 Deploy raw source, no frontend build. Type errors stop before upload; explicit
 override: somewhere deploy --allow-type-errors. Tests: newUser() gives a signed-in page/request; call twice for access tests.
 Diagnose with somewhere errors and somewhere logs.
 
 On demand:
 - Membership/parent: \`somewhere docs sw.db --section owner-or-member-and-parent-access\`
-- Verified-email groups: \`somewhere docs sw.groups --section create-a-group\`
+- Groups/roles: \`somewhere docs sw.groups --section app-wide-roles\`
 - Transactions: \`somewhere docs sw.db --section transaction-intents\`
 - Updates: \`somewhere docs sw.db --section update-shape\`
 - Server paging: \`somewhere docs sw.db --section server-read-paging\`

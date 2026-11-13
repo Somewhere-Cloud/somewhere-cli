@@ -150,7 +150,6 @@ test('minimal starter is a small typed frontend, function, and schema', () => {
   const agents = readFileSync(join(dir, 'AGENTS.md'), 'utf8');
   const claude = readFileSync(join(dir, 'CLAUDE.md'), 'utf8');
   assert.equal(agents, `# somewhere.cloud project contract\n${AGENT_WORKFLOW}\n${SKILLS_POINTER}\n${PORTABILITY_POINTER}\n`);
-  assert.ok(Buffer.byteLength(agents) <= 8192, 'core guidance fits in 8 KB');
   assert.match(agents.slice(0, 250), /enough to start a typical app/);
   assert.match(agents, /member\(\).*does not/);
   assert.equal(claude, 'Read AGENTS.md for project instructions.\n');

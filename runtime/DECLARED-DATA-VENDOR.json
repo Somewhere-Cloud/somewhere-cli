@@ -6,12 +6,12 @@
     "shared/d1-session.ts": "2ae29b74bba68016c86d25fa2a58f8c2fce4aca8fe57fafc253d380c47a3c0ab",
     "shared/types/placeholder-identity.ts": "089a46e2474a21193d3611eddd9c94b6bbe62441b3039ed80fc8499bada447ca",
     "worker/containers/compile/checker-contract.cjs": "c6d4ebc9ec058b3562655cc4f18dc1cea7e4492eb35b7f0fd0d87e974c26b492",
-    "worker/containers/compile/consumer-contract.cjs": "b50d68ee1dd31bfa2e89acf39681b31c2f6e2bbad982d9ee823543366ee79070",
+    "worker/containers/compile/consumer-contract.cjs": "686579acd07dd99d478c49b71887a780097870117d13f28bb05aa44d4e0e64a1",
     "worker/containers/compile/declared-data-contract.cjs": "cd63f117c495d24a1346df95858f162ad09b3fea3654a6ad8cef8ec612482092",
     "worker/containers/compile/generated-declarations-render.cjs": "7ffdb34645cc9eccac6eba39dc86b646a41c4de8a1a038d2b5b46f42df9f1157",
     "worker/containers/compile/generated-declarations.cjs": "6e9902e054c5c784fd9b3c3fafc1869e79954100a45014e1132247cd82833ec4",
     "worker/containers/compile/groups-types.cjs": "7c22b4bb96c9391005d434852600dc02bc8a6bbb99d78d2b8e3eb152f7b72c58",
-    "worker/containers/compile/runtime-types.cjs": "03ee70bfa701c1b5a4ac02c97360be98f8ecf90f889e490b61f2339e23b5b4bc",
+    "worker/containers/compile/runtime-types.cjs": "3852b7ef651dd91198e1710e114339fb03768dc6a89c9862a4714ca0ab3403eb",
     "worker/containers/compile/schema-types.cjs": "aeb2debb8b5b14de780304ec305add32067a8e0ed693cdd29f8c79c8a3cc0928",
     "worker/containers/compile/typed-data.cjs": "1c8bec853fbee4ffd34c651076a4e1f4d8b18c0c2be5e99e31df7c9283207627",
     "worker/containers/compile/typed-files.cjs": "a0b1818afbc7673f84583c76436a3b3ca1d1fdf63d8d8db138b36646103f0708",
@@ -58,5 +58,5 @@
     "worker/src/utils/telegram-attempt-receipts.ts": "a9ba55ae71f63ada44a105f1ceae04b0491bda0d6e77e5762db2dbecdd2981dd",
     "worker/src/utils/telegram.ts": "dfbc9e756b44b445b3c3504c90a1094a94e6f9853ff9c0e0a84fba0e8c4518da"
   },
-  "sha256": "21f2e1b2ebf4962987b088181b278b5ea826a790240d2fa112484d4b4f5d2d3b"
+  "sha256": "08dfcb2e2b99b386ce366692f2908cb4c57e7b1babfd2cb5cfb0c984fdc2a334"
 }

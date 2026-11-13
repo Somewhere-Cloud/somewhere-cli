@@ -3,7 +3,7 @@
   "source_files": {
     "worker/containers/compile/function-route.cjs": "e7faf1104ba95e27921901b4619bd98aa6a2be47cc10af00097fd4957744606b",
     "worker/node_modules/acorn/dist/acorn.mjs": "b4c8c70200e72bae33cf1085e0ecb1e792c1b6924ed50cab817caf14f51bb249",
-    "worker/src/security/browser-secret-scan.ts": "31ebc9dd94eed4d0a9a6b67b3b1e2505d4f7812c557c90337e034c1e3994c039",
+    "worker/src/security/browser-secret-scan.ts": "96e789beeae1dbf31c4669a4e662630f6a6dee291fead0016ac1d2a589f5ef1a",
     "worker/src/services/jobs/limits.ts": "9ba371e4635a3b469cea721fb9eba20e69757d8a771d6ab181837f39b8280103",
     "worker/src/services/source-lint-email.ts": "14fe435da59d10a6bbcbec62faceae00e60a4802ec8e18aedad38fd546a6dc94",
     "worker/src/services/source-lint-ownership.ts": "baaf0edcc6fa72dee26c231ae87951758f313602a2f54d70afc89e0d36b35925",
@@ -32,6 +32,6 @@
     "worker/src/utils/managed-groups/errors.ts": "18d952edd7f46bb7e459d4e6678226f4bd6e040ab40073ee5a8d0802be2f3721",
     "worker/src/utils/managed-groups/policy.ts": "2c5b48479a2925bea9a820022c63ca5fa827e2ff5531fe1ab6c0b058b7212b39"
   },
-  "sha256": "37ffa0c617a812798ebda062181598601baddb193e295f7826653bb830d31e40",
+  "sha256": "2c4516e8564155f4ece1f1b111e6d79fafec2514276c0941386a165c7b556296",
   "fixtures_sha256": "908827d1430f4af5a83cae59ed476abc51dc9648757eac0089fe6e6db95f66c5"
 }

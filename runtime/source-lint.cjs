@@ -469,9 +469,14 @@ function resolveImport(fromPath, specifier, files) {
   ];
   return candidates.find((candidate) => typeof files[candidate] === "string") ?? null;
 }
-function browserReachableFiles(files) {
+function resolveConventionalAlias(specifier, files) {
+  const rest = /^[@~]\/(.+)$/.exec(specifier)?.[1];
+  if (!rest) return null;
+  return resolveImport("", `/src/${rest}`, files) ?? resolveImport("", `/${rest}`, files);
+}
+function browserReachableFiles(files, options = {}) {
   const reachable =                 new Set();
-  const queue = [];
+  const queue = [...options.entries ?? []];
   const htmlPaths = Object.keys(files).filter((path) => HTML_PATH.test(path));
   for (const path of htmlPaths) {
     reachable.add(path);
@@ -493,7 +498,7 @@ function browserReachableFiles(files) {
     if (!path || reachable.has(path) || typeof files[path] !== "string") continue;
     reachable.add(path);
     for (const specifier of importSpecifiers(files[path])) {
-      const resolved = resolveImport(path, specifier, files);
+      const resolved = resolveImport(path, specifier, files) ?? (options.conventionalAliases ? resolveConventionalAlias(specifier, files) : null);
       if (resolved && !reachable.has(resolved)) queue.push(resolved);
     }
   }

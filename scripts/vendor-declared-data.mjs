@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { publicProjection, assertBehaviorParity, assertPublicArtifact } from './public-projection.mjs';
+import { publicProjection, assertBehaviorParity, assertPublicArtifact, assertPublicPackage } from './public-projection.mjs';
 // Regenerate (or prove byte parity with) the platform's parser and generator.
 import { createHash } from 'node:crypto';
 import { readFileSync, realpathSync, writeFileSync } from 'node:fs';
@@ -82,5 +82,6 @@ for (const [name, content] of [['declared-data.cjs', output], ['DECLARED-DATA-VE
   } else writeFileSync(join(dest, name), content);
 }
 console.log(`Declared data ${mode === '--check' ? 'parity verified' : 'vendored'}: ${digest(output)}`);
+if (mode === '--check') assertPublicPackage(join(import.meta.dirname, '..'));
 
 if (mode !== '--check') { platformCommit(root, Object.keys(inputs)); writePlatformSource(join(import.meta.dirname, '..')); }

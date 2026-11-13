@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { publicProjection, assertBehaviorParity } from './public-projection.mjs';
+import { publicProjection, assertBehaviorParity, assertPublicPackage } from './public-projection.mjs';
 // Compare the deterministic public projection of the selected source.
 import { createHash } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -25,3 +25,4 @@ if (mode === '--check') {
   writeFileSync(join(dest, 'REPRO-GUIDANCE-VENDOR.json'), manifest);
 }
 console.log(`Repro guidance ${mode === '--check' ? 'parity verified' : 'vendored'}: ${sha256}`);
+if (mode === '--check') assertPublicPackage(join(import.meta.dirname, '..'));

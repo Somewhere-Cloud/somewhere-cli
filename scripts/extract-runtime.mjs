@@ -3,7 +3,7 @@
 import { createHash } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { publicProjection, assertBehaviorParity, assertPublicArtifact } from './public-projection.mjs';
+import { publicProjection, assertBehaviorParity, assertPublicArtifact, assertPublicPackage } from './public-projection.mjs';
 const monorepo = process.argv[2];
 if (!monorepo) throw new Error('Usage: node scripts/extract-runtime.mjs <monorepo>');
 function extractDomOutlineScript() {
@@ -64,3 +64,4 @@ for (const [name, content] of [['browser-probes.mjs', output], ['VENDOR.json', m
     if (readFileSync(join(outDir, name), 'utf8') !== content) throw new Error(name + ' differs from the selected projection');
   } else writeFileSync(join(outDir, name), content);
 }
+if (process.argv.includes('--check')) assertPublicPackage(join(import.meta.dirname, '..'));

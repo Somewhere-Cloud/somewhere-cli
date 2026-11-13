@@ -5,7 +5,21 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync, copyFileSync, symlinkSyn
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { publicProjection, assertBehaviorParity, assertPublicArtifact } from '../scripts/public-projection.mjs';
+import { publicProjection, assertBehaviorParity, assertPublicArtifact, assertPublicPackage } from '../scripts/public-projection.mjs';
+
+test('the npm shipped-file list is scanned without file-type exclusions', t => {
+  const root = mkdtempSync(join(tmpdir(), 'public-package-scan-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  writeFileSync(join(root, 'package.json'), JSON.stringify({ name: 'public-scan-fixture', version: '1.0.0', files: ['files'] }));
+  mkdirSync(join(root, 'files/templates'), { recursive: true });
+  for (const file of ['a.js', 'a.cjs', 'a.mjs', 'a.ts', 'a.d.ts', 'a.json', 'a.md', 'templates/a.template']) {
+    const path = join(root, 'files', file);
+    writeFileSync(path, 'pfb_12345678abcd');
+    assert.throws(() => assertPublicPackage(root), /internal task or feedback reference/);
+    writeFileSync(path, 'public example');
+  }
+  assert.equal(assertPublicPackage(root).files_scanned, 9);
+});
 
 test('public artifacts reject internal references rather than rewriting literal data', () => {
   for (const marker of ['tsk_abcd1234', 'pfb_12345678abcd']) {

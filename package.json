@@ -38,7 +38,7 @@
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
-    "prepublishOnly": "npm run build",
+    "prepublishOnly": "npm run build && node scripts/check-public-package.mjs",
     "test": "npm run build && node --test --test-concurrency=1 \"test/*.test.mjs\"",
     "test:roundtrip": "node scripts/e2e-roundtrip.mjs",
     "prebuild": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\""

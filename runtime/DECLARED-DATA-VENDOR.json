@@ -58,5 +58,5 @@
     "worker/src/utils/telegram-attempt-receipts.ts": "a9ba55ae71f63ada44a105f1ceae04b0491bda0d6e77e5762db2dbecdd2981dd",
     "worker/src/utils/telegram.ts": "dfbc9e756b44b445b3c3504c90a1094a94e6f9853ff9c0e0a84fba0e8c4518da"
   },
-  "sha256": "a1a3866ff1f62695123354dfcd526881ee0252e9a0c8d18abe4d72a1f9bf1355"
+  "sha256": "b5ba85458713c213a22156fb7577d13a38d8fec2bc2ce587f5f8fd484342bd4b"
 }

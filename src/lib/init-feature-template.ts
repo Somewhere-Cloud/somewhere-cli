@@ -1,5 +1,6 @@
 import { starterTests } from './init-test-template.js';
 import { CLI_VERSION } from './version.js';
+import { ASSET_TYPES_FILE } from './init-asset-types.js';
 import type { InitScaffoldFile } from './init-scaffold.js';
 import type { InitSelection } from './init-features.js';
 import { INIT_AGENTS_MD, INIT_CLAUDE_MD } from './init-agent-guide.js';
@@ -3403,6 +3404,7 @@ After edits:`) },
     { path: 'index.html', content: indexHtml(options.appName) },
     { path: 'api/auth/[...path].ts', content: AUTH_API },
     { path: 'types/auth.ts', content: AUTH_TYPES },
+    ASSET_TYPES_FILE,
     { path: 'src/main.tsx', content: mainTsx(styled, agent) },
     { path: 'src/App.tsx', content: appTsx() },
     { path: 'src/auth/connection-return.ts', content: CONNECTION_RETURN },

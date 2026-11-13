@@ -12,11 +12,10 @@ test('every TypeScript guidance snippet checks against generated starter declara
     mkdirSync(join(dir, 'db'));
     const schema = [...INIT_AGENTS_MD.matchAll(/```ts\n([\s\S]*?)```/g)].find(match => match[1].includes('export default schema('));
     assert.ok(schema);
-    for (const shape of ['notes', 'team_members', 'tickets', 'messages', 'staff_notes', 'pages', 'note_shares']) assert.ok(schema[1].includes(shape + ': table('));
+    for (const shape of ['notes', 'tasks', 'tickets', 'messages', 'staff_notes', 'pages', 'note_shares']) assert.ok(schema[1].includes(shape + ': table('));
     const firstEndpoint = INIT_AGENTS_MD.slice(INIT_AGENTS_MD.indexOf('// api/teams.ts')).split('```')[0];
-    assert.match(firstEndpoint, /handler: async \((?:\{ user, params, body \}), sw\)/);
-    assert.match(firstEndpoint, /user\.id/);
-    assert.match(firstEndpoint, /user\.email/);
+    assert.match(firstEndpoint, /sw\.groups\.create\(request/);
+    assert.match(firstEndpoint, /sw\.groups\.list\(request/);
     writeFileSync(join(dir, 'db/schema.ts'), schema[1]);
     writeFileSync(join(dir, 'tsconfig.json'), JSON.stringify({ compilerOptions: { target: 'ES2022', module: 'ESNext', moduleResolution: 'bundler', strict: true, skipLibCheck: true, paths: { '@somewhere-cloud/cli/testing': [join(process.cwd(), 'dist/testing.d.ts')] } }, include: ['*.ts'] }));
     const snippets = [...INIT_AGENTS_MD.matchAll(/```ts\n([\s\S]*?)```/g)];
@@ -39,21 +38,25 @@ export default schema({ notes: table({ id: id(), ...fields }, { scope: owner(), 
 });
 
 const platform = process.env.SOMEWHERE_PLATFORM_REPO;
-for (const topic of ['sw.groups', 'sw.db', 'declared-data']) {
-  test(`${topic} complete team examples check against generated starter declarations`, { skip: !platform }, async () => {
+// Each docs example is laid out at the path its first line names, so relative
+// imports resolve, and checked as one project against the starter declarations.
+for (const [topic, heading, count] of [['sw.groups', '## Team example', 7], ['sw.groups', '## Staff example', 3], ['declared-data', '## Teams', 2]]) {
+  test(`${topic} ${heading} checks as a project against generated starter declarations`, { skip: !platform }, async () => {
     const body = readFileSync(join(platform, 'docs/mcp-topics', topic + '.md'), 'utf8');
-    const start = body.indexOf('Teams without email verification');
+    const start = body.indexOf('\n' + heading + '\n');
     assert.notEqual(start, -1);
-    const rest = body.slice(body.indexOf('\n', start) + 1);
-    const section = rest.split(/\n#{2,3} /)[0];
+    const section = body.slice(start + heading.length + 2).split(/\n## /)[0];
     const snippets = [...section.matchAll(/```ts\n([\s\S]*?)```/g)].map(match => match[1]);
-    assert.equal(snippets.length, 4, 'complete schema, create-team, add-member and browser examples');
+    assert.equal(snippets.length, count);
     const dir = mkdtempSync(join(tmpdir(), 'teams-doc-snippets-'));
     try {
-      mkdirSync(join(dir, 'db'));
-      writeFileSync(join(dir, 'db/schema.ts'), snippets[0]);
-      writeFileSync(join(dir, 'tsconfig.json'), JSON.stringify({ compilerOptions: { target: 'ES2022', module: 'ESNext', moduleResolution: 'bundler', strict: true, skipLibCheck: true }, include: ['*.ts'] }));
-      snippets.forEach((code, index) => writeFileSync(join(dir, `snippet-${index}.ts`), code + '\nexport {};\n'));
+      for (const code of snippets) {
+        const path = code.match(/^\/\/ (\S+\.ts)\n/)?.[1];
+        assert.ok(path, 'each example names its file on its first line');
+        mkdirSync(join(dir, path, '..'), { recursive: true });
+        writeFileSync(join(dir, path), code);
+      }
+      writeFileSync(join(dir, 'tsconfig.json'), JSON.stringify({ compilerOptions: { target: 'ES2022', module: 'ESNext', moduleResolution: 'bundler', strict: true, skipLibCheck: true, paths: { '@somewhere-cloud/cli/testing': [join(process.cwd(), 'dist/testing.d.ts')] } }, include: ['**/*.ts'] }));
       const result = await runTypecheck(dir);
       assert.equal(result.ok, true, JSON.stringify(result, null, 2));
     } finally { rmSync(dir, { recursive: true, force: true }); }

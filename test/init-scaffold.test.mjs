@@ -156,7 +156,7 @@ test('minimal starter is a small typed frontend, function, and schema', () => {
   const claude = readFileSync(join(dir, 'CLAUDE.md'), 'utf8');
   assert.equal(agents, `# somewhere.cloud project contract\n${AGENT_WORKFLOW}\n${SKILLS_POINTER}\n${PORTABILITY_POINTER}\n${MCP_POINTER}\n`);
   assert.match(agents.slice(0, 250), /Enough to start a typical app/);
-  assert.match(agents, /Teams without verification: own membership table/);
+  assert.match(agents, /Teams are built-in groups/);
   assert.equal(claude, 'Read AGENTS.md for project instructions.\n');
 
 });

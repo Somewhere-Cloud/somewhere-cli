@@ -8,6 +8,13 @@ Republish the platform contract 6 CLI after npm accepted earlier uploads without
 
 # Changelog
 
+## 0.38.85
+
+- somewhere init: the starters ship working journeys to adapt: tests/account (sign up, out, in), tests/phone (one 390 px pass) and tests/access (two people; a role-holder and a non-holder). People are made at once; newUser({ role }) grants a declared app role.
+- somewhere test: after a failure it prints each failed test's file, line and assertion and the focused command; somewhere test --failed reruns only what failed and lists the passed results it keeps for the same release (by spec and test hash), never as a full run. A deploy, a changed shared test file or a changed test drops them and says why.
+- somewhere deploy --test: runs the specs once against the new release after it is live and reports the deploy and the tests separately.
+- somewhere test is faster: Chrome uses the system resolver, the release check uses the light URLs read, cleanup runs in parallel.
+
 ## 0.38.84
 
 - somewhere test: expectRefused(person, target, request, { allowed }) needs a positive control before an empty list, a null get or a 404 counts as refused; writes are checked unchanged; 400/409 fail and say which.

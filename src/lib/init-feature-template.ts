@@ -459,7 +459,7 @@ export function usePathname(): string {
 }
 `;
 
-const APP = `import { useEffect } from 'react';
+const APP = `import { useEffect, useState } from 'react';
 import type { User } from '../types/auth';
 import { useAuthState } from './auth/hooks';
 import { authReturn, returnToConnection } from './auth/connection-return';
@@ -502,7 +502,7 @@ export function App() {
     return <SessionUnavailable keepsWork={false} checkStatus={session.checkStatus} retrying={session.retrying} onRetry={session.retry} />;
   }
   const suspended = session.status === 'suspended';
-  if (back.status === 'pending' && !suspended) return <ReturnToConnection path={back.path} />;
+  if (back.status === 'pending' && !suspended) return <ReturnToConnection path={back.path} at={back.at} />;
   return (
     <>
       {suspended ? <SessionUnavailable keepsWork checkStatus={session.checkStatus} retrying={session.retrying} onRetry={session.retry} /> : null}
@@ -516,8 +516,16 @@ export function App() {
   );
 }
 
-function ReturnToConnection({ path }: { path: string }) {
-  useEffect(() => returnToConnection(path), [path]);
+function ReturnToConnection({ path, at }: { path: string; at: number }) {
+  const [refused, setRefused] = useState<string | null>(null);
+  useEffect(() => setRefused(returnToConnection({ path, at })), [path, at]);
+  if (refused) {
+    return (
+      <AppShell appName={APP_NAME} homeLink={linkTo(ROUTES.home)}>
+        <Alert action={<a href="/">Continue to the app</a>}>{refused}</Alert>
+      </AppShell>
+    );
+  }
   return (
     <AppShell appName={APP_NAME} homeLink={linkTo(ROUTES.home)} busy>
       <p role="status">Signed in. Returning to the connection request…</p>
@@ -2527,7 +2535,10 @@ function openedLink(): OpenedLink | null {
     return link;
   }
   const kept = (window.history.state as Record<string, Partial<OpenedLink>> | null)?.[OPENED_LINK];
-  return typeof kept?.token === 'string' && typeof kept.target === 'string' ? { token: kept.token, target: kept.target } : null;
+  // Re-checked on every read: history state is a separate store from the link that was validated.
+  return typeof kept?.token === 'string' && typeof kept.target === 'string'
+    ? { token: kept.token, target: landingTarget('?redirect_uri=' + encodeURIComponent(kept.target), window.location.origin) }
+    : null;
 }
 
 /** Forget the token: it has been sent, so it is spent or refused either way. */
@@ -2625,53 +2636,71 @@ export function useMagicLinkLanding(): MagicLinkLanding {
  * or a sign-in link in this browser) the app sends them back to approve.
  */
 const CONNECTION_RETURN = `// Return from signing in to an MCP connection (somewhere.auth.json names the
-// page). Only the platform's own consent path on this origin is followed;
-// anything else is refused, and a request older than ten minutes has expired
-// on the platform too.
+// page). Every value, from the address bar or the cookie, passes the same
+// check (safeReturn) when it is read and again just before it is followed:
+// only the platform's own consent path on this origin, younger than ten
+// minutes (the platform's sign-in transaction lifetime).
 const PARAM = 'sw_auth_return';
-const KEY = 'sw_connection_return';
+// __Host-: the browser only accepts it from this exact origin (Secure, Path=/,
+// no Domain), so a sibling site cannot plant one.
+const KEY = '__Host-sw_connection_return';
 const LIFETIME_MS = 10 * 60 * 1000;
 const CONSENT = /^\\/mcp\\/consent\\?signin=[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
 export interface PendingReturn { path: string; at: number; sent: boolean }
 export type AuthReturn =
   | { status: 'none' }
-  | { status: 'pending'; path: string }
+  | { status: 'pending'; path: string; at: number }
   | { status: 'refused'; message: string };
 
-/** Pure decision: the address bar's request, the remembered one, and now. */
-export function decideReturn(requested: string | null, kept: PendingReturn | null, now: number): { result: AuthReturn; keep: PendingReturn | null } {
-  const refused = (message: string) => ({ result: { status: 'refused', message } as AuthReturn, keep: null });
-  if (requested !== null) {
-    if (!CONSENT.test(requested)) return refused('This sign-in link does not lead back to a connection request from this app, so it was not followed.');
-    // Sent back to sign in for the same request we already returned to: the
-    // platform did not see this sign-in. Stop instead of looping.
-    if (kept?.path === requested && kept.sent) return refused('The connection could not confirm your sign-in. Sign out, sign in again, then start connecting again.');
-    kept = { path: requested, at: now, sent: false };
-  }
-  if (!kept || kept.sent) return { result: { status: 'none' }, keep: null };
-  if (now - kept.at > LIFETIME_MS || now < kept.at) return refused('That connection request expired. Start connecting again from the app that asked.');
-  return { result: { status: 'pending', path: kept.path }, keep: kept };
+const EXPIRED = 'That connection request expired. Go back to the app that asked to connect (for example Claude) and start connecting again.';
+
+/** The one check for a return path: exactly the consent path, nothing else. */
+export function safeReturn(path: unknown): path is string {
+  return typeof path === 'string' && CONSENT.test(path);
 }
 
-// Kept in a short-lived cookie so it survives a social sign-in's round trip
-// or a sign-in link opened in another tab. It holds only the consent path,
-// never a credential.
-const COOKIE_MAX_AGE_S = 60 * 60;
+function fresh(at: number, now: number): boolean {
+  return Number.isFinite(at) && at <= now && now - at <= LIFETIME_MS;
+}
 
-function readKept(): PendingReturn | null {
-  const entry = document.cookie.split('; ').find((part) => part.startsWith(KEY + '='));
-  if (!entry) return null;
+/** Parse the cookie header: exactly one well-formed, validated entry, else nothing. */
+export function parseKept(cookieHeader: string): PendingReturn | null {
+  const entries = cookieHeader.split(';').map((part) => part.trim()).filter((part) => part.startsWith(KEY + '='));
+  if (entries.length !== 1) return null;
   try {
-    const value = JSON.parse(decodeURIComponent(entry.slice(KEY.length + 1)));
-    return value && typeof value.path === 'string' && typeof value.at === 'number' && typeof value.sent === 'boolean' ? value : null;
+    const value = JSON.parse(decodeURIComponent(entries[0].slice(KEY.length + 1)));
+    if (!value || !safeReturn(value.path) || typeof value.at !== 'number' || !Number.isFinite(value.at) || typeof value.sent !== 'boolean') return null;
+    return { path: value.path, at: value.at, sent: value.sent };
   } catch {
     return null;
   }
 }
 
+/** Pure decision: the address bar's request, the remembered one, and now. */
+export function decideReturn(requested: string | null, kept: PendingReturn | null, now: number): { result: AuthReturn; keep: PendingReturn | null } {
+  const refused = (message: string) => ({ result: { status: 'refused', message } as AuthReturn, keep: null });
+  if (kept && !safeReturn(kept.path)) kept = null;
+  if (kept && !fresh(kept.at, now)) {
+    if (requested === null) return kept.sent ? { result: { status: 'none' }, keep: null } : refused(EXPIRED);
+    kept = null;
+  }
+  if (requested !== null) {
+    if (!safeReturn(requested)) return refused('This sign-in link does not lead back to a connection request from this app, so it was not followed.');
+    // Sent back to sign in for the same request we already returned to: the
+    // platform did not see this sign-in. Stop instead of looping.
+    if (kept?.path === requested && kept.sent) return refused('The connection could not confirm your sign-in. Sign out, sign in again, then start connecting again from the app that asked.');
+    // The same request reopened keeps its original start time.
+    kept = kept?.path === requested ? kept : { path: requested, at: now, sent: false };
+  }
+  if (!kept) return { result: { status: 'none' }, keep: null };
+  // Already returned once: keep the marker until it expires, so a bounce back is seen as a loop.
+  if (kept.sent) return { result: { status: 'none' }, keep: kept };
+  return { result: { status: 'pending', path: kept.path, at: kept.at }, keep: kept };
+}
+
 function writeKept(value: PendingReturn | null) {
-  const body = value ? encodeURIComponent(JSON.stringify(value)) + '; Max-Age=' + COOKIE_MAX_AGE_S : '; Max-Age=0';
+  const body = value ? encodeURIComponent(JSON.stringify(value)) + '; Max-Age=' + Math.ceil(LIFETIME_MS / 1000) : '; Max-Age=0';
   document.cookie = KEY + '=' + body + '; Path=/; SameSite=Lax; Secure';
 }
 
@@ -2687,16 +2716,24 @@ export function authReturn(): AuthReturn {
     url.searchParams.delete(PARAM);
     window.history.replaceState(window.history.state, '', url.pathname + url.search + url.hash);
   }
-  const { result, keep } = decideReturn(requested, readKept(), Date.now());
+  const { result, keep } = decideReturn(requested, parseKept(document.cookie), Date.now());
   writeKept(keep);
   decided = result;
   return result;
 }
 
-/** Signed in: go back to the platform's consent page, once. */
-export function returnToConnection(path: string) {
-  writeKept({ ...(readKept() ?? { path, at: Date.now() }), path, sent: true });
-  window.location.replace(path);
+/** Signed in: go back to the platform's consent page, once. Checked again
+ *  here, at the moment it is followed. Returns a refusal message instead of
+ *  navigating when the request is no longer valid. */
+export function returnToConnection(back: { path: string; at: number }): string | null {
+  if (!safeReturn(back.path)) return 'This sign-in link does not lead back to a connection request from this app, so it was not followed.';
+  if (!fresh(back.at, Date.now())) {
+    writeKept(null);
+    return EXPIRED;
+  }
+  writeKept({ path: back.path, at: back.at, sent: true });
+  window.location.replace(new URL(back.path, window.location.origin).href);
+  return null;
 }
 `;
 

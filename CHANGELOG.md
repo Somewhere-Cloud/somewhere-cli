@@ -8,6 +8,11 @@ Republish the platform contract 6 CLI after npm accepted earlier uploads without
 
 # Changelog
 
+## 0.38.80
+
+- Starter: the MCP sign-in return now checks every remembered value, not only the address bar, with the same exact-path check again just before it is followed. It is kept in a __Host- cookie that other sites cannot set, duplicates are refused, and a page left open past ten minutes refuses plainly instead of following an expired request.
+- Starter: the sign-in link landing checks its remembered destination again when it reads it back.
+
 ## 0.38.79
 
 - An ordinary deploy publishes somewhere.auth.json without --include.

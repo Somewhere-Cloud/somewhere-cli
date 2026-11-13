@@ -10,7 +10,7 @@ Enough to start a typical app: declare access and use the browser client; docs a
 | --- | --- |
 | Each user sees only their own rows | notes: owner() |
 | Team: owner adds members; members read/write; creator rights | teams/team_members/tasks: owner() + member(); role-owner delete branch |
-| Owner/staff record with staff-only child notes | tickets: owner() or appRole(); parent() thread; staff-only notes; role granted in sign-up below |
+| Owner/staff record with staff-only child notes | tickets: owner() or appRole(); parent() thread; staff-only notes; staff by verified emailDomain |
 | Public pages from private drafts | pages: conditional publicRead |
 | Share one record read-only | shared_notes/note_shares: read-only grant() |
 
@@ -63,16 +63,16 @@ export default schema({
     scope: anyOf(owner(), grant({ table: 'note_shares', grantee: 'grantee_id', row: 'note_id', operations: ['read'] })),
     client: { read: ['id', 'title'], create: ['title'], update: ['title'] },
   }),
-}, { appRoles: { staff: { assignedBy: 'server' } } });
+}, { appRoles: { staff: { emailDomain: 'staff.example' } } });
 \`\`\`
 
-Your app's code decides who gets a role; the platform enforces what the role may do.
-Grant it inside your sign-up route, before the response is sent (example below), so
-the new person's first request already holds it; never in a second request after sign-up.
+Who is staff is your app's decision; the platform enforces what the role may do.
+First choice, as above: emailDomain. The role holds once the person verifies an address
+at that domain; no grant code. An email ending alone proves nothing: anyone can sign up
+as anyone@your-domain without owning that mailbox. Without verification, grant only from
+something the visitor cannot choose, such as an invitation your app issued, checked inside
+the sign-up route: somewhere docs sw.auth --section server-assigned-app-roles-setroles.
 messages use parent(): owner() would hide staff replies from the customer.
-Use emailDomain for staff at your verified domain; assignedBy: 'server' when the
-app decides (promotion, payment, invitation). An email ending proves identity only
-when verified; assigning a role anyway is your app's decision, whose permissions the platform enforces.
 Publish pages in an owner-checked endpoint. Share with caller-scoped
 sw.db.insert('note_shares', { grantee_id, note_id }); it checks row ownership.
 Browser calls THROW, not { error }; catch below.
@@ -125,21 +125,6 @@ export default sw.endpoint({
 });
 \`\`\`
 
-\`\`\`ts
-// api/auth/[...path].ts — the starter's auth route, plus this app's staff rule
-import { somewhereAuth } from '@somewhere-cloud/sdk/server';
-export default async function (request: Request, sw: SomewhereRuntimeContext): Promise<Response> {
-  const response = await somewhereAuth(request, sw);
-  if (response.ok && request.method === 'POST' && new URL(request.url).pathname.endsWith('/signup')) {
-    const body = await response.clone().json() as { user?: { id?: string; email?: string } };
-    if (body.user?.id && body.user.email?.toLowerCase().endsWith('@staff.example')) {
-      await sw.auth.server.setRoles(body.user.id, { add: ['staff'] });
-    }
-  }
-  return response;
-}
-\`\`\`
-
 Do not hand-write access to app-read/write data: declare who may read/write it.
 serverOnly() fits job/import/audit/counter state and protected membership ledgers.
 Grant ledgers use owner() without browser writes. Undeclarable: arbitrary predicates
@@ -173,11 +158,11 @@ several people, and ready(page, 'signed-in' | 'signed-out') waits for the sessio
 You do not need a separate browser script.
 Deploy raw source, no frontend build; type errors stop upload.
 newUser() gives a signed-in page/API client; call N times (owner, member, outsider).
-newUser() takes no chosen email; for a role your sign-up grants, signUp(page, { domain: 'staff.example' }),
-and newPage() for a second person. Test users are verified and visible to this project's server user lookup.
-Email-domain role: signUp(page, { domain: 'staff.example' }), then verify(page, person).
-Refusals: await expectRefused(person, 'notes', { operation: 'update', id, values }) or
-expectRefused(person, 'POST /api/x', body); it knows every refusal shape. person: page, newUser() or anonymous.
+newUser() takes no chosen email. Test users are verified and visible to this project's server user lookup.
+Email-domain role: signUp(page, { domain: 'staff.example' }), then verify(page, person); newPage() for a second person.
+Refusals: await expectRefused(person, 'notes', { operation: 'update', id, values }, { allowed: owner }) or
+expectRefused(person, 'POST /api/x', body, { allowed }). allowed is someone the same request succeeds for;
+an empty list, a null get or a 404 counts as refused only then. person/allowed: page, newUser() or anonymous.
 somewhere test --phone runs every test again at 390x844.
 For the complete owner-adds-member-by-email test and its endpoints, run
 somewhere docs test and follow Two users sharing through the app.

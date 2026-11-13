@@ -4476,8 +4476,8 @@ var require_consumer_contract = __commonJS({
   "worker/containers/compile/consumer-contract.cjs"(exports2, module2) {
     "use strict";
     var CONSUMER_CONTRACT2 = Object.freeze({
-      version: 10,
-      digest: "f5028380f839629dcd70df55f2548e38a22c5b5c05eaae54946a2d4acedd39ab"
+      version: 11,
+      digest: "62d18315ecf37c38b4540dd8a4f6597ec35c3312807aa0f511eacd5dd3e5a346"
     });
     var MEMBERSHIPS = "memberships: table({ id: id(), team_id: text(), member_id: text() }, { scope: owner(), client: { read: true } }),";
     var SHARES = "shares: table({ id: id(), grantee_id: text() }, { scope: owner(), client: { read: true, create: ['grantee_id'], delete: true }, unique: [['user_id', 'grantee_id']] }),";

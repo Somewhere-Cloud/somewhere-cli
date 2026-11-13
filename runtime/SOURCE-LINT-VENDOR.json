@@ -27,7 +27,7 @@
     "worker/src/runtime/calendar.ts": "483a7e0151b5cff2b0cccadc52da2a32d547c87a565edbbe66d7a2a26b537371",
     "worker/src/runtime/connect.ts": "45bba4d2f90d3fe5bc60a985dacf459e1132f89fbbcbe369ec2829100acc049a",
     "worker/src/runtime/context-head.ts": "ea9af3394dd483143dd30fb36b36ad63f168740b005d857bf087d73c2e7ab8eb",
-    "worker/src/runtime/context-tail.ts": "8fa257b0117e01a7852dc27d5dd6c74064f1161b66353e7fdf4f36d73f30472a",
+    "worker/src/runtime/context-tail.ts": "7911800e7a9fabae72163cfd05263fec2b48874ef8dc6a0c16846e8b7994e525",
     "worker/src/runtime/context.ts": "e3810d92c7c7bab05c12d518b012fcc84523e8aee0f1003a319ca11e8593e409",
     "worker/src/runtime/cron.ts": "4aac732fe8ce072dec8e3dafaebfc1b48818ec34bb13b388a4f1bb3f184b4383",
     "worker/src/runtime/crypto.ts": "5c91be24e7da79a8c11f04e06f70158ce89e09940a0918711c656d4cc893915d",
@@ -88,7 +88,7 @@
     "worker/src/runtime/storage.ts": "15c7953b994497c7883b774f79ae93bae96e16373a0826cc733d21005de22ad7",
     "worker/src/runtime/tasks.ts": "75efa2e3083853bfba1dc49745ede8865ddd218b84d568a00da2dbd669f9ab23",
     "worker/src/runtime/verify-signup.ts": "dcac46b4581794fe875e3f85e3d93a2253b470f60a3c7fcee68543d8be8a6fa1",
-    "worker/src/runtime/version.ts": "df2611361fc0de08a61d6457d1881379aa62ddecb141d8050ef858a731b63e7a",
+    "worker/src/runtime/version.ts": "5a7f3cc7873c601c405f96e4379f7c40a3cf1e337858d57bf56751ed3de15c5c",
     "worker/src/runtime/visitor-session.generated.ts": "f788a0c4efe22b18c313d8433150931d48a5f872e3bd98549d94138a5b0dfe5d",
     "worker/src/runtime/web.ts": "269590d44ffa6239bb6e79999b58ba42435c230f045daea52bf73d09519afb0e",
     "worker/src/security/browser-secret-scan.ts": "31ebc9dd94eed4d0a9a6b67b3b1e2505d4f7812c557c90337e034c1e3994c039",
@@ -162,6 +162,6 @@
     "worker/src/utils/telegram.ts": "dfbc9e756b44b445b3c3504c90a1094a94e6f9853ff9c0e0a84fba0e8c4518da",
     "worker/src/vendor/neondatabase-serverless/source.generated.ts": "96a3c18fde7d8888fdb53a4d7cd0721c238a234521d2084d1e66868a8df8e69c"
   },
-  "sha256": "990a318a92c26567b57795979f280d56a4051c838e0e95589be76ee722f2532d",
+  "sha256": "59da48afa417269b03a304d90587143a08c2de3a615f16bf2d80b5fd6f8a3e17",
   "fixtures_sha256": "908827d1430f4af5a83cae59ed476abc51dc9648757eac0089fe6e6db95f66c5"
 }

@@ -3,9 +3,9 @@ import { join, relative } from 'node:path';
 import ts from 'typescript';
 
 const METHODS = new Set(['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']);
-const ROLE_WRITES = new Set(['setRoles', 'grantRole', 'revokeRole']);
+const REMOVED_ROLE_METHODS: Record<string, string> = { grantRole: 'add', revokeRole: 'remove' };
 
-/** A warning for explicit GET-only route exports, not an authorization analysis. */
+/** Removed role-method names, and setRoles in explicit GET-only routes; not an authorization analysis. */
 export function roleMethodHints(projectDir: string): string[] {
   const api = join(projectDir, 'api');
   if (!existsSync(api)) return [];
@@ -34,17 +34,23 @@ export function roleMethodHints(projectDir: string): string[] {
           if (ts.isFunctionDeclaration(statement) && statement.name) exports.add(statement.name.text);
         }
       }
-      const methods = [...exports].filter(name => METHODS.has(name));
-      if (unknown || methods.length !== 1 || methods[0] !== 'GET') continue;
+      const rel = relative(projectDir, path).replaceAll('\\', '/');
       let write: string | undefined;
+      const removed = new Set<string>();
       function walk(node: ts.Node): void {
         if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)
-          && ROLE_WRITES.has(node.expression.name.text)
-          && node.expression.expression.getText(file) === 'sw.auth.server') write ??= node.expression.name.text;
+          && node.expression.expression.getText(file) === 'sw.auth.server') {
+          const name = node.expression.name.text;
+          if (name === 'setRoles') write ??= name;
+          if (name in REMOVED_ROLE_METHODS) removed.add(name);
+        }
         ts.forEachChild(node, walk);
       }
       walk(file);
-      if (write) hints.push(`hint: ${relative(projectDir, path).replaceAll('\\', '/')}: ${write} is called in a GET-only route; use a POST setup handler once after sign-up/profile completion (cookie GET cannot change roles).`);
+      for (const name of removed) hints.push(`hint: ${rel}: sw.auth.server.${name} was removed; call sw.auth.server.setRoles(userId, { ${REMOVED_ROLE_METHODS[name]}: [role] }).`);
+      const methods = [...exports].filter(name => METHODS.has(name));
+      if (unknown || methods.length !== 1 || methods[0] !== 'GET') continue;
+      if (write) hints.push(`hint: ${rel}: ${write} is called in a GET-only route; use a POST setup handler once after sign-up/profile completion (cookie GET cannot change roles).`);
     }
   }
   visitDir(api);

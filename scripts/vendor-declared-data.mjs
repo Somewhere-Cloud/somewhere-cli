@@ -22,7 +22,6 @@ const result = await esbuild.build({
   absWorkingDir: root,
   stdin: {
     contents: `import { clientAuthorityFromSource, declaredFilesFromSource, declaredRolesFromSource, schemaAuthorityFromSource } from './worker/src/utils/db-schema-deploy/client-contract-source.ts';
-import { extractSchemaTs } from './worker/src/utils/db-schema-deploy/extract-schema-ts.ts';
 import { describeDataClientLocalDeclaration } from './worker/containers/compile/declared-data-contract.cjs';
 import { generateDataClient } from './worker/containers/compile/typed-data.cjs';
 import { declaredTablesDeclaration, runtimeContextDeclaration } from './worker/containers/compile/runtime-types.cjs';
@@ -34,13 +33,6 @@ export { CLIENT_FILE as FILES_DECLARATION_FILE } from './worker/containers/compi
 export * as checkerContract from './worker/containers/compile/checker-contract.cjs';
 export { referenceCheckDeclarations, isRuntimeEndpointGlobal } from './worker/src/utils/reference-check-inputs.ts';
 export { CONSUMER_CONTRACT, consumerContractComponents, consumerContractFingerprint, consumerContractVerdict, parseConsumerContractHeader } from './worker/containers/compile/consumer-contract.cjs';
-export function allTablesServerOnlyWithoutClient(files) {
-  const source = files['db/schema.ts'];
-  if (source === undefined) return false;
-  const parsed = extractSchemaTs(source);
-  return parsed.ok && parsed.declaration.tables.length > 0 &&
-    parsed.declaration.tables.every(table => table.scope.kind === 'server_only' && table.client === undefined);
-}
 export function generateFromFiles(files) {
   const authority = clientAuthorityFromSource(files);
   return authority ? generateDataClient(authority) : undefined;

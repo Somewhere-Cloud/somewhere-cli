@@ -3280,8 +3280,8 @@ export function createFeatureTemplate(
 Write tests/*.spec.ts importing test, expect from @somewhere-cloud/cli/testing.
 Each test creates its own users with newUser() and unique row values.
 Run somewhere test against the linked production app (five workers).
-After a failure, fix it and run somewhere test --failed, then one full run.
-One green FULL run is the stop rule; test your app's own rules once.
+After a failure, fix it and run somewhere test --failed.
+A pass means the checks you wrote passed; say which requirements they do not cover.
 Use ready(page) for starter session readiness, or an explicit locator.
 Test users are removed afterwards; rows, files and mail they created remain.
 Managed users bypass signup/onboarding; test those separately if you customize them.

@@ -162,8 +162,8 @@ headers: { 'content-type': 'application/json' }, body: JSON.stringify(values) })
 Access cookies refresh automatically. Cookie-auth POST/PATCH/DELETE from scripts
 need Origin equal to the app URL.
 
-Publish: somewhere typecheck → npx @somewhere-cloud/cli deploy → somewhere verify → somewhere test.
-Deploy raw source, no frontend build. Type errors stop upload; override: somewhere deploy --allow-type-errors.
+Publish: npx @somewhere-cloud/cli deploy, then somewhere test for the rules you changed.
+Deploy raw source, no frontend build; type errors stop upload.
 newUser() gives a signed-in page/API client; call N times (owner, member, outsider).
 No chosen email argument: assign roles/memberships through your app's authorized POST setup.
 Test users are verified and visible to this project's server user lookup.

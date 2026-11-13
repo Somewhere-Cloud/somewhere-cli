@@ -292,4 +292,4 @@ Browser tests can call `waitForApp(page, 'signed-in')` or `'signed-out'`; omit t
 state for either ready state. Add `data-app-state` to your own app's confirmed auth
 boundary (the starter already does). Do not mark loading or unconfirmed logout ready.
 Each test owns its fixture. Rerun only a failing test with `--test-name-pattern`;
-one full passing run is the stop rule. Test your app's declared rules once.
+a pass means the checks you wrote passed; say which requirements they do not cover.

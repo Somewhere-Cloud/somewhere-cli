@@ -207,5 +207,8 @@ export const DECLARED_ACCESS_POINTER = '';
  *  AGENT_WORKFLOW, which is a byte mirror of the platform's agent workflow. */
 export const PORTABILITY_POINTER = 'Data/code export limits: `somewhere docs portability`.';
 
-export const INIT_AGENTS_MD = `# somewhere.cloud project contract\n${AGENT_WORKFLOW}\n${SKILLS_POINTER}\n${PORTABILITY_POINTER}\n`;
+/** One line: using the app from Claude as its signed-in user (MCP tools). */
+export const MCP_POINTER = 'Use this app from Claude as its signed-in user (MCP tools): `somewhere docs sw.endpoint --section mcp-tools-for-claude`.';
+
+export const INIT_AGENTS_MD = `# somewhere.cloud project contract\n${AGENT_WORKFLOW}\n${SKILLS_POINTER}\n${PORTABILITY_POINTER}\n${MCP_POINTER}\n`;
 export const INIT_CLAUDE_MD = 'Read AGENTS.md for project instructions.\n';

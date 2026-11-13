@@ -205,6 +205,17 @@ test('the run-2 shape: private notes are not published, and are named', () => {
   assert.ok(collected.functions['api/links.ts']);
 });
 
+test('somewhere.auth.json ships without --include (MCP sign-in return)', () => {
+  const dir = fixture({
+    'index.html': '<!doctype html>',
+    'somewhere.auth.json': '{"version":1,"signInPath":"/"}',
+    'NOTES.md': 'private',
+  });
+  const collected = collectFiles(dir);
+  assert.ok(collected.files['somewhere.auth.json']);
+  assert.deepEqual(collected.excluded.map((e) => e.path), ['NOTES.md']);
+});
+
 test('--include publishes a held-back file on purpose', () => {
   const dir = fixture({
     'index.html': '<!doctype html>',

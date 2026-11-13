@@ -46,3 +46,9 @@ export function assertBehaviorParity(original, projected, filename = 'vendor.ts'
     throw new Error(filename + ': executable token mismatch (including literal contents)');
   }
 }
+
+export function assertPublicArtifact(text, filename) {
+  if (/\b(?:tsk|pfb)_[a-f0-9]{8,32}\b/.test(text)) {
+    throw new Error(filename + ': internal task or feedback reference in public artifact; fix its source');
+  }
+}

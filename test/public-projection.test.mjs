@@ -5,7 +5,18 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync, copyFileSync, symlinkSyn
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { publicProjection, assertBehaviorParity } from '../scripts/public-projection.mjs';
+import { publicProjection, assertBehaviorParity, assertPublicArtifact } from '../scripts/public-projection.mjs';
+
+test('public artifacts reject internal references rather than rewriting literal data', () => {
+  for (const marker of ['tsk_abcd1234', 'pfb_12345678abcd']) {
+    const source = `export const text = "${marker}";`;
+    const projected = publicProjection(source);
+    assertBehaviorParity(source, projected);
+    assert.equal(projected, source);
+    assert.throws(() => assertPublicArtifact(projected, 'fixture'), /internal task or feedback reference/);
+  }
+  assertPublicArtifact('export const text = "public example";', 'fixture');
+});
 
 test('only parsed comments are removed; literal bytes and tokens survive', async () => {
   const marker = ['tsk', 'abc123'].join('_');

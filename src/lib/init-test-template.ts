@@ -41,14 +41,24 @@ test('sign up, sign out and sign back in', async ({ page, signUp, signOut, signI
 });
 `;
 
+// Nothing scrolls sideways at phone width: not the page, and not a table or panel inside it.
+const SIDEWAYS = `async function scrollsSideways(page: import('@playwright/test').Page) {
+  return page.evaluate(() => [document.documentElement, ...document.querySelectorAll('body *')]
+    .filter((el) => el.scrollWidth > el.clientWidth + 1
+      && (el === document.documentElement || ['auto', 'scroll'].includes(getComputedStyle(el).overflowX)))
+    .map((el) => el.tagName.toLowerCase() + (typeof el.className === 'string' && el.className ? '.' + el.className.split(' ')[0] : '')));
+}
+`;
+
 const FORM_PHONE = (privateData: boolean) => `import { test, expect } from '@somewhere-cloud/cli/testing';
 
 // One pass at phone width. Adapt: do the app's main action here, as a person on a phone would.
 test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
-
+${SIDEWAYS}
 test('phone: ${privateData ? 'sign up, add a note and sign out' : 'sign up and sign out'}', async ({ page, signUp, signOut }) => {
   const person = await signUp(page);
   await expect(page.getByText(person.email)).toBeVisible();
+  expect(await scrollsSideways(page), 'these scroll sideways at 390 px').toEqual([]);
 ${privateData ? `  const title = 'phone ' + crypto.randomUUID();
   await page.getByLabel('Title').fill(title);
   await page.getByRole('button', { name: 'Add note' }).click();
@@ -61,11 +71,11 @@ const ROUTE_PHONE = `import { test, expect } from '@somewhere-cloud/cli/testing'
 
 // One pass at phone width. Adapt: do the app's main action here, as a person on a phone would.
 test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
-
+${SIDEWAYS}
 test('phone: the page shows the greeting from its function', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByText('Your full-stack app is ready.')).toBeVisible();
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  expect(await scrollsSideways(page), 'these scroll sideways at 390 px').toEqual([]);
 });
 `;
 

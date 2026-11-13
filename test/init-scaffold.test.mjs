@@ -111,6 +111,7 @@ test('minimal starter is a small typed frontend, function, and schema', () => {
     'src/styles.css',
     'tsconfig.json',
     'types/app.ts',
+    'types/assets.d.ts',
   ]);
 
   const pkg = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'));
@@ -184,6 +185,56 @@ declare module 'react-dom/client' {
   const result = await runTypecheck(dir);
   assert.equal(result.ok, true, result.raw);
   assert.deepEqual(result.errors, []);
+});
+
+test('both starters typecheck .svg, .svg?react and media imports', async () => {
+  const fakeReact = `declare module 'react' {
+  export interface ReactNode {}
+  export interface SVGProps<T> { className?: string; width?: number }
+  export type FunctionComponent<P> = (props: P) => JSX.Element;
+  export const StrictMode: (props: { children?: ReactNode }) => JSX.Element;
+  export function useEffect(effect: () => void, dependencies: unknown[]): void;
+  export function useState<T>(initial: T): [T, (next: T) => void];
+}
+declare module 'react/jsx-runtime' {
+  namespace JSX {
+    interface Element {}
+    interface IntrinsicElements { [name: string]: Record<string, unknown> }
+  }
+  export function jsx(type: unknown, props: unknown): JSX.Element;
+  export function jsxs(type: unknown, props: unknown): JSX.Element;
+  export const Fragment: unknown;
+}
+declare module '@somewhere-cloud/sdk/server' { export const somewhereAuth: (request: Request) => Promise<Response>; }
+declare module 'react-dom/client' {
+  export function createRoot(node: Element): { render(value: unknown): void };
+}
+`;
+  const probe = `import logoUrl, { ReactComponent as Logo } from './logo.svg';
+import Icon from './icon.svg?react';
+import photo from './photo.png';
+import font from './brand.woff2';
+export const urls: string[] = [logoUrl, photo, font];
+export const views = [<Logo className="logo" />, <Icon width={16} />];
+`;
+  for (const [name, files] of [
+    ['minimal', createGreenTemplate()],
+    ['auth', createFeatureTemplate({ requested: ['auth'], added: [], modules: ['auth'], ui: 'styled' }, { appName: 'Starter' })],
+  ]) {
+    assert.ok(files.some((file) => file.path === 'types/assets.d.ts'), `${name} starter ships types/assets.d.ts`);
+    for (const withTypes of [true, false]) {
+      const dir = tempDir();
+      writeInitScaffold(dir, withTypes ? files : files.filter((file) => file.path !== 'types/assets.d.ts'));
+      const typesDir = join(dir, 'node_modules/@types/scaffold-contract');
+      mkdirSync(typesDir, { recursive: true });
+      writeFileSync(join(typesDir, 'index.d.ts'), fakeReact);
+      writeFileSync(join(dir, 'src/AssetProbe.tsx'), probe);
+      const result = await runTypecheck(dir);
+      const probeErrors = result.errors.filter((e) => e.file.includes('AssetProbe'));
+      if (withTypes) assert.deepEqual(probeErrors, [], `${name}: ${result.raw}`);
+      else assert.ok(probeErrors.some((e) => e.code === 'TS2307'), `${name}: without the declarations the imports are refused`);
+    }
+  }
 });
 
 test('default starter is the auth module: SDK client, packaged handler, hooks, replaceable views', () => {

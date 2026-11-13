@@ -66,7 +66,7 @@ for (const selection of [[], ['--template', 'minimal'], ['--features', 'private-
     assert.ok(Object.keys(collected.files).every(path => !/^\.(claude|codex|cursor)\//.test(path)), 'hook configs are never deployed');
     assert.ok(collected.files['index.html']); assert.ok(Object.keys(collected.files).some(p => p.endsWith('.tsx')));
     for (const [path, content] of Object.entries(collected.files)) {
-      if (!/\.tsx?$/.test(path)) continue;
+      if (!/\.tsx?$/.test(path) || path.endsWith('.d.ts')) continue; // declarations have no output
       const output = ts.transpileModule(content, { fileName: path, reportDiagnostics: true,
         compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext, jsx: ts.JsxEmit.ReactJSX } });
       assert.deepEqual(output.diagnostics?.filter(d => d.category === ts.DiagnosticCategory.Error), [], path);

@@ -1,6 +1,7 @@
 import { CLI_VERSION } from './version.js';
 import type { InitScaffoldFile } from './init-scaffold.js';
 import { INIT_AGENTS_MD, INIT_CLAUDE_MD } from './init-agent-guide.js';
+import { ASSET_TYPES_FILE } from './init-asset-types.js';
 
 const PACKAGE_JSON = `{
   "name": "somewhere-starter",
@@ -196,5 +197,6 @@ export function createGreenTemplate(): InitScaffoldFile[] {
     { path: 'api/auth/[...path].ts', content: "export { somewhereAuth as default } from '@somewhere-cloud/sdk/server';\n" },
     { path: 'db/schema.ts', content: SCHEMA },
     { path: 'types/app.ts', content: APP_TYPES },
+    ASSET_TYPES_FILE,
   ];
 }

@@ -8,7 +8,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { spawn } from 'node:child_process';
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, existsSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -47,6 +47,7 @@ const sendJson = (res, status, payload) => { res.writeHead(status, { 'content-ty
 /** logAnswers: what successive GET /deploy/log?release_id= reads return (the last one repeats). */
 function server({ pending = true, logAnswers = [] } = {}) {
   const reads = [];
+  const uploads = [];
   const handler = (req, res) => {
     let body = '';
     req.on('data', (c) => (body += c));
@@ -59,6 +60,7 @@ function server({ pending = true, logAnswers = [] } = {}) {
         return sendJson(res, 200, { ok: true, data: { id: PROJECT, name: 'p', subdomain: 'post-live', status: 'deployed' } });
       }
       if (req.method === 'POST' && req.url === '/v1/deploy') {
+        uploads.push(body);
         return sendJson(res, 200, { ok: true, data: {
           project_id: PROJECT, version: 8, url: 'https://post-live.somewhere.site', has_functions: false,
           release_id: 'rel_new', active_release_id: 'rel_new', base_release_id: 'rel_old', status: 'success',
@@ -74,7 +76,7 @@ function server({ pending = true, logAnswers = [] } = {}) {
       sendJson(res, 404, { ok: false, error: 'NOT_FOUND', message: req.url });
     });
   };
-  return { handler, reads };
+  return { handler, reads, uploads };
 }
 async function withServer(handler, fn) {
   const s = createServer(handler);
@@ -159,5 +161,23 @@ test('no pending check (a gated release): the deploy log is not read', async () 
     assert.equal(r.status, 0, r.stderr);
     assert.equal(srv.reads.length, 0);
     assert.equal(existsSync(distIndex), true);
+  });
+});
+
+// TypeScript runs alongside preparation, but upload remains behind its verdict.
+test('overlapped typecheck refuses errors before any deploy upload; explicit override still works', async () => {
+  const f = fixture();
+  writeFileSync(join(f.dir, 'tsconfig.json'), JSON.stringify({ compilerOptions: { strict: true, skipLibCheck: true, types: [], target: 'ES2022' }, include: ['broken.ts'] }));
+  writeFileSync(join(f.dir, 'broken.ts'), 'const value: number = notDefined;');
+  symlinkSync(join(dirname(distIndex), '..', 'node_modules'), join(f.dir, 'node_modules'), 'dir');
+  const srv = server({ pending: false });
+  await withServer(srv.handler, async (apiUrl) => {
+    const refused = await deploy(f, apiUrl);
+    assert.equal(refused.status, 1, refused.stderr);
+    assert.match(refused.stdout + refused.stderr, /notDefined/);
+    assert.equal(srv.uploads.length, 0, 'no source upload before the typecheck verdict');
+    const allowed = await deploy(f, apiUrl, ['--allow-type-errors']);
+    assert.equal(allowed.status, 0, allowed.stderr);
+    assert.equal(srv.uploads.length, 1);
   });
 });

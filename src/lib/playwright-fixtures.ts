@@ -180,19 +180,25 @@ export const expect: typeof import('@playwright/test').expect = eager?.expect ??
   get: (_target, key) => Reflect.get(runner().expect, key),
 });
 type Person_ = Page | { request: APIRequestContext } | APIRequestContext;
+/** `allowed`: someone the same request succeeds for. It is the positive control that turns an
+ *  empty list, a null get or a 404 into proof of refusal (otherwise those look exactly like an
+ *  empty table, a missing row or a missing route). */
+export interface RefusalOptions { allowed?: Person_ }
 /**
- * Prove a refusal in one call: act as `person` against a table (with a data request) or an
- * endpoint ('METHOD /path', with a JSON body), and pass only if it was refused. Knows every shape
- * a refusal takes: a hidden row reads as 200 data:null, a hidden list as 200 with no rows, a
- * refused update/delete as 404, a closed table, operation or role as 403, an endpoint as
- * 401/403/404. A malformed request or stale contract (400/409) never counts.
- *
- * The older form expectRefused(response, status, code) checks one exact status and code.
+ * Prove a refusal: act as `person` against a table (with a data request) or an endpoint
+ * ('METHOD /path', with a JSON body), and pass only if it was refused.
+ * - 401 or 403 counts as refused on its own.
+ * - A 200 with no rows, a get with data:null, or a 404 counts only with `{ allowed }`: the same
+ *   read must return data for them, the row a write targeted must exist for them before and be
+ *   unchanged after, and an endpoint must succeed for them.
+ * - A malformed request or a stale contract (400/409) never counts.
+ * With `allowed`, the control always runs (after the person's attempt), so an endpoint call
+ * runs twice. The older form expectRefused(response, status, code) checks one exact status and code.
  */
-export async function expectRefused(person: Person_, target: string, request?: unknown): Promise<void>;
+export async function expectRefused(person: Person_, target: string, request?: unknown, options?: RefusalOptions): Promise<void>;
 export async function expectRefused(response: APIResponse, status: number, code: string): Promise<void>;
-export async function expectRefused(first: APIResponse | Person_, second: number | string, third?: unknown): Promise<void> {
-  if (typeof second === 'string') return refusedAs(first as Person_, second, third);
+export async function expectRefused(first: APIResponse | Person_, second: number | string, third?: unknown, options?: RefusalOptions): Promise<void> {
+  if (typeof second === 'string') return refusedAs(first as Person_, second, third, options ?? {});
   const response = first as APIResponse;
   const status = second, code = third as string;
   const actual = response.status();
@@ -212,43 +218,84 @@ async function bodyOf(response: APIResponse): Promise<{ code: string; message: s
   const raw = typeof json?.error === 'string' ? json.error : '';
   return { code: /^[A-Z_]+$/.test(raw) ? raw : 'none', message: typeof json?.message === 'string' ? scrub(json.message).slice(0, 300) : '', json };
 }
-async function refusedAs(person: Person_, target: string, request: unknown): Promise<void> {
+const INCONCLUSIVE = 'looks the same as an empty table, a missing row or a missing route, so it proves nothing on its own. Pass { allowed: <someone the same request succeeds for> } as the positive control.';
+function seen(status: number, code: string, message: string): string {
+  const kind = status === 400 ? 'a malformed request' : status === 409 ? 'a stale data contract' : `HTTP ${status}`;
+  return `${kind} (${status} ${code}${message ? `: ${message}` : ''})`;
+}
+async function refusedAs(person: Person_, target: string, request: unknown, options: RefusalOptions): Promise<void> {
   const client = clientOf(person);
+  const allowed = options.allowed === undefined ? undefined : clientOf(options.allowed);
   const endpoint = ENDPOINT.exec(target);
   if (endpoint) {
     const [, method, path] = endpoint;
-    const response = await client.fetch(path, { method, ...(method === 'GET' || request === undefined ? {} : { data: request }) });
+    const send = (as: APIRequestContext) => as.fetch(path, { method, ...(method === 'GET' || request === undefined ? {} : { data: request }) });
+    const response = await send(client);
     const status = response.status();
-    if ([401, 403, 404].includes(status)) return;
     const { code, message } = await bodyOf(response);
-    const said = `${target} answered HTTP ${status} ${code}${message ? ` (${message})` : ''}`;
+    const said = `${target} answered ${seen(status, code, message)}`;
     if (status < 400) throw new Error(`expectRefused: ${said}: it was allowed, not refused.`);
     if (status === 400 || status === 422) throw new Error(`expectRefused: ${said}: the endpoint rejected the input, which says nothing about who is asking. Send a body it accepts from someone who may.`);
-    throw new Error(`expectRefused: ${said}: a refusal is 401, 403 or 404.`);
+    if (![401, 403, 404].includes(status)) throw new Error(`expectRefused: ${said}: a refusal is 401, 403 or 404.`);
+    if (status === 404 && !allowed) throw new Error(`expectRefused: ${said}: a 404 ${INCONCLUSIVE}`);
+    if (allowed) {
+      const control = await send(allowed);
+      const c = await bodyOf(control);
+      if (control.status() >= 300) throw new Error(`expectRefused: ${said}, but the allowed person got ${seen(control.status(), c.code, c.message)} too, so the route or input is wrong and the refusal is not proven.`);
+    }
+    return;
   }
   if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(target)) throw new Error(`expectRefused: "${target}" is neither a table name nor 'METHOD /path'.`);
   if (!request || typeof request !== 'object' || typeof (request as { operation?: unknown }).operation !== 'string') {
     throw new Error(`expectRefused: pass a data request for table ${target}, for example { operation: 'get', id }.`);
   }
-  if (!digests.has(client)) throw new Error('expectRefused: act as a page that signed up or signed in (signUp/signIn), a newUser() user, or anonymous.');
+  for (const as of [client, ...(allowed ? [allowed] : [])]) {
+    if (!digests.has(as)) throw new Error('expectRefused: act as (and pass allowed as) a page that signed up or signed in (signUp/signIn), a newUser() user, or anonymous.');
+  }
   const operation = (request as { operation: string }).operation;
+  const reading = operation === 'get' || operation === 'list' || operation === 'relation_list';
+  const writing = operation === 'update' || operation === 'delete';
+  const id = (request as { id?: string | number }).id;
+  const rowOf = async (as: APIRequestContext) => {
+    const response = await data(as, target, { operation: 'get', id: id as string | number });
+    const body = await bodyOf(response);
+    if (response.status() !== 200) throw new Error(`expectRefused: the allowed person could not read ${target} ${String(id)} (${seen(response.status(), body.code, body.message)}), so it is not a control for this row.`);
+    return body.json?.data ?? null;
+  };
+  let before = '';
+  if (writing && allowed) {
+    const row = await rowOf(allowed);
+    before = JSON.stringify(row);
+    if (row === null) throw new Error(`expectRefused: ${target} ${String(id)} does not exist for the allowed person, so there is nothing to refuse. Create the row first.`);
+  }
   const response = await data(client, target, request as DataRequest);
   const status = response.status();
   const { code, message, json } = await bodyOf(response);
-  const said = `${operation} on ${target} answered HTTP ${status} ${code}${message ? ` (${message})` : ''}`;
-  if (status === 400 || status === 409) throw new Error(`expectRefused: ${said}. The request was malformed or the app's data contract changed, so nothing ran and this proves nothing about access.`);
-  if (status === 401 || status === 403) return;
-  if (status === 404 && code === 'DATA_NOT_FOUND') return;
-  if (status === 200) {
-    const rows = json?.data;
-    if ((operation === 'get') && rows === null) return;
-    if ((operation === 'list' || operation === 'relation_list') && Array.isArray(rows) && rows.length === 0) return;
-    if (operation === 'list' || operation === 'relation_list') throw new Error(`expectRefused: ${said}: this person read ${Array.isArray(rows) ? rows.length : 'some'} row(s).`);
-    if (operation === 'get') throw new Error(`expectRefused: ${said}: this person read the row.`);
+  const said = `${operation} on ${target} answered ${seen(status, code, message)}`;
+  if (status === 400 || status === 409) throw new Error(`expectRefused: ${said}. Nothing ran, so this proves nothing about access.`);
+  const rows = json?.data;
+  const empty = status === 200 && ((operation === 'get' && rows === null) || ((operation === 'list' || operation === 'relation_list') && Array.isArray(rows) && rows.length === 0));
+  const missing = status === 404 && code === 'DATA_NOT_FOUND';
+  if (status === 200 && !empty) {
+    if (reading) throw new Error(`expectRefused: ${said}: this person read ${Array.isArray(rows) ? `${rows.length} row(s)` : 'the row'}.`);
     throw new Error(`expectRefused: ${said}: the ${operation} was allowed.`);
   }
-  throw new Error(`expectRefused: ${said}: not a refusal.`);
+  if (status !== 401 && status !== 403 && !empty && !missing) throw new Error(`expectRefused: ${said}: not a refusal.`);
+  if ((empty || missing) && !allowed) throw new Error(`expectRefused: ${said}: ${empty ? 'an empty answer' : 'a 404'} ${INCONCLUSIVE}`);
+  if (!allowed) return;
+  if (reading) {
+    const control = await data(allowed, target, request as DataRequest);
+    const c = await bodyOf(control);
+    const got = c.json?.data;
+    const found = control.status() === 200 && (operation === 'get' ? got !== null && got !== undefined : Array.isArray(got) && got.length > 0);
+    if (!found) throw new Error(`expectRefused: ${said}, but the allowed person got ${control.status() === 200 ? 'nothing' : seen(control.status(), c.code, c.message)} for the same request, so there was nothing to refuse.`);
+  } else if (writing) {
+    const after = await rowOf(allowed);
+    if (JSON.stringify(after) !== before) throw new Error(`expectRefused: ${said}, but ${target} ${String(id)} ${after === null ? 'is gone' : 'changed'} for the allowed person afterwards.`);
+  }
 }
+/** Test seam: a stand-in request client that data() accepts. */
+export function _fixtureClientForTests(client: APIRequestContext, digest: string): APIRequestContext { digests.set(client, digest); return client; }
 export function data(client: APIRequestContext, table: string, request: DataRequest): Promise<APIResponse> {
   if (!digests.has(client)) throw new Error('Use a newUser or anonymous fixture client');
   return client.post('/__sw/data', { data: { ...request, table, contract: digests.get(client) ?? '' } });

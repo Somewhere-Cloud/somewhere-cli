@@ -8,6 +8,12 @@ Republish the platform contract 6 CLI after npm accepted earlier uploads without
 
 # Changelog
 
+## 0.38.79
+
+- An ordinary deploy publishes somewhere.auth.json without --include.
+- The auth starter returns someone who signs in while connecting an MCP client (for example Claude) to the consent page, and refuses foreign or expired return values plainly.
+- The generated AGENTS.md points to the MCP tools recipe.
+
 ## 0.38.76
 
 - Keep unreferenced operational scripts, fixtures and output local, with app-reference retention and explicit includes.

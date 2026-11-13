@@ -6,12 +6,12 @@
     "shared/d1-session.ts": "2ae29b74bba68016c86d25fa2a58f8c2fce4aca8fe57fafc253d380c47a3c0ab",
     "shared/types/placeholder-identity.ts": "089a46e2474a21193d3611eddd9c94b6bbe62441b3039ed80fc8499bada447ca",
     "worker/containers/compile/checker-contract.cjs": "c6d4ebc9ec058b3562655cc4f18dc1cea7e4492eb35b7f0fd0d87e974c26b492",
-    "worker/containers/compile/consumer-contract.cjs": "23b9a7e1bda74fb50075038cac44f9f74bdfdd826763da6e4a5d10ce20685ccb",
+    "worker/containers/compile/consumer-contract.cjs": "b50d68ee1dd31bfa2e89acf39681b31c2f6e2bbad982d9ee823543366ee79070",
     "worker/containers/compile/declared-data-contract.cjs": "cd63f117c495d24a1346df95858f162ad09b3fea3654a6ad8cef8ec612482092",
     "worker/containers/compile/generated-declarations-render.cjs": "7ffdb34645cc9eccac6eba39dc86b646a41c4de8a1a038d2b5b46f42df9f1157",
     "worker/containers/compile/generated-declarations.cjs": "6e9902e054c5c784fd9b3c3fafc1869e79954100a45014e1132247cd82833ec4",
     "worker/containers/compile/groups-types.cjs": "7c22b4bb96c9391005d434852600dc02bc8a6bbb99d78d2b8e3eb152f7b72c58",
-    "worker/containers/compile/runtime-types.cjs": "64f8fa6a9d2207ab5848f98bd242695d6fd1069c7eaab2ded7029d1fc9fe2773",
+    "worker/containers/compile/runtime-types.cjs": "03ee70bfa701c1b5a4ac02c97360be98f8ecf90f889e490b61f2339e23b5b4bc",
     "worker/containers/compile/schema-types.cjs": "aeb2debb8b5b14de780304ec305add32067a8e0ed693cdd29f8c79c8a3cc0928",
     "worker/containers/compile/typed-data.cjs": "1c8bec853fbee4ffd34c651076a4e1f4d8b18c0c2be5e99e31df7c9283207627",
     "worker/containers/compile/typed-files.cjs": "a0b1818afbc7673f84583c76436a3b3ca1d1fdf63d8d8db138b36646103f0708",
@@ -38,7 +38,7 @@
     "worker/src/utils/db-schema-deploy/extract-schema-options.ts": "0998748a953fa9df742a7bdcbbce01f4fc56f9735ddbe3adf9e01facd82f87ad",
     "worker/src/utils/db-schema-deploy/extract-schema-parents.ts": "4fd79529b301b04581aa91fd9a3af846c85c15311cea717b2873021ce66486ff",
     "worker/src/utils/db-schema-deploy/extract-schema-relations.ts": "f5deac350ee915758f61d4be33711d23bad51ab20abcf153a463f0c90bfc3e27",
-    "worker/src/utils/db-schema-deploy/extract-schema-roles.ts": "809950f841146d24de179012be8a57fe4953ce148c604608818ee2adb0a1f8d8",
+    "worker/src/utils/db-schema-deploy/extract-schema-roles.ts": "a5cc7524108c19121445ea2feb85c155067b790075eb823a5d5f8c2a12e92e78",
     "worker/src/utils/db-schema-deploy/extract-schema-ts.ts": "19c7dbcff729e14f2071a228d4ec231690b57a9b8697dd234406625213a8cdcc",
     "worker/src/utils/db-schema-deploy/schema-constants.ts": "9742bc649f494963af4ae2039a1d6062cc6dbe087285bdf470f6ee71d9f76aac",
     "worker/src/utils/db-schema-deploy/schema-ownership.ts": "e6c811a87bc657707be3518dfe547c6d97718ac073108b126eb7f791c9c08202",
@@ -58,5 +58,5 @@
     "worker/src/utils/telegram-attempt-receipts.ts": "a9ba55ae71f63ada44a105f1ceae04b0491bda0d6e77e5762db2dbecdd2981dd",
     "worker/src/utils/telegram.ts": "dfbc9e756b44b445b3c3504c90a1094a94e6f9853ff9c0e0a84fba0e8c4518da"
   },
-  "sha256": "b5ba85458713c213a22156fb7577d13a38d8fec2bc2ce587f5f8fd484342bd4b"
+  "sha256": "21f2e1b2ebf4962987b088181b278b5ea826a790240d2fa112484d4b4f5d2d3b"
 }

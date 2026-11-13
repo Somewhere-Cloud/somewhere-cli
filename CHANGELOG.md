@@ -8,6 +8,11 @@ Republish the platform contract 6 CLI after npm accepted earlier uploads without
 
 # Changelog
 
+## 0.38.84
+
+- somewhere test: expectRefused(person, target, request, { allowed }) needs a positive control before an empty list, a null get or a 404 counts as refused; writes are checked unchanged; 400/409 fail and say which.
+- AGENTS.md: staff by a verified email domain first; an unverified email ending is never proof; grants at sign-up only from an invitation the app issued.
+
 ## 0.38.83
 
 - somewhere test: expectRefused(person, table or 'METHOD /path', request) proves a refusal in one call and knows every refusal shape; a malformed request or stale contract fails with the reason.

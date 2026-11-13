@@ -1,4 +1,5 @@
 import type { TestInfo } from '@playwright/test';
+import { span } from './test-timeline.js';
 const secrets = new Set<string>();
 export function rememberSecrets(...values: string[]): void { for (const value of values) if (value) secrets.add(value); }
 export function scrub(value: string): string {
@@ -15,7 +16,7 @@ export function diagnostics(info: TestInfo): Diagnostics {
 }
 export async function timed<T>(info: TestInfo, name: string, work: () => Promise<T>): Promise<T> {
   const start = performance.now();
-  try { return await work(); } finally { const report = diagnostics(info); report.timings[name] = (report.timings[name] ?? 0) + performance.now() - start; }
+  try { return await span(name, { test: titled(info.project.name, info.title) }, work); } finally { const report = diagnostics(info); report.timings[name] = (report.timings[name] ?? 0) + performance.now() - start; }
 }
 
 /** The failure as Playwright reported it (assertion, expected and received, file:line),

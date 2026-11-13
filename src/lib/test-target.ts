@@ -1,11 +1,12 @@
 import { ApiClient } from './client.js';
 import { productionOrigin } from './test-identities.js';
+import { span } from './test-timeline.js';
 
 export interface TestTarget { projectId: string; origin: string; host: string; releaseId: string; contractDigest: string | null }
 export async function loadTestTarget(client: ApiClient, projectId: string): Promise<TestTarget> {
   const [urls, map] = await Promise.all([
-    client.call<{ prod_fallback: string }>('GET', `/projects/${encodeURIComponent(projectId)}/urls`),
-    client.call<{ release: { id: string }; browser_data: { contract_digest: string | null } }>('GET', '/db/access-map', undefined, { project_id: projectId }),
+    span('target:urls', {}, () => client.call<{ prod_fallback: string }>('GET', `/projects/${encodeURIComponent(projectId)}/urls`)),
+    span('target:access-map', {}, () => client.call<{ release: { id: string }; browser_data: { contract_digest: string | null } }>('GET', '/db/access-map', undefined, { project_id: projectId })),
   ]);
   return { projectId, ...productionOrigin(urls.prod_fallback), releaseId: map.release.id, contractDigest: map.browser_data.contract_digest };
 }

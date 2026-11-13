@@ -3,14 +3,18 @@ import { getToken, loadProjectConfig } from './config.js';
 import type { Reporter, FullResult, Suite, TestCase, TestResult, TestError } from '@playwright/test/reporter';
 import { writePrivateFile } from './test-identities.js';
 import { scrub, describeError, titled, type Diagnostics } from './test-diagnostics.js';
+import { mark, markProcessStart, span } from './test-timeline.js';
+markProcessStart('playwright');
 interface Entry extends Diagnostics { title: string; status: string; outcome: string; errors: string[]; step: string }
 export default class TestReporter implements Reporter {
   private total = 0;
   private errors = 0;
   private setupDiagnostics: { file?: string; message: string }[] = [];
   private entries: Entry[] = [];
-  onBegin(_config: unknown, suite: Suite): void { this.total = suite.allTests().length; }
+  onBegin(_config: unknown, suite: Suite): void { this.total = suite.allTests().length; mark('runner:begin', { tests: this.total }); }
+  onTestBegin(test: TestCase, result: TestResult): void { mark('test:start', { test: titled(test.parent?.project?.()?.name, scrub(test.title)), worker: result.workerIndex }); }
   onTestEnd(test: TestCase, result: TestResult): void {
+    mark('test:end', { test: titled(test.parent?.project?.()?.name, scrub(test.title)), worker: result.workerIndex, status: result.status, ms: result.duration });
     const attachment = result.attachments.find(item => item.name === 'somewhere-diagnostics');
     const details = attachment?.body ? JSON.parse(attachment.body.toString()) as Diagnostics & { title: string; errors: string[] } : { title: titled(test.parent?.project?.()?.name, scrub(test.title)), errors: ['Test failed before fixture setup'], timings: {} };
     // The assertion with expected/received, scrubbed in the worker that knows the issued secrets;
@@ -35,13 +39,14 @@ export default class TestReporter implements Reporter {
     const projectId = loadProjectConfig()?.project_id;
     if (projectId && releases.size) {
       try {
-        const map = await new ApiClient(getToken()).call<{ release: { id: string } }>('GET', '/db/access-map', undefined, { project_id: projectId });
+        const map = await span('release-check', {}, () => new ApiClient(getToken()).call<{ release: { id: string } }>('GET', '/db/access-map', undefined, { project_id: projectId }));
         releases.add(map.release.id);
       } catch { this.errors++; console.error('Could not verify release at end of run'); }
     }
     const report = { passed, failed, skipped, expectedFailures, setupDiagnostics: this.setupDiagnostics, notRun: Math.max(0, this.total - this.entries.length), setupErrors: this.errors, target: process.env.SW_TEST_ORIGIN, release: releases.size > 1 ? 'release changed during run' : [...releases][0] ?? 'release unavailable (no access map)' , browser: process.env.SW_TEST_BROWSER, duration: result.duration, browserProbeMs: Number(process.env.SW_TEST_BROWSER_LAUNCH_MS), subset: process.env.SW_TEST_SUBSET === 'true', tests: this.entries };
     writePrivateFile(process.env.SW_TEST_RESULTS!, JSON.stringify(report) + '\n');
     console.log(process.env.SW_TEST_JSON === 'true' ? JSON.stringify(report) : `${report.subset ? 'SUBSET (filtered or last failures only): ' : 'FULL: '}${passed} passed, ${failed} failed, ${expectedFailures} expected failures, ${this.errors} setup errors, ${skipped} skipped, ${report.notRun} not run · ${report.target} · ${report.release} · ${report.browser} · ${(result.duration / 1000).toFixed(1)} s`);
+    mark('runner:end', { passed, failed });
     const status = result.status === 'passed' && failed === 0 && this.errors === 0 && passed > 0 ? 'passed' : 'failed';
     if (status === 'passed' && process.env.SW_TEST_JSON !== 'true') console.log('The checks you wrote passed; say which requirements they do not cover.');
     return { status };

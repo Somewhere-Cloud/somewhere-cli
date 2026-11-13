@@ -11,6 +11,7 @@ import { ApiClient } from '../lib/client.js';
 import { cliConfigDir, getToken, loadProjectConfig } from '../lib/config.js';
 import { ensurePrivateDir, writePrivateFile } from '../lib/test-identities.js';
 import { describeSweep, sweepAccounts } from '../lib/form-accounts.js';
+import { mark, markProcessStart, span } from '../lib/test-timeline.js';
 
 export function registerTest(program: Command): void {
   program.command('test [file]')
@@ -22,6 +23,8 @@ export function registerTest(program: Command): void {
     .option('--phone', 'Run every test again in a 390x844 phone viewport ([phone] in results)')
     .option('--json', 'Print structured results')
     .action(async (file: string | undefined, opts: { workers: string; failed?: boolean; grep?: string; url?: string; json?: boolean; phone?: boolean }) => {
+      markProcessStart('cli');
+      mark('cli:action');
       if (opts.url) throw new Error('--url is unsupported: tests use the linked project canonical production origin only.');
       if (!/^[1-9]\d*$/.test(opts.workers)) throw new Error('--workers must be a positive integer');
       const root = process.cwd();
@@ -44,6 +47,7 @@ export function registerTest(program: Command): void {
       let channel: 'chrome' | undefined = 'chrome';
       let browser;
       const launchStart = performance.now();
+      mark('browser-probe:start');
       try { browser = await pw.chromium.launch({ channel: 'chrome' }); }
       catch (error) {
         if (!(error instanceof Error) || !/not found|doesn't exist|not installed/i.test(error.message)) throw error;
@@ -57,12 +61,13 @@ export function registerTest(program: Command): void {
       const version = browser.version();
       const browserLaunchMs = performance.now() - launchStart;
       await browser.close();
-      const ipv4First = await addressOrder;
+      mark('browser-probe:end');
+      const ipv4First = await span('address-probe', {}, () => addressOrder);
       const runnerEnv = { ...process.env, ...(ipv4First ? { NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --dns-result-order=ipv4first` } : {}) }; 
       const subset = Boolean(file || opts.grep || opts.failed);
       // Form sign-up accounts (signUp fixture) left by an interrupted earlier run are finished first.
       process.env.SW_TEST_RUN = randomUUID();
-      for (const line of describeSweep(await sweepAccounts(client, root, id), 'Before this run')) process.stderr.write(line + '\n');
+      for (const line of describeSweep(await span('sweep:before', {}, () => sweepAccounts(client, root, id)), 'Before this run')) process.stderr.write(line + '\n');
       const config = join(dir, 'runner.config.cjs');
       const artifacts = join(dir, createHash('sha256').update(id + origin).digest('hex').slice(0, 16));
       if (opts.failed) {
@@ -74,9 +79,11 @@ export function registerTest(program: Command): void {
       if (file) args.push(file);
       if (opts.grep) args.push('--grep', opts.grep);
       if (opts.failed) args.push('--last-failed');
+      mark('runner:spawn');
       const result = spawnSync(process.execPath, args, { stdio: 'inherit', env: { ...runnerEnv, SW_TEST_TARGET: JSON.stringify(target), SW_TEST_RELEASE: target.releaseId, SW_TEST_ORIGIN: origin, SW_TEST_BROWSER_LAUNCH_MS: String(browserLaunchMs), SW_TEST_BROWSER: `${channel ?? 'chromium'} ${version}`, SW_TEST_SUBSET: String(subset), SW_TEST_JSON: String(Boolean(opts.json)), SW_TEST_RESULTS: join(dir, 'results.json'), SW_TEST_RUN: process.env.SW_TEST_RUN, SW_TEST_RUN_PID: String(process.pid) } });
+      mark('runner:exit', { status: result.status ?? -1 });
       // Anything a test's own cleanup could not finish (its record is kept) is retried once more here.
-      const after = await sweepAccounts(client, root, id).catch(error => { process.stderr.write(`Could not finish form sign-up cleanup: ${error instanceof Error ? error.message : String(error)}\n`); return null; });
+      const after = await span('sweep:after', {}, () => sweepAccounts(client, root, id).catch(error => { process.stderr.write(`Could not finish form sign-up cleanup: ${error instanceof Error ? error.message : String(error)}\n`); return null; }));
       const leftover = after ? describeSweep(after, 'After this run') : [];
       for (const line of leftover) process.stderr.write(line + '\n');
       // Playwright may create raw error-context text; retain only screenshots and rerun state.
@@ -85,6 +92,7 @@ export function registerTest(program: Command): void {
         for (const entry of readdirSync(path, { withFileTypes: true })) { const file = join(path, entry.name); if (entry.isDirectory()) cleanArtifacts(file); else if (entry.name !== '.last-run.json' && !entry.name.endsWith('.png')) rmSync(file); }
       };
       cleanArtifacts(artifacts);
+      mark('cli:exit');
       process.exitCode = result.status === null ? 1 : result.status || (after === null || after.failed.length || after.unknownId.length ? 1 : 0);
     });
 }

@@ -6,6 +6,7 @@ import { ApiClient } from './client.js';
 import { getToken, loadProjectConfig } from './config.js';
 import { buildStorageState, createTestIdentities, expiryOf, messagesAfter, type IssuedIdentity, type InboxMessage } from './test-identities.js';
 import { diagnostics, rememberSecrets, scrub, describeError, timed, titled } from './test-diagnostics.js';
+import { mark as timelineMark, markProcessStart, span, trackPage } from './test-timeline.js';
 import { admitReservedAddress, deleteAccount, forgetRecord, generatedAddress, generatedPassword, recordAttempt, recordId } from './form-accounts.js';
 import type { TestTarget } from './test-target.js';
 import type { TestInfo } from '@playwright/test';
@@ -74,6 +75,7 @@ function runner() {
           constrain(context.request, origin, info);
           digests.set(context.request, target.contractDigest);
           const page = await timed(info, 'page creation', () => context.newPage());
+          trackPage(page, titled(info.project.name, info.title));
           page.on('load', () => { void page.evaluate<number>("performance.getEntriesByType('navigation')[0]?.duration ?? 0").then(ms => { diagnostics(info).timings['page load'] = ms; }).catch(() => {}); });
           return { id: issued.user.id, email: issued.user.email, page, request: context.request };
         });
@@ -115,13 +117,14 @@ function runner() {
       digests.set(context.request, target.contractDigest);
       try { await use(context.request); } finally { rememberSecrets(...(await context.cookies()).map(cookie => cookie.value)); await context.close(); }
     },
-    newPage: async ({ browser, baseURL, viewport, isMobile, hasTouch, _forms }, use) => {
+    newPage: async ({ browser, baseURL, viewport, isMobile, hasTouch, _forms }, use, info) => {
       const contexts: BrowserContext[] = [];
       try {
         await use(async () => {
           const context = await browser.newContext({ baseURL, viewport, isMobile, hasTouch });
           contexts.push(context);
           const page = await context.newPage();
+          trackPage(page, titled(info.project.name, info.title));
           _forms.pages.add(page);
           return page;
         });
@@ -132,13 +135,14 @@ function runner() {
     // Depends on page so its teardown (screenshots, cookie scrubbing) runs while the page is open.
     _forms: async ({ page }, use, info) => {
       const run = new FormRun(info);
+      trackPage(page, titled(info.project.name, info.title));
       run.pages.add(page);
       try { await use(run); } finally { await run.finish(); }
     },
-    signUp: async ({ _forms }, use) => { await use((page, options) => signUp(_forms, page, options ?? {})); },
-    verify: async ({ _forms }, use) => { await use((page, person) => verify(_forms, page, person)); },
-    signIn: async ({ _forms }, use) => { await use((page, person, options) => signIn(_forms, page, person, options ?? {})); },
-    signOut: async ({ _forms }, use) => { await use((page, options) => signOut(_forms, page, options ?? {})); },
+    signUp: async ({ _forms }, use, info) => { await use((page, options) => span('signUp', { test: titled(info.project.name, info.title) }, () => signUp(_forms, page, options ?? {}))); },
+    verify: async ({ _forms }, use, info) => { await use((page, person) => span('verify', { test: titled(info.project.name, info.title) }, () => verify(_forms, page, person))); },
+    signIn: async ({ _forms }, use, info) => { await use((page, person, options) => span('signIn', { test: titled(info.project.name, info.title) }, () => signIn(_forms, page, person, options ?? {}))); },
+    signOut: async ({ _forms }, use, info) => { await use((page, options) => span('signOut', { test: titled(info.project.name, info.title) }, () => signOut(_forms, page, options ?? {}))); },
   });
   loaded = { test, expect: pw.expect };
   return loaded;
@@ -161,6 +165,7 @@ function constrain(client: APIRequestContext, origin: string, info: TestInfo): v
         try { const body = await response.json() as { error?: unknown }; if (typeof body.error === 'string' && /^[A-Z_]+$/.test(body.error)) code = body.error; } catch {}
       }
       diagnostics(info).request = { method: String(options.method ?? 'GET').toUpperCase(), path: scrub(url.pathname), status: response.status(), code };
+      timelineMark('app-request', { test: titled(info.project.name, info.title), method: String(options.method ?? 'GET').toUpperCase(), path: scrub(url.pathname), status: response.status() });
       return response;
     } });
   }
@@ -171,6 +176,7 @@ function constrain(client: APIRequestContext, origin: string, info: TestInfo): v
 // and `somewhere test <file>` would match none. The lazy wrapper remains only for plain Node imports
 // without @playwright/test, where test() is never called.
 const eager = (() => { try { return runner(); } catch { return undefined; } })();
+if (eager) { markProcessStart('playwright'); timelineMark('fixtures:loaded'); }
 export const test: RunnerTest = eager?.test ?? new Proxy((() => {}) as unknown as RunnerTest, {
   apply: (_target, receiver, args) => Reflect.apply(runner().test, receiver, args),
   get: (_target, key) => Reflect.get(runner().test, key),
@@ -302,7 +308,7 @@ export function data(client: APIRequestContext, table: string, request: DataRequ
 }
 export async function ready(page: Page, state: 'ready' | 'signed-in' | 'signed-out' | Locator = 'ready'): Promise<void> {
   const locator = typeof state === 'string' ? page.locator(state === 'ready' ? '[data-app-state="signed-in"], [data-app-state="signed-out"]' : `[data-app-state="${state}"]`) : state;
-  await locator.waitFor({ state: 'visible' });
+  await span('ready', { state: typeof state === 'string' ? state : 'locator' }, () => locator.waitFor({ state: 'visible' }));
 }
 
 // ---------------------------------------------------------------- sign-up through the app's form
@@ -390,7 +396,7 @@ async function pageSays(page: Page): Promise<string> {
 
 /** Run one named step; a failure says which step, what the page showed, and the cause, scrubbed. */
 async function step<T>(page: Page, name: string, work: () => Promise<T>): Promise<T> {
-  try { return await work(); }
+  try { return await span(name, {}, work); }
   catch (error) {
     if (error instanceof StepError) throw error;
     const said = await pageSays(page);
@@ -549,6 +555,7 @@ async function verify(run: FormRun, page: Page, person: Person): Promise<void> {
     // a wrong or expired code (401/400) is never retried.
     let confirmed = await step(page, 'verify: enter the code in the app', () => page.request.post('/api/auth/verify-email', { data: { code } }));
     for (let wait = 0; confirmed.status() === 404 && wait < 8; wait++) {
+      timelineMark('wait', { ms: 250, why: 'verify: code not installed yet (404)' });
       await new Promise(resolve => setTimeout(resolve, 250));
       confirmed = await step(page, 'verify: enter the code in the app', () => page.request.post('/api/auth/verify-email', { data: { code } }));
     }
@@ -588,6 +595,7 @@ async function signIn(run: FormRun, page: Page, person: Person, options: SignInO
     const wait = Math.max(0, CODE_GAP_MS - (Date.now() - (lastSignInCode.get(person) ?? 0)));
     const waitMs = Math.min(wait, CODE_GAP_MS);
     if (run.info.timeout > 0) run.info.setTimeout(run.info.timeout + waitMs + 10_000);
+    timelineMark('wait', { ms: waitMs, why: 'signIn: one emailed code a minute' });
     await page.waitForTimeout(waitMs);
     result = await submit();
   }

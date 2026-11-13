@@ -137,15 +137,14 @@ test('fixture: a static site with robots/sitemap/favicon/.well-known is unchange
     'images/hero.png': 'png',
     '.well-known/security.txt': 'Contact: mailto:a@b.c',
   });
-  const collected = assertByteIdentical('static-site', dir);
+  const collected = collectFiles(dir);
+  assert.deepEqual(deployedKeys(collected).filter(key => key !== '.well-known/security.txt'), legacyKeys(dir), 'all historical static files remain');
   assert.ok(collected.files['robots.txt']);
   assert.ok(collected.files['sitemap.xml']);
   assert.ok(collected.binaryFiles['favicon.ico']);
   assert.ok(collected.binaryFiles['images/hero.png']);
-  // `.well-known/` is a dot-directory: the collector has never uploaded it and
-  // still does not. Documented here so the next reader does not "fix" it by
-  // accident — changing it is a separate, deliberate change.
-  assert.equal(collected.files['.well-known/security.txt'], undefined);
+  // CLI0.38.75 deliberately added this app surface; the legacy walker predates it.
+  assert.equal(collected.files['.well-known/security.txt'], 'Contact: mailto:a@b.c');
 });
 
 test('fixture: a functions-only project is unchanged', () => {

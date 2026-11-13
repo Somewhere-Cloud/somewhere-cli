@@ -62,16 +62,18 @@ const TESTS = {
   'api/tests/seed.ts': 'export default async () => new Response("seed");\n',
 };
 
-test('tests stay home by default; app files with test-like names, config, e2e/ and .well-known upload', () => {
+test('tests stay home by default; app files with test-like names, config and .well-known upload; operational e2e stays local', () => {
   const c = collectFiles(app({ ...APP, ...TESTS }));
   const up = uploaded(c);
-  for (const kept of APP_KEPT) assert.ok(up.includes(kept), `${kept} uploads`);
+  for (const kept of APP_KEPT.filter(p => !p.startsWith('e2e/'))) assert.ok(up.includes(kept), `${kept} uploads`);
   assert.ok(up.includes('openapi.spec.json') || up.includes('public/openapi.spec.json'), 'a .spec. data file uploads');
   assert.ok(up.includes('.well-known/assetlinks.json') || up.includes('public/.well-known/assetlinks.json'), 'public/.well-known uploads');
   for (const held of Object.keys(TESTS)) {
     assert.ok(!up.includes(held), `${held} does not upload`);
     assert.ok(excludedPaths(c).includes(held), `${held} is named as not published`);
   }
+  assert.ok(excludedPaths(c).includes('e2e/run.mjs'), 'operational e2e source stays local');
+  assert.ok(collectFiles(app(APP), {include:['e2e']}).published.includes('e2e/run.mjs'), 'e2e explicit opt-in works');
   assert.ok(!('api/slots.test.ts' in c.functions) && !('api/tests/seed.ts' in c.functions), 'no test becomes a function route');
   const reason = (p) => c.excluded.find((e) => e.path === p).reason;
   assert.match(reason('api/slots.test.ts'), /--include api\/slots\.test\.ts/);

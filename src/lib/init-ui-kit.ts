@@ -439,28 +439,29 @@ export function AuthCard({ appName, tagline, form, providers, children }: AuthCa
         <p className="muted">{tagline ?? (signUp ? 'It takes a few seconds.' : 'Sign in to continue.')}</p>
       </div>
       <div className="auth__column">
-        <form className="panel auth__form" onSubmit={onSubmit} noValidate aria-label={signUp ? 'Create account' : 'Sign in'}>
+        <form className="panel auth__form" onSubmit={onSubmit} noValidate aria-label={signUp ? 'Create account' : 'Sign in'}
+          data-sw-auth="form" data-sw-auth-mode={form.mode}>
           {providers ? (
             <>
               {providers}
               <p className="divider" aria-hidden="true">or use email</p>
             </>
           ) : null}
-          <TextField id="auth-email" label="Email" type="email" name="email" autoComplete="email" inputMode="email" autoFocus
+          <TextField id="auth-email" label="Email" type="email" name="email" autoComplete="email" inputMode="email" autoFocus data-sw-auth="email"
             value={form.email} onChange={(event) => form.setEmail(event.target.value)} />
-          <TextField id="auth-password" label="Password" type="password" name="password"
+          <TextField id="auth-password" label="Password" type="password" name="password" data-sw-auth="password"
             autoComplete={signUp ? 'new-password' : 'current-password'}
             minLength={signUp ? form.passwordMinLength : undefined}
             hint={signUp ? \`At least \${form.passwordMinLength} characters.\` : undefined}
             value={form.password} onChange={(event) => form.setPassword(event.target.value)} />
           {signUp ? null : <p className="auth__forgot"><a href="/forgot-password">Forgot password?</a></p>}
-          {form.error ? <p className="error" role="alert">{form.error}</p> : null}
-          <Button type="submit" block disabled={!form.canSubmit} pending={form.pending}>
+          {form.error ? <p className="error" role="alert" data-sw-auth="error">{form.error}</p> : null}
+          <Button type="submit" block disabled={!form.canSubmit} pending={form.pending} data-sw-auth="submit">
             {signUp ? 'Create account' : 'Sign in'}
           </Button>
           <p className="auth__switch">
             {signUp ? 'Already have an account?' : 'New here?'}{' '}
-            <button type="button" className="link-button" onClick={form.toggleMode} disabled={form.pending}>
+            <button type="button" className="link-button" onClick={form.toggleMode} disabled={form.pending} data-sw-auth="mode">
               {signUp ? 'Sign in' : 'Create an account'}
             </button>
           </p>
@@ -502,22 +503,22 @@ export function AuthCard({ appName, tagline, form, providers, children }: AuthCa
       <h1>{signUp ? 'Create your account' : 'Sign in'} · {appName}</h1>
       {tagline ? <p>{tagline}</p> : null}
       {providers}
-      <form onSubmit={onSubmit} noValidate aria-label={signUp ? 'Create account' : 'Sign in'}>
-        <TextField id="auth-email" label="Email" type="email" name="email" autoComplete="email" inputMode="email" autoFocus
+      <form onSubmit={onSubmit} noValidate aria-label={signUp ? 'Create account' : 'Sign in'} data-sw-auth="form" data-sw-auth-mode={form.mode}>
+        <TextField id="auth-email" label="Email" type="email" name="email" autoComplete="email" inputMode="email" autoFocus data-sw-auth="email"
           value={form.email} onChange={(event) => form.setEmail(event.target.value)} />
-        <TextField id="auth-password" label="Password" type="password" name="password"
+        <TextField id="auth-password" label="Password" type="password" name="password" data-sw-auth="password"
           autoComplete={signUp ? 'new-password' : 'current-password'}
           minLength={signUp ? form.passwordMinLength : undefined}
           hint={signUp ? \`At least \${form.passwordMinLength} characters.\` : undefined}
           value={form.password} onChange={(event) => form.setPassword(event.target.value)} />
         {signUp ? null : <p><a href="/forgot-password">Forgot password?</a></p>}
-        {form.error ? <p role="alert">{form.error}</p> : null}
-        <Button type="submit" disabled={!form.canSubmit} pending={form.pending}>
+        {form.error ? <p role="alert" data-sw-auth="error">{form.error}</p> : null}
+        <Button type="submit" disabled={!form.canSubmit} pending={form.pending} data-sw-auth="submit">
           {signUp ? 'Create account' : 'Sign in'}
         </Button>
       </form>
       <p>
-        <button type="button" onClick={form.toggleMode} disabled={form.pending}>
+        <button type="button" onClick={form.toggleMode} disabled={form.pending} data-sw-auth="mode">
           {signUp ? 'Sign in' : 'Create an account'}
         </button>
       </p>

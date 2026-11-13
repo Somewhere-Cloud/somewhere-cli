@@ -1872,12 +1872,12 @@ export function MfaStep({ continuation }: { continuation: MfaContinuation }) {
         <p>We emailed you a 6-digit sign-in code. It expires 5 minutes after you signed in.</p>
         <div className="field">
           <label className="field__label" htmlFor="mfa-code"><span>6-digit code from the email</span></label>
-          <input id="mfa-code" className="control" autoComplete="one-time-code" inputMode="numeric" maxLength={8} autoFocus value={continuation.code}
+          <input id="mfa-code" className="control" autoComplete="one-time-code" inputMode="numeric" maxLength={8} autoFocus value={continuation.code} data-sw-auth="mfa-code"
             disabled={busy} onChange={(event) => continuation.setCode(event.target.value)} />
         </div>
-        {continuation.error ? <p className="error" role="alert">{continuation.error}</p> : null}
+        {continuation.error ? <p className="error" role="alert" data-sw-auth="error">{continuation.error}</p> : null}
         {continuation.notice ? <p role="status">{continuation.notice}</p> : null}
-        <button type="submit" className="button" disabled={busy || !continuation.code.trim()} aria-busy={continuation.pending}>
+        <button type="submit" className="button" disabled={busy || !continuation.code.trim()} aria-busy={continuation.pending} data-sw-auth="mfa-submit">
           {continuation.pending ? 'Signing in…' : 'Finish signing in'}
         </button>
         <button type="button" className="button button--secondary" disabled={busy || !continuation.resendReady} aria-busy={continuation.resending}
@@ -2133,7 +2133,7 @@ export function AppShell({ appName, homeLink, account, busy, children }: AppShel
         {account ? (
           <div className="account">
             <span className="account__label" title={account.label}>{account.label}</span>
-            <button type="button" className="button button--quiet" onClick={account.onSignOut} disabled={account.signingOut}>
+            <button type="button" className="button button--quiet" onClick={account.onSignOut} disabled={account.signingOut} data-sw-auth="sign-out">
               {account.signingOut ? 'Signing out…' : 'Sign out'}
             </button>
           </div>
@@ -2309,7 +2309,7 @@ export function AppShell({ appName, homeLink, account, busy, children }: AppShel
         {account ? (
           <>
             {' '}<span>{account.label}</span>{' '}
-            <button type="button" onClick={account.onSignOut} disabled={account.signingOut}>
+            <button type="button" onClick={account.onSignOut} disabled={account.signingOut} data-sw-auth="sign-out">
               {account.signingOut ? 'Signing out…' : 'Sign out'}
             </button>
             {account.error ? <p role="alert">{account.error}</p> : null}

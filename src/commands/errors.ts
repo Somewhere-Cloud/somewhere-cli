@@ -1,3 +1,4 @@
+import { runtimeRefusalMessage } from '../lib/runtime-refusals.js';
 import { Command } from 'commander';
 import { ApiClient, CliApiError } from '../lib/client.js';
 import { getToken, loadProjectConfig } from '../lib/config.js';
@@ -81,7 +82,10 @@ export function registerErrors(program: Command) {
           undefined,
           { project_id: projectId, limit },
         );
-        rows = result.errors ?? [];
+        rows = (result.errors ?? []).map(row => {
+          const message = runtimeRefusalMessage(row.error_code);
+          return message ? { ...row, error_message: message } : row;
+        });
       } catch (err) {
         if (err instanceof CliApiError) {
           error(`${err.message} ${dim(`[${err.code}${err.statusCode ? `, HTTP ${err.statusCode}` : ''}]`)}`, err);
@@ -150,7 +154,7 @@ export function formatErrorDetail(code: string | null | undefined, message: stri
     RATE_LIMIT_UNAVAILABLE: 'Temporary platform condition: request not admitted. Retry it; do not remove rateLimit.',
     AUTH_ERROR: 'Authentication request failed.',
   };
-  const detail = message && message !== code ? message : (code && help[code]) || message;
+  const detail = runtimeRefusalMessage(code) ?? (message && message !== code ? message : (code && help[code]) || message);
   const text = truncate(terminalSafe(detail), 300);
   return code && code !== 'FUNCTION_ERROR' && code !== detail ? `${terminalSafe(code)}: ${text}` : text;
 }

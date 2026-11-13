@@ -1,3 +1,4 @@
+import { runtimeRefusalMessage } from '../lib/runtime-refusals.js';
 import { Command } from 'commander';
 import { ApiClient } from '../lib/client.js';
 import { getToken, loadProjectConfig } from '../lib/config.js';
@@ -6,7 +7,7 @@ import { chooseProjectRef, projectRefConflictMessage } from '../lib/project-ref.
 import { unlinkedFolderHint } from '../lib/link-hint.js';
 import { terminalContinuation, terminalSafe } from '../lib/terminal-text.js';
 
-interface LogRow {
+export interface LogRow {
   id?: string;
   level: string;
   message: string;
@@ -76,7 +77,7 @@ export function registerLogs(program: Command) {
           logs: LogRow[];
         }>('GET', '/logs', undefined, query);
 
-        const initialLogs = result.logs ?? [];
+        const initialLogs = (result.logs ?? []).map(describeFunctionRefusal);
         if (initialLogs.length === 0 && !opts.follow) {
           if (opts.json) {
             console.log('[]');
@@ -119,7 +120,7 @@ export function registerLogs(program: Command) {
                 trace_id: traceId,
                 after: lastSeen,
               });
-              const freshLogs = fresh.logs ?? [];
+              const freshLogs = (fresh.logs ?? []).map(describeFunctionRefusal);
               const unseenLogs = takeUnseenLogs(freshLogs, seenLogKeys);
               lastSeen = newestCreatedAt(freshLogs, lastSeen);
               if (opts.json) {
@@ -241,4 +242,13 @@ function newestCreatedAt(logs: LogRow[], fallback?: string): string | undefined 
   }
 
   return newest;
+}
+
+/** Expand only a known platform code, never arbitrary response-body text. */
+export function describeFunctionRefusal(log: LogRow): LogRow {
+  if (log.source !== 'function' || !log.data || typeof log.data !== 'object') return log;
+  const data = log.data as Record<string, unknown>;
+  const code = typeof data.error === 'string' ? data.error.split(':', 1)[0] : undefined;
+  const message = runtimeRefusalMessage(code);
+  return message ? { ...log, message: `${log.message} — ${message}`, data: { ...data, error_message: message } } : log;
 }

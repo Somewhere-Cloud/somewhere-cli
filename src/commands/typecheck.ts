@@ -1,3 +1,4 @@
+import { roleMethodHints } from '../lib/role-method-hints.js';
 import { Command } from 'commander';
 import chokidar from 'chokidar';
 import { existsSync } from 'node:fs';
@@ -32,6 +33,7 @@ export function registerTypecheck(program: Command) {
     .option('--watch', 'Keep running and re-check after each save while this command is open. It is not installed into your editor or agent; start it yourself. Never deploys or touches live data')
     .action(async (dirArg: string | undefined, opts) => {
       const dir = resolve(process.cwd(), dirArg ?? '.');
+      for (const hint of roleMethodHints(dir)) console.error(hint);
 
       if (opts.hook !== undefined) {
         if (!opts.deploy || !isAgentHost(opts.hook)) {

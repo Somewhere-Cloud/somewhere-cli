@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { publicProjection, assertBehaviorParity } from './public-projection.mjs';
+import { publicProjection, assertBehaviorParity, assertPublicPackage } from './public-projection.mjs';
 // Compare the deterministic public projection of the selected source.
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -31,3 +31,4 @@ if (check) {
   writeFileSync(join(dest, 'DEPLOY-PATHS-VENDOR.json'), JSON.stringify({ sha256 }, null, 2) + '\n');
 }
 console.log(`Deploy path policy ${check ? 'parity verified' : 'vendored'}: ${sha256}`);
+if (check) assertPublicPackage(join(import.meta.dirname, '..'));

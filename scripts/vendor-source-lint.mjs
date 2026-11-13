@@ -1,4 +1,4 @@
-import { publicProjection, assertBehaviorParity, assertPublicArtifact } from './public-projection.mjs';
+import { publicProjection, assertBehaviorParity, assertPublicArtifact, assertPublicPackage } from './public-projection.mjs';
 // Same vendored-source pattern as vendor-declared-data: no second rule engine.
 import { createHash } from 'node:crypto';
 import { readFileSync, realpathSync, writeFileSync } from 'node:fs';
@@ -34,5 +34,6 @@ for (const [name, contents] of [['runtime/source-lint.cjs', output], ['runtime/S
   } else writeFileSync(path, contents);
 }
 console.log(`Source lint ${mode === '--check' ? 'parity verified' : 'vendored'}: ${digest(output)} (${Buffer.byteLength(output)} bytes)`);
+if (mode === '--check') assertPublicPackage(join(import.meta.dirname, '..'));
 
 if (mode !== '--check') { platformCommit(root, [...Object.keys(inputs), 'worker/verify/fixtures/source-lint.json']); writePlatformSource(join(import.meta.dirname, '..')); }

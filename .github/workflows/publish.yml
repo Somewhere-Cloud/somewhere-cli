@@ -92,6 +92,7 @@ jobs:
         run: node scripts/publish-release.mjs check "$SOURCE_SHA" "$EXPECTED_VERSION"
       - run: npm ci
       - run: npm run build
+      - run: node scripts/check-public-package.mjs
       - name: Recheck identity immediately before publication
         id: final
         env:

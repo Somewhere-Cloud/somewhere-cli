@@ -3,6 +3,7 @@
 import { createHash } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { publicProjection, assertBehaviorParity, assertPublicArtifact, assertPublicPackage } from './public-projection.mjs';
 const monorepo = process.argv[2];
 if (!monorepo) throw new Error('Usage: node scripts/extract-runtime.mjs <monorepo>');
 function extractDomOutlineScript() {
@@ -50,9 +51,12 @@ function extractDomOutlineScript() {
 }
 
 const probe = extractDomOutlineScript();
+const publicScript = publicProjection(probe.script, 'browser-probe.js');
+assertBehaviorParity(probe.script, publicScript, 'browser-probe.js');
 const output = `// Generated browser probe.\n`
   + `export const MAX_OUTLINE_NODES = ${probe.cap};\n`
-  + `export const DOM_OUTLINE_SCRIPT = ${JSON.stringify(probe.script)};\n`;
+  + `export const DOM_OUTLINE_SCRIPT = ${JSON.stringify(publicScript)};\n`;
+assertPublicArtifact(output, 'runtime/browser-probes.mjs');
 const outDir = join(import.meta.dirname, '..', 'runtime');
 const manifest = JSON.stringify({ files: { 'browser-probes.mjs': createHash('sha256').update(output).digest('hex') } }, null, 2) + '\n';
 for (const [name, content] of [['browser-probes.mjs', output], ['VENDOR.json', manifest]]) {
@@ -60,3 +64,4 @@ for (const [name, content] of [['browser-probes.mjs', output], ['VENDOR.json', m
     if (readFileSync(join(outDir, name), 'utf8') !== content) throw new Error(name + ' differs from the selected projection');
   } else writeFileSync(join(outDir, name), content);
 }
+if (process.argv.includes('--check')) assertPublicPackage(join(import.meta.dirname, '..'));

@@ -407,8 +407,8 @@ test('one generated template consumes the SDK auth adapter and server data/files
   }
 
   const guide = readFileSync(join(dir, 'AGENTS.md'), 'utf8');
-  assert.match(guide, /somewhere typecheck/);
-  assert.match(guide, /somewhere deploy/);
+  assert.match(guide, /npx @somewhere-cloud\/cli deploy, then somewhere test/);
+  assert.doesNotMatch(guide, /allow-type-errors|somewhere verify/);
   assert.match(guide, /Deploy raw source/);
   assert.doesNotMatch(guide, /worker\/src\/runtime\/auth\.ts/);
   assert.equal(

@@ -88,7 +88,7 @@
     "worker/src/runtime/storage.ts": "15c7953b994497c7883b774f79ae93bae96e16373a0826cc733d21005de22ad7",
     "worker/src/runtime/tasks.ts": "75efa2e3083853bfba1dc49745ede8865ddd218b84d568a00da2dbd669f9ab23",
     "worker/src/runtime/verify-signup.ts": "dcac46b4581794fe875e3f85e3d93a2253b470f60a3c7fcee68543d8be8a6fa1",
-    "worker/src/runtime/version.ts": "023c9f1c1e836381ff23954310f1f9c762abfd7da2cd6ad777c26f6b2086a7d9",
+    "worker/src/runtime/version.ts": "f387f156fbdaa097baa17a2fed572885a02d2dcf771428396881271fe38c1485",
     "worker/src/runtime/visitor-session.generated.ts": "f788a0c4efe22b18c313d8433150931d48a5f872e3bd98549d94138a5b0dfe5d",
     "worker/src/runtime/web.ts": "269590d44ffa6239bb6e79999b58ba42435c230f045daea52bf73d09519afb0e",
     "worker/src/security/browser-secret-scan.ts": "31ebc9dd94eed4d0a9a6b67b3b1e2505d4f7812c557c90337e034c1e3994c039",

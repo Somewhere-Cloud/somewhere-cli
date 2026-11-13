@@ -6858,7 +6858,15 @@ var DB_POLICY_HELPERS_JS = `${ROLE_DOMAIN_MAP_JS}
       function __sw_structPolicyIdent(value) { return typeof value === 'string' && value && __sw_reMatch(__SW_STRUCT_IDENT_RE, value); }
       function __sw_structPolicyMember(value) {
         if (!value || typeof value !== 'object') return false;
-        const keys = __sw_keys(value).slice().sort().join(',');
+        const keys = __sw_keys(value).filter(function (key) { return key !== 'w'; }).sort().join(',');
+        if (value.w !== undefined) {
+          const w = value.w;
+          if (!w || typeof w !== 'object' || __sw_arrayIsArray(w) || __sw_keys(w).sort().join(',') !== 'c,o,v' || !__sw_structPolicyIdent(w.c)
+              || !__sw_arrayIsArray(w.v) || w.v.length === 0 || !__sw_arrayIsArray(w.o)) return false;
+          for (let i = 0; i < w.v.length; i++) if (typeof w.v[i] !== 'string' || i > 0 && !(w.v[i - 1] < w.v[i])) return false;
+          const ordered = ['read', 'create', 'update', 'delete'].filter(function (op) { return w.o.indexOf(op) !== -1; });
+          if (JSON.stringify(ordered) !== JSON.stringify(w.o)) return false;
+        }
         // Per-owner grant: g/mg ["user_id"]. Per-row: g ["user_id", key], mg ["user_id", row].
         const grant = keys === 'g,m,mg,o,og,u' && value.og === true && __sw_arrayIsArray(value.g) && __sw_arrayIsArray(value.mg)
           && value.g[0] === 'user_id' && value.mg[0] === 'user_id'
@@ -12843,7 +12851,8 @@ var AUTH_SERVER_JS = `        server: (function () {
               if (verified.data.row_bound !== false) throw refuse('MANAGED_AUTHORITY_UNAVAILABLE', 403, 'A row-bound job cannot use server authority.');
             }
             __sw_enforceAmbientCookieCsrf();
-            if (cookieAuthenticated() && !__sw_isUnsafeCookieMethod(__sw_authSnapshotRequest.method || 'GET')) throw refuse('METHOD_NOT_ALLOWED', 405, 'Role changes require POST, PUT, PATCH or DELETE when signed in by cookie.');
+            const cookieHeader = __sw_authSnapshotRequest.headers.get('cookie') || '';
+            if ((__sw_readCookie(cookieHeader, '__Host-token') || __sw_readCookie(cookieHeader, '__Host-sw_visitor')) && !__sw_isUnsafeCookieMethod(__sw_authSnapshotRequest.method || 'GET')) throw refuse('METHOD_NOT_ALLOWED', 405, 'Role changes require POST, PUT, PATCH or DELETE when signed in by cookie.');
             const headers = await __sw_runtimeSubjectHeaders('X-Somewhere-Managed-Authority', 'none', true);
             headers['X-Sw-Execution-Attestation'] = env.SW_EXECUTION_ATTESTATION;
             headers['Content-Type'] = 'application/json';

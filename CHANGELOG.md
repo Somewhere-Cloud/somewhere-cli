@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.38.88
+
+- Plain Playwright scripts first: one example script, form helpers by action, and a data request with no digest to find.
+
 ## 0.38.87
 
 - The generated guide teaches built-in groups for teams and grantableBy for staff.

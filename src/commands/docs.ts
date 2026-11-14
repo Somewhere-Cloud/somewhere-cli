@@ -354,9 +354,10 @@ export function renderDocsIndex(pages: PublicDocsPage[], groups: PublicDocsGroup
     '',
     'Requirement | Declaration (complete examples in generated AGENTS.md)',
     'Own rows | owner()',
-    'Team: owner adds members; members read/write; creator rights | own membership table + member() + owner(); role-owner delete restriction',
-    'Owner/staff record, staff-only child notes | owner() or server-assigned appRole(); parent() thread; appRole() notes',
-    'Team example: somewhere docs sw.groups --section teams-without-email-verification',
+    'Team: owner invites members; members read/write; creator or team owner deletes | built-in groups: group() + sw.groups endpoints',
+    'Owner/staff record, staff-only child notes | owner() or appRole(); staff hand staff on with grantableBy; parent() thread; appRole() notes',
+    'Team example: somewhere docs sw.groups --section team-example',
+    'Staff example: somewhere docs sw.groups --section staff-example',
     'Record/thread example: somewhere docs sw.db --section membership-and-parent-examples',
     '', 'Public topics:'];
   for (const block of blocks) {

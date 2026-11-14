@@ -9,35 +9,26 @@ Enough to start a typical app: declare access and use the browser client; docs a
 | Requirement | Declaration below |
 | --- | --- |
 | Each user sees only their own rows | notes: owner() |
-| Team: owner adds members; members read/write; creator rights | teams/team_members/tasks: owner() + member(); role-owner delete branch |
-| Owner/staff record with staff-only child notes | tickets: owner() or appRole(); parent() thread; staff-only notes; staff by verified emailDomain |
+| Team: owner invites members; members read/write; creator or team owner deletes | tasks: anyOf(owner(), group()); sw.groups endpoints below |
+| Owner/staff record with staff-only child notes | tickets: owner() or appRole(); parent() thread; staff-only notes; staff by verified emailDomain (or grantableBy) |
 | Public pages from private drafts | pages: conditional publicRead |
 | Share one record read-only | shared_notes/note_shares: read-only grant() |
 
 db/schema.ts is declaration only: imports, constants/spreads, default schema;
 no helpers/expressions. id() is random text; owner() stamps user_id. client.read
 includes the key. Inside anyOf(), owner() takes only column/read: it stamps the
-creator, not create/delete options; member() gates placement (non-member create is
-refused), while creators or the allowed branch can delete. Other fields: timestamp({ default: 'now' }), text({ nullable: true });
+creator, not create/delete options; group() gates placement (non-member create is
+refused); inside anyOf an operation missing from roles allows no group role. Other fields: timestamp({ default: 'now' }), text({ nullable: true });
 indexes: [['team_id']].
 
 \`\`\`ts
-import { schema, table, id, text, owner, member, anyOf, serverOnly, parent, appRole, boolean, grant } from 'somewhere/db';
+import { schema, table, id, text, owner, group, anyOf, parent, appRole, boolean, grant } from 'somewhere/db';
 export default schema({
   notes: table({ id: id(), title: text() }, { scope: owner(), client: { read: ['id', 'title'], create: ['title'], update: ['title'], delete: true },
   }),
-  teams: table({ id: id(), name: text(), owner_id: text() }, {
-    scope: member({ group: 'id', membership: 'team_members', member_user: 'user_id', member_group: 'team_id' }),
-    client: { read: ['id', 'name'] },
-  }),
-  team_members: table({ id: id(), team_id: text(), user_id: text(), role: text() }, {
-    scope: serverOnly(), unique: [['team_id', 'user_id']],
-  }),
-  tasks: table({ id: id(), team_id: text({ references: 'teams' }), title: text() }, {
-    scope: anyOf(owner(), member({ group: 'team_id', membership: 'team_members',
-      member_user: 'user_id', member_group: 'team_id', operations: ['read', 'create', 'update'] }),
-      member({ group: 'team_id', membership: 'team_members', member_user: 'user_id',
-        member_group: 'team_id', where: { role: 'owner' }, operations: ['delete'] })),
+  tasks: table({ id: id(), team_id: text(), title: text() }, {
+    scope: anyOf(owner(), group({ column: 'team_id', roles: { read: ['owner', 'admin', 'member'],
+      create: ['owner', 'admin', 'member'], update: ['owner', 'admin', 'member'], delete: ['owner'] } })),
     client: { read: ['id', 'team_id', 'title'], create: ['team_id', 'title'], update: ['title'], delete: true },
   }),
   tickets: table({ id: id(), subject: text() }, {
@@ -88,46 +79,42 @@ export async function save(title: string) {
 export const list = (after?: string) => data.notes.list({ limit: 100, after });
 \`\`\`
 
-Teams without verification: own membership table + member(); sw.groups and domain
-roles need VERIFIED emails. Members read/create/update tasks; creators or team owners delete while members.
-Restrictions narrow operations, not grant read.
-Comment author or team owner deletes: declare it as tasks do (owner() plus member() where role owner, delete).
-Create the team and its owner membership atomically:
+Teams are built-in groups: the platform keeps the team, invitations, roster, removal,
+leaving, last owner. Starting a team needs a signed-in user; joining needs a verified
+email (a password sign-up joins once it enters its emailed code). The browser cannot call
+sw.groups: pass each call through an endpoint. A parent() child's delete follows the task
+(creator or team owner), so "comment author or team owner deletes" is an endpoint.
+Staff making others staff: appRoles { staff: { grantableBy: ['staff'] } } and
+sw.groups.appRoles.grant(request, userId, 'staff') in an endpoint (never to oneself).
+Complete apps and specs: somewhere docs sw.groups --section team-example or staff-example.
 
 \`\`\`ts
-// api/teams.ts
-export default sw.endpoint({
-  auth: 'required', body: { name: 'string' },
-  handler: async ({ user, params, body }, sw) => {
-    const id = crypto.randomUUID();
-    await sw.db.server.tx([
-      { op: 'insert', table: 'teams', values: { id, name: body.name, owner_id: user.id } },
-      { op: 'insert', table: 'team_members', values: { id: crypto.randomUUID(), team_id: id, user_id: user.id, role: 'owner' } },
-    ]);
-    return { id, email: user.email };
-  },
-});
+// api/teams.ts — GET my teams (completes invitations to me); POST starts one I own
+const refusal = (e: { code: string; message: string; status: number }) =>
+  Response.json({ error: e.code, message: e.message }, { status: e.status });
+export const GET = sw.endpoint({ auth: 'required', handler: async ({ request }, sw) => {
+  const page = await sw.groups.list(request, { limit: 100 });
+  return page.error ? refusal(page.error) : { teams: page.data.items, next_cursor: page.data.next_cursor };
+} });
+export default sw.endpoint({ auth: 'required', body: { name: 'string' }, handler: async ({ request, body }, sw) => {
+  const made = await sw.groups.create(request, { name: body.name });
+  return made.error ? refusal(made.error) : { id: made.data.id };
+} });
 \`\`\`
 
 \`\`\`ts
-// api/teams/[id]/members.ts — only the team owner adds a member
-export default sw.endpoint({
-  auth: 'required', body: { email: 'string' },
-  handler: async ({ user, params, body }, sw) => {
-    const { data: teams } = await sw.db.from('teams', { where: { id: params.id, owner_id: user.id }, limit: 1 });
-    if (!teams[0]) return Response.json({ error: 'Team owner required' }, { status: 403 });
-    const { users: [target] } = await sw.auth.server.listUsers({ emails: [body.email] });
-    if (!target) return Response.json({ error: 'Account not found' }, { status: 404 });
-    await sw.db.server.insert('team_members', {
-      id: crypto.randomUUID(), team_id: params.id, user_id: target.id, role: 'member',
-    }, { onConflict: 'ignore' });
-    return { ok: true };
-  },
-});
+// api/teams/[id]/invitations.ts — owners invite; others 403; a member's address 409 ALREADY_MEMBER
+export default sw.endpoint({ auth: 'required', body: { email: 'string' }, handler: async ({ request, params, body }, sw) => {
+  const sent = await sw.groups.invite(request, params.id, { email: body.email, role: 'member', redirect_uri: '/' });
+  return sent.error ? Response.json({ error: sent.error.code }, { status: sent.error.status }) : { delivery: sent.data.delivery };
+} });
 \`\`\`
+
+Same shape: sw.groups.get/members(request, id), remove(request, id, userId), leave(request, id)
+(last owner: 409 LAST_OWNER), delete(request, id) by owners.
 
 Do not hand-write access to app-read/write data: declare who may read/write it.
-serverOnly() fits job/import/audit/counter state and protected membership ledgers.
+serverOnly() fits job/import/audit/counter state.
 Grant ledgers use owner() without browser writes. Undeclarable: arbitrary predicates
 (e.g. expiry) or per-role writable fields (split tables or check that write).
 
@@ -171,8 +158,7 @@ Refusals: await expectRefused(person, 'notes', { operation: 'update', id, values
 expectRefused(person, 'POST /api/x', body, { allowed }). allowed is someone the same request succeeds for;
 an empty list, a null get or a 404 counts as refused only then. person/allowed: page, newUser() or anonymous.
 somewhere test --phone runs every test again at 390x844.
-For the complete owner-adds-member-by-email test and its endpoints, run
-somewhere docs test and follow Two users sharing through the app.
+The complete team spec, with removal and leaving: somewhere docs sw.groups --section team-example.
 Diagnose with somewhere errors and somewhere logs.
 
 On demand:
@@ -180,24 +166,22 @@ On demand:
 
 ## Testing shared access
 
-With the teams and membership endpoints above, the owner adds a fixture by email
-and that fixture reads the shared team row:
+With the team endpoints above, the owner invites a fixture by email; test users are verified,
+so its next GET /api/teams shows the team. A test user who still owns a team is not deleted:
+delete the team last (api/teams/[id].ts DELETE: sw.groups.delete). Group calls take
+about a second, so raise the timeout:
 
 \`\`\`ts
 // tests/team.spec.ts
-import { test, expect, data } from '@somewhere-cloud/cli/testing';
-test('owner adds a second user by email', async ({ newUser }) => {
-  const owner = await newUser();
-  const bob = await newUser();
-  const name = \`Shared team \${crypto.randomUUID()}\`;
-  const created = await owner.request.post('/api/teams', { data: { name } });
-  expect(created.ok()).toBeTruthy();
-  const { id } = await created.json();
-  const added = await owner.request.post(\`/api/teams/\${id}/members\`, { data: { email: bob.email } });
-  expect(added.ok()).toBeTruthy();
-  const response = await data(bob.request, 'teams', { operation: 'get', id });
-  expect(response.ok()).toBeTruthy();
-  expect((await response.json()).data).toMatchObject({ id, name });
+import { test, expect } from '@somewhere-cloud/cli/testing';
+test.describe.configure({ timeout: 90_000 });
+test('owner invites a second user by email', async ({ newUser }) => {
+  const [owner, bob] = await Promise.all([newUser(), newUser()]);
+  const { id } = await (await owner.request.post('/api/teams', { data: { name: 'Shared team' } })).json();
+  expect((await owner.request.post(\`/api/teams/\${id}/invitations\`, { data: { email: bob.email } })).ok()).toBeTruthy();
+  const { teams } = await (await bob.request.get('/api/teams')).json();
+  expect(teams).toContainEqual(expect.objectContaining({ id, role: 'member' }));
+  expect((await owner.request.delete(\`/api/teams/\${id}\`)).status()).toBe(204);
 });
 \`\`\`
 `;

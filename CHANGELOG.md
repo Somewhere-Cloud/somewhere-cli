@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.38.87
+
+- The generated guide teaches built-in groups for teams and grantableBy for staff.
+- A release change during a test run fails it; kept results need identical inputs; stranded actors are cleaned up.
+
 ## 0.38.86
 
 - Release notes list every change since the previous version.

@@ -55,8 +55,9 @@ function runner() {
       }
     }, { auto: true }],
     newUser: async ({ browser, viewport, isMobile, hasTouch }, use, info) => {
-      const projectId = loadProjectConfig()?.project_id;
-      if (!projectId) throw new Error('Run somewhere test from a linked project folder.');
+      const linked = loadProjectConfig()?.project_id;
+      if (!linked) throw new Error('Run somewhere test from a linked project folder.');
+      const projectId: string = linked;
       const client = new ApiClient(getToken());
       const target = await timed(info, 'target snapshot', () => fixtureTestTarget(client, projectId));
       const { origin, host } = target;
@@ -64,8 +65,21 @@ function runner() {
       const owned: IssuedIdentity[] = [];
       const contexts: BrowserContext[] = [];
       const partialIds: string[] = [];
+      // Every creation still running when the test ends (say Promise.all rejected on another actor)
+      // is waited for before cleanup reads the ids, so a late identity is deleted too.
+      const inflight = new Set<Promise<unknown>>();
       try {
-        await use(async (options = {}) => {
+        await use((options = {}) => {
+          const creation = createUser(options);
+          inflight.add(creation);
+          void creation.finally(() => inflight.delete(creation)).catch(() => {});
+          return creation;
+        });
+      } finally {
+        while (inflight.size) await Promise.allSettled([...inflight]);
+        await cleanup();
+      }
+      async function createUser(options: NewUserOptions): Promise<TestUser> {
           if (options.role !== undefined && (typeof options.role !== 'string' || !/^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(options.role))) throw new Error('newUser({ role }): name a role declared in db/schema.ts appRoles.');
           let created: Awaited<ReturnType<typeof createTestIdentities>>;
           try { created = await timed(info, 'test-user creation', () => createTestIdentities(client, projectId, 'user', 1, 'pw')); }
@@ -79,17 +93,21 @@ function runner() {
           rememberSecrets(issued.access_token, issued.refresh_token);
           const granted = options.role === undefined ? undefined : timed(info, 'role grant', () => client.call('POST', '/auth/app-roles/grant', { project_id: projectId, user_id: issued.user.id, role: options.role }))
             .catch((error: unknown) => { throw new Error(`newUser({ role: '${options.role}' }): the role was not granted: ${error instanceof Error ? scrub(error.message) : String(error)}`); });
-          const context = await browser.newContext({ baseURL: origin, viewport, isMobile, hasTouch, extraHTTPHeaders: { Origin: origin }, storageState: buildStorageState(origin, host, issued, expiryOf(issued, created.receivedAt)) });
-          contexts.push(context);
-          await granted;
+          const opened = browser.newContext({ baseURL: origin, viewport, isMobile, hasTouch, extraHTTPHeaders: { Origin: origin }, storageState: buildStorageState(origin, host, issued, expiryOf(issued, created.receivedAt)) })
+            .then(context => { contexts.push(context); return context; });
+          // Both settle before this creation does: a failed context never leaves a grant running.
+          const [openedResult, grantResult] = await Promise.allSettled([opened, granted ?? Promise.resolve()]);
+          if (openedResult.status === 'rejected') throw openedResult.reason;
+          if (grantResult.status === 'rejected') throw grantResult.reason;
+          const context = openedResult.value;
           constrain(context.request, origin, info);
           digests.set(context.request, target.contractDigest);
           const page = await timed(info, 'page creation', () => context.newPage());
           trackPage(page, titled(info.project.name, info.title));
           page.on('load', () => { void page.evaluate<number>("performance.getEntriesByType('navigation')[0]?.duration ?? 0").then(ms => { diagnostics(info).timings['page load'] = ms; }).catch(() => {}); });
           return { id: issued.user.id, email: issued.user.email, page, request: context.request };
-        });
-      } finally {
+      }
+      async function cleanup(): Promise<void> {
         const failures: string[] = [];
         for (const context of contexts) try {
           rememberSecrets(...(await context.cookies()).map(cookie => cookie.value));

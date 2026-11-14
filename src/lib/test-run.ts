@@ -10,10 +10,11 @@ import { ensurePrivateDir, writePrivateFile } from './test-identities.js';
 import { describeSweep, sweepAccounts } from './form-accounts.js';
 import { loadTestTarget, type TestTarget } from './test-target.js';
 import { testAddressOrder } from './test-connectivity.js';
-import { failedOnRelease } from './test-ledger.js';
+import { owedFor } from './test-ledger.js';
+import { collectInputs, remoteInputs } from './test-inputs.js';
 import { mark, span } from './test-timeline.js';
 
-export interface PreparedRunner { cli: string; channel: 'chrome' | undefined; version: string; browserLaunchMs: number }
+export interface PreparedRunner { cli: string; channel: 'chrome' | undefined; version: string; browserLaunchMs: number; playwright: string }
 export interface RunOptions { workers: string; files?: string[]; grep?: string; failed?: boolean; json?: boolean; phone?: boolean }
 export interface RunOutcome { exitCode: number; results: Record<string, unknown> | null; target: TestTarget }
 
@@ -43,7 +44,9 @@ export async function prepareRunner(root: string): Promise<PreparedRunner> {
   const browserLaunchMs = performance.now() - launchStart;
   await browser.close();
   mark('browser-probe:end');
-  return { cli, channel, version, browserLaunchMs };
+  let playwright = 'unknown';
+  try { playwright = (JSON.parse(readFileSync(join(dirname(cli), 'package.json'), 'utf8')) as { version?: string }).version ?? 'unknown'; } catch { /* unknown never matches a kept result's runner */ }
+  return { cli, channel, version, browserLaunchMs, playwright };
 }
 
 /** Run the project's specs once against its live release. `expectRelease`: refuse to run unless the
@@ -52,7 +55,7 @@ export async function runTests(input: { root: string; client: ApiClient; project
   const { root, client, projectId, options } = input;
   // The target requests and the local browser probe run at the same time.
   let addressOrder: Promise<boolean> | undefined;
-  const [target, prepared] = await Promise.all([loadTestTarget(client, projectId, origin => { addressOrder = testAddressOrder(origin); }), input.prepared]);
+  const [target, prepared, remote] = await Promise.all([loadTestTarget(client, projectId, origin => { addressOrder = testAddressOrder(origin); }), input.prepared, remoteInputs(client, projectId)]);
   if (input.expectRelease && target.releaseId !== input.expectRelease) {
     throw new Error(`The live release is ${target.releaseId}, not ${input.expectRelease} from this deploy (another deploy or rollback happened), so the tests were not run.`);
   }
@@ -66,19 +69,26 @@ export async function runTests(input: { root: string; client: ApiClient; project
   const runnerEnv = { ...process.env, ...(ipv4First ? { NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --dns-result-order=ipv4first` } : {}) };
   const files = options.files ?? [];
   let failed = Boolean(options.failed);
+  const browser = `${prepared.channel ?? 'chromium'} ${prepared.version}`;
+  // Everything the results of this run depend on besides the specs; kept results must match all of it.
+  const inputs = collectInputs({ root, projectId, origin, release: target.releaseId, remote, browser, playwright: prepared.playwright });
   const artifacts = join(dir, createHash('sha256').update(projectId + origin).digest('hex').slice(0, 16));
   if (failed) {
-    // A focused rerun: exactly the tests that failed on this release, from the results ledger.
-    const earlier = failedOnRelease(root, projectId, target.releaseId);
+    // A focused rerun: exactly the tests owed a run (failed, or changed since their result) with
+    // these same inputs. Anything else runs the whole suite and says why.
+    const earlier = owedFor(root, inputs);
     if ('stale' in earlier) {
-      process.stderr.write(`somewhere test --failed: ${earlier.stale}, so earlier results no longer count. Running every test.\n`);
+      process.stderr.write(`somewhere test --failed: earlier results no longer count (${earlier.stale}). Running every test.\n`);
       failed = false;
+    } else if (!earlier.ids.length && earlier.complete) {
+      throw new Error(`Nothing is owed on release ${target.releaseId}: every test of the last full run has a result with these inputs. Do not run the suite again on this release.`);
     } else if (!earlier.ids.length) {
-      throw new Error(`Nothing failed on release ${target.releaseId}: every recorded test passed, so there is nothing to rerun. Do not run the suite again on this release.`);
+      process.stderr.write('somewhere test --failed: nothing failed, but the full suite has not run with these inputs. Running every test.\n');
+      failed = false;
     } else {
       ensurePrivateDir(artifacts);
       writePrivateFile(join(artifacts, '.last-run.json'), JSON.stringify({ status: 'failed', failedTests: earlier.ids }) + '\n');
-      process.stderr.write(`Rerunning ${earlier.entries.length} test(s) that failed on ${target.releaseId}: ${earlier.entries.map(entry => `${entry.file}:${entry.line}`).join(', ')}\n`);
+      process.stderr.write(`Rerunning ${earlier.entries.length} test(s) owed a run on ${target.releaseId}: ${earlier.entries.map(entry => `${entry.file}:${entry.line}`).join(', ')}\n`);
     }
   }
   const subset = Boolean(files.length || options.grep || failed);
@@ -96,9 +106,11 @@ export async function runTests(input: { root: string; client: ApiClient; project
   if (failed) args.push('--last-failed');
   const rerunFlags = `${options.phone ? ' --phone' : ''}${options.workers !== '5' ? ` --workers ${options.workers}` : ''}`;
   const resultsPath = join(dir, 'results.json');
+  const inputsPath = join(dir, 'inputs.json');
+  writePrivateFile(inputsPath, JSON.stringify(inputs) + '\n');
   rmSync(resultsPath, { force: true });
   mark('runner:spawn');
-  const child = spawn(process.execPath, args, { cwd: root, stdio: ['inherit', input.toStderr ? 'pipe' : 'inherit', 'inherit'], env: { ...runnerEnv, SW_TEST_TARGET: JSON.stringify(target), SW_TEST_RELEASE: target.releaseId, SW_TEST_ORIGIN: origin, SW_TEST_BROWSER_LAUNCH_MS: String(prepared.browserLaunchMs), SW_TEST_BROWSER: `${prepared.channel ?? 'chromium'} ${prepared.version}`, SW_TEST_SUBSET: String(subset), SW_TEST_JSON: String(Boolean(options.json)), SW_TEST_RESULTS: resultsPath, SW_TEST_RUN: process.env.SW_TEST_RUN, SW_TEST_RUN_PID: String(process.pid), SW_TEST_RERUN_FLAGS: rerunFlags } });
+  const child = spawn(process.execPath, args, { cwd: root, stdio: ['inherit', input.toStderr ? 'pipe' : 'inherit', 'inherit'], env: { ...runnerEnv, SW_TEST_TARGET: JSON.stringify(target), SW_TEST_RELEASE: target.releaseId, SW_TEST_ORIGIN: origin, SW_TEST_BROWSER_LAUNCH_MS: String(prepared.browserLaunchMs), SW_TEST_BROWSER: browser, SW_TEST_INPUTS: inputsPath, SW_TEST_FULL: String(!subset), SW_TEST_SUBSET: String(subset), SW_TEST_JSON: String(Boolean(options.json)), SW_TEST_RESULTS: resultsPath, SW_TEST_RUN: process.env.SW_TEST_RUN, SW_TEST_RUN_PID: String(process.pid), SW_TEST_RERUN_FLAGS: rerunFlags } });
   if (input.toStderr) child.stdout?.pipe(process.stderr);
   const status = await new Promise<number | null>(resolve => child.on('close', code => resolve(code)));
   mark('runner:exit', { status: status ?? -1 });

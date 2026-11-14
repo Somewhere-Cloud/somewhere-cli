@@ -6,7 +6,9 @@ import type { Reporter, FullResult, Suite, TestCase, TestResult, TestError } fro
 import { writePrivateFile } from './test-identities.js';
 import { scrub, describeError, titled, type Diagnostics } from './test-diagnostics.js';
 import { mark, markProcessStart, span } from './test-timeline.js';
-import { recordRun, type LedgerOutcome, type RanTest } from './test-ledger.js';
+import { recordRun, type Inputs, type LedgerOutcome, type RanTest } from './test-ledger.js';
+import { remoteInputs } from './test-inputs.js';
+import { existsSync, readFileSync } from 'node:fs';
 markProcessStart('playwright');
 interface Entry extends Diagnostics { title: string; status: string; outcome: string; errors: string[]; step: string; file: string; line: number }
 
@@ -17,6 +19,14 @@ function titlePath(test: TestCase): string[] {
   return path;
 }
 const firstLine = (message: string): string => message.replace(/^[^:\n]+:\d+: /, '').split('\n').find(line => line.trim())?.trim().slice(0, 240) ?? '';
+
+/** The one release a run's results describe: confirmed at the end and the same as at the start
+ *  (and as every fixture saw), or null. */
+export function confirmedRelease(start: string | undefined, seen: (string | undefined)[], live: string | null): string | null {
+  if (!start || !live) return null;
+  const all = new Set([start, live, ...seen.filter(Boolean)]);
+  return all.size === 1 ? start : null;
+}
 
 export default class TestReporter implements Reporter {
   private total = 0;
@@ -50,43 +60,63 @@ export default class TestReporter implements Reporter {
     const skipped = this.entries.filter(entry => entry.status === 'skipped').length;
     const expectedFailures = this.entries.filter(entry => entry.status === 'failed' && entry.outcome === 'expected').length;
     const failed = this.entries.filter(entry => entry.outcome === 'unexpected').length;
-    const releases = new Set([process.env.SW_TEST_RELEASE, ...this.entries.map(entry => entry.release)].filter(Boolean));
+    const startRelease = process.env.SW_TEST_RELEASE;
+    const releases = new Set([startRelease, ...this.entries.map(entry => entry.release)].filter(Boolean));
     const projectId = loadProjectConfig()?.project_id;
-    if (projectId && releases.size) {
+    // The release (and the platform and environment-variable listing) must be the same at the end as
+    // at the start; otherwise these results describe no single release.
+    let confirmed = false;
+    let remoteChanged = false;
+    const startInputs = process.env.SW_TEST_INPUTS && existsSync(process.env.SW_TEST_INPUTS) ? JSON.parse(readFileSync(process.env.SW_TEST_INPUTS, 'utf8')) as Inputs : null;
+    if (projectId && startRelease) {
+      const client = new ApiClient(getToken());
       try {
-        releases.add(await span('release-check', {}, () => liveReleaseId(new ApiClient(getToken()), projectId)));
-      } catch { this.errors++; console.error('Could not verify release at end of run'); }
+        const [live, remote] = await Promise.all([span('release-check', {}, () => liveReleaseId(client, projectId)), remoteInputs(client, projectId)]);
+        releases.add(live);
+        confirmed = confirmedRelease(startRelease, this.entries.map(entry => entry.release), live) !== null;
+        remoteChanged = Boolean(startInputs && (startInputs.platform !== remote.platform || startInputs.env !== remote.env));
+      } catch { /* not confirmed */ }
     }
-    const release = releases.size === 1 ? [...releases][0]! : null;
+    const release = confirmed ? startRelease! : null;
+    if (!release && projectId && startRelease) {
+      this.errors++;
+      console.error(releases.size > 1
+        ? `The release changed during this run (${[...releases].join(' → ')}): these results describe no single release, so the run fails and nothing is kept. Run the tests again.`
+        : 'The live release could not be confirmed at the end of this run, so the run fails and nothing is kept. Run the tests again.');
+    }
     const subset = process.env.SW_TEST_SUBSET === 'true';
-    // Results on this exact release, kept for a focused rerun; a run whose release changed records nothing.
+    // Results tied to this exact release and inputs, kept for a focused rerun. A run whose release,
+    // platform or environment changed while it ran records nothing.
     const ledger: LedgerOutcome = projectId
-      ? recordRun(process.cwd(), { projectId, release, ran: this.ran })
-      : { kept: [], dropped: [], all: [], changedFiles: [] };
+      ? recordRun(process.cwd(), { inputs: release && startInputs && !remoteChanged ? startInputs : null, ran: this.ran, full: process.env.SW_TEST_FULL === 'true' })
+      : { kept: [], dropped: [], all: [], owed: [], changedFiles: [], complete: false };
+    if (remoteChanged) ledger.dropped.unshift('the platform or the environment variables changed during this run');
     const flags = process.env.SW_TEST_RERUN_FLAGS ?? '';
-    const stillFailing = ledger.all.filter(entry => entry.status !== 'passed' && entry.status !== 'skipped');
-    const rerun = release && stillFailing.length ? `somewhere test --failed${flags}` : null;
+    const rerun = release && ledger.owed.length ? `somewhere test --failed${flags}` : null;
+    const count = (list: { status: string }[], status: string) => list.filter(entry => entry.status === status).length;
     const report = {
       passed, failed, skipped, expectedFailures, setupDiagnostics: this.setupDiagnostics, notRun: Math.max(0, this.total - this.entries.length), setupErrors: this.errors, target: process.env.SW_TEST_ORIGIN,
-      release: releases.size > 1 ? 'release changed during run' : release ?? 'release unavailable (no access map)',
+      release: releases.size > 1 ? 'release changed during run' : release ?? 'release not confirmed',
+      releaseConfirmed: Boolean(release),
       browser: process.env.SW_TEST_BROWSER, duration: result.duration, browserProbeMs: Number(process.env.SW_TEST_BROWSER_LAUNCH_MS), subset,
       tests: this.entries,
-      // Earlier results on the same release, spec and test hash; never counted in passed/failed above.
+      // Earlier results with the same release and inputs, spec and test; never counted in passed/failed above.
       kept: ledger.kept.map(({ file, line, title, project, status, release, specHash, testHash, at }) => ({ file, line, title: project === 'phone' ? `[phone] ${title}` : title, status, release, specHash, testHash, at })),
       dropped: ledger.dropped,
+      owed: ledger.owed.map(({ file, line, title, project, status, was }) => ({ file, line, title: project === 'phone' ? `[phone] ${title}` : title, status, ...(was ? { was } : {}) })),
       rerun,
-      onRelease: release ? { tests: ledger.all.length, passed: ledger.all.filter(entry => entry.status === 'passed').length, failing: stillFailing.length } : null,
+      // complete: the last full run's tests all have results with these inputs. Only then does
+      // onRelease describe the whole suite.
+      onRelease: release ? { complete: ledger.complete, tests: ledger.all.length, passed: count(ledger.all, 'passed'), skipped: count(ledger.all, 'skipped'), owed: ledger.owed.length } : null,
     };
     writePrivateFile(process.env.SW_TEST_RESULTS!, JSON.stringify(report) + '\n');
     mark('runner:end', { passed, failed });
     if (process.env.SW_TEST_JSON === 'true') console.log(JSON.stringify(report));
     else {
-      console.log(`${subset ? 'SUBSET (filtered or last failures only): ' : 'FULL: '}${passed} passed, ${failed} failed, ${expectedFailures} expected failures, ${this.errors} setup errors, ${skipped} skipped, ${report.notRun} not run · ${report.target} · ${report.release} · ${report.browser} · ${(result.duration / 1000).toFixed(1)} s`);
+      console.log(`${subset ? 'SUBSET (filtered or owed tests only; not a full run): ' : 'FULL: '}${passed} passed, ${failed} failed, ${expectedFailures} expected failures, ${this.errors} setup errors, ${skipped} skipped, ${report.notRun} not run · ${report.target} · ${report.release} · ${report.browser} · ${(result.duration / 1000).toFixed(1)} s`);
       for (const reason of ledger.dropped) console.log(`Earlier results no longer count: ${reason}.`);
-      if (ledger.changedFiles.length) console.log(`Run those again: somewhere test ${ledger.changedFiles.join(' ')}${flags}`);
       if (ledger.kept.length) {
-        const count = (status: string) => ledger.kept.filter(entry => status === 'failed' ? entry.status !== 'passed' && entry.status !== 'skipped' : entry.status === status).length;
-        console.log(`KEPT from earlier runs on ${release} (same release, spec and test unchanged; not rerun): ${count('passed')} passed, ${count('failed')} failed, ${count('skipped')} skipped`);
+        console.log(`KEPT from earlier runs on ${release} (same release, inputs, spec and test; not rerun): ${count(ledger.kept, 'passed')} passed, ${count(ledger.kept, 'skipped')} skipped`);
         for (const entry of ledger.kept) console.log(`  ${entry.status}: ${entry.project === 'phone' ? '[phone] ' : ''}${entry.title} (${entry.file}, ran ${entry.at.slice(11, 19)} UTC)`);
       }
       const failures = this.entries.filter(entry => entry.outcome === 'unexpected');
@@ -97,12 +127,15 @@ export default class TestReporter implements Reporter {
           console.log(`  ${at ?? `${entry.file}:${entry.line}`} ${entry.title}${at && at !== `${entry.file}:${entry.line}` ? ` (test at line ${entry.line})` : ''}\n    ${firstLine(entry.errors[0] ?? '') || 'see the error above'}`);
         }
       }
-      const keptFailing = ledger.kept.filter(entry => entry.status !== 'passed' && entry.status !== 'skipped');
-      if (keptFailing.length) console.log(`Still failing on this release from an earlier run: ${keptFailing.map(entry => `${entry.file} › ${entry.title}`).join('; ')}`);
-      if (rerun) console.log(`After fixing a test, run only what failed, on the same release: ${rerun}\nAfter fixing the app, deploy, then run somewhere test${flags}.`);
-      else if (release && ledger.all.length && !this.errors && failed === 0 && !ledger.changedFiles.length) {
-        const now = this.entries.filter(entry => entry.status === 'passed').length;
-        console.log(`Every test recorded on ${release} has passed (${now} in this run${ledger.kept.length ? `, ${ledger.kept.filter(entry => entry.status === 'passed').length} kept` : ''}). Do not run this suite again on this release.`);
+      const owedElsewhere = ledger.owed.filter(entry => !failures.some(failure => failure.file === entry.file && failure.title.endsWith(entry.title)));
+      if (owedElsewhere.length) console.log(`Owed a run on this release: ${owedElsewhere.map(entry => `${entry.file} › ${entry.title} (${entry.status === 'needs-run' ? `changed since it ${entry.was ?? 'ran'}` : entry.status})`).join('; ')}`);
+      if (rerun) console.log(`After fixing a test, run only what is owed, on the same release: ${rerun}\nAfter fixing the app, deploy, then run somewhere test${flags}.`);
+      else if (release && !this.errors && failed === 0) {
+        const allSkipped = count(ledger.all, 'skipped');
+        const skippedNote = allSkipped ? ` ${allSkipped} skipped: a skipped test proves nothing until it runs.` : '';
+        if (ledger.complete) console.log(`Every test of the full suite has a result on ${release} with these inputs: ${count(ledger.all, 'passed')} passed (${passed} in this run, ${count(ledger.kept, 'passed')} kept).${skippedNote} Do not run the suite again on this release.`);
+        else if (subset) console.log(`This was not a full run, and the full suite has no complete result with these inputs: run somewhere test${flags} once.${skippedNote}`);
+        else if (skippedNote) console.log(skippedNote.trim());
       }
     }
     const status = result.status === 'passed' && failed === 0 && this.errors === 0 && passed > 0 ? 'passed' : 'failed';

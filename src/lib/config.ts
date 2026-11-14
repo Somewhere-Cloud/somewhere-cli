@@ -101,6 +101,21 @@ function writeSecret(path: string, body: string): void {
   }
 }
 
+/**
+ * Write an owner-only file under a subdirectory of the CLI config root (0700 directory, 0600 file,
+ * atomic). For per-preview tool credentials (lib/preview-credential.ts): kept out of the project
+ * folder, its source snapshots and Git.
+ */
+export function writePrivateConfigFile(subdir: string, name: string, body: string): string {
+  ensureDir();
+  const dir = join(CONFIG_DIR, subdir);
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true, mode: 0o700 });
+  chmodSync(dir, 0o700);
+  const path = join(dir, name);
+  writeSecret(path, body);
+  return path;
+}
+
 export function saveConfig(config: CliConfig): void {
   ensureDir();
   writeSecret(CONFIG_PATH, JSON.stringify(config, null, 2) + '\n');

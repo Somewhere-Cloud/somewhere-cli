@@ -92,10 +92,16 @@ test('preview handoff exposes the exact candidate capability and promote command
   };
 
   const handoff = await mintPreviewHandoff(client, 'project id', 'draft-current', 'rel-current');
+  // Then the preview's own tool credential is minted once. This fixture answers that call without a
+  // credential, so the mint is refused, which only warns: the preview handoff itself is unaffected.
   assert.deepEqual(calls, [{
     method: 'POST',
     path: '/projects/project%20id/preview/mint',
     body: { draft_id: 'draft-current', candidate_release_id: 'rel-current' },
+  }, {
+    method: 'POST',
+    path: '/projects/project%20id/preview/tool-credential',
+    body: { preview_session_id: 'draft-current' },
   }]);
   assert.equal(handoff.draftId, 'draft-current');
   assert.equal(handoff.candidateReleaseId, 'rel-current');

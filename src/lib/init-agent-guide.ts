@@ -191,7 +191,7 @@ export const MCP_POINTER = 'Use this app from Claude as its signed-in user (MCP 
 
 /** One line on what a preview cannot do today, so no agent learns it by failing.
  *  Rewrite it when previews gain these (the full list: docs dev-environments). */
-export const PREVIEW_POINTER = 'somewhere preview runs your change on a copy of production data, but sign-in, public reads for visitors, sw.groups, server user lookup, jobs/cron handlers and somewhere test do not work in a preview yet: check those in production after promoting (`somewhere docs dev-environments`).';
+export const PREVIEW_POINTER = 'somewhere preview runs your change on a copy of production data with its own sign-in: a preview starts with no users (sign up in it or `somewhere preview user-add`), its sign-in mail is captured (`somewhere preview mail`), and rows private to a production user stay hidden from preview users. Teams and roles, server user lookup, jobs/cron handlers and somewhere test do not work in a preview yet: check those in production after promoting (`somewhere docs dev-environments`).';
 
 export const INIT_AGENTS_MD = `# somewhere.cloud project contract\n${AGENT_WORKFLOW}\n${SKILLS_POINTER}\n${PORTABILITY_POINTER}\n${MCP_POINTER}\n${PREVIEW_POINTER}\n`;
 export const INIT_CLAUDE_MD = 'Read AGENTS.md for project instructions.\n';

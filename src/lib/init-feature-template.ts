@@ -2188,7 +2188,7 @@ export function NotesBoard({ notes }: { notes: NotesController }) {
         <p className={notes.notice?.tone === 'error' ? 'note-status error' : 'note-status'} role="status">{notes.notice?.text ?? ''}</p>
       </form>
 
-      <section aria-labelledby="notes-title" aria-busy={notes.status === 'loading'}>
+      <section aria-labelledby="notes-title" aria-busy={notes.status === 'loading'} data-sw-data={notes.status}>
         <h2 id="notes-title" className="section-title">Your notes</h2>
         {notes.status === 'loading' ? <p className="muted" role="status">Loading notes…</p> : null}
         {notes.status === 'error' ? (
@@ -2357,7 +2357,7 @@ export function NotesBoard({ notes }: { notes: NotesController }) {
         {editing ? <button type="button" onClick={notes.cancelEdit}>Cancel</button> : null}
         <p role="status">{notes.notice?.text ?? ''}</p>
       </form>
-      <h2>Your notes</h2>
+      <h2 data-sw-data={notes.status}>Your notes</h2>
       {notes.status === 'loading' ? <p role="status">Loading notes…</p> : null}
       {notes.status === 'error' ? <Alert action={<button type="button" onClick={notes.reload}>Try again</button>}>{notes.loadError}</Alert> : null}
       {notes.status === 'ready' && notes.notes.length === 0 ? <EmptyState title="No notes yet." /> : null}
@@ -3424,14 +3424,14 @@ export function createFeatureTemplate(
     ...starterTests({ privateData }),
     { path: '.gitignore', content: 'node_modules\ndist\nbuild\n.env\n# Generated from db/schema.ts by somewhere typecheck, dev and deploy.\n__somewhere_data.d.ts\n__somewhere_files.d.ts\n' },
     { path: 'AGENTS.md', content: INIT_AGENTS_MD.replace(/## Getting started[^]*?After edits:/, `## Testing
-tests/account, phone and access specs are working journeys: adapt them, one journey per test.
-Each test makes its own people at once (Promise.all of newUser()) and unique row values.
-Run somewhere test (or somewhere deploy --test): every spec, old and new, in one run.
-After fixing a test, run only what failed: somewhere test --failed. Never rerun a green suite on one release.
-A pass means the checks you wrote passed; say which requirements they do not cover.
-Use ready(page) for starter session readiness, or an explicit locator.
-Test users are removed afterwards; rows, files and mail they created remain.
-Managed users bypass signup/onboarding; test those separately if you customize them.
+Test the journeys you changed and your access boundaries with an ordinary Playwright script.
+tests/app-check.mjs is a short example to change: npx somewhere deploy && node tests/app-check.mjs
+(after a successful deploy only; one result file, .somewhere/app-check.json; the exit code is the verdict).
+Helpers from @somewhere-cloud/cli/script (import or require): signUp/signIn/signOut through your form,
+data(page, { table, operation, id, values, where }) as that person, expectRefused with a positive control,
+captureResponses, dataReady (the list has loaded), launchOptions. A rebuilt sign-in form keeps
+data-sw-auth="email", "password", "sign-up", "sign-in" on its controls, or pass { form: { … } } selectors.
+Rerun only to answer a question. A pass means the checks you wrote passed; say what they do not cover.
 
 After edits:`) },
     { path: 'CLAUDE.md', content: INIT_CLAUDE_MD },

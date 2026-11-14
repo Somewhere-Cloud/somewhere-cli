@@ -469,7 +469,7 @@ export function AuthCard({ appName, tagline, form, providers, children }: AuthCa
             value={form.password} onChange={(event) => form.setPassword(event.target.value)} />
           {signUp ? null : <p className="auth__forgot"><a href="/forgot-password">Forgot password?</a></p>}
           {form.error ? <p className="error" role="alert" data-sw-auth="error">{form.error}</p> : null}
-          <Button type="submit" block disabled={!form.canSubmit} pending={form.pending} data-sw-auth="submit">
+          <Button type="submit" block disabled={!form.canSubmit} pending={form.pending} data-sw-auth={form.mode === 'sign-up' ? 'sign-up' : 'sign-in'}>
             {signUp ? 'Create account' : 'Sign in'}
           </Button>
           <p className="auth__switch">
@@ -526,7 +526,7 @@ export function AuthCard({ appName, tagline, form, providers, children }: AuthCa
           value={form.password} onChange={(event) => form.setPassword(event.target.value)} />
         {signUp ? null : <p><a href="/forgot-password">Forgot password?</a></p>}
         {form.error ? <p role="alert" data-sw-auth="error">{form.error}</p> : null}
-        <Button type="submit" disabled={!form.canSubmit} pending={form.pending} data-sw-auth="submit">
+        <Button type="submit" disabled={!form.canSubmit} pending={form.pending} data-sw-auth={form.mode === 'sign-up' ? 'sign-up' : 'sign-in'}>
           {signUp ? 'Create account' : 'Sign in'}
         </Button>
       </form>

@@ -5,7 +5,7 @@ import { runTypecheck } from '../lib/typecheck.js';
 import { reportTypecheck } from './typecheck.js';
 import { clearBaseFiles, hashFiles, loadLastActivation, saveBaseFiles } from '../lib/base-files.js';
 import { withVerifyProgress } from '../lib/verify-progress.js';
-import { Command } from 'commander';
+import { Command, Option } from 'commander';
 import { basename, resolve } from 'node:path';
 import prompts from 'prompts';
 import ora, { type Ora } from '../lib/spinner.js';
@@ -708,7 +708,9 @@ export function registerDeploy(program: Command) {
       '--verify [flow.json]',
       'After the deploy is live, run one browser verification flow at desktop and phone size. Omit the file for the default health check.',
     )
-    .option('--test', 'After the deploy is live, run the project tests (tests/*.spec.ts) once against the new release and report their results with the deploy')
+    // Kept working for scripts that already call it; no longer documented. The exit-safe form is
+    // `somewhere deploy && node tests/app-check.mjs` (or `&& somewhere test`).
+    .addOption(new Option('--test', 'After a successful deploy, run somewhere test once against the new release').hideHelp())
     .option('--json', 'Print the raw deploy response as JSON on stdout; files left out locally are listed on stderr by path and reason')
     .option('--allow-type-errors', 'Upload even when the local TypeScript check fails')
     .option('--timing', 'Print collection, upload, release, activation, and verification timings')
@@ -719,8 +721,8 @@ export function registerDeploy(program: Command) {
       const targetDir = resolveTargetDir(dir);
       markProcessStart('cli');
       timelineMark('cli:action');
-      // --test: the runner is prepared (local only: Playwright, browser check) while the deploy runs.
-      const testRunner = opts.test && !opts.dryRun ? prepareDeployTests(() => prepareRunner(targetDir)) : undefined;
+      const runTestsAfter = Boolean(opts.test && !opts.dryRun);
+      if (runTestsAfter) process.stderr.write('deploy --test: the documented form is `somewhere deploy && node tests/app-check.mjs` (or `&& somewhere test`); --test still runs somewhere test once after a successful deploy.\n');
       let typecheckMs = 0;
       const typecheckStartedAt = performance.now();
       // Collection, authentication and packaging can proceed while tsc runs.
@@ -1429,11 +1431,11 @@ export function registerDeploy(program: Command) {
         const verificationFailed = verification?.passed === false || Boolean(verificationError);
         // --test runs only once the release is live and confirmed: never before, never on a failed deploy.
         const runReleaseTests = async (): Promise<DeployTests | undefined> => {
-          if (!testRunner) return undefined;
+          if (!runTestsAfter) return undefined;
           const release = result.active_release_id ?? result.release_id ?? null;
           if (hasFunctionErrors) return { status: 'not_run', release, reason: 'functions failed to deploy' };
           if (verificationFailed) return { status: 'not_run', release, reason: 'the deploy verification did not pass' };
-          return runDeployTests({ client, root: deployStateEntry?.dir ?? targetDir, projectId: result.project_id ?? projectId ?? undefined, temporary: Boolean(tempSession), json: Boolean(opts.json), release: release ?? undefined, renderPending: postLive.kind === 'timeout', prepared: testRunner });
+          return runDeployTests({ client, root: deployStateEntry?.dir ?? targetDir, projectId: result.project_id ?? projectId ?? undefined, temporary: Boolean(tempSession), json: Boolean(opts.json), release: release ?? undefined, renderPending: postLive.kind === 'timeout', prepared: prepareDeployTests(() => prepareRunner(deployStateEntry?.dir ?? targetDir)) });
         };
         const verificationNextSteps = besideRealLogin ? [
           'Inspect the live URL; keep this project and its claim URL.',

@@ -1,7 +1,7 @@
 {
   "name": "@somewhere-cloud/cli",
   "version": "0.38.87",
-  "description": "CLI for somewhere.cloud — auth, projects, deploy, pull, promote, db, logs, env, MCP bridge.",
+  "description": "CLI for somewhere.cloud \u2014 auth, projects, deploy, pull, promote, db, logs, env, MCP bridge.",
   "keywords": [
     "somewhere",
     "somewhere.cloud",
@@ -78,7 +78,11 @@
       "types": "./dist/testing.d.ts",
       "import": "./dist/testing.js"
     },
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./script": {
+      "types": "./dist/script.d.ts",
+      "default": "./dist/script.js"
+    }
   },
   "bundleDependencies": [
     "@modelcontextprotocol/sdk",

@@ -93,6 +93,7 @@ function toolSuccess(data) {
 const ADDRESS = 'ann@app.test.somewhere.site';
 const messages = [
   { id: 'm1', to: ADDRESS, subject: 'Welcome', html: null, text: 'from preview', created_at: '2026-11-13T00:00:02.000Z', magic_link: null, verification_code: null, environment: 'preview', preview_session_id: 'draft_abc' },
+  { id: 'm3', to: ADDRESS, subject: 'Old app mail', html: null, text: 'x', created_at: '2026-11-13T00:00:00.000Z', magic_link: null, verification_code: null, environment: 'unknown', preview_session_id: null },
   { id: 'm2', to: ADDRESS, subject: 'Verify your email', html: null, text: 'from live', created_at: '2026-11-13T00:00:01.000Z', magic_link: null, verification_code: '123456', environment: 'production', preview_session_id: null },
 ];
 
@@ -105,6 +106,7 @@ test('email test-inbox says who sent each message and forwards the environment f
     assert.equal(all.status, 0, all.stderr);
     assert.match(all.stdout, /Welcome\nsent by: preview draft_abc\n/);
     assert.match(all.stdout, /Verify your email\nsent by: live app\n/);
+    assert.match(all.stdout, /Old app mail\nsent by: unknown \(stored before senders were recorded\)\n/);
     assert.equal((await run(['email', 'test-inbox', ADDRESS, '--project', 'app', '--preview'], env)).status, 0);
     assert.equal((await run(['email', 'test-inbox', ADDRESS, '--project', 'app', '--preview', 'draft_abc'], env)).status, 0);
     assert.equal((await run(['email', 'test-inbox', ADDRESS, '--project', 'app', '--production'], env)).status, 0);

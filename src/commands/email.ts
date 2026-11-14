@@ -22,7 +22,7 @@ interface EmailTestInboxMessage {
   created_at: string;
   magic_link: string | null;
   verification_code: string | null;
-  environment: 'production' | 'preview' | null;
+  environment: 'production' | 'preview' | 'unknown' | null;
   preview_session_id: string | null;
 }
 
@@ -57,7 +57,8 @@ function parseTestInbox(value: unknown): EmailTestInboxResult {
       magic_link: typeof message.magic_link === 'string' ? message.magic_link : null,
       verification_code: typeof message.verification_code === 'string' ? message.verification_code : null,
       // Who sent it: the live app or a preview. An older platform does not say.
-      environment: message.environment === 'preview' ? 'preview' as const : message.environment === 'production' ? 'production' as const : null,
+      environment: message.environment === 'preview' || message.environment === 'production' || message.environment === 'unknown'
+        ? message.environment as 'preview' | 'production' | 'unknown' : null,
       preview_session_id: typeof message.preview_session_id === 'string' ? message.preview_session_id : null,
     };
   });
@@ -79,6 +80,7 @@ function printTestInbox(inbox: EmailTestInboxResult): void {
     console.log(`${message.created_at}  ${message.subject}`);
     if (message.environment === 'preview') console.log(`sent by: preview ${message.preview_session_id ?? '(unnamed)'}`);
     else if (message.environment === 'production') console.log('sent by: live app');
+    else if (message.environment === 'unknown') console.log('sent by: unknown (stored before senders were recorded)');
     console.log(`id: ${message.id}`);
     console.log(`to: ${message.to}`);
     console.log(`magic_link: ${message.magic_link ?? 'null'}`);

@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto';
+import { setDefaultResultOrder } from 'node:dns';
 import { lookup } from 'node:dns/promises';
+import { testAddressOrder } from './test-connectivity.js';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import type { APIRequestContext, BrowserContext, LaunchOptions, Locator, Page } from '@playwright/test';
@@ -29,9 +31,9 @@ export interface DataRequest { table: string; operation: 'list' | 'get' | 'creat
  *  - empty: a list with no rows or a get with null (a missing row and a hidden row look the same);
  *  - refused: 401/403;
  *  - missing-or-refused: 404 DATA_NOT_FOUND on update/delete (a missing row and a refused write look the same);
- *  - malformed: 400 (the request is wrong; it proves nothing about access);
- *  - stale-contract: 409 (the app changed since this script read its contract; it proves nothing);
- *  - error: anything else. */
+ *  - malformed: 400/405/413/415, or 403 DATA_ORIGIN_FORBIDDEN (the request is wrong; it proves nothing about access);
+ *  - stale-contract: 409 DATA_CONTRACT_MISMATCH (the app changed since the contract was read; it proves nothing);
+ *  - error: anything else, such as 409 DATA_CONFLICT (a unique-key conflict). */
 export type DataKind = 'ok' | 'empty' | 'refused' | 'missing-or-refused' | 'malformed' | 'stale-contract' | 'error';
 export interface DataResult { status: number; kind: DataKind; data: unknown; error: string | null; message: string | null }
 type Who = Page | BrowserContext | APIRequestContext;
@@ -70,12 +72,15 @@ export function classifyData(status: number, raw: unknown): DataResult {
   const error = typeof body?.error === 'string' ? body.error : null;
   const message = typeof body?.message === 'string' ? body.message : null;
   const data = body?.data ?? null;
+  // A wrong Origin or a malformed body is the request's fault, never an access answer; a 409 is a
+  // stale contract only with DATA_CONTRACT_MISMATCH (DATA_CONFLICT is a real unique-key conflict).
   const kind: DataKind = status === 200
     ? ((Array.isArray(data) && data.length === 0) || data === null ? 'empty' : 'ok')
-    : status === 401 || status === 403 ? 'refused'
-      : status === 404 && error === 'DATA_NOT_FOUND' ? 'missing-or-refused'
-        : status === 400 ? 'malformed'
-          : status === 409 ? 'stale-contract' : 'error';
+    : status === 403 && error === 'DATA_ORIGIN_FORBIDDEN' ? 'malformed'
+      : status === 401 || status === 403 ? 'refused'
+        : status === 404 && error === 'DATA_NOT_FOUND' ? 'missing-or-refused'
+          : [400, 405, 413, 415].includes(status) ? 'malformed'
+            : status === 409 && error === 'DATA_CONTRACT_MISMATCH' ? 'stale-contract' : 'error';
   return { status, kind, data, error, message };
 }
 
@@ -112,8 +117,11 @@ export class AppTest {
       }
       if (local && local.release && local.release !== target.releaseId) process.stderr.write(`Note: the live release ${target.releaseId} is not the one this folder last deployed (${local.release}).\n`);
     }
-    // Resolve the app's host once through the system resolver, so the browser finds it cached.
-    await lookup(new URL(target.origin).hostname).catch(() => {});
+    // Resolve the app's host once through the system resolver, so the browser finds it cached. Where
+    // IPv6 does not connect but IPv4 does, this process prefers IPv4 addresses: Playwright's request
+    // client (page.request, app.data) runs here and otherwise waits seconds on every new connection.
+    const [ipv4First] = await Promise.all([testAddressOrder(target.origin), lookup(new URL(target.origin).hostname).catch(() => null)]);
+    if (ipv4First) setDefaultResultOrder('ipv4first');
     process.env.SW_TEST_RUN ??= randomUUID();
     for (const line of describeSweep(await sweepAccounts(client, root, projectId), 'Before this script')) process.stderr.write(line + '\n');
     return new AppTest(root, client, projectId, target, resolve(root, options.results ?? join('.somewhere', 'app-check.json')));
@@ -203,6 +211,7 @@ export class AppTest {
     mkdirSync(dirname(this.resultsPath), { recursive: true });
     writeFileSync(this.resultsPath, JSON.stringify({ origin: this.origin, release: this.release, started: this.started.toISOString(), finished: new Date().toISOString(), passed, failed, checks: this.checks }, null, 2) + '\n');
     for (const check of this.checks.filter(c => !c.ok)) process.stdout.write(`FAIL ${check.name}\n  ${(check.error ?? '').replaceAll('\n', '\n  ')}\n`);
+    if (!this.checks.length) process.stdout.write('FAIL no check ran: the script stopped before its first check (the error is below)\n');
     process.stdout.write(`${failed || !passed ? 'FAILED' : 'PASSED'}: ${passed} passed, ${failed} failed · ${this.origin} · ${this.release} · ${this.resultsPath}\n`);
     if (failed || !passed) process.exitCode = 1;
     return { passed, failed, file: this.resultsPath };

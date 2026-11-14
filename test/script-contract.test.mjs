@@ -127,7 +127,10 @@ test('data answers are classified; a malformed request is never an access refusa
   assert.equal(classifyData(401, { error: 'AUTH_REQUIRED' }).kind, 'refused');
   assert.equal(classifyData(404, { error: 'DATA_NOT_FOUND' }).kind, 'missing-or-refused');
   assert.equal(classifyData(400, { error: 'DATA_INPUT_INVALID', message: 'unsupported field nope' }).kind, 'malformed');
-  assert.equal(classifyData(409, { error: 'DATA_CONTRACT_STALE' }).kind, 'stale-contract');
+  assert.equal(classifyData(409, { error: 'DATA_CONTRACT_MISMATCH' }).kind, 'stale-contract');
+  assert.equal(classifyData(409, { error: 'DATA_CONFLICT' }).kind, 'error', 'a unique-key conflict is not a stale contract');
+  assert.equal(classifyData(403, { error: 'DATA_ORIGIN_FORBIDDEN' }).kind, 'malformed', 'a wrong Origin is not an access refusal');
+  assert.equal(classifyData(415, { error: 'DATA_JSON_REQUIRED' }).kind, 'malformed');
   assert.equal(classifyData(404, { error: 'NOT_FOUND' }).kind, 'error', 'an unknown route is not a refusal');
 });
 

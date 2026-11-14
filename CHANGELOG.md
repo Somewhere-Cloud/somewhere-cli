@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.38.89
+
+- Email test-inbox says when a message's sender is unknown (stored before senders were recorded).
+- Preview edit loop: continue the folder's preview, list and close previews, promote moves the folder base.
+
 ## 0.38.88
 
 - Plain Playwright scripts first: one example script, form helpers by action, and a data request with no digest to find.

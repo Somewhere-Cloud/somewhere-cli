@@ -45,7 +45,7 @@
     "worker/src/utils/dev-health-class.ts": "fd430f31b9c8469f3d90e118fd8c75d1836ebcf705c1f9e93915ffa53a4cb066",
     "worker/src/utils/errors.ts": "fcc62f5ad26d31ac3487fcca125bd1dae152ca62d801cd38df3c36a8fe36a3c1",
     "worker/src/utils/event-log.ts": "0c36483fa84c42ce607d195f1ded527ab4383d58808a63353d3cadef81d93948",
-    "worker/src/utils/feed-kinds.ts": "f5973cbe0337e54294f7d38fc93397adc2ad77110d431a101c5dc1214371e8a1",
+    "worker/src/utils/feed-kinds.ts": "91fbe5df2edf31a0b08d2450b64a07d659cf02a9ccdb74a008785260d14a971b",
     "worker/src/utils/journey-segment.ts": "b1d27c58bea03a791193d7120d88d232ea1c8374d6f25f72cd86b5b8c33c73a1",
     "worker/src/utils/json-exact-integers.ts": "e2eb8d3b2e17da363eb14fb46d876208579e2e92bfac173fb27527e6c4fb575e",
     "worker/src/utils/log-sanitize.ts": "21997963eb5de1fa3e5544394996270d9bd073a76d57e6cbb3f8d789cb5c3663",

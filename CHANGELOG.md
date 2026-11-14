@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.38.92
+
+- Preview users, test users and captured mail with a preview-only credential.
+- Link takes --project and --json and runs init --link's own handler.
+
 ## 0.38.91
 
 - Release notes say when the bundled agent skills change.

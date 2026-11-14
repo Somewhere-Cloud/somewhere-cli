@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.38.90
+
+- Starter links on the reset pages are 44 px tap targets, and the guide states the 24 px tap-target minimum.
+
 ## 0.38.89
 
 - Email test-inbox says when a message's sender is unknown (stored before senders were recorded).

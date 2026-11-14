@@ -110,263 +110,266 @@ export function registerInit(program: Command) {
         + 'Requirements are added and reported (magic-link, private-data and agent add auth). --features only\n'
         + 'writes into an empty directory and is checked before the project is created.\n',
     )
-    .action(async (opts: InitOptions, command: Command) => {
-      const dir = process.cwd();
-      let plan: FeaturePlan | undefined;
-      try {
-        if (opts.catalog) {
-          printCatalog(opts, command);
-          return;
-        }
-        plan = planFeatures(opts, command, dir);
-      } catch (err) {
-        if (!(err instanceof InitSelectionError)) throw err;
-        error(err.message);
-        process.exit(2);
-      }
-      if (plan && opts.dryRun) {
-        const files = plan.files.map((file) => file.path);
-        if (opts.json) {
-          printJson({ dry_run: true, selection: plan.selection, files });
-        } else {
-          info(`Dry run: ${describeSelection(plan.selection)}`);
-          for (const path of files) console.log(`  ${path}`);
-          info('Nothing was created. Drop --dry-run (and add --name) to write the starter; a signed-in run also creates the project.');
-        }
-        return;
-      }
+    .action(runInit);
+}
 
-      const template = (opts.template ?? 'auth') as InitTemplateName;
-      if (!INIT_TEMPLATES.includes(template)) {
-        error(`Unknown --template ${opts.template}. Use one of: ${INIT_TEMPLATES.join(', ')}.`);
-        process.exit(2);
-      }
-      if (opts.project && !opts.link) {
-        error('--project requires --link.');
-        process.exit(1);
-      }
-      if (opts.subdomain !== undefined && opts.link) {
-        error('--subdomain names a new project; it cannot be combined with --link.');
-        process.exit(1);
-      }
-      if (opts.json && opts.link && !opts.project) {
-        error('--project <ref> is required with --link --json.');
-        process.exit(1);
-      }
-      if (opts.json && !opts.link && !opts.name) {
-        error('--name <name> is required with --json.');
-        process.exit(1);
-      }
-      // No one can answer a prompt in a non-interactive shell (an agent's exec
-      // tool, a script, a pipe): fail fast with the flag instead of waiting.
-      if (!process.stdin.isTTY) {
-        if (!opts.link && !opts.name) {
-          failNonInteractive('Pass --name <project-name> to create a project in a non-interactive shell (e.g. `somewhere init --name my-app`).');
-        }
-        if (opts.link && !opts.project) {
-          failNonInteractive('Pass --project <ref> to link a project in a non-interactive shell (e.g. `somewhere init --link --project my-app`).');
-        }
-      }
+/** The init command's handler; `somewhere link` runs it with link set (commands/link.ts). */
+export async function runInit(opts: InitOptions, command: Command): Promise<void> {
+  const dir = process.cwd();
+  let plan: FeaturePlan | undefined;
+  try {
+    if (opts.catalog) {
+      printCatalog(opts, command);
+      return;
+    }
+    plan = planFeatures(opts, command, dir);
+  } catch (err) {
+    if (!(err instanceof InitSelectionError)) throw err;
+    error(err.message);
+    process.exit(2);
+  }
+  if (plan && opts.dryRun) {
+    const files = plan.files.map((file) => file.path);
+    if (opts.json) {
+      printJson({ dry_run: true, selection: plan.selection, files });
+    } else {
+      info(`Dry run: ${describeSelection(plan.selection)}`);
+      for (const path of files) console.log(`  ${path}`);
+      info('Nothing was created. Drop --dry-run (and add --name) to write the starter; a signed-in run also creates the project.');
+    }
+    return;
+  }
 
-      const shouldScaffold = !opts.bare && canWriteInitScaffold(dir);
-      // Decide starter vs existing source before any login, request or write:
-      // a folder holding only files that are not an app (a stray file, notes)
-      // would otherwise be linked to a new project with no starter and no app.
-      if (!shouldScaffold && !opts.bare && !opts.link) {
-        const entries = initSourceEntries(dir);
-        if (entries.source.length === 0) {
-          error(`This directory has no app source, only ${entries.other.join(', ')}. somewhere init writes its starter into an empty directory and links a directory that already holds an app, so nothing was created. Run it in a new empty directory, move these files out, or pass --bare to link this directory without a starter.`);
-          process.exit(2);
-        }
-      }
-      const scaffoldFiles = (projectName: string): InitScaffoldFile[] =>
-        template === 'minimal' && !plan
-          ? createGreenTemplate()
-          : createFeatureTemplate(plan?.selection ?? DEFAULT_AUTH_SELECTION, { appName: projectName });
+  const template = (opts.template ?? 'auth') as InitTemplateName;
+  if (!INIT_TEMPLATES.includes(template)) {
+    error(`Unknown --template ${opts.template}. Use one of: ${INIT_TEMPLATES.join(', ')}.`);
+    process.exit(2);
+  }
+  if (opts.project && !opts.link) {
+    error('--project requires --link.');
+    process.exit(1);
+  }
+  if (opts.subdomain !== undefined && opts.link) {
+    error('--subdomain names a new project; it cannot be combined with --link.');
+    process.exit(1);
+  }
+  if (opts.json && opts.link && !opts.project) {
+    error('--project <ref> is required with --link --json.');
+    process.exit(1);
+  }
+  if (opts.json && !opts.link && !opts.name) {
+    error('--name <name> is required with --json.');
+    process.exit(1);
+  }
+  // No one can answer a prompt in a non-interactive shell (an agent's exec
+  // tool, a script, a pipe): fail fast with the flag instead of waiting.
+  if (!process.stdin.isTTY) {
+    if (!opts.link && !opts.name) {
+      failNonInteractive('Pass --name <project-name> to create a project in a non-interactive shell (e.g. `somewhere init --name my-app`).');
+    }
+    if (opts.link && !opts.project) {
+      failNonInteractive('Pass --project <ref> to link a project in a non-interactive shell (e.g. `somewhere init --link --project my-app`).');
+    }
+  }
 
-      const existing = loadProjectConfig(dir);
-      // Missing credentials never block local source generation. Linking and
-      // bare project creation remain account operations; deploy owns anonymous
-      // provisioning and its proof-of-work / temporary-session isolation.
-      // An expired temporary session (left by an earlier no-login deploy) is
-      // no credential at all: it never blocks the local starter, and deploy
-      // replaces it with a fresh one.
-      const storedConfig = loadConfig();
-      if (!hasUsableCredential(storedConfig) && !opts.link && !opts.bare) {
-        const expiredTemporaryAt = temporaryConfigExpired(storedConfig) ? storedConfig.temp_expires_at : undefined;
-        if (existing || existsSync(join(dir, '.somewhere.json')) || !shouldScaffold) {
-          error('Local starter generation requires an empty, unlinked directory. Existing files were kept. Run somewhere docs start for the anonymous deploy workflow.');
-          process.exit(1);
-        }
-        let localName = opts.name;
-        if (!localName) {
-          const answer = await prompts({ type: 'text', name: 'name', message: 'App name', initial: basename(dir) || 'my-app' });
-          localName = answer.name as string | undefined;
-          if (!localName) return;
-        }
-        try {
-          const scaffold = writeInitScaffold(dir, scaffoldFiles(localName));
-          const skills = writeInitSkills(dir);
-          const next = ['somewhere deploy', 'somewhere docs start'];
-          if (opts.json) {
-            printJson({ local: true, linked: false, name: localName, dir, files: scaffold.created, dependencies_installed: false, skills,
-              ...(expiredTemporaryAt ? { expired_temporary_session_ignored: expiredTemporaryAt } : {}),
-              ...(plan ? { selection: plan.selection, extension_points: extensionPoints(plan.selection) } : {}), next });
-          } else {
-            success(`Local starter written to ${dir} (${scaffold.created.length} files); no account or project was created.`);
-            if (expiredTemporaryAt) info(`Ignored the temporary session on this machine that expired at ${expiredTemporaryAt}; somewhere deploy starts a new one.`);
-            reportSkills(skills);
-            reportPin(dir);
-            info('Dependencies are not installed. Run npm install if you want to run it locally.');
-            info('Next: somewhere deploy — publish with a temporary workspace, no login needed.');
-            info('Quickstart: somewhere docs start');
-          }
-        } catch (err) {
-          error(err instanceof Error ? err.message : String(err), err);
-          process.exit(1);
-        }
-        return;
-      }
-      const token = getToken();
-      const client = new ApiClient(token);
-      if (existing && !opts.project) {
-        if (opts.json) {
-          error(`This directory is already linked to ${existing.name}.`);
-          process.exit(1);
-        }
-        if (!process.stdin.isTTY) {
-          failNonInteractive(`This directory is already linked to ${existing.name}. Run init in an empty directory, or relink with \`somewhere init --link --project <ref>\`.`);
-        }
-        warn(`This directory is already linked to ${teal(existing.name)}`);
-        const { overwrite } = await prompts({
-          type: 'confirm',
-          name: 'overwrite',
-          message: 'Overwrite?',
-          initial: false,
-        });
-        if (!overwrite) return;
-      }
+  const shouldScaffold = !opts.bare && canWriteInitScaffold(dir);
+  // Decide starter vs existing source before any login, request or write:
+  // a folder holding only files that are not an app (a stray file, notes)
+  // would otherwise be linked to a new project with no starter and no app.
+  if (!shouldScaffold && !opts.bare && !opts.link) {
+    const entries = initSourceEntries(dir);
+    if (entries.source.length === 0) {
+      error(`This directory has no app source, only ${entries.other.join(', ')}. somewhere init writes its starter into an empty directory and links a directory that already holds an app, so nothing was created. Run it in a new empty directory, move these files out, or pass --bare to link this directory without a starter.`);
+      process.exit(2);
+    }
+  }
+  const scaffoldFiles = (projectName: string): InitScaffoldFile[] =>
+    template === 'minimal' && !plan
+      ? createGreenTemplate()
+      : createFeatureTemplate(plan?.selection ?? DEFAULT_AUTH_SELECTION, { appName: projectName });
 
-      if (opts.link) {
-        try {
-          await linkExisting(client, dir, opts.project, Boolean(opts.json), false, shouldScaffold ? async (project) => {
-            writeInitScaffold(dir, scaffoldFiles(project.name));
-            writeInitSkills(dir);
-            await installInitDependencies({ cwd: dir, quiet: Boolean(opts.json) });
-          } : undefined);
-        } catch (err) {
-          error(err instanceof Error ? err.message : String(err), err);
-          process.exit(1);
-        }
-        return;
-      }
-
-      let name = opts.name;
-      if (!name) {
-        const res = await prompts({
-          type: 'text',
-          name: 'name',
-          message: 'Project name',
-          initial: dir.split('/').pop() ?? 'my-app',
-        });
-        name = res.name;
-        if (!name) return;
-      }
-
-      // --subdomain wins; with only --name, derive it (no prompt)
-      let subdomain: string;
-      if (opts.subdomain !== undefined) {
-        subdomain = opts.subdomain.trim().toLowerCase();
-      } else if (opts.name) {
-        subdomain = name.toLowerCase().replace(/[^a-z0-9-]/g, '-');
+  const existing = loadProjectConfig(dir);
+  // Missing credentials never block local source generation. Linking and
+  // bare project creation remain account operations; deploy owns anonymous
+  // provisioning and its proof-of-work / temporary-session isolation.
+  // An expired temporary session (left by an earlier no-login deploy) is
+  // no credential at all: it never blocks the local starter, and deploy
+  // replaces it with a fresh one.
+  const storedConfig = loadConfig();
+  if (!hasUsableCredential(storedConfig) && !opts.link && !opts.bare) {
+    const expiredTemporaryAt = temporaryConfigExpired(storedConfig) ? storedConfig.temp_expires_at : undefined;
+    if (existing || existsSync(join(dir, '.somewhere.json')) || !shouldScaffold) {
+      error('Local starter generation requires an empty, unlinked directory. Existing files were kept. Run somewhere docs start for the anonymous deploy workflow.');
+      process.exit(1);
+    }
+    let localName = opts.name;
+    if (!localName) {
+      const answer = await prompts({ type: 'text', name: 'name', message: 'App name', initial: basename(dir) || 'my-app' });
+      localName = answer.name as string | undefined;
+      if (!localName) return;
+    }
+    try {
+      const scaffold = writeInitScaffold(dir, scaffoldFiles(localName));
+      const skills = writeInitSkills(dir);
+      const next = ['somewhere deploy', 'somewhere docs start'];
+      if (opts.json) {
+        printJson({ local: true, linked: false, name: localName, dir, files: scaffold.created, dependencies_installed: false, skills,
+          ...(expiredTemporaryAt ? { expired_temporary_session_ignored: expiredTemporaryAt } : {}),
+          ...(plan ? { selection: plan.selection, extension_points: extensionPoints(plan.selection) } : {}), next });
       } else {
-        const subRes = await prompts({
-          type: 'text',
-          name: 'subdomain',
-          message: 'Subdomain',
-          initial: name.toLowerCase().replace(/[^a-z0-9-]/g, '-'),
-        });
-        subdomain = (subRes.subdomain as string)
-          .trim();
-        if (!subdomain) return;
-      }
-
-      const spinner = opts.json ? null : ora('Creating project...').start();
-      try {
-        const project = await client.call<{
-          id: string;
-          name: string;
-          subdomain: string;
-          slug: string;
-        }>('POST', '/projects', { name, subdomain, cli_version: CLI_VERSION });
-        // The platform's answer, never a host built from the name or slug.
-        const appUrl = await getAuthoritativeAppUrl(client, project.id).catch(() => null);
-
-        spinner?.stop();
-        if (opts.json) {
-          saveProjectConfig(dir, {
-            project_id: project.id,
-            name: project.name,
-            subdomain: project.subdomain ?? subdomain,
-            ...(appUrl ? { app_url: appUrl } : {}),
-            source_base: sourceBaseState(project.id, null),
-          });
-          if (shouldScaffold) {
-            writeInitScaffold(dir, scaffoldFiles(project.name));
-            writeInitSkills(dir);
-            await installInitDependencies({ cwd: dir, quiet: true });
-          } else if (opts.bare) {
-            writeBareGuide(dir);
-            writeInitSkills(dir);
-          }
-          recordPinIfMissing(dir, CLI_VERSION);
-          printJson({ ...project, app_url: appUrl,
-            ...(plan ? { selection: plan.selection, extension_points: extensionPoints(plan.selection) } : {}),
-          });
-          return;
-        }
-        success(`Project created: ${teal(project.name)}`);
-
-        saveProjectConfig(dir, {
-          project_id: project.id,
-          name: project.name,
-          subdomain: project.subdomain ?? subdomain,
-          ...(appUrl ? { app_url: appUrl } : {}),
-          source_base: sourceBaseState(project.id, null),
-        });
-        success('.somewhere.json written');
-
-        if (shouldScaffold) {
-          const scaffold = writeInitScaffold(dir, scaffoldFiles(project.name));
-          success(`Full-stack starter written to ${dir} (${scaffold.created.length} files)`);
-          reportSkills(writeInitSkills(dir));
-          if (template !== 'minimal' || plan) {
-            const selection = plan?.selection ?? DEFAULT_AUTH_SELECTION;
-            info(`Modules: ${describeSelection(selection)}`);
-            for (const [area, where] of Object.entries(extensionPoints(selection))) console.log(`  ${area}: ${where}`);
-          }
-          info('Installing the starter\'s pinned dependencies with `npm install` (downloads from the npm registry and runs package install scripts)…');
-          await installInitDependencies({ cwd: dir, quiet: false });
-          success('Dependencies installed');
-        } else if (opts.bare) {
-          info('Bare project: no starter source or dependencies were added.');
-          const guide = writeBareGuide(dir);
-          reportSkills(writeInitSkills(dir));
-          if (guide.created.length) success(`Agent workflow guide written (${guide.created.join(', ')})`);
-          if (guide.kept.length) info(`Existing ${guide.kept.join(', ')} kept unchanged.`);
-        } else {
-          info('Existing source preserved; starter files were not added.');
-        }
+        success(`Local starter written to ${dir} (${scaffold.created.length} files); no account or project was created.`);
+        if (expiredTemporaryAt) info(`Ignored the temporary session on this machine that expired at ${expiredTemporaryAt}; somewhere deploy starts a new one.`);
+        reportSkills(skills);
         reportPin(dir);
-
-        console.log('');
-        printNext({ stage: 'init', scaffolded: shouldScaffold });
-      } catch (err) {
-        spinner?.fail('Failed to create project');
-        error(err instanceof Error ? err.message : String(err), err);
-        process.exit(1);
+        info('Dependencies are not installed. Run npm install if you want to run it locally.');
+        info('Next: somewhere deploy — publish with a temporary workspace, no login needed.');
+        info('Quickstart: somewhere docs start');
       }
+    } catch (err) {
+      error(err instanceof Error ? err.message : String(err), err);
+      process.exit(1);
+    }
+    return;
+  }
+  const token = getToken();
+  const client = new ApiClient(token);
+  if (existing && !opts.project) {
+    if (opts.json) {
+      error(`This directory is already linked to ${existing.name}.`);
+      process.exit(1);
+    }
+    if (!process.stdin.isTTY) {
+      failNonInteractive(`This directory is already linked to ${existing.name}. Run init in an empty directory, or relink with \`somewhere init --link --project <ref>\`.`);
+    }
+    warn(`This directory is already linked to ${teal(existing.name)}`);
+    const { overwrite } = await prompts({
+      type: 'confirm',
+      name: 'overwrite',
+      message: 'Overwrite?',
+      initial: false,
     });
+    if (!overwrite) return;
+  }
+
+  if (opts.link) {
+    try {
+      await linkExisting(client, dir, opts.project, Boolean(opts.json), false, shouldScaffold ? async (project) => {
+        writeInitScaffold(dir, scaffoldFiles(project.name));
+        writeInitSkills(dir);
+        await installInitDependencies({ cwd: dir, quiet: Boolean(opts.json) });
+      } : undefined);
+    } catch (err) {
+      error(err instanceof Error ? err.message : String(err), err);
+      process.exit(1);
+    }
+    return;
+  }
+
+  let name = opts.name;
+  if (!name) {
+    const res = await prompts({
+      type: 'text',
+      name: 'name',
+      message: 'Project name',
+      initial: dir.split('/').pop() ?? 'my-app',
+    });
+    name = res.name;
+    if (!name) return;
+  }
+
+  // --subdomain wins; with only --name, derive it (no prompt)
+  let subdomain: string;
+  if (opts.subdomain !== undefined) {
+    subdomain = opts.subdomain.trim().toLowerCase();
+  } else if (opts.name) {
+    subdomain = name.toLowerCase().replace(/[^a-z0-9-]/g, '-');
+  } else {
+    const subRes = await prompts({
+      type: 'text',
+      name: 'subdomain',
+      message: 'Subdomain',
+      initial: name.toLowerCase().replace(/[^a-z0-9-]/g, '-'),
+    });
+    subdomain = (subRes.subdomain as string)
+      .trim();
+    if (!subdomain) return;
+  }
+
+  const spinner = opts.json ? null : ora('Creating project...').start();
+  try {
+    const project = await client.call<{
+      id: string;
+      name: string;
+      subdomain: string;
+      slug: string;
+    }>('POST', '/projects', { name, subdomain, cli_version: CLI_VERSION });
+    // The platform's answer, never a host built from the name or slug.
+    const appUrl = await getAuthoritativeAppUrl(client, project.id).catch(() => null);
+
+    spinner?.stop();
+    if (opts.json) {
+      saveProjectConfig(dir, {
+        project_id: project.id,
+        name: project.name,
+        subdomain: project.subdomain ?? subdomain,
+        ...(appUrl ? { app_url: appUrl } : {}),
+        source_base: sourceBaseState(project.id, null),
+      });
+      if (shouldScaffold) {
+        writeInitScaffold(dir, scaffoldFiles(project.name));
+        writeInitSkills(dir);
+        await installInitDependencies({ cwd: dir, quiet: true });
+      } else if (opts.bare) {
+        writeBareGuide(dir);
+        writeInitSkills(dir);
+      }
+      recordPinIfMissing(dir, CLI_VERSION);
+      printJson({ ...project, app_url: appUrl,
+        ...(plan ? { selection: plan.selection, extension_points: extensionPoints(plan.selection) } : {}),
+      });
+      return;
+    }
+    success(`Project created: ${teal(project.name)}`);
+
+    saveProjectConfig(dir, {
+      project_id: project.id,
+      name: project.name,
+      subdomain: project.subdomain ?? subdomain,
+      ...(appUrl ? { app_url: appUrl } : {}),
+      source_base: sourceBaseState(project.id, null),
+    });
+    success('.somewhere.json written');
+
+    if (shouldScaffold) {
+      const scaffold = writeInitScaffold(dir, scaffoldFiles(project.name));
+      success(`Full-stack starter written to ${dir} (${scaffold.created.length} files)`);
+      reportSkills(writeInitSkills(dir));
+      if (template !== 'minimal' || plan) {
+        const selection = plan?.selection ?? DEFAULT_AUTH_SELECTION;
+        info(`Modules: ${describeSelection(selection)}`);
+        for (const [area, where] of Object.entries(extensionPoints(selection))) console.log(`  ${area}: ${where}`);
+      }
+      info('Installing the starter\'s pinned dependencies with `npm install` (downloads from the npm registry and runs package install scripts)…');
+      await installInitDependencies({ cwd: dir, quiet: false });
+      success('Dependencies installed');
+    } else if (opts.bare) {
+      info('Bare project: no starter source or dependencies were added.');
+      const guide = writeBareGuide(dir);
+      reportSkills(writeInitSkills(dir));
+      if (guide.created.length) success(`Agent workflow guide written (${guide.created.join(', ')})`);
+      if (guide.kept.length) info(`Existing ${guide.kept.join(', ')} kept unchanged.`);
+    } else {
+      info('Existing source preserved; starter files were not added.');
+    }
+    reportPin(dir);
+
+    console.log('');
+    printNext({ stage: 'init', scaffolded: shouldScaffold });
+  } catch (err) {
+    spinner?.fail('Failed to create project');
+    error(err instanceof Error ? err.message : String(err), err);
+    process.exit(1);
+  }
 }
 
 interface FeaturePlan {

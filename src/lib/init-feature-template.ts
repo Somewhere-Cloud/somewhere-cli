@@ -3272,7 +3272,8 @@ function readme(selection: InitSelection): string {
       '- Add to the sign-in page through `AuthCard`\'s `providers` and `children`',
       '  slots, never as a sibling of `.auth` (its grid holds exactly two columns).',
       '- `somewhere verify` screenshots desktop and phone; read its accessibility',
-      '  line. Contrast, overflow and tap targets under 44px are regressions.',
+      '  line. Contrast, overflow and tap targets under 24px (the WCAG 2.2 AA',
+      '  minimum) are regressions; 24 to 44px is listed as a note.',
     );
   }
   lines.push(

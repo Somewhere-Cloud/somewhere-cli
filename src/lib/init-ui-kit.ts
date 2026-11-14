@@ -363,7 +363,7 @@ code, kbd { font-family: var(--font-mono); font-size: 0.9em; }
 .auth__providers { display: grid; gap: var(--space-2); }
 .auth__switch { margin: 0; text-align: center; color: var(--color-muted); font-size: var(--text-sm); }
 .auth__forgot { margin: 0; text-align: right; font-size: var(--text-sm); }
-.auth__forgot a { display: inline-flex; align-items: center; min-height: 44px; }
+.auth__forgot a, .auth__switch a { display: inline-flex; align-items: center; min-height: 44px; }
 .divider { display: flex; align-items: center; gap: var(--space-3); color: var(--color-muted); font-size: var(--text-sm); }
 .divider::before, .divider::after { content: ""; flex: 1; height: 1px; background: var(--color-border); }
 .provider-icon { width: 18px; height: 18px; flex: none; }

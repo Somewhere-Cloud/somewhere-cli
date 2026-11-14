@@ -15,7 +15,8 @@ test('CLI presents preview vocabulary and has no --draft alias', () => {
 
   assert.match(dev, /preview_session_id: draftId/);
   assert.match(dev, /preview_operation_id: firstOperationId/);
-  assert.match(dev, /expected_preview_id: null/);
+  assert.match(dev, /expected_preview_id: expectedPreviewId/);
+  assert.match(dev, /expectedPreviewId = null;/);
   assert.match(dev, /res\.preview_session_id \?\? res\.draft_id/);
   assert.match(dev, /res\.preview_id \?\? res\.candidate_release_id/);
 

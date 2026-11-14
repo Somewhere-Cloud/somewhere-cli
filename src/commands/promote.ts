@@ -27,6 +27,32 @@ import {
   type PublishSurfaceCounts,
 } from '../lib/surface-counts.js';
 import { promotedDataNotes } from '../lib/promote-handoff.js';
+import { saveSourceBase } from '../lib/config.js';
+import { saveBaseFiles } from '../lib/base-files.js';
+import { clearPreviewRecord, loadPreviewRecord } from '../lib/preview-record.js';
+
+/**
+ * After a promote, the folder that made exactly this preview holds what is now
+ * live: record the promoted release as its base and the files it sent as the
+ * base files, so the next preview or deploy needs no pull first and a later
+ * pull tells your edits from live ones. Anything else (another folder's
+ * preview, a newer save than this folder sent, functions production kept)
+ * leaves the base as it was, and the caller says to pull.
+ */
+export function recordPromotedBase(
+  dir: string,
+  projectId: string,
+  promoted: { previewSessionId: string; previewId: string; activeReleaseId: string | undefined; preservedFunctions: string[] },
+): 'moved' | 'not-this-folder' | 'kept-functions' {
+  const record = loadPreviewRecord(dir, projectId);
+  if (!record || record.preview_session_id !== promoted.previewSessionId) return 'not-this-folder';
+  clearPreviewRecord(dir);
+  if (record.preview_id !== promoted.previewId || !promoted.activeReleaseId) return 'not-this-folder';
+  if (promoted.preservedFunctions.length > 0) return 'kept-functions';
+  saveSourceBase(dir, projectId, promoted.activeReleaseId);
+  saveBaseFiles(dir, { project_id: projectId, release_id: promoted.activeReleaseId, files: record.files });
+  return 'moved';
+}
 
 /**
  * Read what production is serving right now.
@@ -222,6 +248,14 @@ export function registerPromote(program: Command) {
             r.version,
           );
         }
+        const baseOutcome = deployStateEntry
+          ? recordPromotedBase(deployStateEntry.dir, deployStateEntry.config.project_id, {
+            previewSessionId: draftId,
+            previewId: candidateReleaseId,
+            activeReleaseId: r.active_release_id ?? r.release_id,
+            preservedFunctions: r.preserved_functions ?? [],
+          })
+          : 'not-this-folder';
         if (opts.json) {
           printJson(r);
           return;
@@ -256,6 +290,13 @@ export function registerPromote(program: Command) {
           // ignore — the promote already succeeded
         }
         if (opts.message) info(dim(`Notes: ${opts.message}`));
+        if (baseOutcome === 'moved') {
+          info(`This folder now starts from v${r.version}: the next \`somewhere preview\` or \`somewhere deploy\` here needs no pull.`);
+        } else if (baseOutcome === 'kept-functions') {
+          info('Production kept functions this folder does not have, so run `somewhere pull` before the next preview or deploy here (it adds them and keeps your edits).');
+        } else if (deployStateEntry) {
+          info('This folder did not send this exact preview, so run `somewhere pull` before the next preview or deploy here (it keeps your edits).');
+        }
       } catch (err) {
         const reference = err instanceof CliApiError ? formatErrorReference(err.meta) : null;
 

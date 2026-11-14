@@ -22,6 +22,8 @@ interface EmailTestInboxMessage {
   created_at: string;
   magic_link: string | null;
   verification_code: string | null;
+  environment: 'production' | 'preview' | null;
+  preview_session_id: string | null;
 }
 
 interface EmailTestInboxResult {
@@ -54,6 +56,9 @@ function parseTestInbox(value: unknown): EmailTestInboxResult {
       created_at: message.created_at,
       magic_link: typeof message.magic_link === 'string' ? message.magic_link : null,
       verification_code: typeof message.verification_code === 'string' ? message.verification_code : null,
+      // Who sent it: the live app or a preview. An older platform does not say.
+      environment: message.environment === 'preview' ? 'preview' as const : message.environment === 'production' ? 'production' as const : null,
+      preview_session_id: typeof message.preview_session_id === 'string' ? message.preview_session_id : null,
     };
   });
   return {
@@ -72,6 +77,8 @@ function printTestInbox(inbox: EmailTestInboxResult): void {
   for (const [index, message] of inbox.messages.entries()) {
     if (index > 0) console.log('');
     console.log(`${message.created_at}  ${message.subject}`);
+    if (message.environment === 'preview') console.log(`sent by: preview ${message.preview_session_id ?? '(unnamed)'}`);
+    else if (message.environment === 'production') console.log('sent by: live app');
     console.log(`id: ${message.id}`);
     console.log(`to: ${message.to}`);
     console.log(`magic_link: ${message.magic_link ?? 'null'}`);
@@ -151,12 +158,18 @@ export function registerEmail(program: Command): void {
     .command('test-inbox <address>')
     .description('Read stored auth messages for a project-owned test address')
     .option('-p, --project <project>', 'Project slug or ID; defaults to the linked project')
+    .option('--preview [preview_session_id]', 'Only messages a preview sent (all previews, or the one named)')
+    .option('--production', 'Only messages the live app sent')
     .option('--json', 'Print the complete response as JSON')
-    .action(async (address: string, opts: { project?: string; json?: boolean }) => {
+    .action(async (address: string, opts: { project?: string; json?: boolean; preview?: string | boolean; production?: boolean }) => {
       try {
+        if (opts.preview !== undefined && opts.production) throw new Error('Pass --preview or --production, not both.');
         const value = await callPlatformTool('email_test_inbox', {
           project_id: resolveProjectRef(opts.project),
           address,
+          ...(opts.production ? { environment: 'production' } : {}),
+          ...(opts.preview === true ? { environment: 'preview' } : {}),
+          ...(typeof opts.preview === 'string' ? { preview_session_id: opts.preview } : {}),
         }, { allTools: true });
         if (opts.json) printJson(value);
         else printTestInbox(parseTestInbox(value));

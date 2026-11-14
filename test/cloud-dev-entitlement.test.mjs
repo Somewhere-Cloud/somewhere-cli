@@ -135,7 +135,7 @@ test('a project that already has a live version publishes nothing', async () => 
   let asked = false;
 
   const resolved = await resolveBaseRelease(args({
-    sourceBase: { releaseId: 'rel_folder' },
+    sourceBase: { releaseId: 'rel_live' },
     readBaseReleaseState: async () => ({ known: true, activeReleaseId: 'rel_live' }),
     publish: spy.publish,
     confirmPublish: async () => {
@@ -145,7 +145,7 @@ test('a project that already has a live version publishes nothing', async () => 
     announce: (m) => announced.push(m),
   }));
 
-  assert.deepEqual(resolved, { baseReleaseId: 'rel_folder', published: false });
+  assert.deepEqual(resolved, { baseReleaseId: 'rel_live', published: false });
   assert.deepEqual(spy.calls, [], 'the recorded folder version is retained');
   assert.deepEqual(announced, [], 'and nothing about publishing is said');
   assert.equal(asked, false, 'nobody is asked to consent to a publish that is not happening');
@@ -157,12 +157,22 @@ test('an unknown entitlement on an already-published project does not block the 
   const spy = publishSpy();
   const resolved = await resolveBaseRelease(args({
     cloudDevAllowed: async () => null,
-    sourceBase: { releaseId: 'rel_folder' },
+    sourceBase: { releaseId: 'rel_live' },
     readBaseReleaseState: async () => ({ known: true, activeReleaseId: 'rel_live' }),
     publish: spy.publish,
   }));
-  assert.equal(resolved.baseReleaseId, 'rel_folder');
+  assert.equal(resolved.baseReleaseId, 'rel_live');
   assert.deepEqual(spy.calls, []);
+});
+
+test('a folder whose recorded version is no longer live is refused before any upload, naming somewhere pull', async () => {
+  const spy = publishSpy();
+  await assert.rejects(resolveBaseRelease(args({
+    sourceBase: { releaseId: 'rel_folder' },
+    readBaseReleaseState: async () => ({ known: true, activeReleaseId: 'rel_live' }),
+    publish: spy.publish,
+  })), (err) => err.code === 'STALE_RELEASE_BASE' && /somewhere pull/.test(err.message) && /Nothing was uploaded/.test(err.message));
+  assert.deepEqual(spy.calls, [], 'nothing is published or substituted');
 });
 
 /* ─── The publish itself requires consent ────────────────────────────────── */

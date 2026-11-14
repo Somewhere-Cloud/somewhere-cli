@@ -19,6 +19,18 @@ import { callPlatformTool } from '../lib/platform-tools.js';
 import { isRecord, unwrapPlatformData } from '../lib/platform-command.js';
 import { countPublishSurface, formatPublishSurface } from '../lib/surface-counts.js';
 import { promoteCommandForShell, promoteCommandLines } from '../lib/promote-handoff.js';
+import { hashFiles } from '../lib/base-files.js';
+import { table } from '../lib/output.js';
+import {
+  clearPreviewRecord,
+  decideContinue,
+  formatDuration,
+  loadPreviewRecord,
+  openPreviewsFromStatus,
+  previewIsStale,
+  savePreviewRecord,
+  type OpenPreview,
+} from '../lib/preview-record.js';
 
 const WATCH_EXTS = /\.(ts|tsx|js|jsx|mjs|html|css|json|svg|md|txt|png|jpe?g|gif|webp|ico|woff2?|ttf|otf)$/i;
 const DEBOUNCE_MS = 500;
@@ -266,14 +278,25 @@ async function readPreviewSessionState(
   previewSessionId: string,
   previewId: string,
 ): Promise<PreviewSessionState> {
+  return (await readPreviewSession(projectId, previewSessionId, previewId)).state;
+}
+
+/** The session's lifecycle state, and whether production has moved past its base. */
+async function readPreviewSession(
+  projectId: string,
+  previewSessionId: string,
+  previewId: string,
+): Promise<{ state: PreviewSessionState; stale: boolean }> {
   try {
-    return previewSessionStateFromDeployment(
-      await callPlatformTool('deploy_status', { project_id: projectId }, { allTools: true }),
-      previewSessionId,
-      previewId,
-    );
+    const status = await callPlatformTool('deploy_status', { project_id: projectId }, { allTools: true });
+    const open = openPreviewsFromStatus(status);
+    const mine = open.previews.find((item) => item.previewSessionId === previewSessionId);
+    return {
+      state: previewSessionStateFromDeployment(status, previewSessionId, previewId),
+      stale: mine ? previewIsStale(mine, open.activeReleaseId) : false,
+    };
   } catch {
-    return 'unknown';
+    return { state: 'unknown', stale: false };
   }
 }
 
@@ -290,8 +313,11 @@ export function registerPreview(program: Command) {
         + 'reachable only by you until you share the link. The build is the one production would get; '
         + 'the database starts as a separate copy of your production data, so nothing you try here can '
         + 'change production rows. Nothing your users see changes — production keeps serving what you last '
-        + 'promoted, until you run `somewhere promote`. Reach for this when you want the real hosted app in '
-        + 'front of you, or when your agent reaches the platform over MCP and cannot serve on localhost. '
+        + 'promoted, until you promote a preview. Reach for this when you want your change running on the platform '
+        + 'against a copy of your data, or when your agent reaches the platform over MCP and cannot serve on localhost. '
+        + 'Not available in a preview yet: signing in, public reads for visitors, sw.groups, server user lookup, '
+        + 'jobs and cron handlers, and running tests (somewhere docs dev-environments lists them). '
+        + 'It continues the preview this folder opened while that is open; --new opens a fresh one. '
         + 'The plans that include it are listed at https://somewhere.cloud/pricing; '
         + '`somewhere dev` provides frontend hot reload against the deployed backend.',
     )
@@ -302,8 +328,129 @@ export function registerPreview(program: Command) {
     )
     .option('--json', 'Print a typed JSON refusal when preview cannot start')
     .option('--once', 'Sync once, print the preview link and promote command, and exit instead of watching')
-    .action(async (opts: { project?: string; publishFirst?: boolean; json?: boolean; once?: boolean }) => {
+    .option('--new', 'Open a fresh preview (a new copy of production data) instead of continuing this folder\'s open one')
+    // `somewhere preview <typo>` used to ignore the word and open a new preview
+    // with a fresh copy of production data; an unknown word is refused instead.
+    .allowExcessArguments(false)
+    .action(async (opts: { project?: string; publishFirst?: boolean; json?: boolean; once?: boolean; new?: boolean }) => {
       await runHotDeploy(opts);
+    });
+
+  preview
+    .command('list')
+    .description('List open previews with their age and when they close; each holds a copy of production data until promoted, closed or expired')
+    .option('--project <id>', 'Override project ID')
+    .option('--json', 'Print the previews as JSON')
+    .action(async (_opts: unknown, cmd: Command) => {
+      // `preview` defines --project and --json too and would take them; read both levels.
+      const opts = cmd.optsWithGlobals() as { project?: string; json?: boolean };
+      try {
+        const projectId = opts.project ?? loadProjectConfig()?.project_id;
+        if (!projectId) throw new Error('No project linked. Run `somewhere init` or pass --project <id>.');
+        const { activeReleaseId, previews } = openPreviewsFromStatus(
+          await callPlatformTool('deploy_status', { project_id: projectId }, { allTools: true }),
+        );
+        const mine = loadPreviewRecord(process.cwd(), projectId)?.preview_session_id ?? null;
+        const now = Date.now();
+        const rows = previews.map((item) => ({
+          preview_session_id: item.previewSessionId,
+          preview_id: item.previewId,
+          created_at: item.createdAt,
+          last_updated_at: item.lastUpdatedAt,
+          expires_at: item.expiresAt,
+          age_seconds: item.createdAt ? Math.round((now - Date.parse(item.createdAt)) / 1000) : null,
+          expires_in_seconds: item.expiresAt ? Math.round((Date.parse(item.expiresAt) - now) / 1000) : null,
+          promotable: !previewIsStale(item, activeReleaseId),
+          this_folder: item.previewSessionId === mine,
+        }));
+        if (opts.json) {
+          printJson({ project_id: projectId, active_release_id: activeReleaseId, previews: rows });
+          return;
+        }
+        if (rows.length === 0) {
+          console.log('No open previews. Start one with: somewhere preview');
+          return;
+        }
+        table(['Preview session', 'Preview id', 'Opened', 'Last saved', 'Closes in', 'Promotable', 'Folder'], rows.map((row) => [
+          row.preview_session_id,
+          row.preview_id,
+          row.age_seconds === null ? '—' : `${formatDuration(row.age_seconds * 1000)} ago`,
+          row.last_updated_at ? `${formatDuration(now - Date.parse(row.last_updated_at))} ago` : '—',
+          row.expires_in_seconds === null ? '—' : formatDuration(row.expires_in_seconds * 1000),
+          row.promotable ? 'yes' : 'no: production changed',
+          row.this_folder ? 'this folder' : '',
+        ]));
+        console.log(dim('Each open preview holds a copy of production data until it is promoted, closed, or unused for 24 h (7 days at most).'));
+        console.log(dim('Close one: somewhere preview close <preview_session_id>. Promote one: somewhere promote <preview_session_id> <preview_id>.'));
+      } catch (err) {
+        if (opts.json) printJsonError(typedErrorCode(err) ?? 'PREVIEW_LIST_FAILED', err instanceof Error ? err.message : String(err));
+        else error(err instanceof Error ? err.message : String(err), err);
+        process.exitCode = 1;
+      }
+    });
+
+  preview
+    .command('close [preview_session_id]')
+    .description('Close a preview and delete its copy of production data and files (default: this folder\'s open preview)')
+    .option('--project <id>', 'Override project ID')
+    .option('--all', 'Close every open preview of the project')
+    .option('--json', 'Print the result as JSON')
+    .action(async (previewSessionId: string | undefined, _opts: unknown, cmd: Command) => {
+      const opts = cmd.optsWithGlobals() as { project?: string; all?: boolean; json?: boolean };
+      try {
+        const projectId = opts.project ?? loadProjectConfig()?.project_id;
+        if (!projectId) throw new Error('No project linked. Run `somewhere init` or pass --project <id>.');
+        if (opts.all && previewSessionId) throw new Error('Pass a preview_session_id or --all, not both.');
+        const { previews } = openPreviewsFromStatus(
+          await callPlatformTool('deploy_status', { project_id: projectId }, { allTools: true }),
+        );
+        const recorded = loadPreviewRecord(process.cwd(), projectId);
+        let targets: string[];
+        if (opts.all) targets = previews.map((item) => item.previewSessionId);
+        else if (previewSessionId) targets = [previewSessionId];
+        else if (recorded && previews.some((item) => item.previewSessionId === recorded.preview_session_id)) targets = [recorded.preview_session_id];
+        else if (previews.length === 1) targets = [previews[0].previewSessionId];
+        else if (previews.length === 0) throw new Error('No open preview for this project; nothing was closed.');
+        else throw new Error(`${previews.length} previews are open and this folder has none of its own; name one, or pass --all: ${previews.map((item) => item.previewSessionId).join(', ')}. Nothing was closed.`);
+        if (targets.length === 0) {
+          if (opts.json) printJson({ project_id: projectId, closed: [] });
+          else console.log('No open previews; nothing was closed.');
+          return;
+        }
+        const client = new ApiClient(getToken());
+        const results: Array<{ preview_session_id: string; status: string; data_deleted: boolean }> = [];
+        let failed = false;
+        for (const id of targets) {
+          try {
+            const res = await client.call<{ status?: string; cleanup_complete?: boolean }>(
+              'POST', '/deploy/preview/close', { project_id: projectId, preview_session_id: id },
+            );
+            const deleted = res?.cleanup_complete === true;
+            results.push({ preview_session_id: id, status: res?.status ?? 'closed', data_deleted: deleted });
+            if (recorded?.preview_session_id === id) clearPreviewRecord(process.cwd());
+            if (opts.json) continue;
+            if (deleted) success(`Closed preview ${id}. Its copy of the production data and files was deleted.`);
+            else {
+              failed = true;
+              warn(`Closed preview ${id}, but deleting its copy of the production data has not finished. Run the same close again to finish it: somewhere preview close ${id}`);
+            }
+          } catch (err) {
+            failed = true;
+            const code = typedErrorCode(err);
+            results.push({ preview_session_id: id, status: code ?? 'error', data_deleted: false });
+            if (!opts.json) {
+              error(`Preview ${id} was not closed: ${err instanceof Error ? err.message : String(err)}`, err);
+              if (code === 'DRAFT_NOT_FOUND') info('`somewhere preview list` shows the open previews.');
+            }
+          }
+        }
+        if (opts.json) printJson({ project_id: projectId, closed: results });
+        if (failed) process.exitCode = 1;
+      } catch (err) {
+        if (opts.json) printJsonError(typedErrorCode(err) ?? 'PREVIEW_CLOSE_FAILED', err instanceof Error ? err.message : String(err));
+        else error(err instanceof Error ? err.message : String(err), err);
+        process.exitCode = 1;
+      }
     });
 
   preview
@@ -312,14 +459,18 @@ export function registerPreview(program: Command) {
     .option('--project <id>', 'Override project ID')
     .option('--preview-session <id>', 'Which preview, when more than one is open (its preview_session_id)')
     .option('--json', 'Print { url, preview_session_id, preview_id } as JSON')
-    .action(async (opts: { project?: string; previewSession?: string; json?: boolean }) => {
+    .action(async (_opts: unknown, cmd: Command) => {
+      // `preview` also defines --project and --json, and Commander gives them to
+      // the parent; optsWithGlobals reads them wherever they were parsed.
+      const opts = cmd.optsWithGlobals() as { project?: string; previewSession?: string; json?: boolean };
       try {
         const projectId = opts.project ?? loadProjectConfig()?.project_id;
         if (!projectId) throw new Error('No project linked. Run `somewhere init` or pass --project <id>.');
-        const candidate = choosePreviewCandidate(
-          await callPlatformTool('deploy_status', { project_id: projectId }, { allTools: true }),
-          opts.previewSession,
-        );
+        const status = await callPlatformTool('deploy_status', { project_id: projectId }, { allTools: true });
+        // Without a choice, this folder's own open preview is the one meant.
+        const folderPreview = loadPreviewRecord(process.cwd(), projectId)?.preview_session_id;
+        const folderOpen = folderPreview && openPreviewsFromStatus(status).previews.some((item) => item.previewSessionId === folderPreview);
+        const candidate = choosePreviewCandidate(status, opts.previewSession ?? (folderOpen ? folderPreview : undefined));
         const handoff = await mintPreviewHandoff(
           new ApiClient(getToken()), projectId, candidate.draftId, candidate.candidateReleaseId,
         );
@@ -335,7 +486,8 @@ export function registerPreview(program: Command) {
         printPreviewHandoff(handoff);
         console.log(dim('   This link works once; run `somewhere preview link` again for another.'));
       } catch (err) {
-        error(err instanceof Error ? err.message : String(err), err);
+        if (opts.json) printJsonError(typedErrorCode(err) ?? 'PREVIEW_LINK_FAILED', err instanceof Error ? err.message : String(err));
+        else error(err instanceof Error ? err.message : String(err), err);
         process.exitCode = 1;
       }
     });
@@ -348,16 +500,8 @@ export function choosePreviewCandidate(
   status: unknown,
   previewSessionId?: string,
 ): { draftId: string; candidateReleaseId: string } {
-  const deployment = unwrapPlatformData(status);
-  const open = (isRecord(deployment) && Array.isArray(deployment.preview_candidates)
-    ? deployment.preview_candidates.filter(isRecord)
-    : []).flatMap((item) => {
-    const draftId = typeof item.preview_session_id === 'string' ? item.preview_session_id : item.draft_id;
-    const candidateReleaseId = typeof item.preview_id === 'string' ? item.preview_id : item.candidate_release_id;
-    return typeof draftId === 'string' && typeof candidateReleaseId === 'string'
-      ? [{ draftId, candidateReleaseId }]
-      : [];
-  });
+  const open = openPreviewsFromStatus(status).previews
+    .map((item) => ({ draftId: item.previewSessionId, candidateReleaseId: item.previewId }));
   if (previewSessionId) {
     const match = open.find((item) => item.draftId === previewSessionId);
     if (!match) throw new Error(`No open preview has preview_session_id ${previewSessionId}. Open previews: ${open.map((item) => item.draftId).join(', ') || 'none'}.`);
@@ -571,6 +715,19 @@ export class SourceBaseRequiredError extends Error {
   }
 }
 
+/** The folder's source was read from a production version that is no longer
+ *  live. The platform refuses that snapshot (STALE_RELEASE_BASE) only after
+ *  uploading and building it; the folder already knows, so say it first. */
+export class SourceBaseStaleError extends Error {
+  readonly code = 'STALE_RELEASE_BASE';
+  constructor(readonly baseReleaseId: string, readonly activeReleaseId: string) {
+    super('Production changed since this folder was last pulled or deployed, so a new preview cannot start from it. '
+      + 'Nothing was uploaded. Next: run `somewhere pull` (it keeps your edits and stops if a file changed both here '
+      + 'and live), then `somewhere preview` again.');
+    this.name = 'SourceBaseStaleError';
+  }
+}
+
 export class FirstPublishReleaseUnknownError extends Error {
   readonly code = 'PUBLISHED_RELEASE_UNKNOWN';
   constructor() {
@@ -595,6 +752,9 @@ export async function resolveBaseRelease(args: {
   if (!state.known) throw new BaseReleaseUnknownError(state.reason, state.code);
   if (!args.sourceBase) throw new SourceBaseRequiredError();
   if (args.sourceBase.releaseId) {
+    if (state.activeReleaseId && args.sourceBase.releaseId !== state.activeReleaseId) {
+      throw new SourceBaseStaleError(args.sourceBase.releaseId, state.activeReleaseId);
+    }
     return { baseReleaseId: args.sourceBase.releaseId, published: false };
   }
   if (state.activeReleaseId) throw new SourceBaseRequiredError();
@@ -637,7 +797,7 @@ export async function readPublishConsent(publishFirst: boolean): Promise<Publish
   return ok === true ? 'granted' : 'declined';
 }
 
-async function runHotDeploy(opts: { project?: string; publishFirst?: boolean; json?: boolean; once?: boolean }) {
+async function runHotDeploy(opts: { project?: string; publishFirst?: boolean; json?: boolean; once?: boolean; new?: boolean }) {
   const token = getToken();
   const client = new ApiClient(token);
   const cwd = process.cwd();
@@ -670,18 +830,59 @@ async function runHotDeploy(opts: { project?: string; publishFirst?: boolean; js
   await showProjectNotices(client, projectId);
 
   const { files, binaryFiles, functions } = collected;
-  const draftId = `draft_${randomUUID()}`;
   const firstOperationId = `previewop_${randomUUID()}`;
   const showPublishProgress = opts.publishFirst === true && opts.json !== true;
   const phase = <T>(label: string, operation: () => Promise<T>): Promise<T> =>
     showPublishProgress ? runPreviewPhase(label, operation) : operation();
+  const say = opts.json ? () => {} : info;
+
+  // One preview per folder: continue the one this folder opened while it is
+  // open and still promotable, instead of copying production again.
+  const recorded = loadPreviewRecord(cwd, projectId);
+  let openNow: { activeReleaseId: string | null; previews: OpenPreview[] } = { activeReleaseId: null, previews: [] };
+  if (recorded || !opts.new) {
+    try {
+      openNow = openPreviewsFromStatus(await callPlatformTool('deploy_status', { project_id: projectId }, { allTools: true }));
+    } catch {
+      // Unreadable: a new preview is opened below, and its own checks refuse loudly.
+    }
+  }
+  const decision = decideContinue({
+    recorded, open: openNow.previews, activeReleaseId: openNow.activeReleaseId, forceNew: opts.new === true,
+  });
+  let draftId: string;
+  let expectedPreviewId: string | null;
+  if (decision.action === 'continue') {
+    draftId = decision.preview.previewSessionId;
+    expectedPreviewId = decision.preview.previewId;
+    const when: string[] = [];
+    if (decision.preview.createdAt) when.push(`opened ${formatDuration(Date.now() - Date.parse(decision.preview.createdAt))} ago`);
+    if (decision.preview.expiresAt) when.push(`closes in ${formatDuration(Date.parse(decision.preview.expiresAt) - Date.now())} if unused`);
+    say(`Continuing this folder's preview ${draftId}${when.length ? ` (${when.join(', ')})` : ''}.`);
+    say('Pass --new to open a fresh preview with a new copy of production data instead.');
+  } else {
+    draftId = `draft_${randomUUID()}`;
+    expectedPreviewId = null;
+    if (decision.reason === 'stale') {
+      if (!opts.json) {
+        warn(`This folder's preview ${decision.recorded.preview_session_id} was opened from an older production version, so it can no longer be promoted. Opening a new one.`);
+        info(`It still holds a copy of production data until it expires; close it with: somewhere preview close ${decision.recorded.preview_session_id}`);
+      }
+    } else if (decision.reason === 'not-open') {
+      say(`This folder's last preview ${decision.recorded.preview_session_id} is no longer open; opening a new one.`);
+      clearPreviewRecord(cwd);
+    } else if (decision.reason === 'none-recorded' && openNow.previews.length > 0) {
+      say(`${openNow.previews.length} other preview${openNow.previews.length === 1 ? ' is' : 's are'} open for this project (somewhere preview list). Opening a new one for this folder.`);
+    }
+  }
 
   // The first preview snapshot must name the production release it was read
   // from (base_release_id) — the platform binds the preview to that exact
   // source release. Everything about how that id is obtained, including
-  // the refusal to invent one, lives in resolveBaseRelease.
-  let baseReleaseId: string;
-  try {
+  // the refusal to invent one, lives in resolveBaseRelease. A continued
+  // preview already has its base.
+  let baseReleaseId: string | null = null;
+  if (expectedPreviewId === null) try {
     const resolved = await resolveBaseRelease({
       sourceBase: readSourceBase(loadProjectConfig(cwd), projectId),
       cloudDevAllowed: () => phase('Checking preview access', () => readCloudDevAllowed(projectId)),
@@ -711,7 +912,8 @@ async function runHotDeploy(opts: { project?: string; publishFirst?: boolean; js
   } catch (err) {
     // A completed publish with an unnamed release needs truthful recovery copy;
     // refusal paths below must not claim that anything was published.
-    if (err instanceof SourceBaseRequiredError || err instanceof FirstPublishReleaseUnknownError) {
+    if (err instanceof SourceBaseRequiredError || err instanceof FirstPublishReleaseUnknownError
+        || err instanceof SourceBaseStaleError) {
       if (opts.json) printJsonError(err.code, err.message);
       else error(err.message);
       process.exit(1);
@@ -787,8 +989,8 @@ async function runHotDeploy(opts: { project?: string; publishFirst?: boolean; js
       preview: true,
       preview_session_id: draftId,
       preview_operation_id: firstOperationId,
-      expected_preview_id: null,
-      base_release_id: baseReleaseId,
+      expected_preview_id: expectedPreviewId,
+      ...(baseReleaseId !== null ? { base_release_id: baseReleaseId } : {}),
     };
     const res = await phase('Syncing the first private preview', () =>
       callDraftCandidate<DeployResult>(client, '/deploy', body, (retryError) => {
@@ -806,6 +1008,14 @@ async function runHotDeploy(opts: { project?: string; publishFirst?: boolean; js
     // two lines above and break the moment the platform returns only the
     // canonical preview_id.
     candidateReleaseId = returnedPreviewId;
+    // This folder's preview, with its files exactly as sent: the next
+    // `somewhere preview` continues it, and promoting it moves the folder's base.
+    savePreviewRecord(cwd, {
+      project_id: projectId,
+      preview_session_id: draftId,
+      preview_id: candidateReleaseId,
+      files: hashFiles(cwd, collected.published),
+    });
     // Keep the printed capability usable: auto-open consumes a one-time token,
     // so mint a separate token for the browser before minting the handoff shown
     // in the terminal.
@@ -822,11 +1032,18 @@ async function runHotDeploy(opts: { project?: string; publishFirst?: boolean; js
     // number and then a later line counted it separately, so one project
     // reported three different sizes of itself.
     success(`Synced ${formatPublishSurface(countPublishSurface({ files, binaryFiles, functions }))} to preview`);
+    if (expectedPreviewId === null) say(`Opened preview ${draftId} for this folder; \`somewhere preview\` continues it until it is promoted, closed or expires.`);
     if (res.warnings?.length) for (const w of res.warnings) warn(w);
   } catch (err) {
     spinner?.fail('Initial sync failed');
     if (!(isBuildError(err) && renderBuildError(err, cwd))) {
       error(err instanceof Error ? err.message : String(err), err);
+    }
+    const code = typedErrorCode(err);
+    if (code === 'STALE_RELEASE_BASE') {
+      info('Next: run `somewhere pull` (it keeps your edits), then `somewhere preview` again.');
+    } else if (expectedPreviewId !== null && code && ['DRAFT_SESSION_TERMINAL', 'DRAFT_CANDIDATE_CONFLICT', 'DRAFT_VERSION_MISMATCH', 'DRAFT_NOT_FOUND'].includes(code)) {
+      info(`Preview ${draftId} cannot take this save. Next: \`somewhere preview --new\` opens a fresh preview.`);
     }
     process.exit(1);
   }
@@ -970,11 +1187,18 @@ async function runHotDeploy(opts: { project?: string; publishFirst?: boolean; js
 
   watcher.on('add', onChange).on('change', onChange).on('unlink', onUnlink);
 
+  let staleWarned = false;
   const pollSession = async () => {
     if (previewEnded || deploying || pollingSession) return;
     pollingSession = true;
     try {
-      const state = await readPreviewSessionState(projectId!, draftId, candidateReleaseId!);
+      const { state, stale } = await readPreviewSession(projectId!, draftId, candidateReleaseId!);
+      if (stale && !staleWarned) {
+        staleWarned = true;
+        console.log('');
+        warn('Production changed since this preview opened (a deploy, promote or rollback), so this preview can no longer be promoted. Saves still update it for review.');
+        info(`To ship these edits: stop here (Ctrl-C), run ${teal('somewhere pull')} (it keeps your edits), then ${teal('somewhere preview')}; it opens a fresh preview. Close this one with ${teal(`somewhere preview close ${draftId}`)}.`);
+      }
       if (state === 'active') {
         observedSessionActive = true;
         return;
@@ -1106,6 +1330,14 @@ async function deployBatch(
       for (const w of r.warnings) warn(w);
     } else {
       console.log(`${dim(stamp())} ${label} ${green('✓ preview')} ${dim(`(${secs}s)`)}`);
+    }
+    // Keep this folder's record equal to what the preview now holds.
+    const record = loadPreviewRecord(cwd, projectId);
+    if (record && record.preview_session_id === draftId) {
+      const nextFiles = { ...record.files };
+      for (const rel of deleted) delete nextFiles[rel];
+      for (const rel of changed) if (existsSync(join(cwd, rel))) Object.assign(nextFiles, hashFiles(cwd, [rel]));
+      savePreviewRecord(cwd, { ...record, preview_id: nextCandidate, files: nextFiles });
     }
     try {
       const handoff = await mintPreviewHandoff(client, projectId, draftId, nextCandidate);

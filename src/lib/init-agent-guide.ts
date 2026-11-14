@@ -189,5 +189,9 @@ export const PORTABILITY_POINTER = 'Data/code export limits: `somewhere docs por
 /** One line: using the app from Claude as its signed-in user (MCP tools). */
 export const MCP_POINTER = 'Use this app from Claude as its signed-in user (MCP tools): `somewhere docs sw.endpoint --section mcp-tools-for-claude`.';
 
-export const INIT_AGENTS_MD = `# somewhere.cloud project contract\n${AGENT_WORKFLOW}\n${SKILLS_POINTER}\n${PORTABILITY_POINTER}\n${MCP_POINTER}\n`;
+/** One line on what a preview cannot do today, so no agent learns it by failing.
+ *  Rewrite it when previews gain these (the full list: docs dev-environments). */
+export const PREVIEW_POINTER = 'somewhere preview runs your change on a copy of production data, but sign-in, public reads for visitors, sw.groups, server user lookup, jobs/cron handlers and somewhere test do not work in a preview yet: check those in production after promoting (`somewhere docs dev-environments`).';
+
+export const INIT_AGENTS_MD = `# somewhere.cloud project contract\n${AGENT_WORKFLOW}\n${SKILLS_POINTER}\n${PORTABILITY_POINTER}\n${MCP_POINTER}\n${PREVIEW_POINTER}\n`;
 export const INIT_CLAUDE_MD = 'Read AGENTS.md for project instructions.\n';

@@ -1528,6 +1528,13 @@ export function registerDeploy(program: Command) {
         if (result.runtime_fixes && result.runtime_fixes.length > 0) {
           for (const fix of result.runtime_fixes) success(fix.message);
         }
+        // The platform names the open previews this release made unpromotable.
+        const listed: unknown = (result as unknown as { unpromotable_previews?: unknown }).unpromotable_previews;
+        const unpromotable = Array.isArray(listed) ? listed.filter((id): id is string => typeof id === 'string') : [];
+        if (unpromotable.length > 0) {
+          warn(`${unpromotable.length} open preview${unpromotable.length === 1 ? ' was' : 's were'} opened from the previous production version and can no longer be promoted: ${unpromotable.join(', ')}.`);
+          info('To ship a change from one: run `somewhere preview` here (it opens a fresh preview from this release), and close the old ones with `somewhere preview close <preview_session_id>` (`somewhere preview list` shows them).');
+        }
 
         if (tempSession) {
           // Every anonymous deploy ends with stable, machine-scannable labels.

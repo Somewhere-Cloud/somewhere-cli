@@ -23,7 +23,7 @@ const { createGreenTemplate } =
   await import(`${moduleRoot}/lib/init-green-template.${process.env.SOMEWHERE_TEST_SOURCE ? 'ts' : 'js'}`);
 const { createFeatureTemplate } =
   await import(`${moduleRoot}/lib/init-feature-template.${process.env.SOMEWHERE_TEST_SOURCE ? 'ts' : 'js'}`);
-const { AGENT_WORKFLOW, MCP_POINTER, PORTABILITY_POINTER, SKILLS_POINTER } =
+const { AGENT_WORKFLOW, MCP_POINTER, PORTABILITY_POINTER, PREVIEW_POINTER, SKILLS_POINTER } =
   await import(`${moduleRoot}/lib/init-agent-guide.${process.env.SOMEWHERE_TEST_SOURCE ? 'ts' : 'js'}`);
 const { createHappyPathTemplate } =
   await import(`${moduleRoot}/lib/init-template.${process.env.SOMEWHERE_TEST_SOURCE ? 'ts' : 'js'}`);
@@ -150,7 +150,7 @@ test('minimal starter is a small typed frontend, function, and schema', () => {
 
   const agents = readFileSync(join(dir, 'AGENTS.md'), 'utf8');
   const claude = readFileSync(join(dir, 'CLAUDE.md'), 'utf8');
-  assert.equal(agents, `# somewhere.cloud project contract\n${AGENT_WORKFLOW}\n${SKILLS_POINTER}\n${PORTABILITY_POINTER}\n${MCP_POINTER}\n`);
+  assert.equal(agents, `# somewhere.cloud project contract\n${AGENT_WORKFLOW}\n${SKILLS_POINTER}\n${PORTABILITY_POINTER}\n${MCP_POINTER}\n${PREVIEW_POINTER}\n`);
   assert.match(agents.slice(0, 250), /Enough to start a typical app/);
   assert.match(agents, /Teams are built-in groups/);
   assert.equal(claude, 'Read AGENTS.md for project instructions.\n');

@@ -236,3 +236,18 @@ test('cron runs --help explains triggers, UTC times and the overdue state', asyn
   assert.match(out.stdout, /overdue/);
   assert.doesNotMatch(out.stdout, /dispatched/);
 });
+
+test('cron runs labels where each run ran, so a preview run never reads as a production failure', async () => {
+  const home = credentialHome('sw-cron-runs-env-home-');
+  const calls = [];
+  const preview = { ...manualJob, job_id: 'job_preview', environment: 'preview', preview_session_id: 'draft_abc', preview_id: 'rel_p' };
+  const live = { ...scheduledJob, environment: 'production' };
+  await withFixture(fixture(cronRow(), [live, preview], calls), async (url) => {
+    const out = await run(['cron', 'runs', 'digest'], { HOME: home, USERPROFILE: home, SOMEWHERE_MCP_URL: url }, linkedDir());
+    assert.equal(out.status, 0, out.stderr);
+    assert.match(out.stdout, /RAN IN/i);
+    const line = (id) => out.stdout.split('\n').find((l) => l.includes(id)) ?? '';
+    assert.match(line('job_preview'), /job_preview\s+preview draft_abc\s+manual\s+—\s+failed/);
+    assert.match(line('job_sched'), /job_sched\s+production\s+scheduled/);
+  });
+});

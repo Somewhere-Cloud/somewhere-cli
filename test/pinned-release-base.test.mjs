@@ -18,7 +18,8 @@ test('CLI never substitutes the current release into an unanchored request', () 
   assert.match(devSource, /callDraftCandidate<DeployResult>\(client, '\/deploy', body(?:,|\))/);
   assert.match(devSource, /callDraftCandidate<PatchResult>\(client, '\/deploy\/patch', body\)/);
   assert.match(devSource, /preview_operation_id: firstOperationId/);
-  assert.match(devSource, /expected_preview_id: null/);
+  assert.match(devSource, /expected_preview_id: expectedPreviewId/);
+  assert.match(devSource, /expectedPreviewId = null;/, 'a new preview session starts with no expected preview');
   assert.match(devSource, /expected_preview_id: expectedCandidateReleaseId/);
   // The preview retains the folder's recorded base even if live has moved.
   assert.match(devSource, /sourceBase: readSourceBase\(loadProjectConfig\(cwd\), projectId\)/);

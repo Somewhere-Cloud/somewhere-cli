@@ -626,8 +626,12 @@ export function registerCron(program: Command): void {
           console.log(dim('No runs yet.'));
           return;
         }
-        table(['Job', 'Trigger', 'Scheduled for', 'Status', 'Started', 'Finished', 'Result'], jobs.map((job) => [
+        // A preview's run is labelled as one: it never reads as a production failure.
+        table(['Job', 'Ran in', 'Trigger', 'Scheduled for', 'Status', 'Started', 'Finished', 'Result'], jobs.map((job) => [
           typeof job.job_id === 'string' ? job.job_id : '—',
+          job.environment === 'preview'
+            ? `preview ${typeof job.preview_session_id === 'string' ? job.preview_session_id : ''}`.trim()
+            : job.environment === 'production' ? 'production' : '—',
           typeof job.trigger === 'string' ? job.trigger : '—',
           isoSeconds(job.cron_scheduled_at),
           typeof job.status === 'string' ? job.status : '—',

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.38.91
+
+- Release notes say when the bundled agent skills change.
+- The agent skills somewhere init writes match the platform's current pack.
+
 ## 0.38.90
 
 - Starter links on the reset pages are 44 px tap targets, and the guide states the 24 px tap-target minimum.

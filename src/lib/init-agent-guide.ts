@@ -139,25 +139,16 @@ headers: { 'content-type': 'application/json' }, body: JSON.stringify(values) })
 Access cookies refresh automatically. Cookie-auth POST/PATCH/DELETE from scripts
 need Origin equal to the app URL.
 
-Publish: npx @somewhere-cloud/cli deploy, then somewhere test for the rules you changed.
-One somewhere test run drives the UI and calls the API: signUp(page) uses your sign-up form
-(then signOut, signIn with its password, verify with the emailed code), newUser() acts as
-several people, and ready(page, 'signed-in' | 'signed-out') waits for the session check.
-You do not need a separate browser script.
-Start from the starter's tests/account, phone and access specs: one journey per test, its own people.
-One somewhere test runs every spec, old and new together; somewhere deploy --test deploys, then runs them once.
-After fixing a test, run only what is owed: somewhere test --failed (results that still hold are kept).
-Do not rerun a suite that is already green on this release.
+Test with an ordinary Playwright script: the journeys you changed and your access boundaries.
+Run it only after a successful deploy: npx @somewhere-cloud/cli deploy && node tests/app-check.mjs
+(the starter's short example; one result file, and the exit code is the verdict). Rerun only to answer a question.
+Helpers from @somewhere-cloud/cli/script (import or require): openAppTest() then app.signUp/signIn/signOut(page)
+through your form, app.data(page, { table, operation, id, values, where }) as that person,
+app.expectRefused(page, request, { allowed: ownerPage }), captureResponses, dataReady, launchOptions.
+A rebuilt sign-in form keeps data-sw-auth="email", "password", "sign-up", "sign-in" on its controls,
+or pass app.signUp(page, { form: { email, password, signUp, signIn } }) with your own selectors.
 Deploy raw source, no frontend build; type errors stop upload.
-newUser() gives a signed-in page/API client; make people at once: await Promise.all([newUser(), newUser()]).
-newUser({ role: 'staff' }) holds a role declared in appRoles, granted with your developer key;
-it tests what staff may do, not how someone becomes staff.
-newUser() takes no chosen email. Test users are verified and visible to this project's server user lookup.
-Email-domain role: signUp(page, { domain: 'staff.example' }), then verify(page, person); newPage() for a second person.
-Refusals: await expectRefused(person, 'notes', { operation: 'update', id, values }, { allowed: owner }) or
-expectRefused(person, 'POST /api/x', body, { allowed }). allowed is someone the same request succeeds for;
-an empty list, a null get or a 404 counts as refused only then. person/allowed: page, newUser() or anonymous.
-somewhere test --phone runs every test again at 390x844.
+Email-domain role: app.signUp(page, { domain: 'staff.example' }), then app.verify(page, person).
 The complete team spec, with removal and leaving: somewhere docs sw.groups --section team-example.
 Diagnose with somewhere errors and somewhere logs.
 

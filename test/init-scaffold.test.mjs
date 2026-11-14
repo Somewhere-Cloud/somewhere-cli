@@ -109,9 +109,6 @@ test('minimal starter is a small typed frontend, function, and schema', () => {
     'src/main.tsx',
     'src/services/greeting.ts',
     'src/styles.css',
-    'tests/access.spec.ts',
-    'tests/account.spec.ts',
-    'tests/phone.spec.ts',
     'tsconfig.json',
     'types/app.ts',
     'types/assets.d.ts',
@@ -125,7 +122,6 @@ test('minimal starter is a small typed frontend, function, and schema', () => {
   });
   assert.deepEqual(pkg.devDependencies, {
     // The starter records the CLI that wrote it.
-    '@playwright/test': '1.65.0',
     '@somewhere-cloud/cli': CLI_PACKAGE_VERSION,
     '@types/react': '19.2.2',
     '@types/react-dom': '19.2.2',
@@ -250,20 +246,16 @@ test('default starter is the auth module: SDK client, packaged handler, hooks, r
   assert.ok(result.created.includes('src/auth/hooks.ts'));
   assert.ok(result.created.includes('src/ui/AuthCard.tsx'));
   assert.ok(!result.created.includes('db/schema.ts'), 'private data is opt-in');
-  const appTests = readFileSync(join(dir, 'tests/account.spec.ts'), 'utf8');
-  assert.match(appTests, /await signUp\(page\)[\s\S]*await signOut\(page\)[\s\S]*await signIn\(page, person\)/, 'the first journey signs up through the real form');
-  assert.match(readFileSync(join(dir, 'tests/phone.spec.ts'), 'utf8'), /viewport: \{ width: 390, height: 844 \}/);
-  const access = readFileSync(join(dir, 'tests/access.spec.ts'), 'utf8');
-  assert.doesNotMatch(access, /'notes'/, 'default tests must not refer to an absent table');
-  assert.match(access, /test\.skip\(!OWNED\.table/, 'the two-person journey waits to be filled in');
-  assert.match(access, /test\.skip\(!ROLE\.role/, 'the role journey waits to be filled in');
-  assert.match(access, /Promise\.all\(\[newUser\(\), newUser\(\)\]\)/, 'people are made at the same time');
-  assert.match(access, /newUser\(\{ role: ROLE\.role \}\)/);
-  assert.doesNotMatch(access + appTests, /waitForTimeout|setTimeout/, 'journeys wait on events, never sleeps');
-  // The hooks signUp/signIn/signOut drive, on the starter's own form, code step and sign-out button.
+  // One ordinary example script, not a suite `somewhere test` would discover.
+  assert.deepEqual(result.created.filter(path => path.startsWith('tests/')), ['tests/app-check.mjs']);
+  const script = readFileSync(join(dir, 'tests/app-check.mjs'), 'utf8');
+  assert.match(script, /await app\.signUp\(page\)[\s\S]*await app\.signOut\(ana\.page\)[\s\S]*await app\.signIn\(ana\.page, ana\.account\)/, 'signs up through the real form');
+  assert.doesNotMatch(script, /'notes'/, 'the default script must not refer to an absent table');
+  // The hooks signUp/signIn/signOut find, by action: the submit names what it does.
   const authCard = readFileSync(join(dir, 'src/ui/AuthCard.tsx'), 'utf8');
-  for (const hook of ['form', 'email', 'password', 'submit', 'mode', 'error']) assert.match(authCard, new RegExp(`data-sw-auth="${hook}"`), hook);
-  assert.match(authCard, /data-sw-auth-mode=\{form\.mode\}/);
+  for (const hook of ['email', 'password', 'mode', 'error']) assert.match(authCard, new RegExp(`data-sw-auth="${hook}"`), hook);
+  assert.match(authCard, /data-sw-auth=\{form\.mode === 'sign-up' \? 'sign-up' : 'sign-in'\}/);
+  assert.doesNotMatch(authCard, /data-sw-auth="submit"/);
   for (const hook of ['mfa-code', 'mfa-submit']) assert.match(readFileSync(join(dir, 'src/ui/MfaStep.tsx'), 'utf8'), new RegExp(`data-sw-auth="${hook}"`), hook);
   assert.match(readFileSync(join(dir, 'src/ui/AppShell.tsx'), 'utf8'), /data-sw-auth="sign-out"/);
   // The auth route is ONE line: the SDK's maintained handler, no pasted logic.
@@ -475,7 +467,8 @@ test('one generated template consumes the SDK auth adapter and server data/files
   }
 
   const guide = readFileSync(join(dir, 'AGENTS.md'), 'utf8');
-  assert.match(guide, /npx @somewhere-cloud\/cli deploy, then somewhere test/);
+  assert.match(guide, /npx @somewhere-cloud\/cli deploy && node tests\/app-check\.mjs/);
+  assert.doesNotMatch(guide, /You do not need a separate browser script/);
   assert.doesNotMatch(guide, /allow-type-errors|somewhere verify/);
   assert.match(guide, /Deploy raw source/);
   assert.doesNotMatch(guide, /worker\/src\/runtime\/auth\.ts/);

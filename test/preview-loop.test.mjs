@@ -286,3 +286,16 @@ test('promote of a preview this folder did not make, or with kept functions, lea
     await platform.close();
   }
 });
+
+test('an unknown word after preview is refused, never a new preview', async () => {
+  const platform = await fakePlatform();
+  const { home, dir } = folder();
+  try {
+    const result = await run(['preview', 'lsit'], dir, platform.env(home));
+    assert.notEqual(result.status, 0);
+    assert.match(result.all, /too many arguments|unknown command/i);
+    assert.equal(previewDeploys(platform.state).length, 0, 'nothing uploaded, no copy of production made');
+  } finally {
+    await platform.close();
+  }
+});

@@ -329,6 +329,9 @@ export function registerPreview(program: Command) {
     .option('--json', 'Print a typed JSON refusal when preview cannot start')
     .option('--once', 'Sync once, print the preview link and promote command, and exit instead of watching')
     .option('--new', 'Open a fresh preview (a new copy of production data) instead of continuing this folder\'s open one')
+    // `somewhere preview <typo>` used to ignore the word and open a new preview
+    // with a fresh copy of production data; an unknown word is refused instead.
+    .allowExcessArguments(false)
     .action(async (opts: { project?: string; publishFirst?: boolean; json?: boolean; once?: boolean; new?: boolean }) => {
       await runHotDeploy(opts);
     });

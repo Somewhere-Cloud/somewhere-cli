@@ -69,6 +69,7 @@ const SYNCED = [
   [/^src\/lib\/vendor\/(deploy-paths\.ts|DEPLOY-PATHS-VENDOR\.json)$/, 'somewhere deploy chooses the files to publish with the platform\'s current rules.'],
   [/^src\/lib\/vendor\/(repro-guidance\.ts|REPRO-GUIDANCE-VENDOR\.json)$/, 'Error guidance matches the platform\'s current messages.'],
   [/^runtime\/browser-probes\.mjs$/, 'somewhere browser and somewhere verify use the platform\'s current page checks.'],
+  [/^src\/lib\/skills-pack\.generated\.ts$/, 'The agent skills somewhere init writes match the platform\'s current pack.'],
 ];
 
 export function entryLines(subjects, changedFiles) {

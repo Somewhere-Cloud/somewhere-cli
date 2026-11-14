@@ -21,6 +21,7 @@ import { countPublishSurface, formatPublishSurface } from '../lib/surface-counts
 import { promoteCommandForShell, promoteCommandLines } from '../lib/promote-handoff.js';
 import { hashFiles } from '../lib/base-files.js';
 import { table } from '../lib/output.js';
+import { forgetPreviewCredential, isDeadPreviewCredential, loadPreviewCredential, mintPreviewCredential, previewToolClient } from '../lib/preview-credential.js';
 import {
   clearPreviewRecord,
   decideContinue,
@@ -126,6 +127,16 @@ export async function mintPreviewHandoff(
   );
   if (!cap || typeof cap.preview_url !== 'string' || !cap.preview_url.includes('/__sw_cap?t=')) {
     throw new Error('The platform created the candidate but did not return its preview capability URL.');
+  }
+  // The preview's own tool credential (users, test users, captured mail), minted once per preview
+  // under your sign-in and kept privately; preview tool commands use only it.
+  if (!loadPreviewCredential(projectId, draftId)) {
+    try {
+      await mintPreviewCredential(client, projectId, draftId);
+    } catch (err) {
+      warn(`The preview works, but its tool credential was not minted (${err instanceof Error ? err.message : String(err)}). `
+        + '`somewhere preview users` and `somewhere preview mail` mint it when first used.');
+    }
   }
   return {
     draftId,
@@ -315,8 +326,10 @@ export function registerPreview(program: Command) {
         + 'change production rows. Nothing your users see changes — production keeps serving what you last '
         + 'promoted, until you promote a preview. Reach for this when you want your change running on the platform '
         + 'against a copy of your data, or when your agent reaches the platform over MCP and cannot serve on localhost. '
-        + 'Not available in a preview yet: signing in, public reads for visitors, sw.groups, server user lookup, '
-        + 'jobs and cron handlers, and running tests (somewhere docs dev-environments lists them). '
+        + 'A preview starts with no users: sign up in it, or add test users with `somewhere preview user-add`; its sign-in '
+        + 'mail is captured, never sent (`somewhere preview mail`). Copied rows private to a production user are not visible '
+        + 'to new preview users. Not available in a preview yet: teams and roles, server user lookup, jobs and cron handlers, '
+        + 'rooms, AI and running tests (somewhere docs dev-environments lists them). '
         + 'It continues the preview this folder opened while that is open; --new opens a fresh one. '
         + 'The plans that include it are listed at https://somewhere.cloud/pricing; '
         + '`somewhere dev` provides frontend hot reload against the deployed backend.',
@@ -389,6 +402,122 @@ export function registerPreview(program: Command) {
       }
     });
 
+  // ── Preview tools: the preview's own users, test users and captured mail ─────────────────────
+  // Every call carries ONLY this preview's tool credential (lib/preview-credential.ts); your own
+  // sign-in is used for nothing but minting that credential, and never for the preview's data.
+  async function previewToolTarget(opts: { project?: string; previewSession?: string }): Promise<{ projectId: string; previewSessionId: string; credential: string }> {
+    const projectId = opts.project ?? loadProjectConfig()?.project_id;
+    if (!projectId) throw new Error('No project linked. Run `somewhere init` or pass --project <id>.');
+    const previewSessionId = opts.previewSession ?? loadPreviewRecord(process.cwd(), projectId)?.preview_session_id;
+    if (!previewSessionId) throw new Error('This folder has no open preview. Open one with `somewhere preview`, or name one with --preview-session <id> (`somewhere preview list`).');
+    const credential = loadPreviewCredential(projectId, previewSessionId)
+      ?? await mintPreviewCredential(new ApiClient(getToken()), projectId, previewSessionId);
+    return { projectId, previewSessionId, credential };
+  }
+  function previewToolFailed(err: unknown, json: boolean | undefined, fallbackCode: string, target?: { projectId: string; previewSessionId: string }): void {
+    if (target && isDeadPreviewCredential(err)) forgetPreviewCredential(target.projectId, target.previewSessionId);
+    const message = isDeadPreviewCredential(err)
+      ? 'That preview is closed, promoted or expired, or its credential was revoked. Start or continue a preview with `somewhere preview`.'
+      : err instanceof Error ? err.message : String(err);
+    if (json) printJsonError(typedErrorCode(err) ?? fallbackCode, message);
+    else error(message, err);
+    process.exitCode = 1;
+  }
+
+  preview
+    .command('users')
+    .description('List the users of this folder\'s open preview (a preview starts with none; production accounts are never copied)')
+    .option('--project <id>', 'Override project ID')
+    .option('--preview-session <id>', 'Which preview (its preview_session_id); default: this folder\'s')
+    .option('--json', 'Print the users as JSON')
+    .action(async (_opts: unknown, cmd: Command) => {
+      const opts = cmd.optsWithGlobals() as { project?: string; previewSession?: string; json?: boolean };
+      let target;
+      try {
+        target = await previewToolTarget(opts);
+        const result = await previewToolClient(target.credential).call<{ preview_session_id: string; users: Array<Record<string, unknown>> }>('GET', '/preview-tools/users');
+        if (opts.json) { printJson(result); return; }
+        if (result.users.length === 0) {
+          console.log(`Preview ${result.preview_session_id} has no users yet. Sign up in the app, or add one: somewhere preview user-add`);
+          return;
+        }
+        table(['Email', 'User id', 'Verified', 'Kind'], result.users.map((u) => [
+          String(u.email), String(u.id), u.email_verified ? 'yes' : 'no', u.test ? 'test user' : 'signed up',
+        ]));
+      } catch (err) { previewToolFailed(err, opts.json, 'PREVIEW_USERS_FAILED', target); }
+    });
+
+  preview
+    .command('user-add [email]')
+    .description('Create a managed test user in this folder\'s open preview and print its password once (default address: a reserved test address)')
+    .option('--password <password>', 'Use this password instead of a generated one')
+    .option('--name <display_name>', 'Display name')
+    .option('--project <id>', 'Override project ID')
+    .option('--preview-session <id>', 'Which preview (its preview_session_id); default: this folder\'s')
+    .option('--json', 'Print the user and password as JSON')
+    .action(async (email: string | undefined, _opts: unknown, cmd: Command) => {
+      const opts = cmd.optsWithGlobals() as { password?: string; name?: string; project?: string; previewSession?: string; json?: boolean };
+      let target;
+      try {
+        target = await previewToolTarget(opts);
+        const result = await previewToolClient(target.credential).call<{ preview_session_id: string; user: Record<string, unknown>; password: string }>(
+          'POST', '/preview-tools/users', { ...(email ? { email } : {}), ...(opts.password ? { password: opts.password } : {}), ...(opts.name ? { display_name: opts.name } : {}) });
+        if (opts.json) { printJson(result); return; }
+        success(`Test user ${String(result.user.email)} created in preview ${result.preview_session_id}.`);
+        console.log(`   password: ${result.password}`);
+        console.log(dim('   Sign in with it in the preview. It exists only in this preview and is deleted when the preview closes.'));
+      } catch (err) { previewToolFailed(err, opts.json, 'PREVIEW_USER_ADD_FAILED', target); }
+    });
+
+  preview
+    .command('user-remove <id_or_email>')
+    .description('Delete a managed test user from this folder\'s open preview (users who signed up in the app are kept)')
+    .option('--project <id>', 'Override project ID')
+    .option('--preview-session <id>', 'Which preview (its preview_session_id); default: this folder\'s')
+    .option('--json', 'Print the result as JSON')
+    .action(async (idOrEmail: string, _opts: unknown, cmd: Command) => {
+      const opts = cmd.optsWithGlobals() as { project?: string; previewSession?: string; json?: boolean };
+      let target;
+      try {
+        target = await previewToolTarget(opts);
+        const result = await previewToolClient(target.credential).call<{ preview_session_id: string; deleted: boolean }>(
+          'DELETE', `/preview-tools/users/${encodeURIComponent(idOrEmail)}`);
+        if (opts.json) { printJson(result); return; }
+        success(`Deleted test user ${idOrEmail} from preview ${result.preview_session_id}; its sessions ended.`);
+      } catch (err) { previewToolFailed(err, opts.json, 'PREVIEW_USER_REMOVE_FAILED', target); }
+    });
+
+  preview
+    .command('mail')
+    .description('Read the sign-in mail this folder\'s open preview captured (verification codes, reset links); it is never sent to anyone')
+    .option('--limit <n>', 'How many messages, newest first (default 20, at most 200)')
+    .option('--project <id>', 'Override project ID')
+    .option('--preview-session <id>', 'Which preview (its preview_session_id); default: this folder\'s')
+    .option('--json', 'Print the messages as JSON')
+    .action(async (_opts: unknown, cmd: Command) => {
+      const opts = cmd.optsWithGlobals() as { limit?: string; project?: string; previewSession?: string; json?: boolean };
+      let target;
+      try {
+        target = await previewToolTarget(opts);
+        const limit = opts.limit ? Number(opts.limit) : 20;
+        if (!Number.isInteger(limit) || limit < 1 || limit > 200) throw new Error('--limit must be a whole number from 1 to 200.');
+        const result = await previewToolClient(target.credential).call<{ preview_session_id: string; messages: Array<Record<string, unknown>> }>(
+          'GET', '/preview-tools/mail', undefined, { limit });
+        if (opts.json) { printJson(result); return; }
+        if (result.messages.length === 0) {
+          console.log(`Preview ${result.preview_session_id} has captured no mail yet.`);
+          return;
+        }
+        for (const m of result.messages) {
+          console.log(`${bold(String(m.subject))}  ${dim(String(m.created_at))}`);
+          console.log(`   to: ${String(m.to)}`);
+          if (m.verification_code) console.log(`   code: ${String(m.verification_code)}`);
+          if (m.magic_link) console.log(`   link: ${String(m.magic_link)}`);
+        }
+        console.log(dim(`Captured by preview ${result.preview_session_id}; nothing was delivered.`));
+      } catch (err) { previewToolFailed(err, opts.json, 'PREVIEW_MAIL_FAILED', target); }
+    });
+
   preview
     .command('close [preview_session_id]')
     .description('Close a preview and delete its copy of production data and files (default: this folder\'s open preview)')
@@ -428,6 +557,7 @@ export function registerPreview(program: Command) {
             const deleted = res?.cleanup_complete === true;
             results.push({ preview_session_id: id, status: res?.status ?? 'closed', data_deleted: deleted });
             if (recorded?.preview_session_id === id) clearPreviewRecord(process.cwd());
+            forgetPreviewCredential(projectId, id);
             if (opts.json) continue;
             if (deleted) success(`Closed preview ${id}. Its copy of the production data and files was deleted.`);
             else {

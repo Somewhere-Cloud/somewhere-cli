@@ -32,7 +32,7 @@ test('every subcommand shadowed by a parent option reads optsWithGlobals', async
   };
   walk(program, '');
   assert.deepEqual(shadowed.sort(), [
-    ' ai keys list', ' ai keys remove', ' ai keys set', ' preview close', ' preview link', ' preview list',
+    ' ai keys list', ' ai keys remove', ' ai keys set', ' preview close', ' preview link', ' preview list', ' preview mail', ' preview user-add', ' preview user-remove', ' preview users',
   ], 'a newly shadowed subcommand must read optsWithGlobals; add it here once it does');
   const dev = readFileSync(join(repoRoot, 'src', 'commands', 'dev.ts'), 'utf8');
   for (const sub of ['list', 'close', 'link']) {

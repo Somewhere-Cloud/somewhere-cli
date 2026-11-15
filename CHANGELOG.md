@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.38.95
+
+- No internal task or design references in public CLI source comments.
+- somewhere typecheck checks db/schema.ts with the platform's current rules.
+- Lint checks match the platform's current rules.
+
 ## 0.38.94
 
 - A fixture request remembers the cookies it set from its own response, not by reading the whole jar each call (slow-calls 5.3.

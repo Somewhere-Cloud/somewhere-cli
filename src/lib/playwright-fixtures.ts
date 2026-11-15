@@ -497,10 +497,10 @@ class FormRun implements FormHost {
         else if (deletion.dropped.has(id)) {
           // Not a cleanup failure: there is nothing left to delete (the run fails for the closed preview itself).
           forgetRecord(attempt.record);
-          process.stderr.write(`Dropped the cleanup record of ${attempt.email}: ${deletion.dropped.get(id)}.\n`);
+          (diagnostics(this.info).notes ??= []).push(`Dropped the cleanup record of ${attempt.email}: ${deletion.dropped.get(id)}.`);
         } else failures.push(`Could not delete the form sign-up account ${attempt.email} (${deletion.kept.get(id) ?? 'not deleted'}); its record is kept and the next somewhere test retries`);
       }
-      if (deletion.teamsDeleted.length) process.stderr.write(`Deleted ${deletion.teamsDeleted.length} team(s) that only this test's sign-ups belonged to: ${deletion.teamsDeleted.map(team => `"${team.name}" (${team.id})`).join(', ')}.\n`);
+      if (deletion.teamsDeleted.length) (diagnostics(this.info).notes ??= []).push(`Deleted ${deletion.teamsDeleted.length} team(s) that only this test's sign-ups belonged to: ${deletion.teamsDeleted.map(team => `"${team.name}" (${team.id})`).join(', ')}.`);
     }
     for (const attempt of this.attempts.filter(attempt => !attempt.id)) {
       if (attempt.submitted && !attempt.refused) {

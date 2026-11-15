@@ -48,6 +48,7 @@ export default class TestReporter implements Reporter {
     this.entries.push(entry);
     if (process.env.SW_TEST_JSON !== 'true') {
       console.log(`${result.status}: ${entry.title}`);
+      for (const note of entry.notes ?? []) console.log(`  note: ${scrub(note)}`);
       if (result.status !== 'passed' && result.status !== 'skipped') console.log(`  step: ${entry.step}\n${entry.errors.map(error => '  ' + error.replaceAll('\n', '\n  ')).join('\n')}\n  last request: ${entry.request ? `${entry.request.method} ${entry.request.path} · HTTP ${entry.request.status} · ${entry.request.code}` : 'none'}\n  screenshot: ${entry.screenshot ?? 'not captured (setup/auth page)'}`);
     }
   }

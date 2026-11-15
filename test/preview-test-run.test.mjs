@@ -26,8 +26,6 @@ const COOKIE = 'sw_draft_cap'; // the platform names it; on an http test origin 
 
 // ── Shared state: the preview's store, mail and sessions; every secret seen ─────────────────────
 const state = { candidate: CANDIDATE, dead: false, requests: [], production: [], users: new Map(), sessions: new Map(), mail: [], notes: new Map(), teams: new Map(), secrets: new Set([CREDENTIAL]) };
-// Someone in the preview who is not one of a run's sign-ups (a person the app's own users invited).
-state.users.set('pvu_outsider', { id: 'pvu_outsider', email: 'outsider@e5.test', password: 'x', test: false, verified: true });
 /** The platform's rule (DESIGN.md slice 3a follow-ups, part B): delete the listed accounts together, with the
  *  teams whose every member is listed; the only owner of a team with a member outside the list is kept. */
 function deleteTogether(ids, { option, kindOf }) {
@@ -418,7 +416,7 @@ test('somewhere test --preview runs the journey on the preview with its own cred
   assert.match(r.stdout, new RegExp(`preview ${DRAFT} · ${appOrigin.replaceAll('.', '\\.')} · ${CANDIDATE}`));
   assert.deepEqual(state.production, [], 'no production call of any kind');
   assert.ok(state.requests.every((line) => line.includes('/v1/preview-tools/')));
-  assert.ok(state.requests.includes('GET /v1/preview-tools/target') && state.requests.includes('POST /v1/preview-tools/users') && state.requests.some((l) => l.startsWith('DELETE /v1/preview-tools/signups/pvu_')));
+  assert.ok(state.requests.includes('GET /v1/preview-tools/target') && state.requests.includes('POST /v1/preview-tools/users') && state.requests.includes('POST /v1/preview-tools/signups/delete'));
   assert.deepEqual([...state.users.values()].map((u) => u.email), [], 'every account the run made is gone: form sign-ups by exact id, managed users through the preview tool');
   assert.ok([...state.sessions.values()].every((s) => s.ended), 'every pinned browser session was ended');
   assert.equal(readFileSync(prodRecordPath, 'utf8'), prodBefore.text, 'the production cleanup record is untouched');
@@ -538,6 +536,8 @@ test('cleanup deletes the sign-ups of a test together with a team only they belo
 
 test('a team with a member outside the run is left alone: its owner is kept, the team named, the record kept', { timeout: 300_000 }, async () => {
   reset();
+  // Someone in the preview who is not one of the run's sign-ups (a person the app's own users invited).
+  state.users.set('pvu_outsider', { id: 'pvu_outsider', email: 'outsider@e5.test', password: 'x', test: false, verified: true });
   const r = await somewhere(['test', '--preview', 'tests/shared.spec.ts', '--workers', '1']);
   assert.equal(r.status, 1, r.all);
   assert.match(r.all, /it is the only owner of the team "Shared" \(grp_[0-9a-f]+\), which has members outside this run's sign-ups; the team and the account were left alone/);
@@ -553,6 +553,7 @@ test('a team with a member outside the run is left alone: its owner is kept, the
   assert.match(again.all, /Before this run: deleted 1 leftover form sign-up account\(s\) by their recorded ids/);
   assert.ok(state.teams.has(teamId), 'the shared team stays with its new owner');
   assert.deepEqual(state.production, []);
+  state.teams.delete(teamId); state.users.delete('pvu_outsider');
 });
 
 test('no open preview, or no credential for it on this machine: refused before any request, never minting with your sign-in', async () => {

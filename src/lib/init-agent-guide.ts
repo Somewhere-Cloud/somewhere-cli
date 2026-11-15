@@ -89,7 +89,9 @@ Never let a late answer overwrite what the user typed: fill an input from loaded
 
 Teams are built-in groups: the platform keeps the team, invitations, roster, removal,
 leaving, last owner. Starting a team needs a signed-in user; joining needs a verified
-email (a password sign-up joins once it enters its emailed code). The browser cannot call
+email (a password sign-up joins once it enters its emailed code).
+No email verification in your app: keep membership in your own table with member() (somewhere docs sw.groups --section relationships-that-are-not-teams) and assign staff with setRoles in the sign-up route (above).
+The browser cannot call
 sw.groups: pass each call through an endpoint. A parent() child's delete follows the task
 (creator or team owner), so "comment author or team owner deletes" is an endpoint.
 Staff making others staff: appRoles { staff: { grantableBy: ['staff'] } } and

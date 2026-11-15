@@ -5,19 +5,27 @@ import { fixtureTestTarget } from './test-target.js';
 import { ApiClient } from './client.js';
 import { getToken, loadProjectConfig } from './config.js';
 import { buildStorageState, createTestIdentities, expiryOf, messagesAfter, type IssuedIdentity, type InboxMessage } from './test-identities.js';
-import { diagnostics, rememberSecrets, scrub, describeError, timed, titled } from './test-diagnostics.js';
+import { diagnostics, rememberSecrets, scrub, scrubTestErrors, describeError, timed, titled } from './test-diagnostics.js';
 import { mark as timelineMark, markProcessStart, span, trackPage } from './test-timeline.js';
-import { deleteAccount, forgetRecord } from './form-accounts.js';
+import { forgetRecord } from './form-accounts.js';
 import { ready, signUp, signIn, signOut, verify, type FormHost, type FormControl, type Attempt, type Person, type FormSteps, type CodeSteps, type SignUpOptions, type SignInOptions, type FormAdapter } from './form-auth.js';
+import { openPreviewControl, openProductionControl, type TestControl } from './test-control.js';
+import { safeToScreenshot } from './screenshot-guard.js';
 export type { Person, FormSteps, CodeSteps, SignUpOptions, SignInOptions, FormAdapter };
 import type { TestTarget } from './test-target.js';
 import type { TestInfo } from '@playwright/test';
 import type { DataRequest } from '../testing.js';
 
+// Playwright adds an accessibility snapshot of the failing page (its visible text, which can show a
+// password, an emailed code or a reset link) to error-context.md. Off in every worker that loads these
+// fixtures, whether or not `somewhere test` started it; the runner sets it too.
+process.env.PLAYWRIGHT_NO_COPY_PROMPT = '1';
+
 export interface TestUser { id: string; email: string; page: Page; request: APIRequestContext }
 /** `role`: an app role declared in db/schema.ts appRoles, granted to this user with your developer
  *  credential (the same grant as somewhere's app-roles grant) before newUser returns. */
 export interface NewUserOptions { role?: string }
+interface WorkerFixtures { _preview: TestControl | null }
 interface Fixtures {
   _evidence: void; anonymous: APIRequestContext; _forms: FormRun;
   /** A fresh signed-in test user. Make several at once: `await Promise.all([newUser(), newUser()])`.
@@ -30,9 +38,30 @@ interface Fixtures {
   signIn: (page: Page, person: Person, options?: SignInOptions) => Promise<void>;
   signOut: (page: Page, options?: { steps?: (page: Page) => Promise<void>; form?: FormAdapter }) => Promise<void>;
 }
-type RunnerTest = TestType<PlaywrightTestArgs & PlaywrightTestOptions & Fixtures, PlaywrightWorkerArgs & PlaywrightWorkerOptions>;
+type RunnerTest = TestType<PlaywrightTestArgs & PlaywrightTestOptions & Fixtures, PlaywrightWorkerArgs & PlaywrightWorkerOptions & WorkerFixtures>;
 let loaded: { test: RunnerTest; expect: typeof import('@playwright/test').expect } | undefined;
 const digests = new WeakMap<APIRequestContext, string | null>();
+
+/** The run's target as the runner passed it (no credential is ever in it). */
+function runTarget(projectId: string): TestTarget | null {
+  if (!process.env.SW_TEST_TARGET) return null;
+  const target = JSON.parse(process.env.SW_TEST_TARGET) as TestTarget;
+  if (target.projectId !== projectId) throw new Error('Test target belongs to a different project');
+  return target;
+}
+function linkedProject(): string {
+  const projectId = loadProjectConfig()?.project_id;
+  if (!projectId) throw new Error('Run somewhere test from a linked project folder.');
+  return projectId;
+}
+/** A preview run's control for this worker, or null for a production run. A preview run never
+ *  builds a production client: its control holds only the preview's tool credential. */
+async function previewControlForWorker(): Promise<TestControl | null> {
+  const projectId = linkedProject();
+  const target = runTarget(projectId);
+  if (target?.environment !== 'preview') return null;
+  return openPreviewControl({ root: process.cwd(), projectId, expect: target });
+}
 
 function runner() {
   if (loaded) return loaded;
@@ -40,14 +69,27 @@ function runner() {
   let pw: typeof import('@playwright/test');
   try { pw = require('@playwright/test') as typeof import('@playwright/test'); }
   catch { throw new Error('Install project test dependencies: npm install -D @playwright/test @somewhere-cloud/cli'); }
-  const test = pw.test.extend<Fixtures>({
+  const test = pw.test.extend<Fixtures, WorkerFixtures>({
+    _preview: [async ({}, use) => {
+      const control = await previewControlForWorker();
+      try { await use(control); } finally { await control?.close(); }
+    }, { scope: 'worker' }],
+    // A preview run: every browser context reaches the preview through the run's pinned session.
+    context: async ({ context, _preview }, use) => {
+      if (_preview) await _preview.prepareContext(context);
+      await use(context);
+    },
     _evidence: [async ({}, use, info) => {
       try { await use(); } finally {
+        // Torn down after every other somewhere fixture and before Playwright writes error-context.md
+        // or reports the errors: scrub them in place first.
+        scrubTestErrors(info.errors as unknown as Array<Record<string, unknown>>);
         const report = diagnostics(info);
         await info.attach('somewhere-diagnostics', { body: Buffer.from(JSON.stringify({ ...report, title: titled(info.project.name, scrub(info.title)), errors: info.errors.map(error => describeError(error)), secretAudit: 'issued values scrubbed before reporting' })), contentType: 'application/json' });
       }
     }, { auto: true }],
-    newUser: async ({ browser, viewport, isMobile, hasTouch }, use, info) => {
+    newUser: async ({ browser, viewport, isMobile, hasTouch, _preview }, use, info) => {
+      if (_preview) return previewNewUser(_preview, { browser, viewport, isMobile, hasTouch }, use, info);
       const linked = loadProjectConfig()?.project_id;
       if (!linked) throw new Error('Run somewhere test from a linked project folder.');
       const projectId: string = linked;
@@ -106,7 +148,7 @@ function runner() {
           rememberSecrets(...(await context.cookies()).map(cookie => cookie.value));
           if (info.status !== info.expectedStatus && !diagnostics(info).screenshot) {
             const page = context.pages()[0];
-            if (page && !/auth|login|signup|reset/i.test(new URL(page.url()).pathname)) {
+            if (page && await safeToScreenshot(page)) {
               const path = info.outputPath('failure.png');
               await page.screenshot({ path, mask: [page.locator('input, textarea')] });
               diagnostics(info).screenshot = path;
@@ -130,24 +172,25 @@ function runner() {
         if (failures.length) throw new Error(failures.join('; '));
       }
     },
-    anonymous: async ({ browser }, use, info) => {
+    anonymous: async ({ browser, _preview }, use, info) => {
       const projectId = loadProjectConfig()?.project_id;
       if (!projectId) throw new Error('Run from a linked project folder.');
-      const client = new ApiClient(getToken());
-      const target = await timed(info, 'target snapshot', () => fixtureTestTarget(client, projectId));
+      const target = _preview ? _preview.target : await timed(info, 'target snapshot', () => fixtureTestTarget(new ApiClient(getToken()), projectId));
       const { origin } = target;
       diagnostics(info).release = target.releaseId;
       const context = await browser.newContext({ baseURL: origin, extraHTTPHeaders: { Origin: origin } });
+      if (_preview) await _preview.prepareContext(context);
       constrain(context.request, origin, info);
       digests.set(context.request, target.contractDigest);
       try { await use(context.request); } finally { rememberSecrets(...(await context.cookies()).map(cookie => cookie.value)); await context.close(); }
     },
-    newPage: async ({ browser, baseURL, viewport, isMobile, hasTouch, _forms }, use, info) => {
+    newPage: async ({ browser, baseURL, viewport, isMobile, hasTouch, _forms, _preview }, use, info) => {
       const contexts: BrowserContext[] = [];
       try {
         await use(async () => {
           const context = await browser.newContext({ baseURL, viewport, isMobile, hasTouch });
           contexts.push(context);
+          if (_preview) await _preview.prepareContext(context);
           const page = await context.newPage();
           trackPage(page, titled(info.project.name, info.title));
           _forms.pages.add(page);
@@ -158,8 +201,8 @@ function runner() {
       }
     },
     // Depends on page so its teardown (screenshots, cookie scrubbing) runs while the page is open.
-    _forms: async ({ page }, use, info) => {
-      const run = new FormRun(info);
+    _forms: async ({ page, _preview }, use, info) => {
+      const run = new FormRun(info, _preview);
       trackPage(page, titled(info.project.name, info.title));
       run.pages.add(page);
       try { await use(run); } finally { await run.finish(); }
@@ -171,6 +214,61 @@ function runner() {
   });
   loaded = { test, expect: pw.expect };
   return loaded;
+}
+
+/**
+ * newUser in a preview run: a managed test user made with the preview's developer tool (its
+ * password is returned once and never printed), signed in through the app's own auth route on the
+ * preview, and deleted by id at the end. App roles are assigned by the app's own server code in a
+ * preview (sw.auth.server.setRoles), so `{ role }` is refused rather than granted some other way.
+ */
+async function previewNewUser(control: TestControl, args: { browser: import('@playwright/test').Browser; viewport: PlaywrightTestOptions['viewport']; isMobile: boolean; hasTouch: boolean },
+  use: (create: (options?: NewUserOptions) => Promise<TestUser>) => Promise<void>, info: TestInfo): Promise<void> {
+  const { origin } = control.target;
+  diagnostics(info).release = control.target.releaseId;
+  const ids: string[] = [];
+  const contexts: BrowserContext[] = [];
+  const inflight = new Set<Promise<unknown>>();
+  const create = async (options: NewUserOptions = {}): Promise<TestUser> => {
+    if (options.role !== undefined) {
+      throw new Error('newUser({ role }) is not available in a preview: a preview grants roles only through your app\'s own server code (sw.auth.server.setRoles). Sign the person up and let the app grant it, or test the role in production.');
+    }
+    const user = await timed(info, 'test-user creation', () => control.createManagedUser!());
+    ids.push(user.id);
+    const context = await args.browser.newContext({ baseURL: origin, viewport: args.viewport, isMobile: args.isMobile, hasTouch: args.hasTouch, extraHTTPHeaders: { Origin: origin } });
+    contexts.push(context);
+    await control.prepareContext(context);
+    const signedIn = await timed(info, 'test-user sign-in', () => context.request.post(origin + '/api/auth/login', { data: { email: user.email, password: user.password }, headers: { Origin: origin }, maxRedirects: 0 }));
+    rememberSecrets(...(await context.cookies()).map((cookie) => cookie.value));
+    if (!signedIn.ok()) {
+      throw new Error(`newUser: the preview test user could not sign in through the app's /api/auth/login (HTTP ${signedIn.status()}). In a preview, newUser signs in through the app's own auth route; an app without one can use signUp(page) and signIn(page, person).`);
+    }
+    constrain(context.request, origin, info);
+    digests.set(context.request, control.target.contractDigest);
+    const page = await timed(info, 'page creation', () => context.newPage());
+    trackPage(page, titled(info.project.name, info.title));
+    return { id: user.id, email: user.email, page, request: context.request };
+  };
+  try {
+    await use((options) => { const creation = create(options); inflight.add(creation); void creation.finally(() => inflight.delete(creation)).catch(() => {}); return creation; });
+  } finally {
+    while (inflight.size) await Promise.allSettled([...inflight]);
+    const failures: string[] = [];
+    for (const context of contexts) {
+      try { rememberSecrets(...(await context.cookies()).map((cookie) => cookie.value)); } catch { /* closed */ }
+      const page = context.pages()[0];
+      if (info.status !== info.expectedStatus && !diagnostics(info).screenshot && page && await safeToScreenshot(page)) {
+        try { const path = info.outputPath('failure.png'); await page.screenshot({ path, mask: [page.locator('input, textarea')] }); diagnostics(info).screenshot = path; }
+        catch { failures.push('Failure screenshot capture failed'); }
+      }
+    }
+    await Promise.all(contexts.map((context) => context.close().catch(() => { failures.push('Browser context cleanup failed'); })));
+    for (const id of ids) {
+      const refused = await timed(info, 'test-user deletion', () => control.deleteManagedUser!(id));
+      if (refused !== null) failures.push(`Preview test user cleanup unconfirmed (${refused})`);
+    }
+    if (failures.length) throw new Error(failures.join('; '));
+  }
 }
 
 // Patch the shared-cookie client, preserving its identity and cookie rotation.
@@ -344,23 +442,30 @@ class FormRun implements FormHost {
   readonly pages = new Set<Page>();
   readonly attempts: Attempt[] = [];
   private loading?: Promise<FormControl>;
+  private readonly prepared = new WeakSet<BrowserContext>();
   readonly root = process.cwd();
-  constructor(readonly info: TestInfo) {}
+  constructor(readonly info: TestInfo, private readonly preview: TestControl | null) {}
   timed<T>(name: string, work: () => Promise<T>): Promise<T> { return timed(this.info, name, work); }
   control(): Promise<FormControl> {
     return this.loading ??= (async () => {
-      const projectId = loadProjectConfig()?.project_id;
-      if (!projectId) throw new Error('Run somewhere test from a linked project folder.');
-      const client = new ApiClient(getToken());
-      const target = await timed(this.info, 'target snapshot', () => fixtureTestTarget(client, projectId));
-      diagnostics(this.info).release = target.releaseId;
-      return { client, projectId, target };
+      // A preview run uses its worker's preview control; only a production run reads your sign-in.
+      const control = this.preview ?? await timed(this.info, 'target snapshot', async () => {
+        const projectId = linkedProject();
+        return openProductionControl(projectId, runTarget(projectId) ?? undefined);
+      });
+      diagnostics(this.info).release = control.target.releaseId;
+      return { control };
     })();
+  }
+  async prepare(page: Page): Promise<void> {
+    if (!this.preview || this.prepared.has(page.context())) return;
+    this.prepared.add(page.context());
+    await this.preview.prepareContext(page.context());
   }
   /** The page's own request client, with the app Origin and the data contract, for data()/expectRefused(). */
   async attach(page: Page): Promise<void> {
     this.pages.add(page);
-    const { target } = await this.control();
+    const { target } = (await this.control()).control;
     const request = page.context().request;
     if (constrained.has(request)) return;
     constrained.add(request);
@@ -375,7 +480,7 @@ class FormRun implements FormHost {
     for (const page of this.pages) {
       if (page.isClosed()) continue;
       try { rememberSecrets(...(await page.context().cookies()).map(cookie => cookie.value)); } catch { /* context already closed */ }
-      if (failed && !diagnostics(this.info).screenshot) try {
+      if (failed && !diagnostics(this.info).screenshot && await safeToScreenshot(page)) try {
         const path = this.info.outputPath('failure.png');
         await page.screenshot({ path, mask: [page.locator('input, textarea')] });
         diagnostics(this.info).screenshot = path;
@@ -384,9 +489,9 @@ class FormRun implements FormHost {
     // Each account is deleted by its exact id; the deletions run at the same time.
     await Promise.all(this.attempts.map(async attempt => {
       if (attempt.id) {
-        const { client, projectId } = await this.control();
+        const { control } = await this.control();
         const id = attempt.id;
-        const refused = await timed(this.info, 'sign-up account deletion', () => deleteAccount(client, projectId, id));
+        const refused = await timed(this.info, 'sign-up account deletion', () => control.deleteSignup(id));
         if (refused === null) forgetRecord(attempt.record);
         else failures.push(`Could not delete the form sign-up account ${attempt.email} (${refused}); its record is kept and the next somewhere test retries`);
       } else if (attempt.submitted && !attempt.refused) {

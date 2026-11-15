@@ -12,6 +12,11 @@
  * Never by email. The run record is private (.somewhere/tests/accounts, 0700/0600) and holds the
  * project, address, id and run, never a password or code. An interrupted run leaves its records,
  * and the next `somewhere test` for the project finishes them.
+ *
+ * A run against a preview (`somewhere test --preview`) records its sign-ups apart, per preview
+ * (.somewhere/tests/preview-accounts/<project>/<preview>), and removes them only with the preview's
+ * own tool credential. A preview run never reads, finishes or deletes a production record, and a
+ * production run never touches a preview record.
  */
 import { existsSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
@@ -19,6 +24,9 @@ import { randomBytes } from 'node:crypto';
 import type { ApiClient } from './client.js';
 import { CliApiError } from './client.js';
 import { ensurePrivateDir, writePrivateFile } from './test-identities.js';
+
+/** The part of a test control the sweep needs (lib/test-control.ts). */
+export interface SweepControl { environment: 'production' | 'preview'; projectId: string; target: { previewSessionId?: string }; journalDir(root: string): string; deleteSignup(id: string): Promise<string | null> }
 
 export const RESERVED_DOMAINS_TEXT = 'example.com, example.org, example.net, or a name ending in .example or .test (for example staff.example)';
 export const DEFAULT_SIGNUP_DOMAIN = 'example.com';
@@ -65,7 +73,7 @@ export function generatedPassword(): string {
   return `Sw-${randomBytes(15).toString('base64url')}-9a`;
 }
 
-export interface AccountRecord { project_id: string; email: string; id: string | null; run: string; pid: number; created_at: string }
+export interface AccountRecord { project_id: string; email: string; id: string | null; run: string; pid: number; created_at: string; environment?: 'production' | 'preview'; preview_session_id?: string }
 
 export function accountsDir(root: string, projectId: string): string {
   if (!/^[A-Za-z0-9-]{1,64}$/.test(projectId)) throw new Error('Unexpected project id in the test run record.');
@@ -74,11 +82,12 @@ export function accountsDir(root: string, projectId: string): string {
 
 /** Write one record per sign-up attempt, before the form is submitted, so an interrupted run is
  *  visible to the next one. Returns the record's file path. */
-export function recordAttempt(root: string, projectId: string, email: string): string {
-  const dir = accountsDir(root, projectId);
+export function recordAttempt(control: SweepControl, root: string, email: string): string {
+  const dir = control.journalDir(root);
   ensurePrivateDir(dir);
   const path = join(dir, `${Date.now()}-${randomBytes(4).toString('hex')}.json`);
-  const record: AccountRecord = { project_id: projectId, email, id: null, run: process.env.SW_TEST_RUN ?? 'direct', pid: Number(process.env.SW_TEST_RUN_PID ?? process.pid), created_at: new Date().toISOString() };
+  const record: AccountRecord = { project_id: control.projectId, email, id: null, run: process.env.SW_TEST_RUN ?? 'direct', pid: Number(process.env.SW_TEST_RUN_PID ?? process.pid), created_at: new Date().toISOString(),
+    environment: control.environment, ...(control.environment === 'preview' ? { preview_session_id: control.target.previewSessionId } : {}) };
   writePrivateFile(path, JSON.stringify(record) + '\n');
   return path;
 }
@@ -112,18 +121,23 @@ export interface SweepResult { deleted: string[]; failed: string[]; unknownId: s
 /** Finish the records of runs that ended (this one, or one that was interrupted): delete each
  *  recorded id, and report addresses whose id was never learned (they are never deleted by
  *  address). Records of another `somewhere test` still running are left to it. */
-export async function sweepAccounts(client: ApiClient, root: string, projectId: string): Promise<SweepResult> {
+export async function sweepAccounts(control: SweepControl, root: string): Promise<SweepResult> {
   const result: SweepResult = { deleted: [], failed: [], unknownId: [] };
-  const dir = accountsDir(root, projectId);
+  const projectId = control.projectId;
+  const dir = control.journalDir(root);
   if (!existsSync(dir)) return result;
   for (const name of readdirSync(dir).filter((entry) => /^\d+-[0-9a-f]{8}\.json$/.test(entry))) {
     const path = join(dir, name);
     let record: AccountRecord;
     try { record = JSON.parse(readFileSync(path, 'utf8')) as AccountRecord; } catch { result.failed.push(name); continue; }
     if (record.project_id !== projectId) continue;
+    // A record is finished only by a run against the same environment (and the same preview); a record
+    // written before records named one is a production record.
+    if ((record.environment ?? 'production') !== control.environment) continue;
+    if (control.environment === 'preview' && record.preview_session_id !== control.target.previewSessionId) continue;
     if (record.run !== process.env.SW_TEST_RUN && alive(record.pid)) continue;
     if (record.id === null) { result.unknownId.push(record.email); forgetRecord(path); continue; }
-    const refused = await deleteAccount(client, projectId, record.id);
+    const refused = await control.deleteSignup(record.id);
     if (refused === null) { result.deleted.push(record.id); forgetRecord(path); }
     else result.failed.push(`${record.email} (${refused})`);
   }

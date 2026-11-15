@@ -9,11 +9,12 @@ import { cliConfigDir } from './config.js';
 import { ensurePrivateDir, writePrivateFile } from './test-identities.js';
 import { describeSweep, sweepAccounts } from './form-accounts.js';
 import { loadTestTarget, type TestTarget } from './test-target.js';
+import { openPreviewControl, productionControl, type TestControl } from './test-control.js';
 import { testAddressOrder } from './test-connectivity.js';
 import { mark, span } from './test-timeline.js';
 
 export interface PreparedRunner { cli: string; channel: 'chrome' | undefined; version: string; browserLaunchMs: number; playwright: string }
-export interface RunOptions { workers: string; files?: string[]; grep?: string; failed?: boolean; json?: boolean; phone?: boolean }
+export interface RunOptions { workers: string; files?: string[]; grep?: string; failed?: boolean; json?: boolean; phone?: boolean; preview?: boolean }
 export interface RunOutcome { exitCode: number; results: Record<string, unknown> | null; target: TestTarget }
 
 /** Resolve the project's Playwright and confirm a browser (installing Chromium only when Chrome is
@@ -47,13 +48,27 @@ export async function prepareRunner(root: string): Promise<PreparedRunner> {
   return { cli, channel, version, browserLaunchMs, playwright };
 }
 
-/** Run the project's specs once against its live release. `expectRelease`: refuse to run unless the
- *  live release is that one (deploy --test). `toStderr`: the runner's stdout goes to stderr. */
-export async function runTests(input: { root: string; client: ApiClient; projectId: string; prepared: PreparedRunner | Promise<PreparedRunner>; options: RunOptions; expectRelease?: string; toStderr?: boolean }): Promise<RunOutcome> {
-  const { root, client, projectId, options } = input;
+/** Run the project's specs once against its live release, or with options.preview against the
+ *  folder's open preview (its own credential only; `client` is not used and may be omitted).
+ *  `expectRelease`: refuse to run unless the live release is that one (deploy --test).
+ *  `toStderr`: the runner's stdout goes to stderr. */
+export async function runTests(input: { root: string; client?: ApiClient; projectId: string; prepared: PreparedRunner | Promise<PreparedRunner>; options: RunOptions; expectRelease?: string; toStderr?: boolean }): Promise<RunOutcome> {
+  const { root, projectId, options } = input;
   // The target requests and the local browser probe run at the same time.
   let addressOrder: Promise<boolean> | undefined;
-  const [target, prepared] = await Promise.all([loadTestTarget(client, projectId, origin => { addressOrder = testAddressOrder(origin); }), input.prepared]);
+  const loadControl = async (): Promise<TestControl> => {
+    if (options.preview) {
+      if (input.expectRelease) throw new Error('A preview run is never tied to a production release.');
+      const control = await openPreviewControl({ root, projectId });
+      addressOrder = testAddressOrder(control.target.origin);
+      return control;
+    }
+    if (!input.client) throw new Error('A production test run needs your sign-in.');
+    const client = input.client;
+    return productionControl(client, await loadTestTarget(client, projectId, origin => { addressOrder = testAddressOrder(origin); }));
+  };
+  const [control, prepared] = await Promise.all([loadControl(), input.prepared]);
+  const target = control.target;
   if (input.expectRelease && target.releaseId !== input.expectRelease) {
     throw new Error(`The live release is ${target.releaseId}, not ${input.expectRelease} from this deploy (another deploy or rollback happened), so the tests were not run.`);
   }
@@ -68,7 +83,8 @@ export async function runTests(input: { root: string; client: ApiClient; project
   const files = options.files ?? [];
   const failed = Boolean(options.failed);
   const browser = `${prepared.channel ?? 'chromium'} ${prepared.version}`;
-  const artifacts = join(dir, createHash('sha256').update(projectId + origin).digest('hex').slice(0, 16));
+  // A preview run keeps its own artifacts per preview and candidate: --failed never reruns another version's failures.
+  const artifacts = join(dir, createHash('sha256').update(projectId + origin + (target.environment === 'preview' ? `${target.previewSessionId}:${target.releaseId}` : '')).digest('hex').slice(0, 16));
   if (failed) {
     // Playwright's own record of the last run's failures (kept beside its artifacts). It names what
     // to run; it does not certify anything else as still passing.
@@ -80,7 +96,7 @@ export async function runTests(input: { root: string; client: ApiClient; project
   const subset = Boolean(files.length || options.grep || failed);
   // Form sign-up accounts (signUp fixture) left by an interrupted earlier run are finished first.
   process.env.SW_TEST_RUN = randomUUID();
-  for (const line of describeSweep(await span('sweep:before', {}, () => sweepAccounts(client, root, projectId)), 'Before this run')) process.stderr.write(line + '\n');
+  for (const line of describeSweep(await span('sweep:before', {}, () => sweepAccounts(control, root)), 'Before this run')) process.stderr.write(line + '\n');
   const config = join(dir, 'runner.config.cjs');
   // Chrome resolves the app's host through the operating system (as the CLI just did), not its own
   // DNS client: on a resolver whose first nameserver times out, Chrome's own client waited ~2 s in
@@ -90,16 +106,17 @@ export async function runTests(input: { root: string; client: ApiClient; project
   const args = [prepared.cli, 'test', '--config', config, ...files];
   if (options.grep) args.push('--grep', options.grep);
   if (failed) args.push('--last-failed');
-  const rerunFlags = `${options.phone ? ' --phone' : ''}${options.workers !== '5' ? ` --workers ${options.workers}` : ''}`;
+  const rerunFlags = `${options.preview ? ' --preview' : ''}${options.phone ? ' --phone' : ''}${options.workers !== '5' ? ` --workers ${options.workers}` : ''}`;
   const resultsPath = join(dir, 'results.json');
   rmSync(resultsPath, { force: true });
   mark('runner:spawn');
-  const child = spawn(process.execPath, args, { cwd: root, stdio: ['inherit', input.toStderr ? 'pipe' : 'inherit', 'inherit'], env: { ...runnerEnv, SW_TEST_TARGET: JSON.stringify(target), SW_TEST_RELEASE: target.releaseId, SW_TEST_ORIGIN: origin, SW_TEST_BROWSER_LAUNCH_MS: String(prepared.browserLaunchMs), SW_TEST_BROWSER: browser, SW_TEST_SUBSET: String(subset), SW_TEST_JSON: String(Boolean(options.json)), SW_TEST_RESULTS: resultsPath, SW_TEST_RUN: process.env.SW_TEST_RUN, SW_TEST_RUN_PID: String(process.pid), SW_TEST_RERUN_FLAGS: rerunFlags } });
+  const child = spawn(process.execPath, args, { cwd: root, stdio: ['inherit', input.toStderr ? 'pipe' : 'inherit', 'inherit'], env: { ...runnerEnv, SW_TEST_TARGET: JSON.stringify(target), SW_TEST_RELEASE: target.releaseId, PLAYWRIGHT_NO_COPY_PROMPT: '1', SW_TEST_ORIGIN: origin, SW_TEST_BROWSER_LAUNCH_MS: String(prepared.browserLaunchMs), SW_TEST_BROWSER: browser, SW_TEST_SUBSET: String(subset), SW_TEST_JSON: String(Boolean(options.json)), SW_TEST_RESULTS: resultsPath, SW_TEST_RUN: process.env.SW_TEST_RUN, SW_TEST_RUN_PID: String(process.pid), SW_TEST_RERUN_FLAGS: rerunFlags } });
   if (input.toStderr) child.stdout?.pipe(process.stderr);
   const status = await new Promise<number | null>(resolve => child.on('close', code => resolve(code)));
   mark('runner:exit', { status: status ?? -1 });
   // Anything a test's own cleanup could not finish (its record is kept) is retried once more here.
-  const after = await span('sweep:after', {}, () => sweepAccounts(client, root, projectId).catch(error => { process.stderr.write(`Could not finish form sign-up cleanup: ${error instanceof Error ? error.message : String(error)}\n`); return null; }));
+  const after = await span('sweep:after', {}, () => sweepAccounts(control, root).catch(error => { process.stderr.write(`Could not finish form sign-up cleanup: ${error instanceof Error ? error.message : String(error)}\n`); return null; }));
+  await control.close();
   for (const line of after ? describeSweep(after, 'After this run') : []) process.stderr.write(line + '\n');
   // Playwright may create raw error-context text; retain only screenshots and rerun state.
   const cleanArtifacts = (path: string): void => {

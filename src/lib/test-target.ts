@@ -2,7 +2,10 @@ import { ApiClient } from './client.js';
 import { productionOrigin } from './test-identities.js';
 import { span } from './test-timeline.js';
 
-export interface TestTarget { projectId: string; origin: string; host: string; releaseId: string; contractDigest: string | null }
+/** `releaseId`: the live release (production) or the preview's candidate (preview). A preview target
+ *  names its preview session; it never carries a credential (it is passed to the test process in
+ *  SW_TEST_TARGET, which is not a secret). */
+export interface TestTarget { projectId: string; origin: string; host: string; releaseId: string; contractDigest: string | null; environment?: 'production' | 'preview'; previewSessionId?: string }
 /** `onOrigin` is called as soon as the app's origin is known, before the access map arrives. */
 export async function loadTestTarget(client: ApiClient, projectId: string, onOrigin?: (origin: string) => void): Promise<TestTarget> {
   const [urls, map] = await Promise.all([

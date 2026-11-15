@@ -1,7 +1,8 @@
 import { relative } from 'node:path';
 import { ApiClient } from './client.js';
 import { getToken, loadProjectConfig } from './config.js';
-import { liveReleaseId } from './test-target.js';
+import { liveReleaseId, type TestTarget } from './test-target.js';
+import { openPreviewControl, previewCredentialFor, PreviewRunError } from './test-control.js';
 import type { Reporter, FullResult, Suite, TestCase, TestResult, TestError } from '@playwright/test/reporter';
 import { writePrivateFile } from './test-identities.js';
 import { scrub, describeError, titled, type Diagnostics } from './test-diagnostics.js';
@@ -24,7 +25,14 @@ export default class TestReporter implements Reporter {
   private errors = 0;
   private setupDiagnostics: { file?: string; message: string }[] = [];
   private entries: Entry[] = [];
-  onBegin(_config: unknown, suite: Suite): void { this.total = suite.allTests().length; mark('runner:begin', { tests: this.total }); }
+  onBegin(_config: unknown, suite: Suite): void {
+    this.total = suite.allTests().length;
+    // A preview run's credential is registered for scrubbing before this process writes anything.
+    const target = process.env.SW_TEST_TARGET ? JSON.parse(process.env.SW_TEST_TARGET) as TestTarget : null;
+    const projectId = loadProjectConfig()?.project_id;
+    if (target?.environment === 'preview' && projectId) { try { previewCredentialFor(process.cwd(), projectId, target.previewSessionId); } catch { /* reported at the end check */ } }
+    mark('runner:begin', { tests: this.total });
+  }
   onTestBegin(test: TestCase, result: TestResult): void { mark('test:start', { test: titled(test.parent?.project?.()?.name, scrub(test.title)), worker: result.workerIndex }); }
   onTestEnd(test: TestCase, result: TestResult): void {
     mark('test:end', { test: titled(test.parent?.project?.()?.name, scrub(test.title)), worker: result.workerIndex, status: result.status, ms: result.duration });
@@ -52,18 +60,28 @@ export default class TestReporter implements Reporter {
     const startRelease = process.env.SW_TEST_RELEASE;
     const releases = new Set([startRelease, ...this.entries.map(entry => entry.release)].filter(Boolean));
     const projectId = loadProjectConfig()?.project_id;
-    // The release must be the same at the end as at the start (and as every fixture saw); otherwise
-    // these results describe no single release and the run fails.
+    const target = process.env.SW_TEST_TARGET ? JSON.parse(process.env.SW_TEST_TARGET) as TestTarget : null;
+    const preview = target?.environment === 'preview' ? target : null;
+    // The release (or, in a preview run, the preview's saved version) must be the same at the end as
+    // at the start and as every fixture saw; otherwise these results describe no single version and
+    // the run fails. A preview run asks only the preview, with its own credential.
     let release: string | null = null;
     if (projectId && startRelease) {
-      const live = await span('release-check', {}, () => liveReleaseId(new ApiClient(getToken()), projectId)).catch(() => null);
+      let ended = '';
+      const live = await span('release-check', {}, () => preview
+        ? openPreviewControl({ root: process.cwd(), projectId, expect: preview }).then((control) => control.currentRelease())
+        : liveReleaseId(new ApiClient(getToken()), projectId)).catch((error: unknown) => { if (error instanceof PreviewRunError) ended = scrub(error.message); return null; });
       if (live) releases.add(live);
       release = confirmedRelease(startRelease, this.entries.map(entry => entry.release), live);
       if (!release) {
         this.errors++;
-        console.error(releases.size > 1
-          ? `The release changed during this run (${[...releases].join(' → ')}): these results describe no single release, so the run fails. Run the tests again.`
-          : 'The live release could not be confirmed at the end of this run, so the run fails. Run the tests again.');
+        console.error(preview
+          ? (releases.size > 1
+            ? `The preview was saved again during this run (${[...releases].join(' → ')}): these results describe no single version, so the run fails. Run the tests again.`
+            : `${ended || 'The preview could not be confirmed at the end of this run.'} The run fails as a preview run; nothing ran against production.`)
+          : releases.size > 1
+            ? `The release changed during this run (${[...releases].join(' → ')}): these results describe no single release, so the run fails. Run the tests again.`
+            : 'The live release could not be confirmed at the end of this run, so the run fails. Run the tests again.');
       }
     }
     const subset = process.env.SW_TEST_SUBSET === 'true';
@@ -72,6 +90,7 @@ export default class TestReporter implements Reporter {
     const rerun = failures.length ? `somewhere test --failed${flags}` : null;
     const report = {
       passed, failed, skipped, expectedFailures, setupDiagnostics: this.setupDiagnostics, notRun: Math.max(0, this.total - this.entries.length), setupErrors: this.errors, target: process.env.SW_TEST_ORIGIN,
+      environment: preview ? 'preview' : 'production', ...(preview ? { preview_session_id: preview.previewSessionId } : {}),
       release: releases.size > 1 ? 'release changed during run' : release ?? (startRelease ? 'release not confirmed' : 'release unavailable'),
       releaseConfirmed: Boolean(release),
       browser: process.env.SW_TEST_BROWSER, duration: result.duration, browserProbeMs: Number(process.env.SW_TEST_BROWSER_LAUNCH_MS), subset,
@@ -83,14 +102,14 @@ export default class TestReporter implements Reporter {
     if (process.env.SW_TEST_JSON === 'true') console.log(JSON.stringify(report));
     else {
       // Exactly what ran in this invocation; a filtered or --failed run is a SUBSET, never a full result.
-      console.log(`${subset ? 'SUBSET (only the tests selected for this run): ' : 'FULL: '}${passed} passed, ${failed} failed, ${expectedFailures} expected failures, ${this.errors} setup errors, ${skipped} skipped, ${report.notRun} not run · ${report.target} · ${report.release} · ${report.browser} · ${(result.duration / 1000).toFixed(1)} s`);
+      console.log(`${subset ? 'SUBSET (only the tests selected for this run): ' : 'FULL: '}${passed} passed, ${failed} failed, ${expectedFailures} expected failures, ${this.errors} setup errors, ${skipped} skipped, ${report.notRun} not run · ${preview ? `preview ${preview.previewSessionId} · ` : ''}${report.target} · ${report.release} · ${report.browser} · ${(result.duration / 1000).toFixed(1)} s`);
       if (failures.length) {
         console.log('Failed:');
         for (const entry of failures) {
           const at = /^([^\s:]+\.ts:\d+): /.exec(entry.errors[0] ?? '')?.[1];
           console.log(`  ${at ?? `${entry.file}:${entry.line}`} ${entry.title}${at && at !== `${entry.file}:${entry.line}` ? ` (test at line ${entry.line})` : ''}\n    ${firstLine(entry.errors[0] ?? '') || 'see the error above'}`);
         }
-        console.log(`Rerun the failed tests on the same release: ${rerun}`);
+        console.log(`Rerun the failed tests on the same ${preview ? 'preview version' : 'release'}: ${rerun}`);
       }
       if (skipped) console.log(`${skipped} skipped: a skipped test proves nothing until it runs.`);
     }

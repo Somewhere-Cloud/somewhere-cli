@@ -45,7 +45,11 @@ ${privateData ? `  await app.check('a note stays private to its owner', async ()
     await app.expectRefused(ben.page, { table: 'notes', operation: 'update', id: note.id, values: { title: 'changed' } }, { allowed: ana.page });
     await app.expectRefused(ben.page, { table: 'notes', operation: 'delete', id: note.id }, { allowed: ana.page });
   });
-` : ''}  await app.check('at phone width nothing scrolls sideways', async () => {
+` : `  // Your own tables (db/schema.ts), called as a signed-in person: app.data adds the release's
+  // data contract and the Origin, and says ok, empty or refused. No need to read either from the page.
+  //   const { data: [task] } = await app.data(ana.page, { table: 'tasks', operation: 'list' });
+  //   await app.expectRefused(ben.page, { table: 'tasks', operation: 'get', id: task.id }, { allowed: ana.page });
+`}  await app.check('at phone width nothing scrolls sideways', async () => {
     await ana.page.setViewportSize({ width: 390, height: 844 });
     await ana.page.reload();
     await ana.page.getByText(ana.account.email).waitFor();

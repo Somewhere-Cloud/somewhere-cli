@@ -83,6 +83,10 @@ export async function save(title: string) {
 export const list = (after?: string) => data.notes.list({ limit: 100, after });
 \`\`\`
 
+A page that needs several reads: start them together and show it once every read it depends on has answered.
+Keep an input disabled until the data it depends on has loaded, including who the user is.
+Never let a late answer overwrite what the user typed: fill an input from loaded data only before it is enabled.
+
 Teams are built-in groups: the platform keeps the team, invitations, roster, removal,
 leaving, last owner. Starting a team needs a signed-in user; joining needs a verified
 email (a password sign-up joins once it enters its emailed code). The browser cannot call

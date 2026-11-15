@@ -28,6 +28,7 @@ import {
 } from '../lib/surface-counts.js';
 import { promotedDataNotes } from '../lib/promote-handoff.js';
 import { saveSourceBase } from '../lib/config.js';
+import { formatLiveRefusalMessage, liveRefusal } from '../lib/live-refusal.js';
 import { saveBaseFiles } from '../lib/base-files.js';
 import { clearPreviewRecord, loadPreviewRecord } from '../lib/preview-record.js';
 
@@ -363,6 +364,23 @@ export function registerPromote(program: Command) {
         // production was not changed, and it cannot know that a previous
         // attempt did not already change it. Check the pointer before letting
         // that claim stand.
+        // The platform switched production to the promoted version and could not switch it back: it is
+        // live. Say so plainly. The folder's base stays where it was (this refusal does not say whether
+        // production kept functions the preview lacked), so the next step here is a pull.
+        const live = liveRefusal(err);
+        if (live && err instanceof CliApiError) {
+          const envelope = platformErrorEnvelope(err);
+          const liveMessage = formatLiveRefusalMessage(envelope?.message ?? err.message);
+          if (opts.json) {
+            printJsonError(err.code, liveMessage, { ...(envelope?.extra ?? {}), live: true, deployment_outcome: 'live', release_id: live.releaseId });
+            process.exit(1);
+          }
+          spinner?.fail('Live, but this version failed its check');
+          error(`${liveMessage} ${dim(`[${err.code}, HTTP ${err.statusCode}]`)}`);
+          if (deployStateEntry) info('Production now serves this version: run `somewhere pull` before the next preview or deploy here (it keeps your edits).');
+          if (reference) info(dim(`Reference: ${reference}`));
+          process.exit(1);
+        }
         spinner?.fail('Promote failed');
         const message = err instanceof Error ? err.message : String(err);
         const assertsUnchanged = /production was not (changed|touched)/i.test(message);

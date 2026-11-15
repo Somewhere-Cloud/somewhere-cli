@@ -6925,6 +6925,9 @@ function resolveParentChains(tables, tableByName, privatePolicy, errors) {
     const parentKey = parentKeys.length === 1 ? parentKeys[0] : void 0;
     let inherited = null;
     let edges = 1;
+    if (parentTable && parentTable.scope.kind === "policy" && parentTable.scope.policy.kind === "parent" && parentTable.scope.policy.author) {
+      return fail(`Table "${t.name}" uses parent({ via: '${pending.via}' }), but "${parentTable.name}" declares parent({ author }); a table cannot inherit from a table with authors yet.`);
+    }
     if (parentTable && parentTable.scope.kind === "policy" && parentTable.scope.policy.kind === "parent") {
       const above = resolveParent(parentTable);
       if (above === null) {
@@ -6947,7 +6950,7 @@ function resolveParentChains(tables, tableByName, privatePolicy, errors) {
     if (!compatible) {
       return fail(`Table "${t.name}" uses parent({ via: '${pending.via}' }), but that foreign key does not have the same scalar type as "${parentTable.name}"."${parentKey.name}".`);
     }
-    t.scope.policy = { kind: "parent", via: pending.via, table: parentTable.name, parentKey: parentKey.name, policy: inherited };
+    t.scope.policy = { kind: "parent", via: pending.via, table: parentTable.name, parentKey: parentKey.name, policy: inherited, ...pending.author ? { author: pending.author } : {} };
     if (t.client?.create && !t.client.create.includes(pending.via)) {
       errors.push(`Table "${t.name}" uses parent({ via: '${pending.via}' }) and client.create must include "${pending.via}" so every new row explicitly selects an authorized parent.`);
     }
@@ -7748,6 +7751,133 @@ function resolveAppRoleScopes(tables, appRoles, errors) {
 }
 
 
+var roleLines =                 new WeakMap();
+var columnLines =                 new WeakMap();
+function readColumnRules(r, tableName, line, fail) {
+  const where = `columns on table "${tableName}"`;
+  r.expectPunct("{", `opening ${where}, which takes { column: { write: ['role'] } } or { column: { memberOf: 'team_column' } }`);
+  const rules = {};
+  const memberOf = {};
+  const seen =                 new Set();
+  const lines2 = [];
+  const at2 = {};
+  while (!r.tryPunct("}")) {
+    const column = r.readKey(`for a column in ${where}`);
+    const name = column.name.toLowerCase();
+    if (seen.has(name)) fail(column.line, `${where} lists "${column.name}" twice.`);
+    seen.add(name);
+    r.expectPunct(":", `after "${column.name}" in ${where}`);
+    r.expectPunct("{", `opening the rule for "${column.name}" in ${where}, which takes { write: ['role'] } or { memberOf: 'team_column' }`);
+    let roles = null;
+    let team = null;
+    while (!r.tryPunct("}")) {
+      const key = r.readKey(`for an option of column "${column.name}" in ${where}`);
+      if (key.name === "memberOf") {
+        if (team) fail(key.line, `column "${column.name}" in ${where} declares memberOf twice.`);
+        r.expectPunct(":", `after "memberOf" for column "${column.name}"`);
+        const t = r.next();
+        if (t.kind !== "string" || !/^[A-Za-z_][A-Za-z0-9_]{0,63}$/.test(t.value)) fail(t.line, `columns.${column.name}.memberOf on table "${tableName}" must be the quoted name of the table's team column, such as 'team_id'.`);
+        team = t.value.toLowerCase();
+        if (!r.tryPunct(",")) {
+          r.expectPunct("}", `closing the rule for "${column.name}"`);
+          break;
+        }
+        continue;
+      }
+      if (key.name !== "write") fail(key.line, `column "${column.name}" in ${where} has an unknown option "${key.name}". Allowed: write, memberOf.`);
+      if (roles) fail(key.line, `column "${column.name}" in ${where} declares write twice.`);
+      r.expectPunct(":", `after "write" for column "${column.name}"`);
+      const open = r.next();
+      if (open.kind !== "punct" || open.value !== "[") fail(open.line, `columns.${column.name}.write on table "${tableName}" must be a list of quoted app role names, such as ['staff'].`);
+      const list = [];
+      while (!r.tryPunct("]")) {
+        const t = r.next();
+        if (t.kind !== "string") fail(t.line, `columns.${column.name}.write on table "${tableName}" must list quoted app role names; values must be literal strings.`);
+        if (!/^[a-z][a-z0-9_]{0,63}$/.test(t.value)) fail(t.line, `columns.${column.name}.write on table "${tableName}" names "${t.value}", which is not an app role name (lowercase letters, digits and _, starting with a letter).`);
+        if (list.includes(t.value)) fail(t.line, `columns.${column.name}.write on table "${tableName}" lists "${t.value}" twice.`);
+        list.push(t.value);
+        lines2.push({ column: name, role: t.value, line: t.line });
+        if (!r.tryPunct(",")) {
+          r.expectPunct("]", `closing columns.${column.name}.write`);
+          break;
+        }
+      }
+      if (list.length === 0) fail(open.line, `columns.${column.name}.write on table "${tableName}" is empty, so no caller could ever write "${column.name}". List the app roles that may, or leave the column out of columns.`);
+      roles = [...list].sort();
+      if (!r.tryPunct(",")) {
+        r.expectPunct("}", `closing the rule for "${column.name}"`);
+        break;
+      }
+    }
+    if (!roles && !team) fail(column.line, `column "${column.name}" in ${where} needs write: ['role'] or memberOf: 'team_column'.`);
+    if (roles) rules[name] = roles;
+    if (team) memberOf[name] = team;
+    at2[name] = column.line;
+    if (!r.tryPunct(",")) {
+      r.expectPunct("}", `closing ${where}`);
+      break;
+    }
+  }
+  if (seen.size === 0) fail(line, `${where} is empty; leave it out, or list the columns that take a rule.`);
+  const out = {};
+  if (Object.keys(rules).length) {
+    const sorted2 = {};
+    for (const name of Object.keys(rules).sort()) sorted2[name] = rules[name];
+    roleLines.set(sorted2, lines2);
+    columnLines.set(sorted2, at2);
+    out.write = sorted2;
+  }
+  if (Object.keys(memberOf).length) {
+    const sorted2 = {};
+    for (const name of Object.keys(memberOf).sort()) sorted2[name] = memberOf[name];
+    columnLines.set(sorted2, at2);
+    out.memberOf = sorted2;
+  }
+  return out;
+}
+function validateColumnMemberOf(memberOf, input, fail) {
+  const at2 = columnLines.get(memberOf) ?? {};
+  for (const [column, team] of Object.entries(memberOf)) {
+    const line = at2[column] ?? input.nameLine;
+    const label = `columns.${column}.memberOf on table "${input.tableName}"`;
+    const declared = input.columns.find((c) => c.name === column);
+    if (column === input.ownerColumn) fail(line, `${label} names the owner column, which the platform writes; it takes no memberOf rule.`);
+    if (!declared) fail(line, `${label}: "${column}" is not one of its declared columns.`);
+    if (declared.helper !== "text") fail(line, `${label}: "${column}" must be a text() column holding a user id.`);
+    if (declared.hasDefault && declared.default !== null) fail(line, `${label}: "${column}" declares a default user id, which a create that leaves the column out would store without the team check. Remove the default (a nullable column may default to null).`);
+    if (input.accessColumns.includes(column)) fail(line, `${label}: "${column}" is read by the table's access rule, so it takes no memberOf rule.`);
+    if (column === input.roomSave) fail(line, `${label}: "${column}" is the room's save column.`);
+    if (!input.groupColumns.includes(team)) {
+      fail(line, `${label} names "${team}", which is not this table's team column. memberOf names the table's own group() column (group(), anyOf(owner(), group()) or an allOf() group() gate); a team inherited through parent() is not supported yet.`);
+    }
+  }
+}
+function validateColumnRules(rules, input, fail) {
+  const at2 = columnLines.get(rules) ?? {};
+  if (input.serverOnly) fail(input.nameLine, `table "${input.tableName}" is serverOnly(), so no caller writes it; columns write rules apply to caller writes and are not accepted on it.`);
+  for (const column of Object.keys(rules)) {
+    const line = at2[column] ?? input.nameLine;
+    const label = `columns.${column} on table "${input.tableName}"`;
+    if (column === input.ownerColumn) fail(line, `${label} names the owner column, which the platform writes; no caller writes it, so it takes no write rule.`);
+    if (!input.declaredColumns.has(column)) fail(line, `${label} names "${column}", which is not one of its declared columns.`);
+    if (input.accessColumns.includes(column)) fail(line, `${label} names "${column}", which the table's access rule reads; who may set it is decided by that rule, so it takes no column write rule.`);
+    if (column === input.roomSave) fail(line, `${label} names "${column}", the column this table's room saves its state to. The room writes it, not a caller, so a write rule on it would not be enforced on room saves; it is not accepted.`);
+  }
+}
+function resolveColumnRuleRoles(tables, appRoles, groups, errors) {
+  const vocabulary = new Set((appRoles ?? []).map((role) => role.name));
+  const teamRoles =                 new Set(["owner", "admin", "member", ...groups?.roles ?? []]);
+  for (const t of tables) {
+    if (!t.columnRules) continue;
+    for (const { column, role, line } of roleLines.get(t.columnRules) ?? []) {
+      if (vocabulary.has(role)) continue;
+      errors.push(teamRoles.has(role) ? `line ${line}: columns.${column}.write on table "${t.name}" names "${role}", a team role. Column write rules take app roles only for now (declared in the schema's appRoles option); a team role cannot restrict a column yet.` : `line ${line}: columns.${column}.write on table "${t.name}" names "${role}", which is not declared in the schema's appRoles option. Column write rules accept only app roles declared there.`);
+    }
+    roleLines.delete(t.columnRules);
+  }
+}
+
+
 var ROLE_NAME_PATTERN = /^[a-z][a-z0-9_]{0,63}$/;
 var EMAIL_DOMAIN_PATTERN = /^(?=.{4,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z][a-z0-9-]{0,61}[a-z0-9]$/;
 var ROLE_DOMAIN_MAP_JS = `
@@ -8157,8 +8287,16 @@ function declaredScopeIdentityColumns(scope) {
   if (scope.kind === "owner") return [scope.column];
   if (scope.kind === "member") return [...scope.group];
   if (scope.kind !== "policy") return [];
-  const collect = (policy) => policy.kind === "owner" ? [policy.column] : policy.kind === "member" ? [...policy.group] : policy.kind === "any_of" ? policy.policies.flatMap(collect) : policy.kind === "all_of" ? [...collect(policy.gate), ...collect(policy.who)] : policy.kind === "group" ? [policy.column] : policy.kind === "app_role" ? [] : [policy.via];
+  const collect = (policy) => policy.kind === "owner" ? [policy.column] : policy.kind === "member" ? [...policy.group] : policy.kind === "any_of" ? policy.policies.flatMap(collect) : policy.kind === "all_of" ? [...collect(policy.gate), ...collect(policy.who)] : policy.kind === "group" ? [policy.column] : policy.kind === "app_role" ? [] : [policy.via, ...policy.author ? [policy.author.column] : []];
   return [...new Set(collect(scope.policy))];
+}
+function declaredTeamColumns(scope) {
+  if (scope.kind !== "policy") return [];
+  const p = scope.policy;
+  if (p.kind === "group") return [p.column];
+  if (p.kind === "any_of") return p.policies.flatMap((x) => x.kind === "group" ? [x.column] : []);
+  if (p.kind === "all_of") return p.gate.kind === "group" ? [p.gate.column] : [];
+  return [];
 }
 var ROOM_REFEREE_PATH = /^\/api\/[A-Za-z0-9_\-]+(?:\/[A-Za-z0-9_\-.]+)*$/;
 function readRoomsOption(r, rawName, line) {
@@ -8911,17 +9049,56 @@ function readAllOfScope(r, tableName, line) {
 }
 function readParentScope(r, tableName, line) {
   r.expectPunct("(", 'after "parent"');
-  const opts = r.readLiteralObject(`in parent() options for table "${tableName}"`);
+  const where = `parent() options for table "${tableName}"`;
+  r.expectPunct("{", `in ${where}`);
+  let via = null;
+  let authorColumn = null;
+  const actions = {};
+  const seen =                 new Set();
+  while (!r.tryPunct("}")) {
+    const key = r.readKey(`for an option key in ${where}`);
+    if (seen.has(key.name)) throw new SchemaTsError(`line ${key.line}: option "${key.name}" appears twice in ${where}.`);
+    seen.add(key.name);
+    r.expectPunct(":", `after "${key.name}" in ${where}`);
+    if (key.name === "via" || key.name === "author") {
+      const t = r.next();
+      if (t.kind !== "string" || !SAFE_IDENT.test(t.value) || t.value.length > MAX_NAME_LENGTH) {
+        throw new SchemaTsError(key.name === "via" ? `line ${t.line}: parent({ via }) on table "${tableName}" must name a valid declared foreign-key column.` : `line ${t.line}: parent({ author }) on table "${tableName}" must name a declared nullable text() column the platform stamps with the row's creator.`);
+      }
+      if (key.name === "via") via = { value: t.value.toLowerCase(), line: t.line };
+      else authorColumn = { value: t.value.toLowerCase(), line: t.line };
+    } else if (key.name === "update" || key.name === "delete") {
+      const open = r.next();
+      if (open.kind !== "punct" || open.value !== "[") throw new SchemaTsError(`line ${open.line}: parent({ ${key.name} }) on table "${tableName}" lists who may ${key.name} a row: 'author' and/or 'parent', such as ['author', 'parent'].`);
+      const list = [];
+      while (!r.tryPunct("]")) {
+        const t = r.next();
+        if (t.kind !== "string" || t.value !== "author" && t.value !== "parent") throw new SchemaTsError(`line ${t.line}: parent({ ${key.name} }) on table "${tableName}" accepts 'author' (the row's author) and 'parent' (whoever may ${key.name} the parent row).`);
+        if (list.includes(t.value)) throw new SchemaTsError(`line ${t.line}: parent({ ${key.name} }) on table "${tableName}" lists '${t.value}' twice.`);
+        list.push(t.value);
+        if (!r.tryPunct(",")) {
+          r.expectPunct("]", `closing parent({ ${key.name} })`);
+          break;
+        }
+      }
+      if (list.length === 0) throw new SchemaTsError(`line ${open.line}: parent({ ${key.name} }) on table "${tableName}" is empty, so nobody could ${key.name} a row. List 'author' and/or 'parent', or leave it out for today's rule ('parent').`);
+      actions[key.name] = ["author", "parent"].filter((a) => list.includes(a));
+    } else {
+      throw new SchemaTsError(`line ${key.line}: parent() on table "${tableName}" has an unknown option "${key.name}". Allowed: via, author, update, delete.`);
+    }
+    if (!r.tryPunct(",")) {
+      r.expectPunct("}", `closing ${where}`);
+      break;
+    }
+  }
   r.tryPunct(",");
   r.expectPunct(")", "closing parent()");
-  if (opts.size !== 1 || !opts.has("via")) {
-    throw new SchemaTsError(`line ${line}: parent() on table "${tableName}" needs exactly { via: 'foreign_key' }.`);
-  }
-  const value = opts.get("via").value;
-  if (typeof value !== "string" || !SAFE_IDENT.test(value) || value.length > MAX_NAME_LENGTH) {
-    throw new SchemaTsError(`line ${opts.get("via").line}: parent({ via }) on table "${tableName}" must name a valid declared foreign-key column.`);
-  }
-  const sentinel = { kind: "parent", via: value.toLowerCase(), table: "", parentKey: "", policy: { kind: "owner", column: "" } };
+  if (!via) throw new SchemaTsError(`line ${line}: parent() on table "${tableName}" needs { via: 'foreign_key' }.`);
+  const usesAuthor = [actions.update, actions.delete].some((list) => list?.includes("author"));
+  if (usesAuthor && !authorColumn) throw new SchemaTsError(`line ${line}: parent() on table "${tableName}" lets 'author' act but declares no author column; add author: 'author_id' (a nullable text() column the platform stamps).`);
+  if (!authorColumn && (actions.update || actions.delete)) throw new SchemaTsError(`line ${line}: parent() on table "${tableName}" lists update or delete without an author column; without author, every operation already follows the parent.`);
+  const author = authorColumn ? { column: authorColumn.value, ...actions.update ? { update: actions.update } : {}, ...actions.delete ? { delete: actions.delete } : {} } : void 0;
+  const sentinel = { kind: "parent", via: via.value, table: "", parentKey: "", policy: { kind: "owner", column: "" }, ...author ? { author } : {} };
   rememberParentLine(sentinel, line);
   return { kind: "policy", policy: sentinel };
 }
@@ -9125,6 +9302,7 @@ function readTable(r, rawName, nameLine) {
   let relationsDeclared = false;
   let clientInput;
   let roomsInput;
+  let columnOptions;
   if (r.tryPunct(",")) {
     r.expectPunct("{", `opening the options of table "${rawName}"`);
     while (!r.tryPunct("}")) {
@@ -9152,9 +9330,14 @@ function readTable(r, rawName, nameLine) {
       } else if (key.name === "rooms") {
         if (roomsInput) throw new SchemaTsError(`line ${key.line}: table "${rawName}" declares "rooms" twice.`);
         roomsInput = readRoomsOption(r, rawName, key.line);
+      } else if (key.name === "columns") {
+        if (columnOptions) throw new SchemaTsError(`line ${key.line}: table "${rawName}" declares "columns" twice.`);
+        columnOptions = readColumnRules(r, rawName, key.line, (at2, message) => {
+          throw new SchemaTsError(`line ${at2}: ${message}`);
+        });
       } else {
         throw new SchemaTsError(
-          `line ${key.line}: table "${rawName}" has an unknown option "${key.name}". Allowed: scope, indexes, unique, relations, client, rooms.`
+          `line ${key.line}: table "${rawName}" has an unknown option "${key.name}". Allowed: scope, indexes, unique, relations, client, rooms, columns.`
         );
       }
       if (!r.tryPunct(",")) {
@@ -9282,7 +9465,46 @@ function readTable(r, rawName, nameLine) {
     client = parsed.permissions;
   }
   const rooms = roomsInput ? validateRoomsOption(roomsInput, rawName, nameLine, columns, scope, client, relations) : void 0;
-  return { kind: "table", table: { name, scope, relations, columns, indexes, uniques, removedColumns: [...removedColumns].sort(), ...client ? { client } : {}, ...rooms ? { rooms } : {} } };
+  if (scope.kind === "policy" && scope.policy.kind === "parent" && scope.policy.author) {
+    const authorColumn = scope.policy.author.column;
+    const declared = columns.find((c) => c.name === authorColumn);
+    if (!declared || declared.helper !== "text" || !declared.nullable || declared.hasDefault || declared.renamedFrom) {
+      throw new SchemaTsError(`line ${nameLine}: parent({ author: '${authorColumn}' }) on table "${rawName}" must name a declared text({ nullable: true }) column without a default or rename: the platform stamps it with the row's creator, and a row without one grants its author nothing.`);
+    }
+    if (authorColumn === scope.policy.via) throw new SchemaTsError(`line ${nameLine}: parent({ author }) on table "${rawName}" cannot be the parent link "${authorColumn}".`);
+    if (client && ((client.create ?? []).includes(authorColumn) || (client.update ?? []).includes(authorColumn))) {
+      throw new SchemaTsError(`line ${nameLine}: table "${rawName}": "${authorColumn}" is the author the platform stamps, so client.create and client.update cannot list it.`);
+    }
+  }
+  const columnRules = columnOptions?.write;
+  const memberOf = columnOptions?.memberOf;
+  if (memberOf) {
+    validateColumnMemberOf(memberOf, {
+      tableName: rawName,
+      nameLine,
+      columns,
+      ownerColumn: managedOwner?.column ?? null,
+      accessColumns: declaredScopeIdentityColumns(scope),
+      roomSave: rooms?.save ?? null,
+      groupColumns: declaredTeamColumns(scope)
+    }, (at2, message) => {
+      throw new SchemaTsError(`line ${at2}: ${message}`);
+    });
+  }
+  if (columnRules) {
+    validateColumnRules(columnRules, {
+      tableName: rawName,
+      nameLine,
+      declaredColumns: new Set(columns.map((c) => c.name)),
+      ownerColumn: managedOwner?.column ?? null,
+      accessColumns: declaredScopeIdentityColumns(scope),
+      roomSave: rooms?.save ?? null,
+      serverOnly: scope.kind === "server_only"
+    }, (at2, message) => {
+      throw new SchemaTsError(`line ${at2}: ${message}`);
+    });
+  }
+  return { kind: "table", table: { name, scope, relations, columns, indexes, uniques, removedColumns: [...removedColumns].sort(), ...client ? { client } : {}, ...rooms ? { rooms } : {}, ...columnRules ? { columnRules } : {}, ...memberOf ? { memberOf } : {} } };
 }
 function extractSchemaTs(source, options = {}) {
   if (typeof source !== "string" || source.trim().length === 0) {
@@ -9386,6 +9608,7 @@ function extractSchemaTs(source, options = {}) {
       return null;
     };
     resolveAppRoleScopes(tables, appRoles, errors);
+    resolveColumnRuleRoles(tables, appRoles, groupRoles, errors);
     resolveGroupsAndParents(tables, tableByName, privatePolicy, groupRoles, errors);
     validateDeclaredMemberships(tables, tableByName, knownColumns, errors);
     validateDeclaredRelations(tables, tableByName, knownColumns, (table) => removedTables.includes(table) ? "removedTable()" : exportedTables.includes(table) ? "exported()" : null, errors);

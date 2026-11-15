@@ -25,7 +25,7 @@ const CREDENTIAL = `swpt.${PROJECT}.${DRAFT}.${'s'.repeat(10)}${randomUUID().rep
 const COOKIE = 'sw_draft_cap'; // the platform names it; on an http test origin it cannot be __Host-
 
 // ── Shared state: the preview's store, mail and sessions; every secret seen ─────────────────────
-const state = { candidate: CANDIDATE, dead: false, requests: [], production: [], users: new Map(), sessions: new Map(), mail: [], notes: new Map(), teams: new Map(), secrets: new Set([CREDENTIAL]) };
+const state = { candidate: CANDIDATE, dead: false, requests: [], production: [], users: new Map(), sessions: new Map(), mail: [], notes: new Map(), teams: new Map(), mailCalls: [], secrets: new Set([CREDENTIAL]) };
 /** The platform's rule (DESIGN.md slice 3a follow-ups, part B): delete the listed accounts together, with the
  *  teams whose every member is listed; the only owner of a team with a member outside the list is kept. */
 function deleteTogether(ids, { option, kindOf }) {
@@ -115,7 +115,16 @@ const platform = createServer(async (req, res) => {
     if (u.test) return json(res, 409, { ok: false, error: 'NOT_A_SIGNUP', message: 'no' });
     state.users.delete(id); return json(res, 200, { ok: true, data: { deleted: true } });
   }
-  if (req.method === 'GET' && path === '/mail') return json(res, 200, { ok: true, data: { preview_session_id: DRAFT, messages: [...state.mail].reverse() } });
+  if (req.method === 'GET' && path === '/mail') {
+    // As the platform does (part D2): optional address, and a server-side wait for mail newer than `since`.
+    const address = url.searchParams.get('address'), waitMs = Math.min(10_000, Number(url.searchParams.get('wait_ms') ?? 0)), since = Number(url.searchParams.get('since') ?? 0);
+    const read = () => [...state.mail].reverse().filter((m) => !address || m.to === address);
+    const deadline = Date.now() + waitMs;
+    let messages = read();
+    while (waitMs > 0 && !messages.some((m) => Date.parse(m.created_at) > since) && Date.now() < deadline) { await new Promise((r) => setTimeout(r, 50)); messages = read(); }
+    state.mailCalls.push({ address, waitMs });
+    return json(res, 200, { ok: true, data: { preview_session_id: DRAFT, messages } });
+  }
   return json(res, 404, { ok: false, error: 'NOT_FOUND', message: path });
 });
 
@@ -396,7 +405,7 @@ function leaked(output) {
   const texts = [output, ...files(root).map((path) => readFileSync(path).toString('latin1'))];
   return [...state.secrets].filter((secret) => texts.some((text) => text.includes(secret))).map((secret) => `${secret.slice(0, 4)}…(${secret.length})`);
 }
-const reset = () => { state.requests.length = 0; state.production.length = 0; };
+const reset = () => { state.requests.length = 0; state.production.length = 0; state.mailCalls.length = 0; };
 
 before(async () => {
   await new Promise((resolve) => platform.listen(0, '127.0.0.1', resolve));
@@ -417,6 +426,9 @@ test('somewhere test --preview runs the journey on the preview with its own cred
   assert.deepEqual(state.production, [], 'no production call of any kind');
   assert.ok(state.requests.every((line) => line.includes('/v1/preview-tools/')));
   assert.ok(state.requests.includes('GET /v1/preview-tools/target') && state.requests.includes('POST /v1/preview-tools/users') && state.requests.includes('POST /v1/preview-tools/signups/delete'));
+  // Part D2: captured mail is read with one server-side wait per code, always for one address.
+  const waits = state.mailCalls.filter((c) => c.waitMs > 0);
+  assert.ok(waits.length >= 1 && state.mailCalls.every((c) => c.address), JSON.stringify(state.mailCalls));
   assert.deepEqual([...state.users.values()].map((u) => u.email), [], 'every account the run made is gone: form sign-ups by exact id, managed users through the preview tool');
   assert.ok([...state.sessions.values()].every((s) => s.ended), 'every pinned browser session was ended');
   assert.equal(readFileSync(prodRecordPath, 'utf8'), prodBefore.text, 'the production cleanup record is untouched');

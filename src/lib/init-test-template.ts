@@ -8,6 +8,8 @@ const SCRIPT = (privateData: boolean) => `// tests/app-check.mjs — an ordinary
 // what you built. Run it after a successful deploy, never after a refused one:
 //   npx somewhere deploy && node tests/app-check.mjs
 // It writes its result once to .somewhere/app-check.json; the exit code is the verdict.
+// It stops at the first failed check and prints the page's URL and visible error text.
+// After a fix, rerun only what failed: node tests/app-check.mjs --failed (keep setup outside app.check).
 // From a .cjs script: const { openAppTest } = require('@somewhere-cloud/cli/script');
 import { chromium } from '@playwright/test';
 import { openAppTest${privateData ? ', captureResponses, dataReady' : ''} } from '@somewhere-cloud/cli/script';
@@ -18,6 +20,7 @@ const browser = await chromium.launch(app.launchOptions());
 // deleted by exact id in finish()).
 const person = async () => {
   const page = await browser.newPage({ baseURL: app.origin });
+  page.setDefaultTimeout(5_000); // a deployed app answers in well under a second; never sleep, wait for the thing itself
   return { page, account: await app.signUp(page) };
 };
 try {

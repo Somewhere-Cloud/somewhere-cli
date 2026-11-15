@@ -6,7 +6,7 @@ import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { chromium } from '@playwright/test';
 import { signUp, signIn, signOut, FIND_MS } from '../dist/lib/form-auth.js';
-import { classifyData, captureResponses, dataReady, launchOptions, undeployedChanges } from '../dist/lib/app-test.js';
+import { AppTest, classifyData, captureResponses, dataReady, launchOptions, undeployedChanges } from '../dist/lib/app-test.js';
 import { productionControl } from '../dist/lib/test-control.js';
 
 const ORIGIN = 'https://app.test';
@@ -167,4 +167,43 @@ test('the stale-release guard names files the live release does not have', () =>
 
 test('launchOptions keeps caller options and adds the system-resolver switch once', () => {
   assert.deepEqual(launchOptions({ headless: false, args: ['--x'] }), { headless: false, args: ['--disable-features=AsyncDns', '--x'] });
+});
+
+// The first failed check stops the run: it says what the page showed, later checks are skipped without
+// waiting, and --failed reruns only the checks that did not pass (bench-1115: nine dependent checks each
+// waited a 30 s timeout after one real failure, then the whole script was rerun for diagnostics).
+test('check() stops at the first failure, prints the page, skips the rest; --failed reruns only failures', async () => {
+  const page = await pageFor('<!doctype html><html><body><main><h1>Teams</h1><p role="alert">Could not open the team</p></main></body></html>');
+  await page.goto('/teams');
+  const results = join(mkdtempSync(join(process.env.TMPDIR, 'app-check-')), 'app-check.json');
+  const client = { call: async () => { throw new Error('unexpected control-plane call'); } };
+  const target = { projectId: 'p-1', origin: ORIGIN, host: 'app.test', releaseId: 'rel_1', contractDigest: 'd' };
+  const out = [];
+  const write = process.stdout.write.bind(process.stdout);
+  process.stdout.write = (chunk) => { out.push(String(chunk)); return true; };
+  let ran = [];
+  try {
+    const app = new AppTest(process.env.TMPDIR, productionControl(client, target), results);
+    app.host.pages.add(page);
+    const started = Date.now();
+    await app.check('one', () => { ran.push('one'); });
+    await app.check('two', () => { ran.push('two'); throw new Error('the team page did not open'); });
+    for (const n of ['three', 'four']) await app.check(n, async () => { ran.push(n); await page.waitForTimeout(30_000); });
+    assert.ok(Date.now() - started < 5_000, 'later checks never wait');
+    assert.deepEqual(ran, ['one', 'two']);
+    assert.deepEqual(app.checks.map((c) => [c.name, c.ok, c.skipped ?? null]), [['one', true, null], ['two', false, null], ['three', false, 'after-failure'], ['four', false, 'after-failure']]);
+    const said = out.join('');
+    assert.match(said, /FAIL two\n  the team page did not open\n  page 1: https:\/\/app\.test\/teams shows: Could not open the team/);
+    assert.match(said, /--failed/);
+    const { writeFileSync: w } = await import('node:fs');
+    w(results, JSON.stringify({ checks: app.checks }));
+
+    // After a fix: --failed (onlyFailed) skips 'one' and runs the rest.
+    ran = [];
+    const again = new AppTest(process.env.TMPDIR, productionControl(client, target), results);
+    again.passedLastRun = new Set(app.checks.filter((c) => c.ok).map((c) => c.name));
+    for (const n of ['one', 'two', 'three', 'four']) await again.check(n, () => { ran.push(n); });
+    assert.deepEqual(ran, ['two', 'three', 'four']);
+    assert.deepEqual(again.checks.map((c) => [c.name, c.ok, c.skipped ?? null]), [['one', true, 'passed-last-run'], ['two', true, null], ['three', true, null], ['four', true, null]]);
+  } finally { process.stdout.write = write; await page.context().close(); }
 });

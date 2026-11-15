@@ -65,6 +65,10 @@ something the visitor cannot choose, such as an invitation your app issued, chec
 the sign-up route: single use, bound to one account, its link delivered only to that person:
 somewhere docs sw.auth --section server-assigned-app-roles-setroles.
 messages use parent(): owner() would hide staff replies from the customer.
+A staff reply is a messages row, and creating a parent() child needs create on the parent
+for that person: its owner, or a role listed under the parent's create. Read or update is
+not enough. So tickets lists create: ['staff']; without it every staff reply is refused
+(403 POLICY_AUTHORITY_REQUIRED).
 Publish pages in an owner-checked endpoint. Share with caller-scoped
 sw.db.insert('note_shares', { grantee_id, note_id }); it checks row ownership.
 Browser calls THROW, not { error }; catch below.
@@ -141,7 +145,16 @@ need Origin equal to the app URL.
 
 Test with an ordinary Playwright script: the journeys you changed and your access boundaries.
 Run it only after a successful deploy: npx @somewhere-cloud/cli deploy && node tests/app-check.mjs
-(the starter's short example; one result file, and the exit code is the verdict). Rerun only to answer a question.
+(the starter's short example; one result file, and the exit code is the verdict).
+Keep each run short:
+- Short waits: page.setDefaultTimeout(5_000) on every page; a deployed app answers in under
+  a second. Never sleep for a fixed time: wait for the thing itself (the text, the response).
+- Stop at the first failure and print what the page showed (page.url(), the visible error
+  text). Checks after a failure only wait out their timeouts. app.check() does both.
+- After a fix, rerun only the checks that failed: node tests/app-check.mjs --failed.
+  Keep setup (sign-ups, rows a check needs) outside app.check() so a rerun still has it.
+Call the data endpoint as a signed-in person: app.data(page, { table, operation, id, values })
+(the raw request: somewhere docs declared-data --section calling-the-data-endpoint-directly).
 Helpers from @somewhere-cloud/cli/script (import or require): openAppTest() then app.signUp/signIn/signOut(page)
 through your form, app.data(page, { table, operation, id, values, where }) as that person,
 app.expectRefused(page, request, { allowed: ownerPage }), captureResponses, dataReady, launchOptions.

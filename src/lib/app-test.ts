@@ -39,7 +39,8 @@ export type DataKind = 'ok' | 'empty' | 'refused' | 'missing-or-refused' | 'malf
 export interface DataResult { status: number; kind: DataKind; data: unknown; error: string | null; message: string | null }
 type Who = Page | BrowserContext | APIRequestContext;
 
-export interface Check { name: string; ok: boolean; ms: number; error?: string }
+/** One check's outcome. `skipped` says why it did not run: an earlier check failed, or (with --failed) it passed last run. */
+export interface Check { name: string; ok: boolean; ms: number; error?: string; skipped?: 'after-failure' | 'passed-last-run' }
 export interface OpenOptions {
   /** The linked project folder (default: the current directory). */
   projectDir?: string;
@@ -54,6 +55,24 @@ export interface OpenOptions {
    *  and never touches production. Prepare each browser context with app.prepare(context), or let
    *  signUp/signIn/verify/data do it for the page they get. */
   preview?: boolean | string;
+  /** Run only the checks that did not pass in the previous result file (default: true when the
+   *  script was started with --failed). Use it after a fix instead of rerunning everything. */
+  onlyFailed?: boolean;
+}
+
+/** Where a page is and what it says: its URL and any visible alert or error text (scrubbed). */
+async function pageState(page: Page): Promise<string> {
+  if (page.isClosed()) return 'closed';
+  try {
+    // A string, so this module needs no DOM types: visible alert or error text, else the page's first words.
+    const shown = await page.evaluate(`(() => {
+      const said = [...document.querySelectorAll('[role="alert"], [data-sw-auth="error"], [data-sw-data="error"], [aria-invalid="true"], .error')]
+        .filter((el) => el.getClientRects().length > 0).map((el) => el.innerText.trim()).filter(Boolean);
+      return said.length ? 'shows: ' + said.slice(0, 3).join(' | ')
+        : 'no error text; page starts: ' + (document.body ? document.body.innerText : '').trim().replace(/\\s+/g, ' ').slice(0, 160);
+    })()`) as string;
+    return `${page.url()} ${scrub(shown).slice(0, 400)}`;
+  } catch { return page.url(); }
 }
 
 function clientOf(who: Who): APIRequestContext {
@@ -106,6 +125,8 @@ export class AppTest {
   private readonly host: FormHost;
   private readonly started = new Date();
   private finished = false;
+  private stopped = false;
+  private passedLastRun = new Set<string>();
 
   private readonly prepared = new WeakSet<BrowserContext>();
   private readonly target: TestTarget;
@@ -164,7 +185,13 @@ export class AppTest {
     if (ipv4First) setDefaultResultOrder('ipv4first');
     process.env.SW_TEST_RUN ??= randomUUID();
     for (const line of describeSweep(await sweepAccounts(control, root), 'Before this script')) process.stderr.write(line + '\n');
-    return new AppTest(root, control, resolve(root, options.results ?? join('.somewhere', preview ? 'app-check-preview.json' : 'app-check.json')));
+    const app = new AppTest(root, control, resolve(root, options.results ?? join('.somewhere', preview ? 'app-check-preview.json' : 'app-check.json')));
+    if (options.onlyFailed ?? process.argv.includes('--failed')) {
+      if (!existsSync(app.resultsPath)) throw new Error(`--failed: no previous result at ${app.resultsPath}; run the whole script once first.`);
+      const last = JSON.parse(readFileSync(app.resultsPath, 'utf8')) as { checks?: Check[] };
+      app.passedLastRun = new Set((last.checks ?? []).filter(check => check.ok).map(check => check.name));
+    }
+    return app;
   }
 
   /** Browser launch options for this app: chromium.launch(app.launchOptions()). */
@@ -217,12 +244,21 @@ export class AppTest {
     return result;
   }
 
-  /** Run one named check; a failure is recorded with its message and the script continues. */
+  /** Run one named check. The first failure stops the run: it prints the check, the error and
+   *  what each signed-in page shows (URL, visible error text), and every later check is skipped
+   *  instead of waiting out its own timeout. With --failed, checks that passed last run are skipped. */
   async check(name: string, work: () => unknown | Promise<unknown>): Promise<boolean> {
+    if (this.stopped) { this.checks.push({ name, ok: false, ms: 0, skipped: 'after-failure' }); return false; }
+    if (this.passedLastRun.has(name)) { this.checks.push({ name, ok: true, ms: 0, skipped: 'passed-last-run' }); return true; }
     const start = performance.now();
     try { await work(); this.checks.push({ name, ok: true, ms: Math.round(performance.now() - start) }); return true; }
     catch (error) {
-      this.checks.push({ name, ok: false, ms: Math.round(performance.now() - start), error: error instanceof Error ? error.message.split('\n').slice(0, 6).join('\n') : String(error) });
+      const pages = await Promise.all([...this.host.pages].map(pageState));
+      const message = (error instanceof Error ? error.message.split('\n').slice(0, 6).join('\n') : String(error))
+        + pages.map((state, i) => `\npage ${i + 1}: ${state}`).join('');
+      this.checks.push({ name, ok: false, ms: Math.round(performance.now() - start), error: message });
+      this.stopped = true;
+      process.stdout.write(`FAIL ${name}\n  ${message.replaceAll('\n', '\n  ')}\nStopping here: later checks are skipped. After a fix, rerun only what failed: node <this script> --failed\n`);
       return false;
     }
   }
@@ -232,6 +268,7 @@ export class AppTest {
   async finish(): Promise<{ passed: number; failed: number; file: string }> {
     if (this.finished) throw new Error('finish() already ran');
     this.finished = true;
+    const ranChecks = this.checks.length;
     const preview = this.control.environment === 'preview';
     let ended = '';
     const live = await this.control.currentRelease().catch((error: unknown) => { ended = error instanceof Error ? error.message : ''; return null; });
@@ -254,13 +291,17 @@ export class AppTest {
     await this.control.close();
     if (cleanup.length) this.checks.push({ name: 'cleanup of sign-up accounts', ok: false, ms: 0, error: cleanup.join('; ') });
     const passed = this.checks.filter(check => check.ok).length;
-    const failed = this.checks.length - passed;
+    const failed = this.checks.filter(check => !check.ok && !check.skipped).length;
+    const notRun = this.checks.filter(check => check.skipped === 'after-failure').length;
+    const carried = this.checks.filter(check => check.skipped === 'passed-last-run').length;
     mkdirSync(dirname(this.resultsPath), { recursive: true });
     writeFileSync(this.resultsPath, JSON.stringify({ origin: this.origin, environment: this.control.environment, ...(preview ? { preview_session_id: this.target.previewSessionId } : {}), release: this.release,
       started: this.started.toISOString(), finished: new Date().toISOString(), passed, failed, checks: this.checks.map((check) => ({ ...check, ...(check.error ? { error: scrub(check.error) } : {}) })) }, null, 2) + '\n');
-    for (const check of this.checks.filter(c => !c.ok)) process.stdout.write(`FAIL ${check.name}\n  ${scrub(check.error ?? '').replaceAll('\n', '\n  ')}\n`);
+    // check() printed its own failure when it happened; print the ones finish() found.
+    for (const check of this.checks.slice(ranChecks).filter(c => !c.ok)) process.stdout.write(`FAIL ${check.name}\n  ${scrub(check.error ?? '').replaceAll('\n', '\n  ')}\n`);
     if (!this.checks.length) process.stdout.write('FAIL no check ran: the script stopped before its first check (the error is below)\n');
-    process.stdout.write(`${failed || !passed ? 'FAILED' : 'PASSED'}: ${passed} passed, ${failed} failed · ${preview ? `preview ${this.target.previewSessionId} · ` : ''}${this.origin} · ${this.release} · ${this.resultsPath}\n`);
+    const extra = `${notRun ? `, ${notRun} not run (stopped at the first failure)` : ''}${carried ? ` (${carried} of the passes were from the previous run, not rerun)` : ''}`;
+    process.stdout.write(`${failed || !passed ? 'FAILED' : 'PASSED'}: ${passed} passed, ${failed} failed${extra} · ${preview ? `preview ${this.target.previewSessionId} · ` : ''}${this.origin} · ${this.release} · ${this.resultsPath}\n`);
     if (failed || !passed) process.exitCode = 1;
     return { passed, failed, file: this.resultsPath };
   }
@@ -295,7 +336,7 @@ export function captureResponses(page: Page) {
 
 /** Wait until the page's data views have finished loading: the starter marks each with
  *  data-sw-data="loading" | "ready" | "error". Signed-in is not "the list has loaded". */
-export async function dataReady(scope: Page | Locator, timeout = 15_000): Promise<'ready' | 'error'> {
+export async function dataReady(scope: Page | Locator, timeout = 5_000): Promise<'ready' | 'error'> {
   const root = typeof (scope as Page).goto === 'function' ? (scope as Page).locator(':root') : scope as Locator;
   const views = root.locator('[data-sw-data]');
   await views.first().waitFor({ state: 'attached', timeout });

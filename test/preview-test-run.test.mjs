@@ -132,6 +132,8 @@ const app = createServer(async (req, res) => {
   const session = state.sessions.get(sessionId);
   if (!state.productionAllowed && (!session || session.ended || state.dead || session.candidate !== state.candidate || candidate !== state.candidate)) { res.writeHead(404); return res.end('Preview not found'); }
   const user = appSessions.get(c.app_session) ?? null;
+  // As the platform does: a cookie-authenticated POST must carry the app's own Origin.
+  if (req.method === 'POST' && c.app_session && url.pathname.startsWith('/api/auth/') && req.headers.origin !== appOrigin) return json(res, 400, { error: 'ORIGIN_REQUIRED' });
   const body = raw ? JSON.parse(raw) : {};
   const signedIn = (u) => { const token = randomUUID(); appSessions.set(token, u.id); state.secrets.add(token); return { 'set-cookie': `app_session=${token}; Path=/; HttpOnly` }; };
   const me = user ? state.users.get(user) : null;

@@ -314,11 +314,15 @@ async function verifySteps(run: FormHost, page: Page, person: Person): Promise<v
   await run.prepare(page);
   await run.attach(page);
   const mark = marks.get(person) ?? await inboxMark(run, person.email);
+  // A cookie-authenticated POST from a script must carry the app's Origin, or the platform refuses it
+  // with 400 ORIGIN_REQUIRED (a browser adds it itself; page.request does not). From the docs lane's #309.
+  const { target } = (await run.control()).control;
+  const post = (path: string, data: Record<string, unknown>) => page.request.post(path, { data, headers: { Origin: target.origin } });
   // A code the project sent at sign-up is used if it is already there (or arrives within 2 s);
   // otherwise ask the app for one, as its own verify-email step does.
   let codes = await step(page, 'verify: read a code sent at sign-up', () => takeCodes(run, person.email, mark, 2_000));
   if (!codes.length) {
-    const sent = await step(page, 'verify: ask the app to email a code', () => page.request.post('/api/auth/request-email-verification', { data: {} }));
+    const sent = await step(page, 'verify: ask the app to email a code', () => post('/api/auth/request-email-verification', {}));
     if (!sent.ok()) throw new StepError(`verify: the app did not send a code (HTTP ${sent.status()} ${await errorCode(sent)})`);
     codes = await step(page, 'verify: read the emailed code', () => freshCodes(run, person.email, mark, 'verify'));
   }
@@ -327,11 +331,11 @@ async function verifySteps(run: FormHost, page: Page, person: Person): Promise<v
     // The platform stores the captured message just before it installs the code, so for a moment
     // the code can read as "no pending verification" (404). Only that answer is retried, briefly;
     // a wrong or expired code (401/400) is never retried.
-    let confirmed = await step(page, 'verify: enter the code in the app', () => page.request.post('/api/auth/verify-email', { data: { code } }));
+    let confirmed = await step(page, 'verify: enter the code in the app', () => post('/api/auth/verify-email', { code }));
     for (let wait = 0; confirmed.status() === 404 && wait < 8; wait++) {
       timelineMark('wait', { ms: 250, why: 'verify: code not installed yet (404)' });
       await new Promise(resolve => setTimeout(resolve, 250));
-      confirmed = await step(page, 'verify: enter the code in the app', () => page.request.post('/api/auth/verify-email', { data: { code } }));
+      confirmed = await step(page, 'verify: enter the code in the app', () => post('/api/auth/verify-email', { code }));
     }
     if (confirmed.ok()) {
       const state = await page.request.get('/api/auth/verify-email');

@@ -16,8 +16,11 @@ const NO_SCHEMA_NOTE = '// No db/schema.ts yet: runtime types only (no tables, s
 const SW_ENDPOINT_GLOBAL = `declare const sw: {
   // docs({ topic: 'sw.endpoint' }). Throw an Error with .status and .code
   // for a typed error response; anything else is 500 HANDLER_ERROR.
-  endpoint<const Schema extends SomewhereEndpointBodySchema | undefined = undefined, Auth extends SomewhereEndpointAuth = 'none'>(
-    config: SomewhereEndpointConfig<Auth, Schema>,
+  // Roles imply a signed-in caller: with roles and auth left out, the user is typed as signed in.
+  endpoint<const Schema extends SomewhereEndpointBodySchema | undefined = undefined, Auth extends SomewhereEndpointAuth = 'none',
+    const Roles extends readonly string[] | undefined = undefined>(
+    config: SomewhereEndpointConfig<[Roles] extends [readonly string[]] ? ([Auth] extends ['none'] ? 'required' : Auth) : Auth, Schema>
+      & { auth?: Auth; roles?: Roles },
   ): (req: Request, sw: SomewhereRuntimeContext) => Promise<Response>;
 };
 `;

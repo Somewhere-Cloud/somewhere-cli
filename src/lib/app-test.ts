@@ -5,14 +5,15 @@ import { testAddressOrder } from './test-connectivity.js';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import type { APIRequestContext, BrowserContext, LaunchOptions, Locator, Page } from '@playwright/test';
-import { ApiClient } from './client.js';
-import { getToken, loadProjectConfig } from './config.js';
-import { loadTestTarget, liveReleaseId, type TestTarget } from './test-target.js';
+import { loadProjectConfig } from './config.js';
+import type { TestTarget } from './test-target.js';
 import { collectFiles } from './files.js';
 import { hashFiles } from './base-files.js';
-import { deleteAccount, describeSweep, forgetRecord, sweepAccounts } from './form-accounts.js';
+import { describeSweep, forgetRecord, sweepAccounts } from './form-accounts.js';
+import { openPreviewControl, openProductionControl, type TestControl } from './test-control.js';
+import { loadPreviewRecord } from './preview-record.js';
 import { ready, signIn, signOut, signUp, verify, type Attempt, type FormAdapter, type FormControl, type FormHost, type Person, type SignInOptions, type SignUpOptions } from './form-auth.js';
-import { rememberSecrets } from './test-diagnostics.js';
+import { rememberSecrets, scrub } from './test-diagnostics.js';
 import { span } from './test-timeline.js';
 
 // Helpers for an ordinary Node or Playwright script that tests a linked Somewhere app: no runner,
@@ -45,8 +46,14 @@ export interface OpenOptions {
   /** Where the result is written once, at finish() (default .somewhere/app-check.json). */
   results?: string;
   /** 'refuse' (default): stop when this folder has published files the live release does not have
-   *  (an undeployed or refused change), so the script never tests an old release. */
+   *  (an undeployed or refused change), so the script never tests an old release. With `preview`, the
+   *  same check is against what this folder last saved to its preview. */
   undeployed?: 'refuse' | 'allow';
+  /** Test this folder's open preview instead of production (true), or a named preview session. The
+   *  script uses only the preview's own credential, is pinned to the version saved when it opens,
+   *  and never touches production. Prepare each browser context with app.prepare(context), or let
+   *  signUp/signIn/verify/data do it for the page they get. */
+  preview?: boolean | string;
 }
 
 function clientOf(who: Who): APIRequestContext {
@@ -55,11 +62,19 @@ function clientOf(who: Who): APIRequestContext {
   return who as APIRequestContext;
 }
 
-/** Published files of this folder that differ from what it last deployed, or null when unknown. */
-export function undeployedChanges(root: string, projectId: string): { release: string | null; changed: string[] } | null {
-  const path = join(root, '.somewhere', 'base-files.json');
-  if (!existsSync(path)) return null;
-  const base = JSON.parse(readFileSync(path, 'utf8')) as { project_id?: string; release_id?: string | null; files?: Record<string, string> };
+/** Published files of this folder that differ from what it last deployed (or, for `preview`, last
+ *  saved to its open preview), or null when unknown. */
+export function undeployedChanges(root: string, projectId: string, preview = false): { release: string | null; changed: string[] } | null {
+  let base: { project_id?: string; release_id?: string | null; files?: Record<string, string> };
+  if (preview) {
+    const record = loadPreviewRecord(root, projectId);
+    if (!record) return null;
+    base = { project_id: record.project_id, release_id: record.preview_id, files: record.files };
+  } else {
+    const path = join(root, '.somewhere', 'base-files.json');
+    if (!existsSync(path)) return null;
+    base = JSON.parse(readFileSync(path, 'utf8')) as typeof base;
+  }
   if (base.project_id !== projectId || !base.files) return null;
   const now = hashFiles(root, collectFiles(root).published);
   const changed = [...new Set([...Object.keys(base.files), ...Object.keys(now)])].filter(file => base.files![file] !== now[file]).sort();
@@ -92,30 +107,55 @@ export class AppTest {
   private readonly started = new Date();
   private finished = false;
 
-  private constructor(readonly root: string, private readonly client: ApiClient, readonly projectId: string, private readonly target: TestTarget, private readonly resultsPath: string) {
-    this.origin = target.origin;
-    this.release = target.releaseId;
-    const control: FormControl = { client, projectId, target };
+  private readonly prepared = new WeakSet<BrowserContext>();
+  private readonly target: TestTarget;
+  readonly projectId: string;
+
+  private constructor(readonly root: string, private readonly control: TestControl, private readonly resultsPath: string) {
+    this.target = control.target;
+    this.projectId = control.projectId;
+    this.origin = control.target.origin;
+    this.release = control.target.releaseId;
+    const form: FormControl = { control };
     this.host = {
       pages: new Set<Page>(), attempts: [] as Attempt[], root,
-      control: async () => control, attach: async () => {}, allowTime: () => {},
+      control: async () => form, attach: async () => {}, allowTime: () => {},
+      prepare: (page) => this.prepare(page),
       timed: (name, work) => span(name, {}, work),
     };
+  }
+
+  /** 'production' or 'preview': what this script is testing. */
+  get environment(): 'production' | 'preview' { return this.control.environment; }
+
+  /** Make a browser context (or a page's) able to reach the app. Needed only in a preview, where it
+   *  adds the script's session pinned to the version saved when the script opened; harmless otherwise. */
+  async prepare(who: Page | BrowserContext): Promise<void> {
+    const context = typeof (who as Page).goto === 'function' ? (who as Page).context() : who as BrowserContext;
+    if (this.prepared.has(context)) return;
+    this.prepared.add(context);
+    await this.control.prepareContext(context);
   }
 
   static async open(options: OpenOptions = {}): Promise<AppTest> {
     const root = resolve(options.projectDir ?? process.cwd());
     const projectId = loadProjectConfig(root)?.project_id;
     if (!projectId) throw new Error(`${root} is not a linked Somewhere project (no .somewhere.json with a project_id).`);
-    const client = new ApiClient(getToken());
-    const target = await loadTestTarget(client, projectId);
+    // A preview script uses only the preview's own credential; your sign-in is not read.
+    const preview = options.preview !== undefined && options.preview !== false;
+    const control = preview
+      ? await openPreviewControl({ root, projectId, ...(typeof options.preview === 'string' ? { previewSessionId: options.preview } : {}) })
+      : await openProductionControl(projectId);
+    const target = control.target;
     if ((options.undeployed ?? 'refuse') === 'refuse') {
-      const local = undeployedChanges(root, projectId);
+      const local = undeployedChanges(root, projectId, preview);
       if (local?.changed.length) {
-        throw new Error(`This folder has changes the live release does not have (${local.changed.slice(0, 8).join(', ')}${local.changed.length > 8 ? ', …' : ''}). `
-          + 'The last deploy did not publish them (it failed, was refused, or has not run), so testing now would test an old release. Deploy, check that it succeeded, then run this script.');
+        throw new Error(preview
+          ? `This folder has changes its preview does not have (${local.changed.slice(0, 8).join(', ')}${local.changed.length > 8 ? ', …' : ''}). Save them with \`somewhere preview\`, then run this script.`
+          : `This folder has changes the live release does not have (${local.changed.slice(0, 8).join(', ')}${local.changed.length > 8 ? ', …' : ''}). `
+            + 'The last deploy did not publish them (it failed, was refused, or has not run), so testing now would test an old release. Deploy, check that it succeeded, then run this script.');
       }
-      if (local && local.release && local.release !== target.releaseId) process.stderr.write(`Note: the live release ${target.releaseId} is not the one this folder last deployed (${local.release}).\n`);
+      if (local && local.release && local.release !== target.releaseId) process.stderr.write(`Note: the ${preview ? 'preview\'s saved version' : 'live release'} ${target.releaseId} is not the one this folder last ${preview ? 'saved' : 'deployed'} (${local.release}).\n`);
     }
     // Resolve the app's host once through the system resolver, so the browser finds it cached. Where
     // IPv6 does not connect but IPv4 does, this process prefers IPv4 addresses: Playwright's request
@@ -123,8 +163,8 @@ export class AppTest {
     const [ipv4First] = await Promise.all([testAddressOrder(target.origin), lookup(new URL(target.origin).hostname).catch(() => null)]);
     if (ipv4First) setDefaultResultOrder('ipv4first');
     process.env.SW_TEST_RUN ??= randomUUID();
-    for (const line of describeSweep(await sweepAccounts(client, root, projectId), 'Before this script')) process.stderr.write(line + '\n');
-    return new AppTest(root, client, projectId, target, resolve(root, options.results ?? join('.somewhere', 'app-check.json')));
+    for (const line of describeSweep(await sweepAccounts(control, root), 'Before this script')) process.stderr.write(line + '\n');
+    return new AppTest(root, control, resolve(root, options.results ?? join('.somewhere', preview ? 'app-check-preview.json' : 'app-check.json')));
   }
 
   /** Browser launch options for this app: chromium.launch(app.launchOptions()). */
@@ -142,6 +182,7 @@ export class AppTest {
    *  context, or a request context): { table, operation, id?, values?, where?, limit? }. The app
    *  Origin and the release's data contract are added for you. */
   async data(who: Who, request: DataRequest): Promise<DataResult> {
+    if (typeof (who as Page).goto === 'function' || typeof (who as BrowserContext).newPage === 'function') await this.prepare(who as Page | BrowserContext);
     const response = await clientOf(who).post(this.origin + '/__sw/data', {
       data: { ...request, contract: this.target.contractDigest ?? '' },
       headers: { Origin: this.origin }, failOnStatusCode: false, maxRedirects: 0,
@@ -191,12 +232,17 @@ export class AppTest {
   async finish(): Promise<{ passed: number; failed: number; file: string }> {
     if (this.finished) throw new Error('finish() already ran');
     this.finished = true;
-    const live = await liveReleaseId(this.client, this.projectId).catch(() => null);
-    if (live !== this.release) this.checks.push({ name: 'the release stayed the same during the script', ok: false, ms: 0, error: live ? `the live release changed from ${this.release} to ${live} during the script; these results describe no single release` : 'the live release could not be confirmed at the end' });
+    const preview = this.control.environment === 'preview';
+    let ended = '';
+    const live = await this.control.currentRelease().catch((error: unknown) => { ended = error instanceof Error ? error.message : ''; return null; });
+    if (live !== this.release) this.checks.push({ name: preview ? 'the preview stayed on the same saved version during the script' : 'the release stayed the same during the script', ok: false, ms: 0,
+      error: preview
+        ? (live ? `the preview was saved again during the script (${this.release} → ${live}); these results describe no single version` : `${ended || 'the preview could not be confirmed at the end'}; nothing ran against production`)
+        : live ? `the live release changed from ${this.release} to ${live} during the script; these results describe no single release` : 'the live release could not be confirmed at the end' });
     const cleanup: string[] = [];
     await Promise.all(this.host.attempts.map(async attempt => {
       if (attempt.id) {
-        const refused = await deleteAccount(this.client, this.projectId, attempt.id);
+        const refused = await this.control.deleteSignup(attempt.id);
         if (refused === null) forgetRecord(attempt.record);
         else cleanup.push(`could not delete ${attempt.email} (${refused}); its record is kept and the next run retries`);
       } else if (attempt.submitted && !attempt.refused) {
@@ -205,14 +251,16 @@ export class AppTest {
       } else forgetRecord(attempt.record);
     }));
     for (const page of this.host.pages) try { rememberSecrets(...(await page.context().cookies()).map(cookie => cookie.value)); } catch { /* closed */ }
+    await this.control.close();
     if (cleanup.length) this.checks.push({ name: 'cleanup of sign-up accounts', ok: false, ms: 0, error: cleanup.join('; ') });
     const passed = this.checks.filter(check => check.ok).length;
     const failed = this.checks.length - passed;
     mkdirSync(dirname(this.resultsPath), { recursive: true });
-    writeFileSync(this.resultsPath, JSON.stringify({ origin: this.origin, release: this.release, started: this.started.toISOString(), finished: new Date().toISOString(), passed, failed, checks: this.checks }, null, 2) + '\n');
-    for (const check of this.checks.filter(c => !c.ok)) process.stdout.write(`FAIL ${check.name}\n  ${(check.error ?? '').replaceAll('\n', '\n  ')}\n`);
+    writeFileSync(this.resultsPath, JSON.stringify({ origin: this.origin, environment: this.control.environment, ...(preview ? { preview_session_id: this.target.previewSessionId } : {}), release: this.release,
+      started: this.started.toISOString(), finished: new Date().toISOString(), passed, failed, checks: this.checks.map((check) => ({ ...check, ...(check.error ? { error: scrub(check.error) } : {}) })) }, null, 2) + '\n');
+    for (const check of this.checks.filter(c => !c.ok)) process.stdout.write(`FAIL ${check.name}\n  ${scrub(check.error ?? '').replaceAll('\n', '\n  ')}\n`);
     if (!this.checks.length) process.stdout.write('FAIL no check ran: the script stopped before its first check (the error is below)\n');
-    process.stdout.write(`${failed || !passed ? 'FAILED' : 'PASSED'}: ${passed} passed, ${failed} failed · ${this.origin} · ${this.release} · ${this.resultsPath}\n`);
+    process.stdout.write(`${failed || !passed ? 'FAILED' : 'PASSED'}: ${passed} passed, ${failed} failed · ${preview ? `preview ${this.target.previewSessionId} · ` : ''}${this.origin} · ${this.release} · ${this.resultsPath}\n`);
     if (failed || !passed) process.exitCode = 1;
     return { passed, failed, file: this.resultsPath };
   }

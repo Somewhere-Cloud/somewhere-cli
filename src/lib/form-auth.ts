@@ -1,7 +1,6 @@
 import type { APIResponse, Locator, Page } from '@playwright/test';
-import type { ApiClient } from './client.js';
-import type { TestTarget } from './test-target.js';
-import { messagesAfter, type InboxMessage } from './test-identities.js';
+import type { TestControl } from './test-control.js';
+import type { InboxMessage } from './test-identities.js';
 import { rememberSecrets, scrub } from './test-diagnostics.js';
 import { mark as timelineMark, span } from './test-timeline.js';
 import { admitReservedAddress, generatedAddress, generatedPassword, recordAttempt, recordId } from './form-accounts.js';
@@ -34,7 +33,20 @@ export interface FormAdapter {
 export interface SignUpOptions { domain?: string; email?: string; form?: FormAdapter; steps?: FormSteps; codeSteps?: CodeSteps }
 export interface SignInOptions { form?: FormAdapter; steps?: FormSteps; codeSteps?: CodeSteps }
 export interface Attempt { email: string; record: string; id: string | null; submitted: boolean; refused: boolean }
-export interface FormControl { client: ApiClient; projectId: string; target: TestTarget }
+/** The run's one test control (production or preview): captured mail, exact-id cleanup, the target. */
+export interface FormControl { control: TestControl }
+
+/** Pages that may be showing a password, code or reset link: from the start of a sign-up, sign-in
+ *  or verification step until it succeeds. No screenshot is taken of them (a failure inside one of
+ *  these steps leaves the page marked). */
+const secretScreens = new WeakSet<Page>();
+export function mayShowSecret(page: Page): boolean { return secretScreens.has(page); }
+async function onSecretScreen<T>(page: Page, work: () => Promise<T>): Promise<T> {
+  secretScreens.add(page);
+  const result = await work();
+  secretScreens.delete(page);
+  return result;
+}
 /** What a caller provides: the somewhere test fixture, or a plain script's session. */
 export interface FormHost {
   readonly pages: Set<Page>;
@@ -44,6 +56,9 @@ export interface FormHost {
   control(): Promise<FormControl>;
   /** Called once a page is signed in (the fixture attaches its data client here). */
   attach(page: Page): Promise<void>;
+  /** Called before a helper first uses a page: makes its browser context able to reach the target
+   *  (a preview run's pinned session). */
+  prepare(page: Page): Promise<void>;
   /** Room for real mail paths inside a test timeout, if there is one. */
   allowTime(ms: number): void;
   timed<T>(name: string, work: () => Promise<T>): Promise<T>;
@@ -179,10 +194,8 @@ async function outcome(pending: Promise<APIResponse | Error>, what: string): Pro
 }
 
 async function inbox(run: FormHost, address: string, wait?: { since: number; ms?: number }): Promise<InboxMessage[]> {
-  const { client, projectId } = await run.control();
-  const body = await run.timed('test inbox', () => client.call<{ messages?: unknown }>('GET', '/email/test-inbox', undefined,
-    { project_id: projectId, address, limit: 20, ...(wait ? { wait_ms: wait.ms ?? 10_000, since: wait.since } : {}) }));
-  return messagesAfter(body.messages, address, 0);
+  const { control } = await run.control();
+  return run.timed('test inbox', () => control.inbox(address, wait));
 }
 /** What the test inbox already holds for this address, so a code is only ever one sent after this point. */
 async function inboxMark(run: FormHost, address: string): Promise<InboxMark> {
@@ -208,16 +221,21 @@ async function freshCodes(run: FormHost, address: string, mark: InboxMark, what:
   }
 }
 
-export async function signUp(run: FormHost, page: Page, options: SignUpOptions): Promise<Person> {
+export function signUp(run: FormHost, page: Page, options: SignUpOptions): Promise<Person> {
+  return onSecretScreen(page, () => signUpSteps(run, page, options));
+}
+async function signUpSteps(run: FormHost, page: Page, options: SignUpOptions): Promise<Person> {
   if (options.domain !== undefined && options.email !== undefined) throw new Error('signUp: pass domain or email, not both.');
+  await run.prepare(page);
   const email = options.email !== undefined ? admitReservedAddress(options.email) : generatedAddress(options.domain);
   const password = generatedPassword();
   rememberSecrets(password);
   run.allowTime(20_000);
   run.pages.add(page);
-  const { target, projectId } = await run.control();
+  const { control } = await run.control();
+  const target = control.target;
   const mark = await inboxMark(run, email);
-  const attempt: Attempt = { email, record: recordAttempt(run.root, projectId, email), id: null, submitted: false, refused: false };
+  const attempt: Attempt = { email, record: recordAttempt(control, run.root, email), id: null, submitted: false, refused: false };
   run.attempts.push(attempt);
   const onRequest = (request: { method(): string; url(): string }) => {
     if (request.method() === 'POST' && new URL(request.url()).pathname.endsWith('/auth/signup')) attempt.submitted = true;
@@ -267,8 +285,12 @@ export async function signUp(run: FormHost, page: Page, options: SignUpOptions):
   } finally { page.off('request', onRequest); }
 }
 
-export async function verify(run: FormHost, page: Page, person: Person): Promise<void> {
+export function verify(run: FormHost, page: Page, person: Person): Promise<void> {
+  return onSecretScreen(page, () => verifySteps(run, page, person));
+}
+async function verifySteps(run: FormHost, page: Page, person: Person): Promise<void> {
   run.allowTime(20_000);
+  await run.prepare(page);
   await run.attach(page);
   const mark = marks.get(person) ?? await inboxMark(run, person.email);
   // A code the project sent at sign-up is used if it is already there (or arrives within 2 s);
@@ -304,11 +326,15 @@ async function errorCode(response: APIResponse): Promise<string> {
   try { const body = await response.json() as { error?: unknown }; return typeof body.error === 'string' && /^[A-Z_]+$/.test(body.error) ? body.error : 'none'; } catch { return 'none'; }
 }
 
-export async function signIn(run: FormHost, page: Page, person: Person, options: SignInOptions): Promise<void> {
+export function signIn(run: FormHost, page: Page, person: Person, options: SignInOptions): Promise<void> {
+  return onSecretScreen(page, () => signInSteps(run, page, person, options));
+}
+async function signInSteps(run: FormHost, page: Page, person: Person, options: SignInOptions): Promise<void> {
   rememberSecrets(person.password);
   run.allowTime(20_000);
   run.pages.add(page);
-  const { target } = await run.control();
+  await run.prepare(page);
+  const { target } = (await run.control()).control;
   const mark = await inboxMark(run, person.email);
   const submit = async () => {
     const signedIn = authResponse(page, target.origin, '/auth/login');
@@ -350,6 +376,7 @@ export async function signIn(run: FormHost, page: Page, person: Person, options:
 
 export async function signOut(run: FormHost, page: Page, options: { steps?: (page: Page) => Promise<void>; form?: FormAdapter }): Promise<void> {
   run.pages.add(page);
+  await run.prepare(page);
   await step(page, 'signOut', async () => {
     if (options.steps) await options.steps(page);
     else {

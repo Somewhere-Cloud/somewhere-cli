@@ -1,0 +1,373 @@
+// `somewhere test --preview` and `openAppTest({ preview: true })` (design slice 3a; Astra slice-3
+// check A4/A6, FIX DURING BUILD runner rows), end to end: the real CLI, the real Playwright runner and
+// Chrome, the real fixtures and form helpers, against a fake platform that records every request and
+// a fake preview app whose gate admits only the run's pinned session for the current candidate, as
+// the web gate does. Every request that is not a preview-tool call with the preview credential is a
+// production call and fails the test.
+import assert from 'node:assert/strict';
+import { test, before, after } from 'node:test';
+import { spawn } from 'node:child_process';
+import { createServer } from 'node:http';
+import { randomUUID, randomInt } from 'node:crypto';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { hashFiles } from '../dist/lib/base-files.js';
+import { collectFiles } from '../dist/lib/files.js';
+
+const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
+const distIndex = join(repoRoot, 'dist', 'index.js');
+const PROJECT = '00000000-0000-4000-8000-0000000000e5';
+const DRAFT = 'draft_eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
+const CANDIDATE = 'rel_candidate_E001';
+const CREDENTIAL = `swpt.${PROJECT}.${DRAFT}.${'s'.repeat(10)}${randomUUID().replaceAll('-', '')}`;
+const COOKIE = 'sw_draft_cap'; // the platform names it; on an http test origin it cannot be __Host-
+
+// ── Shared state: the preview's store, mail and sessions; every secret seen ─────────────────────
+const state = { candidate: CANDIDATE, dead: false, requests: [], production: [], users: new Map(), sessions: new Map(), mail: [], notes: new Map(), secrets: new Set([CREDENTIAL]) };
+const json = (res, status, body, headers = {}) => { res.writeHead(status, { 'content-type': 'application/json', ...headers }); res.end(JSON.stringify(body)); };
+const readBody = (req) => new Promise((resolve) => { let raw = ''; req.on('data', (c) => (raw += c)); req.on('end', () => resolve(raw)); });
+let appOrigin = '';
+
+const platform = createServer(async (req, res) => {
+  const url = new URL(req.url, 'http://platform');
+  const raw = await readBody(req);
+  const auth = req.headers.authorization ?? '';
+  state.requests.push(`${req.method} ${url.pathname}`);
+  if (!url.pathname.startsWith('/v1/preview-tools/') || auth !== `Bearer ${CREDENTIAL}`) {
+    state.production.push(`${req.method} ${url.pathname} ${auth.slice(0, 12)}`);
+    return json(res, 500, { ok: false, error: 'PRODUCTION_CALL', message: 'a preview run made a non-preview call' });
+  }
+  if (state.dead) return json(res, 401, { ok: false, error: 'PREVIEW_CREDENTIAL_INVALID', message: 'This preview credential is not valid.' });
+  const path = url.pathname.slice('/v1/preview-tools'.length);
+  const body = raw ? JSON.parse(raw) : {};
+  if (req.method === 'GET' && path === '/target') return json(res, 200, { ok: true, data: { project_id: PROJECT, preview_session_id: DRAFT, preview_id: state.candidate, origin: appOrigin, contract_digest: 'digest-e' } });
+  if (req.method === 'POST' && path === '/browser-session') {
+    const id = randomUUID();
+    state.sessions.set(id, { candidate: state.candidate, ended: false });
+    const value = `${DRAFT}.${state.candidate}.${id}`;
+    state.secrets.add(value); state.secrets.add(id);
+    return json(res, 201, { ok: true, data: { preview_session_id: DRAFT, preview_id: state.candidate, session_id: id, origin: appOrigin, expires_at: Date.now() + 7200_000, cookie: { name: COOKIE, value } } });
+  }
+  if (req.method === 'DELETE' && path.startsWith('/browser-session/')) {
+    const s = state.sessions.get(decodeURIComponent(path.split('/')[2]));
+    if (s) s.ended = true;
+    return json(res, 200, { ok: true, data: { ended: Boolean(s) } });
+  }
+  if (req.method === 'POST' && path === '/users') {
+    const id = 'pvu_' + randomUUID(), email = `preview-${id.slice(4, 12)}@e5.test.somewhere.site`, password = 'Pv-managed-' + randomUUID();
+    state.users.set(id, { id, email, password, test: true, verified: true }); state.secrets.add(password);
+    return json(res, 201, { ok: true, data: { preview_session_id: DRAFT, user: { id, email, email_verified: true }, password } });
+  }
+  if (req.method === 'DELETE' && path.startsWith('/users/')) {
+    const id = decodeURIComponent(path.split('/')[2]); const u = state.users.get(id);
+    if (!u) return json(res, 404, { ok: false, error: 'USER_NOT_FOUND', message: 'no' });
+    if (!u.test) return json(res, 409, { ok: false, error: 'NOT_A_TEST_USER', message: 'no' });
+    state.users.delete(id); return json(res, 200, { ok: true, data: { deleted: true } });
+  }
+  if (req.method === 'DELETE' && path.startsWith('/signups/')) {
+    const id = decodeURIComponent(path.split('/')[2]); const u = state.users.get(id);
+    if (!id.startsWith('pvu_')) return json(res, 400, { ok: false, error: 'VALIDATION_ERROR', message: 'exact id' });
+    if (!u) return json(res, 404, { ok: false, error: 'USER_NOT_FOUND', message: 'no' });
+    if (u.test) return json(res, 409, { ok: false, error: 'NOT_A_SIGNUP', message: 'no' });
+    state.users.delete(id); return json(res, 200, { ok: true, data: { deleted: true } });
+  }
+  if (req.method === 'GET' && path === '/mail') return json(res, 200, { ok: true, data: { preview_session_id: DRAFT, messages: [...state.mail].reverse() } });
+  return json(res, 404, { ok: false, error: 'NOT_FOUND', message: path });
+});
+
+// ── The preview app: the gate, a starter-shaped form and a few routes ───────────────────────────
+const PAGE = `<!doctype html><html><body><div id="root" data-app-state="loading">
+<form id="f"><input type="email" data-sw-auth="email"><input type="password" data-sw-auth="password">
+<button type="button" data-sw-auth="sign-up">Create account</button><button type="button" data-sw-auth="sign-in">Sign in</button></form>
+<button type="button" data-sw-auth="sign-out" hidden>Sign out</button><p id="who"></p></div>
+<script>
+const root = document.getElementById('root'), form = document.getElementById('f'), out = document.querySelector('[data-sw-auth="sign-out"]');
+function set(user) { root.dataset.appState = user ? 'signed-in' : 'signed-out'; form.hidden = !!user; out.hidden = !user; document.getElementById('who').textContent = user ? user.email : ''; }
+async function auth(path) {
+  const r = await fetch('/api/auth/' + path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: form.querySelector('[type=email]').value, password: form.querySelector('[type=password]').value }) });
+  const b = await r.json(); if (r.ok) set(b.user);
+}
+document.querySelector('[data-sw-auth="sign-up"]').onclick = () => auth('signup');
+document.querySelector('[data-sw-auth="sign-in"]').onclick = () => auth('login');
+out.onclick = async () => { await fetch('/api/auth/logout', { method: 'POST' }); set(null); };
+fetch('/api/auth/me').then((r) => r.json()).then((b) => set(b.user));
+</script></body></html>`;
+const appSessions = new Map();
+const cookies = (req) => Object.fromEntries((req.headers.cookie ?? '').split(';').map((c) => c.trim().split('=')).filter((p) => p.length === 2));
+function mail(to, code) { state.mail.push({ id: 'm' + state.mail.length, to, subject: '[Preview] Your verification code', verification_code: code, magic_link: null, created_at: new Date().toISOString(), environment: 'preview', preview_session_id: DRAFT }); state.secrets.add(code); }
+const app = createServer(async (req, res) => {
+  const url = new URL(req.url, 'http://app');
+  const raw = await readBody(req);
+  const c = cookies(req);
+  // The gate: only a live session pinned to the current candidate (validatePreviewCapabilitySession).
+  const [, candidate, sessionId] = (c[COOKIE] ?? '').split('.');
+  const session = state.sessions.get(sessionId);
+  if (!session || session.ended || state.dead || session.candidate !== state.candidate || candidate !== state.candidate) { res.writeHead(404); return res.end('Preview not found'); }
+  const user = appSessions.get(c.app_session) ?? null;
+  const body = raw ? JSON.parse(raw) : {};
+  const signedIn = (u) => { const token = randomUUID(); appSessions.set(token, u.id); state.secrets.add(token); return { 'set-cookie': `app_session=${token}; Path=/; HttpOnly` }; };
+  const me = user ? state.users.get(user) : null;
+  switch (`${req.method} ${url.pathname}`) {
+    case 'GET /': res.writeHead(200, { 'content-type': 'text/html' }); return res.end(PAGE);
+    case 'GET /plain': res.writeHead(200, { 'content-type': 'text/html' }); return res.end('<p id="plain">A page with nothing secret on it.</p>');
+    case 'GET /api/auth/me': return json(res, 200, { user: me ? { id: me.id, email: me.email } : null });
+    case 'POST /api/auth/signup': {
+      if ([...state.users.values()].some((u) => u.email === body.email)) return json(res, 409, { error: 'AUTH_EMAIL_EXISTS' });
+      const u = { id: 'pvu_' + randomUUID(), email: body.email, password: body.password, test: false, verified: false };
+      state.users.set(u.id, u); state.secrets.add(body.password); mail(u.email, String(randomInt(100000, 999999)));
+      return json(res, 200, { user: { id: u.id, email: u.email } }, signedIn(u));
+    }
+    case 'POST /api/auth/login': {
+      const u = [...state.users.values()].find((x) => x.email === body.email && x.password === body.password);
+      return u ? json(res, 200, { user: { id: u.id, email: u.email } }, signedIn(u)) : json(res, 401, { error: 'AUTH_INVALID_CREDS' });
+    }
+    case 'POST /api/auth/logout': appSessions.delete(c.app_session); return json(res, 200, { ok: true }, { 'set-cookie': 'app_session=; Path=/; Max-Age=0' });
+    case 'POST /api/auth/request-email-verification': if (!me) return json(res, 401, { error: 'AUTH_REQUIRED' }); mail(me.email, String(randomInt(100000, 999999))); return json(res, 200, { captured: true });
+    case 'POST /api/auth/verify-email': {
+      if (!me) return json(res, 401, { error: 'AUTH_REQUIRED' });
+      const ok = state.mail.some((m) => m.to === me.email && m.verification_code === body.code);
+      if (ok) me.verified = true;
+      return ok ? json(res, 200, { verified: true }) : json(res, 400, { error: 'AUTH_CODE_INVALID' });
+    }
+    case 'GET /api/auth/verify-email': return json(res, me ? 200 : 401, { email_verified: Boolean(me?.verified) });
+    case 'GET /api/verified-only': return me?.verified ? json(res, 200, { ok: true }) : json(res, 403, { error: 'EMAIL_NOT_VERIFIED' });
+    case 'POST /api/notes': { if (!me) return json(res, 401, { error: 'AUTH_REQUIRED' }); const id = randomUUID(); state.notes.set(id, { owner: me.id, text: body.text }); return json(res, 200, { id }); }
+    case 'POST /__test/save': state.candidate = 'rel_candidate_E002'; return json(res, 200, { saved: true });
+    case 'POST /__test/close': state.dead = true; return json(res, 200, { closed: true });
+  }
+  if (req.method === 'GET' && url.pathname.startsWith('/api/notes/')) {
+    const note = state.notes.get(url.pathname.split('/')[3]);
+    if (!me) return json(res, 401, { error: 'AUTH_REQUIRED' });
+    return note && note.owner === me.id ? json(res, 200, { text: note.text }) : json(res, 403, { error: 'FORBIDDEN' });
+  }
+  return json(res, 404, { error: 'NOT_FOUND' });
+});
+
+// ── The linked project folder ───────────────────────────────────────────────────────────────────
+const SPEC = `import { test, expect, expectRefused } from '@somewhere-cloud/cli/testing';
+test('sign up, unverified refusal, verify with captured mail, sign out and in, and another person is refused', async ({ page, signUp, verify, signOut, signIn, newPage }) => {
+  const ana = await signUp(page);
+  await expectRefused(page, 'GET /api/verified-only');
+  await verify(page, ana);
+  expect((await page.request.get('/api/verified-only')).status()).toBe(200);
+  const { id } = await (await page.request.post('/api/notes', { data: { text: 'ana only' } })).json();
+  await signOut(page);
+  await signIn(page, ana);
+  const benPage = await newPage();
+  await signUp(benPage);
+  await expectRefused(benPage, 'GET /api/notes/' + id, undefined, { allowed: page });
+});
+test('a managed preview test user is signed in', async ({ newUser, anonymous }) => {
+  const user = await newUser();
+  expect(user.id.startsWith('pvu_')).toBe(true);
+  expect((await (await user.request.fetch('/api/auth/me')).json()).user.email).toBe(user.email);
+  expect((await (await anonymous.fetch('/api/auth/me')).json()).user).toBe(null);
+});
+test('newUser({ role }) is refused in a preview, never granted another way', async ({ newUser }) => {
+  await expect(newUser({ role: 'staff' })).rejects.toThrow(/not available in a preview/);
+});
+`;
+const FAILS = `import { test, expect } from '@somewhere-cloud/cli/testing';
+test('fails while a password is on the page', async ({ page, signUp }) => {
+  const ana = await signUp(page);
+  await page.evaluate((p) => document.body.insertAdjacentHTML('beforeend', '<div role="alert" id="leak">Your password is ' + p + '</div>'), ana.password);
+  expect('a password on the page').toBe('photographed');
+});
+test('fails on a page with nothing secret', async ({ page, signUp }) => {
+  await signUp(page);
+  await page.goto('/plain');
+  expect('a plain page').toBe('photographed');
+});
+`;
+const SAVE = `import { test, expect } from '@somewhere-cloud/cli/testing';
+test('the preview is saved again mid-run', async ({ page }) => {
+  await page.goto('/');
+  await page.request.post('/__test/save');
+  const again = await page.goto('/');
+  expect(again.status()).toBe(200);
+});
+`;
+const CLOSE = `import { test, expect } from '@somewhere-cloud/cli/testing';
+test('the preview is closed mid-run', async ({ page, signUp }) => {
+  await signUp(page);
+  await page.request.post('/__test/close');
+  const again = await page.goto('/');
+  expect(again.status()).toBe(200);
+});
+`;
+const SCRIPT = `import { chromium } from '@playwright/test';
+import { openAppTest } from '@somewhere-cloud/cli/script';
+const app = await openAppTest({ preview: true });
+const browser = await chromium.launch(app.launchOptions({ channel: 'chrome' }));
+try {
+  const anaPage = await browser.newPage({ baseURL: app.origin });
+  const ana = await app.signUp(anaPage);
+  await app.check('unverified is refused', async () => { if ((await anaPage.request.get(app.origin + '/api/verified-only')).status() !== 403) throw new Error('not refused'); });
+  await app.verify(anaPage, ana);
+  await app.check('verified', async () => { if ((await anaPage.request.get(app.origin + '/api/verified-only')).status() !== 200) throw new Error('not verified'); });
+  await app.signOut(anaPage);
+  await app.signIn(anaPage, ana);
+  await app.check('signed back in', async () => { if (!(await (await anaPage.request.get(app.origin + '/api/auth/me')).json()).user) throw new Error('signed out'); });
+} finally { await browser.close(); await app.finish(); }
+`;
+
+const PROD_RECORD = { project_id: PROJECT, email: 'sw-prod@example.com', id: 'prod-user-1', run: 'old-production-run', pid: 999999998, created_at: '2026-11-14T00:00:00.000Z' };
+let root, configDir, prodRecordPath;
+function makeProject() {
+  const dir = mkdtempSync(join(process.env.TMPDIR ?? tmpdir(), 'sw-preview-test-run-'));
+  writeFileSync(join(dir, '.somewhere.json'), JSON.stringify({ project_id: PROJECT, name: 'e5', subdomain: 'e5' }));
+  mkdirSync(join(dir, '.somewhere'), { recursive: true });
+  writeFileSync(join(dir, '.somewhere', 'preview.json'), JSON.stringify({ project_id: PROJECT, preview_session_id: DRAFT, preview_id: CANDIDATE, files: {}, saved_at: new Date().toISOString() }));
+  // A retained production cleanup record from an earlier production run (its runner is gone).
+  const prodDir = join(dir, '.somewhere', 'tests', 'accounts', PROJECT);
+  mkdirSync(prodDir, { recursive: true });
+  prodRecordPath = join(prodDir, '1700000000000-0badf00d.json');
+  writeFileSync(prodRecordPath, JSON.stringify(PROD_RECORD) + '\n');
+  writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'e5', private: true, type: 'module' }));
+  mkdirSync(join(dir, 'node_modules', '@somewhere-cloud'), { recursive: true });
+  symlinkSync(join(repoRoot, 'node_modules', '@playwright'), join(dir, 'node_modules', '@playwright'));
+  symlinkSync(join(repoRoot, 'node_modules', 'playwright'), join(dir, 'node_modules', 'playwright'));
+  symlinkSync(join(repoRoot, 'node_modules', 'playwright-core'), join(dir, 'node_modules', 'playwright-core'));
+  symlinkSync(repoRoot, join(dir, 'node_modules', '@somewhere-cloud', 'cli'));
+  mkdirSync(join(dir, 'tests'));
+  for (const [name, content] of [['preview.spec.ts', SPEC], ['fails.spec.ts', FAILS], ['save.spec.ts', SAVE], ['close.spec.ts', CLOSE], ['check.mjs', SCRIPT]]) writeFileSync(join(dir, 'tests', name), content);
+  // What `somewhere preview` records after a save: the folder's published files exactly as sent.
+  writeFileSync(join(dir, '.somewhere', 'preview.json'), JSON.stringify({ project_id: PROJECT, preview_session_id: DRAFT, preview_id: CANDIDATE, files: hashFiles(dir, collectFiles(dir).published), saved_at: new Date().toISOString() }));
+  return dir;
+}
+function makeConfig({ credential = true } = {}) {
+  const dir = mkdtempSync(join(process.env.TMPDIR ?? tmpdir(), 'sw-preview-test-config-'));
+  // A developer sign-in is present: a preview run must not use it (any use is a production call above).
+  writeFileSync(join(dir, 'config.json'), JSON.stringify({ token: 'smt_production_developer_key', api_key: 'smt_production_developer_key' }), { mode: 0o600 });
+  if (credential) {
+    mkdirSync(join(dir, 'previews'), { recursive: true, mode: 0o700 });
+    writeFileSync(join(dir, 'previews', `${PROJECT}__${DRAFT}.json`), JSON.stringify({ credential: CREDENTIAL, project_id: PROJECT, preview_session_id: DRAFT, minted_at: new Date().toISOString() }), { mode: 0o600 });
+  }
+  return dir;
+}
+function run(args, cwd, config) {
+  return new Promise((resolve) => {
+    const child = spawn(process.execPath, args, { cwd, env: { ...process.env, SOMEWHERE_API_URL: `http://127.0.0.1:${platform.address().port}/v1`, SOMEWHERE_CONFIG_DIR: config,
+      CI: '1', NO_COLOR: '1', SOMEWHERE_NO_NOTIFICATIONS: '1', SOMEWHERE_NO_UPDATE_CHECK: '1', SOMEWHERE_NO_BROWSER: '1', SW_TEST_TARGET: '', SW_TEST_RUN: '' } });
+    let stdout = '', stderr = '';
+    child.stdout.on('data', (c) => (stdout += c)); child.stderr.on('data', (c) => (stderr += c));
+    child.on('close', (status) => resolve({ status, stdout, stderr, all: stdout + stderr }));
+  });
+}
+const somewhere = (args, cwd = root, config = configDir) => run([distIndex, ...args], cwd, config);
+function files(dir, out = []) {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    if (entry.name === 'node_modules') continue;
+    const path = join(dir, entry.name);
+    if (entry.isDirectory()) files(path, out); else out.push(path);
+  }
+  return out;
+}
+/** Every seeded secret value the platform and app handed out, searched in every artifact and in the output. */
+function leaked(output) {
+  const texts = [output, ...files(root).map((path) => readFileSync(path).toString('latin1'))];
+  return [...state.secrets].filter((secret) => texts.some((text) => text.includes(secret))).map((secret) => `${secret.slice(0, 4)}…(${secret.length})`);
+}
+const reset = () => { state.requests.length = 0; state.production.length = 0; };
+
+before(async () => {
+  await new Promise((resolve) => platform.listen(0, '127.0.0.1', resolve));
+  await new Promise((resolve) => app.listen(0, '127.0.0.1', resolve));
+  appOrigin = `http://127.0.0.1:${app.address().port}`;
+  root = makeProject();
+  configDir = makeConfig();
+});
+after(() => { platform.close(); app.close(); });
+
+test('somewhere test --preview runs the journey on the preview with its own credential only, cleans up by exact id and leaks nothing', { timeout: 300_000 }, async () => {
+  reset();
+  const prodBefore = { text: readFileSync(prodRecordPath, 'utf8'), mtime: statSync(prodRecordPath).mtimeMs };
+  const r = await somewhere(['test', '--preview', 'tests/preview.spec.ts', '--workers', '2']);
+  assert.equal(r.status, 0, r.all);
+  assert.match(r.stdout, /SUBSET \(only the tests selected for this run\): 3 passed, 0 failed/);
+  assert.match(r.stdout, new RegExp(`preview ${DRAFT} · ${appOrigin.replaceAll('.', '\\.')} · ${CANDIDATE}`));
+  assert.deepEqual(state.production, [], 'no production call of any kind');
+  assert.ok(state.requests.every((line) => line.includes('/v1/preview-tools/')));
+  assert.ok(state.requests.includes('GET /v1/preview-tools/target') && state.requests.includes('POST /v1/preview-tools/users') && state.requests.some((l) => l.startsWith('DELETE /v1/preview-tools/signups/pvu_')));
+  assert.deepEqual([...state.users.values()].map((u) => u.email), [], 'every account the run made is gone: form sign-ups by exact id, managed users through the preview tool');
+  assert.ok([...state.sessions.values()].every((s) => s.ended), 'every pinned browser session was ended');
+  assert.equal(readFileSync(prodRecordPath, 'utf8'), prodBefore.text, 'the production cleanup record is untouched');
+  assert.equal(statSync(prodRecordPath).mtimeMs, prodBefore.mtime);
+  assert.ok(!state.requests.some((l) => l.includes('prod-user-1')));
+  const previewJournal = join(root, '.somewhere', 'tests', 'preview-accounts', PROJECT, DRAFT);
+  assert.deepEqual(existsSync(previewJournal) ? readdirSync(previewJournal) : [], [], 'the preview journal is finished');
+  const results = JSON.parse(readFileSync(join(root, '.somewhere', 'tests', 'results.json'), 'utf8'));
+  assert.equal(results.environment, 'preview'); assert.equal(results.preview_session_id, DRAFT); assert.equal(results.release, CANDIDATE); assert.equal(results.releaseConfirmed, true);
+  assert.ok(!JSON.parse(readFileSync(join(root, '.somewhere', 'tests', 'runner.config.cjs'), 'utf8').replace(/^module\.exports = /, '').replace(/;\s*$/, '')).toString().includes(CREDENTIAL));
+  assert.deepEqual(leaked(r.all), [], 'no password, code, cookie, session or credential in any artifact or output');
+});
+
+test('failure screenshots are never taken while a secret can be on screen; a plain page is still photographed', { timeout: 300_000 }, async () => {
+  reset();
+  const r = await somewhere(['test', '--preview', 'tests/fails.spec.ts', '--workers', '1']);
+  assert.equal(r.status, 1, r.all);
+  assert.match(r.stdout, /2 failed/);
+  const pngs = files(join(root, '.somewhere', 'tests')).filter((path) => path.endsWith('.png'));
+  assert.equal(pngs.length, 1, 'only the plain page');
+  assert.match(r.stdout, /screenshot: not captured/);
+  assert.deepEqual(state.production, []);
+  assert.deepEqual(leaked(r.all), [], 'the password shown in an alert is in no artifact or output');
+});
+
+test('a preview saved again mid-run fails the run as a preview run, never passing for another version or touching production', { timeout: 300_000 }, async () => {
+  reset(); state.candidate = CANDIDATE;
+  const r = await somewhere(['test', '--preview', 'tests/save.spec.ts', '--workers', '1']);
+  state.candidate = CANDIDATE;
+  assert.equal(r.status, 1, r.all);
+  assert.match(r.all, /saved again during this run \(rel_candidate_E001 → rel_candidate_E002\)/);
+  assert.doesNotMatch(r.stdout, /0 failed, 0 expected failures, 0 setup errors/);
+  assert.deepEqual(state.production, []);
+  assert.deepEqual(leaked(r.all), []);
+});
+
+test('a preview closed mid-run fails the run as a preview run; cleanup is reported, never sent to production', { timeout: 300_000 }, async () => {
+  reset(); state.dead = false;
+  const r = await somewhere(['test', '--preview', 'tests/close.spec.ts', '--workers', '1']);
+  state.dead = false;
+  assert.equal(r.status, 1, r.all);
+  assert.match(r.all, /preview is closed, promoted or expired/);
+  assert.match(r.all, /nothing ran against production/);
+  assert.deepEqual(state.production, [], 'no production delete, sweep or lookup as recovery');
+  assert.ok(existsSync(prodRecordPath));
+  assert.deepEqual(leaked(r.all), []);
+});
+
+test('no open preview, or no credential for it on this machine: refused before any request, never minting with your sign-in', async () => {
+  reset();
+  const noPreview = makeProject();
+  writeFileSync(join(noPreview, '.somewhere', 'preview.json'), '{}');
+  const r1 = await somewhere(['test', '--preview'], noPreview);
+  assert.equal(r1.status, 1); assert.match(r1.all, /This folder has no open preview\. Open one with `somewhere preview`/);
+  const r2 = await somewhere(['test', '--preview'], root, makeConfig({ credential: false }));
+  assert.equal(r2.status, 1); assert.match(r2.all, /This machine holds no credential for preview draft_e+/);
+  state.dead = true;
+  const r3 = await somewhere(['test', '--preview'], root);
+  state.dead = false;
+  assert.equal(r3.status, 1); assert.match(r3.all, /preview is closed, promoted or expired/);
+  assert.deepEqual(state.production, [], 'never the developer sign-in, never a tool-credential mint');
+  assert.ok(!state.requests.some((l) => l.includes('tool-credential')));
+});
+
+test('the script helper takes the same preview option: the same journey, its own credential only, exact cleanup', { timeout: 300_000 }, async () => {
+  reset();
+  const before = new Set(state.sessions.keys());
+  const r = await run(['tests/check.mjs'], root, configDir);
+  assert.equal(r.status, 0, r.all);
+  assert.match(r.stdout, new RegExp(`PASSED: 3 passed, 0 failed · preview ${DRAFT} · `));
+  assert.deepEqual(state.production, []);
+  assert.deepEqual([...state.users.values()].filter((u) => !u.test), [], 'its sign-up was removed by exact id');
+  const mine = [...state.sessions].filter(([id]) => !before.has(id));
+  assert.equal(mine.length, 1, 'one pinned session for the script');
+  assert.ok(mine.every(([, s]) => s.ended), 'and finish() ended it');
+  const results = JSON.parse(readFileSync(join(root, '.somewhere', 'app-check-preview.json'), 'utf8'));
+  assert.equal(results.environment, 'preview'); assert.equal(results.release, CANDIDATE);
+  assert.ok(existsSync(prodRecordPath), 'the production cleanup record is untouched');
+  assert.deepEqual(leaked(r.all), []);
+});

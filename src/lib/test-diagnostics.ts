@@ -2,8 +2,16 @@ import type { TestInfo } from '@playwright/test';
 import { span } from './test-timeline.js';
 const secrets = new Set<string>();
 export function rememberSecrets(...values: string[]): void { for (const value of values) if (value) secrets.add(value); }
+/** True when any registered secret (password, code, cookie, credential, session) appears in `text`. */
+export function containsSecret(text: string): boolean {
+  for (const secret of secrets) if (secret.length >= 4 && text.includes(secret)) return true;
+  return false;
+}
 export function scrub(value: string): string {
   for (const secret of secrets) value = value.split(secret).join('[redacted]');
+  // Preview tool credentials (swpt.<project>.<preview>.<secret>) and preview browser sessions
+  // (draft_….rel_….<uuid>), whether or not this process registered them.
+  value = value.replace(/swpt\.[A-Za-z0-9._-]+/g, '[redacted]').replace(/draft_[0-9a-f-]{36}\.rel_[A-Za-z0-9_-]+\.[0-9a-f-]{36}/gi, '[redacted]');
   return value.replace(/https?:\/\/[^\s<>"']+/g, raw => { try { const url = new URL(raw); return url.origin + '/[redacted-url]'; } catch { return '[redacted-url]'; } }).replace(/([?&](?:token|code|secret|key|password|access_token|refresh_token)=)[^&\s]+/gi, '$1[redacted]').replace(/(\/(?:reset-password|reset|verify|magic|invite)\/)[^\s?#]+/gi, '$1[redacted]').replace(/\u001b\[[0-9;]*m/g, '').replace(/eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+|smt_[A-Za-z0-9_-]+/g, '[redacted]');
 }
 export interface RequestEvidence { method: string; path: string; status: number; code: string }

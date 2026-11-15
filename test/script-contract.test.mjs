@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import { chromium } from '@playwright/test';
 import { signUp, signIn, signOut, FIND_MS } from '../dist/lib/form-auth.js';
 import { classifyData, captureResponses, dataReady, launchOptions, undeployedChanges } from '../dist/lib/app-test.js';
+import { productionControl } from '../dist/lib/test-control.js';
 
 const ORIGIN = 'https://app.test';
 let browser;
@@ -54,7 +55,8 @@ const ADAPTER = { email: '[data-testid=auth-email]', password: '[data-testid=aut
 function host() {
   const root = mkdtempSync(join(process.env.TMPDIR, 'script-contract-'));
   const client = { call: async (method, path) => { if (path === '/email/test-inbox') return { messages: [] }; throw new Error('unexpected control-plane call ' + method + ' ' + path); } };
-  return { pages: new Set(), attempts: [], root, control: async () => ({ client, projectId: 'p-1', target: { projectId: 'p-1', origin: ORIGIN, host: 'app.test', releaseId: 'rel_1', contractDigest: 'digest-1' } }), attach: async () => {}, allowTime: () => {}, timed: (_n, w) => w() };
+  const control = productionControl(client, { projectId: 'p-1', origin: ORIGIN, host: 'app.test', releaseId: 'rel_1', contractDigest: 'digest-1' });
+  return { pages: new Set(), attempts: [], root, control: async () => ({ control }), attach: async () => {}, prepare: async () => {}, allowTime: () => {}, timed: (_n, w) => w() };
 }
 async function pageFor(html) {
   const context = await browser.newContext({ baseURL: ORIGIN });

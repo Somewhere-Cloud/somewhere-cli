@@ -330,8 +330,9 @@ export function registerPreview(program: Command) {
         + 'mail is captured, never sent (`somewhere preview mail`). Copied rows private to a production user are not visible '
         + 'to new preview users. Server code can list the preview\'s users and set their roles (sw.auth.server), and '
         + 'built-in teams work with the preview\'s own users (invitations are captured). '
+        + 'Test your change in the preview before you promote it: `somewhere test --preview`. '
         + 'Not available in a preview yet: jobs and cron handlers, '
-        + 'rooms, AI and running tests (somewhere docs dev-environments lists them). '
+        + 'rooms and AI (somewhere docs dev-environments lists them). '
         + 'It continues the preview this folder opened while that is open; --new opens a fresh one. '
         + 'The plans that include it are listed at https://somewhere.cloud/pricing; '
         + '`somewhere dev` provides frontend hot reload against the deployed backend.',

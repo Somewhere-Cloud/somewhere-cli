@@ -1,4 +1,5 @@
 import { roleMethodHints } from '../lib/role-method-hints.js';
+import { DEPLOY_COMMAND } from '../lib/test-report.js';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { runTypecheck } from '../lib/typecheck.js';
@@ -25,8 +26,6 @@ import {
   sourceBaseState,
   saveConfig,
   saveProjectConfig,
-  markPublishNoticeSeen,
-  publishNoticeSeen,
   saveProjectDeployState,
   saveProjectAppUrl,
   loadTempSession,
@@ -713,6 +712,7 @@ export function registerDeploy(program: Command) {
     // `somewhere deploy && somewhere test`.
     .addOption(new Option('--test', 'After a successful deploy, run somewhere test once against the new release').hideHelp())
     .option('--json', 'Print the raw deploy response as JSON on stdout; files left out locally are listed on stderr by path and reason')
+    .option('--list-unpublished', 'List the local files this deploy keeps on your machine, and how to publish one on purpose')
     .option('--allow-type-errors', 'Upload even when the local TypeScript check fails')
     .option('--timing', 'Print collection, upload, release, activation, and verification timings')
     .action(async (dir: string | undefined, opts) => {
@@ -1160,7 +1160,7 @@ export function registerDeploy(program: Command) {
       if (excluded.length && !opts.json) {
         spinner?.stop();
         // A dry run leaves .somewhere.json as it found it.
-        printExcludedFiles(excluded, targetDir, { remember: !opts.dryRun });
+        printExcludedFiles(excluded, targetDir, { list: Boolean(opts.listUnpublished) });
         if (process.stderr.isTTY) spinner?.start();
       }
       if (sensitive.length && !opts.json) {
@@ -2207,20 +2207,17 @@ const isInternalPath = (p: string) =>
 // nowhere to remember it, so it prints every time, which is the safe direction.
 export function printExcludedFiles(
   excluded: Array<{ path: string; reason: string }>,
-  targetDir: string,
-  { remember = true }: { remember?: boolean } = {},
+  _targetDir: string,
+  { list = false }: { list?: boolean } = {},
 ): void {
+  // One plain sentence and the count; the list, and how to publish one on purpose, behind --list-unpublished.
+  if (!list) {
+    info(`Not published: ${excluded.length} local file${excluded.length === 1 ? '' : 's'} (notes, tests, tooling) stay on your machine. See them: ${DEPLOY_COMMAND} --list-unpublished`);
+    return;
+  }
   info(`Not published (${excluded.length}): ${excluded.map((e) => e.path).join(', ')}`);
-  if (publishNoticeSeen(targetDir)) return;
-  info(
-    dim(
-      'Notes, logs and scratch files in your project root that nothing in your app uses stay on your machine, ' +
-        'and so do *.test.* and *.spec.* source files and anything in a tests/ or __tests__/ folder. ' +
-        'Unreferenced operational folders (scripts, fixtures, e2e, tooling, tools, design-v2, build, out, storybook-static, artifacts, reports), fixture/test-output folders, and logs stay local too. App references and explicit includes retain files; all other files are uploaded. ' +
-        'To publish one of these files on purpose: somewhere deploy --include <file>, or add a "!<file>" line to .somewhereignore.',
-    ),
-  );
-  if (remember) markPublishNoticeSeen(targetDir);
+  info(dim('Notes and scratch files nothing in your app uses, tests, and tooling folders stay local; everything else is uploaded. '
+    + `To publish one of these on purpose: ${DEPLOY_COMMAND} --include <file>, or add a "!<file>" line to .somewhereignore.`));
 }
 
 /** The --json form of the omission notices: one stderr line per file, stdout

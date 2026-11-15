@@ -115,7 +115,7 @@ export default class TestReporter implements Reporter {
         if (!versionLost) console.log(`Rerun the failed tests on the same ${preview ? 'preview version' : 'release'}: ${rerun}`);
       }
       // After the version changed there is no "same version" to rerun on: say how to get one, and run
-      // everything again (DESIGN.md slice 3a follow-ups, part C). Also when every test passed.
+      // everything again. Also when every test passed.
       if (versionLost) {
         console.log(preview
           ? 'The preview changed or closed during this run. Save it again with `somewhere preview` (or open a new one if it closed), then run all the tests again: somewhere test --preview'

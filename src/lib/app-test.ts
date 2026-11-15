@@ -44,7 +44,7 @@ type Who = Page | BrowserContext | APIRequestContext;
 export interface Check { name: string; ok: boolean; ms: number; error?: string; skipped?: 'after-failure' | 'passed-last-run'; carried_from?: { run: string; release: string } }
 /** What a result file was run against; --failed carries passes only between runs with the same identity. */
 export interface RunIdentity { project_id: string; environment: string; preview_session_id: string | null; origin: string; script: string | null }
-/** Passes the previous result may carry into this run, or the reason it may not (tsk_0ff3f897). */
+/** Passes the previous result may carry into this run, or the reason it may not. */
 export function carriedPasses(last: { checks?: Check[]; identity?: Partial<RunIdentity>; release?: string; started?: string } | null, identity: RunIdentity):
   { ok: true; passes: Map<string, { run: string; release: string }> } | { ok: false; reason: string } {
   if (!last) return { ok: false, reason: 'there is no previous result; run the whole script once first' };
@@ -289,7 +289,7 @@ export class AppTest {
     try { await work(); this.checks.push({ name, ok: true, ms: Math.round(performance.now() - start) }); return true; }
     catch (error) {
       // Nothing about the failure is printed before every secret it could carry is registered and the whole
-      // diagnostic is scrubbed (tsk_25a5feaf): emailed links, remembered passwords or tokens, session cookies.
+      // diagnostic is scrubbed: emailed links, remembered passwords or tokens, session cookies.
       await this.rememberPageSecrets();
       const pages = await Promise.all([...this.host.pages].map(pageState));
       const message = scrub((error instanceof Error ? error.message.split('\n').slice(0, 6).join('\n') : String(error))
@@ -349,7 +349,7 @@ export class AppTest {
     const sources = [...new Set(this.checks.filter((c) => c.carried_from).map((c) => `${c.carried_from!.release} at ${c.carried_from!.run}`))];
     const extra = `${notRun ? `, ${notRun} not run (stopped at the first failure)` : ''}${carried ? ` (${carried} of the passes were carried from an earlier run, not rerun: ${sources.join('; ')})` : ''}`;
     process.stdout.write(`${failed || !passed ? 'FAILED' : 'PASSED'}: ${passed} passed, ${failed} failed${extra} · ${preview ? `preview ${this.target.previewSessionId} · ` : ''}${this.origin} · ${this.release} · ${this.resultsPath}\n`);
-    // After the version changed there is no same version to rerun on (DESIGN.md slice 3a follow-ups, part C).
+    // After the version changed there is no same version to rerun on.
     if (live !== this.release) {
       process.stdout.write(preview
         ? 'The preview changed or closed during this script. Save it again with `somewhere preview` (or open a new one if it closed), then run the whole script again.\n'

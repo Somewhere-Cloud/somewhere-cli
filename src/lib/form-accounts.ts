@@ -29,7 +29,7 @@ import { ensurePrivateDir, writePrivateFile } from './test-identities.js';
 export interface SweepControl { environment: 'production' | 'preview'; projectId: string; target: { previewSessionId?: string }; journalDir(root: string): string; deleteSignups(ids: string[]): Promise<SignupDeletion> }
 
 /**
- * What one cleanup did with each listed id (DESIGN.md slice 3a follow-ups, part B). The runner
+ * What one cleanup did with each listed id. The runner
  * deletes all the sign-ups it created together, with the teams only they belong to.
  * - `done`: gone (deleted now, or already gone); its record is finished.
  * - `kept`: still there, with why; the record is kept and the next run retries.

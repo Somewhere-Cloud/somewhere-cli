@@ -30,7 +30,9 @@ export function scrubTestErrors(errors: Array<Record<string, unknown>>): void {
   }
 }
 export interface RequestEvidence { method: string; path: string; status: number; code: string }
-export interface Diagnostics { release?: string; request?: RequestEvidence; screenshot?: string; timings: Record<string, number> }
+/** `notes`: what cleanup did that the reader should know but that is not a failure (a team deleted with
+ *  the run's sign-ups, a closed preview's record dropped); printed under the test, kept in results. */
+export interface Diagnostics { release?: string; request?: RequestEvidence; screenshot?: string; timings: Record<string, number>; notes?: string[] }
 const reports = new WeakMap<TestInfo, Diagnostics>();
 export function diagnostics(info: TestInfo): Diagnostics {
   let report = reports.get(info);

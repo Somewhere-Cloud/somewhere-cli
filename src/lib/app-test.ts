@@ -315,16 +315,24 @@ export class AppTest {
         ? (live ? `the preview was saved again during the script (${this.release} → ${live}); these results describe no single version` : `${ended || 'the preview could not be confirmed at the end'}; nothing ran against production`)
         : live ? `the live release changed from ${this.release} to ${live} during the script; these results describe no single release` : 'the live release could not be confirmed at the end' });
     const cleanup: string[] = [];
-    await Promise.all(this.host.attempts.map(async attempt => {
-      if (attempt.id) {
-        const refused = await this.control.deleteSignup(attempt.id);
-        if (refused === null) forgetRecord(attempt.record);
-        else cleanup.push(`could not delete ${attempt.email} (${refused}); its record is kept and the next run retries`);
-      } else if (attempt.submitted && !attempt.refused) {
-        cleanup.push(`a sign-up for ${attempt.email} was submitted but returned no account id, so nothing was deleted`);
-        forgetRecord(attempt.record);
-      } else forgetRecord(attempt.record);
-    }));
+    // The script's accounts are deleted together by their exact ids, with the teams only they belong to.
+    const withIds = this.host.attempts.filter(attempt => attempt.id);
+    const notes: string[] = [];
+    if (withIds.length) {
+      const deletion = await this.control.deleteSignups([...new Set(withIds.map(attempt => attempt.id!))]);
+      for (const attempt of withIds) {
+        const id = attempt.id!;
+        if (deletion.done.includes(id)) forgetRecord(attempt.record);
+        else if (deletion.dropped.has(id)) { forgetRecord(attempt.record); notes.push(`dropped the cleanup record of ${attempt.email}: ${deletion.dropped.get(id)}`); }
+        else cleanup.push(`could not delete ${attempt.email} (${deletion.kept.get(id) ?? 'not deleted'}); its record is kept and the next run retries`);
+      }
+      if (deletion.teamsDeleted.length) notes.push(`deleted ${deletion.teamsDeleted.length} team(s) that only this script's sign-ups belonged to: ${deletion.teamsDeleted.map(team => `"${team.name}" (${team.id})`).join(', ')}`);
+    }
+    for (const attempt of this.host.attempts.filter(attempt => !attempt.id)) {
+      if (attempt.submitted && !attempt.refused) cleanup.push(`a sign-up for ${attempt.email} was submitted but returned no account id, so nothing was deleted`);
+      forgetRecord(attempt.record);
+    }
+    for (const note of notes) process.stderr.write(note + '\n');
     await this.rememberPageSecrets();
     await this.control.close();
     if (cleanup.length) this.checks.push({ name: 'cleanup of sign-up accounts', ok: false, ms: 0, error: cleanup.join('; ') });
@@ -341,6 +349,12 @@ export class AppTest {
     const sources = [...new Set(this.checks.filter((c) => c.carried_from).map((c) => `${c.carried_from!.release} at ${c.carried_from!.run}`))];
     const extra = `${notRun ? `, ${notRun} not run (stopped at the first failure)` : ''}${carried ? ` (${carried} of the passes were carried from an earlier run, not rerun: ${sources.join('; ')})` : ''}`;
     process.stdout.write(`${failed || !passed ? 'FAILED' : 'PASSED'}: ${passed} passed, ${failed} failed${extra} · ${preview ? `preview ${this.target.previewSessionId} · ` : ''}${this.origin} · ${this.release} · ${this.resultsPath}\n`);
+    // After the version changed there is no same version to rerun on (DESIGN.md slice 3a follow-ups, part C).
+    if (live !== this.release) {
+      process.stdout.write(preview
+        ? 'The preview changed or closed during this script. Save it again with `somewhere preview` (or open a new one if it closed), then run the whole script again.\n'
+        : 'The live release changed during this script. Run the whole script again.\n');
+    }
     if (failed || !passed) process.exitCode = 1;
     return { passed, failed, file: this.resultsPath };
   }

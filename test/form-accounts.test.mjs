@@ -81,11 +81,12 @@ test('the run record is private, never holds a secret, and cleanup is by exact i
     assert.deepEqual(Object.keys(JSON.parse(readFileSync(join(dir, name), 'utf8'))).sort(), ['created_at', 'email', 'environment', 'id', 'pid', 'project_id', 'run']);
   }
   const calls = [];
+  // One call for every finished record (DESIGN.md slice 3a follow-ups, part B): user-3 is already gone,
+  // user-4 is the only owner of a team with someone outside the list.
   const client = { async call(method, path, body, query) {
     calls.push({ method, path, body, query });
-    if (path.endsWith('/user-3')) throw new CliApiError('AUTH_INVALID_CREDS', 'User not found in this project.', 404);
-    if (path.endsWith('/user-4')) throw new CliApiError('INTERNAL_ERROR', 'boom', 500);
-    return { deleted: true };
+    return { results: body.ids.map((id) => id === 'user-3' ? { id, outcome: 'not_found' } : id === 'user-4' ? { id, outcome: 'kept', groups: [{ id: 'grp_1', name: 'Shared' }] } : { id, outcome: 'deleted' }),
+      groups_deleted: [{ id: 'grp_2', name: 'Only them' }] };
   } };
   // The sweep runs in a different process from the live run; mark this one as finished.
   process.env.SW_TEST_RUN = 'sweeper';
@@ -93,19 +94,28 @@ test('the run record is private, never holds a secret, and cleanup is by exact i
   Object.defineProperty(process, 'pid', { value: 999999999, configurable: true });
   let result;
   try { result = await sweepAccounts(productionControl(client, { projectId: project, origin: 'https://app.test', host: 'app.test', releaseId: 'rel_1', contractDigest: null }), root); } finally { Object.defineProperty(process, 'pid', { value: original, configurable: true }); }
-  assert.deepEqual(calls.map(call => `${call.method} ${call.path} ${call.query.project_id}`).sort(), [
-    `DELETE /auth/users/user-1 ${project}`, `DELETE /auth/users/user-3 ${project}`, `DELETE /auth/users/user-4 ${project}`]);
-  assert.ok(calls.every(call => call.body === undefined), 'deletion is by id only, never by address');
+  assert.deepEqual(calls.map(call => `${call.method} ${call.path} ${call.query.project_id}`), [`POST /auth/users/delete ${project}`], 'one call for all of them');
+  assert.deepEqual({ ...calls[0].body, ids: [...calls[0].body.ids].sort() }, { ids: ['user-1', 'user-3', 'user-4'], delete_groups_only_they_belong_to: true }, 'by exact id only, never by address');
   assert.deepEqual(result.deleted.sort(), ['user-1', 'user-3']);
-  assert.deepEqual(result.failed, ['sw-4@example.com (HTTP 500 INTERNAL_ERROR: boom)'], 'a failed delete says what the platform answered');
+  assert.deepEqual(result.failed, ['sw-4@example.com (it is the only owner of the team "Shared" (grp_1), which has members outside this run\'s sign-ups; the team and the account were left alone)'], 'a kept account says which team and that it was left alone');
+  assert.deepEqual(result.teamsDeleted, ['"Only them" (grp_2)']);
   assert.deepEqual(result.unknownId, ['sw-2@staff.example']);
   const left = readdirSync(dir).map(name => JSON.parse(readFileSync(join(dir, name), 'utf8')).email).sort();
   assert.deepEqual(left, ['sw-4@example.com', 'sw-5@example.com'], 'a failed delete keeps its record for the next run; a live run keeps its own');
   const lines = describeSweep(result, 'Before this run').join('\n');
   assert.match(lines, /deleted 2/);
+  assert.match(lines, /deleted 1 team\(s\) that only those sign-ups belonged to: "Only them" \(grp_2\)/);
   assert.match(lines, /could not delete 1.*sw-4@example\.com.*next run retries/);
   assert.match(lines, /never deleted by address.*sw-2@staff\.example/);
   assert.throws(() => accountsDir(root, '../escape'), /Unexpected project id/);
+  // A call that fails as a whole keeps every record and says what the platform answered.
+  const broken = { async call() { throw new CliApiError('INTERNAL_ERROR', 'boom', 500); } };
+  process.env.SW_TEST_RUN = 'sweeper-2';
+  Object.defineProperty(process, 'pid', { value: 999999999, configurable: true });
+  try {
+    const again = await sweepAccounts(productionControl(broken, { projectId: project, origin: 'https://app.test', host: 'app.test', releaseId: 'rel_1', contractDigest: null }), root);
+    assert.deepEqual(again.failed, ['sw-4@example.com (HTTP 500 INTERNAL_ERROR: boom)']);
+  } finally { Object.defineProperty(process, 'pid', { value: original, configurable: true }); }
 });
 
 test('passwords and codes the fixtures handled are scrubbed from any text', () => {
@@ -124,7 +134,7 @@ test('a preview run never touches a production cleanup record, and a production 
   const target = (draft) => ({ projectId: project, origin: 'https://app-dev.test', host: 'app-dev.test', releaseId: 'rel_candidate_1', contractDigest: null, environment: 'preview', previewSessionId: draft });
   const production = { projectId: project, origin: 'https://app.test', host: 'app.test', releaseId: 'rel_1', contractDigest: null };
   const calls = [];
-  const recording = (label) => ({ call: async (method, path) => { calls.push(`${label} ${method} ${path}`); return { deleted: true }; } });
+  const recording = (label) => ({ call: async (method, path, body) => { calls.push(`${label} ${method} ${path} ${body.ids.join(',')}`); return { results: body.ids.map((id) => ({ id, outcome: 'deleted' })), groups_deleted: [] }; } });
   process.env.SW_TEST_RUN = 'ended-run'; process.env.SW_TEST_RUN_PID = '999999998';
   // An interrupted production run left a record with a known id; an interrupted preview A run and B run left theirs.
   const prod = recordAttempt(productionControl(recording('prod'), production), root, 'sw-prod@example.com'); recordId(prod, 'prod-user-1');
@@ -136,7 +146,7 @@ test('a preview run never touches a production cleanup record, and a production 
   process.env.SW_TEST_RUN = 'preview-a-run';
   const swept = await sweepAccounts(previewControl(recording('A'), target(draftA)), root);
   assert.deepEqual(swept.deleted, ['pvu_a1']);
-  assert.deepEqual(calls, ['A DELETE /preview-tools/signups/pvu_a1'], 'only preview A\'s record, only through the preview tool');
+  assert.deepEqual(calls, ['A POST /preview-tools/signups/delete pvu_a1'], 'only preview A\'s record, only through the preview tool');
   assert.equal(readFileSync(prod, 'utf8'), prodBefore, 'the production record is untouched');
   assert.ok(existsSync(b), 'preview B\'s record is left to a preview B run');
   // A production record placed in a preview's journal by mistake is still never finished by a preview run.
@@ -149,14 +159,17 @@ test('a preview run never touches a production cleanup record, and a production 
   writeFileSync(join(accountsDir(root, project), '2-deadbeef.json'), JSON.stringify({ project_id: project, email: 'sw-misplaced@example.com', id: 'pvu_misplaced', run: 'x', pid: 0, created_at: '', environment: 'preview', preview_session_id: draftA }));
   calls.length = 0;
   const prodSwept = await sweepAccounts(productionControl(recording('prod'), production), root);
-  assert.deepEqual(calls, ['prod DELETE /auth/users/prod-user-1']);
+  assert.deepEqual(calls, ['prod POST /auth/users/delete prod-user-1']);
   assert.deepEqual(prodSwept.deleted, ['prod-user-1']);
   assert.ok(existsSync(b));
-  // A closed preview: the record is kept and the reason said; nothing falls back to production.
+  // A closed preview took its accounts with it: the record is dropped with the reason, never retried
+  // for ever (DESIGN.md slice 3a follow-ups, part B); nothing falls back to production.
   calls.length = 0;
-  const dead = { call: async (method, path) => { calls.push(`B ${method} ${path}`); throw new CliApiError('PREVIEW_CREDENTIAL_INVALID', 'closed', 401); } };
+  const dead = { call: async (method, path, body) => { calls.push(`B ${method} ${path} ${body.ids.join(',')}`); throw new CliApiError('PREVIEW_CREDENTIAL_INVALID', 'closed', 401); } };
   const closed = await sweepAccounts(previewControl(dead, target(draftB)), root);
-  assert.deepEqual(calls, ['B DELETE /preview-tools/signups/pvu_b1']);
-  assert.match(closed.failed[0], /sw-b@example\.com \(the preview is closed, promoted or expired/);
-  assert.ok(existsSync(b), 'kept for an accurate report');
+  assert.deepEqual(calls, ['B POST /preview-tools/signups/delete pvu_b1']);
+  assert.deepEqual(closed.failed, []);
+  assert.match(closed.dropped[0], /sw-b@example\.com \(the preview is closed, promoted or expired, and its accounts went with it\)/);
+  assert.ok(!existsSync(b), 'the record is dropped');
+  assert.match(describeSweep(closed, 'Before this run').join('\n'), /dropped the cleanup record of 1 form sign-up account\(s\) that can never be deleted/);
 });

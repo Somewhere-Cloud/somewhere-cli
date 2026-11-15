@@ -171,7 +171,7 @@ test('every combination separates types, services, hooks, pages and presentation
     assert.doesNotMatch(all, /fonts\.googleapis|@import url|https?:\/\/[^\s'"`]*\.(woff2?|ttf)/, `${label}: no remote fonts`);
     const pkg = JSON.parse(read('package.json'));
     assert.deepEqual(Object.keys(pkg.dependencies).sort(), ['@somewhere-cloud/sdk', 'react', 'react-dom']);
-    assert.equal(pkg.dependencies['@somewhere-cloud/sdk'], '0.14.1', 'the SDK release with resendMfaCode for the emailed sign-in code');
+    assert.equal(pkg.dependencies['@somewhere-cloud/sdk'], '0.14.2', 'the SDK release whose sign-in lockout answer keeps retry_after_ms and sends Retry-After');
     assert.equal(pkg.scripts.build, undefined);
   }
 });
@@ -603,7 +603,7 @@ test('MFA continuation is shared by password, magic-link and invitation landings
     assert.match(starter.read('src/auth/magic-link.ts'), /window\.location\.replace\(target\.current\)/);
     assert.doesNotMatch(starter.read('src/auth/useMfaContinuation.ts') + starter.read('src/ui/MfaStep.tsx'), /mfa_token|localStorage|sessionStorage|fetch\(|console\./);
     assert.match(starter.read('src/ui/MfaStep.tsx'), /autoComplete="one-time-code"/);
-    assert.equal(JSON.parse(starter.read('package.json')).dependencies['@somewhere-cloud/sdk'], '0.14.1', 'the SDK release with resendMfaCode for the emailed sign-in code');
+    assert.equal(JSON.parse(starter.read('package.json')).dependencies['@somewhere-cloud/sdk'], '0.14.2', 'the SDK release whose sign-in lockout answer keeps retry_after_ms and sends Retry-After');
   }
   // : the step asks for the emailed 6-digit code and can ask for a new one.
   for (const [features, ui] of [['auth','styled'],['magic-link','headless']]) {

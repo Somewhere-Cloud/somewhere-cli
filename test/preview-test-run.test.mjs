@@ -213,6 +213,13 @@ test('fails on a custom form that shows the code and password', async ({ page, s
   await signUp(page, { form: { path: '/custom', email: '#cf-email', password: '#cf-pass', signUp: '#cf-up', signIn: '#cf-in', signedIn: '#banner' } });
   await expect(page.locator('#banner')).toHaveText('nothing secret', { timeout: 500 });
 });
+test('fails inside custom sign-up steps while the page shows the code', async ({ page, signUp }) => {
+  await signUp(page, { form: { path: '/custom', signedIn: '#banner' }, steps: async (p, { email, password }) => {
+    await p.fill('#cf-email', email); await p.fill('#cf-pass', password); await p.click('#cf-up');
+    // Fails because the banner also shows the code and the password, quoting them in the error.
+    await expect(p.locator('#banner')).toHaveText('Welcome', { timeout: 2000 });
+  } });
+});
 test('fails on a page with nothing secret', async ({ page, signUp }) => {
   await signUp(page);
   await page.goto('/plain');
@@ -361,9 +368,11 @@ test('at the moment of failure: no artifact, report or output holds a secret, fo
   const r = await somewhere(['test', '--preview', 'tests/fails.spec.ts', '--workers', '1']);
   watched.close();
   assert.equal(r.status, 1, r.all);
-  assert.match(r.stdout, /3 failed/);
+  assert.match(r.stdout, /4 failed/);
+  assert.match(r.stdout, /toHaveText[\s\S]*Expected/, 'the failure still says which assertion failed and what it expected');
+  assert.match(r.stdout, /signUp: fill and submit the sign-up form failed/, 'and in which helper step');
   const contexts = watched.seen.filter((f) => f.name.endsWith('error-context.md'));
-  assert.ok(contexts.length >= 3, 'Playwright wrote its error context for each failure (seen at write time)');
+  assert.ok(contexts.length >= 4, 'Playwright wrote its error context for each failure (seen at write time)');
   assert.ok(contexts.every((f) => !f.text.includes('# Page snapshot')), 'no page snapshot is ever written');
   assert.ok(contexts.some((f) => f.text.includes('[redacted]')), 'the quoted page text was scrubbed before the write');
   const pngs = files(join(root, '.somewhere', 'tests')).filter((path) => path.endsWith('.png'));
@@ -372,6 +381,7 @@ test('at the moment of failure: no artifact, report or output holds a secret, fo
   assert.deepEqual(state.production, []);
   assert.deepEqual(leakedIn(watched.seen.map((f) => f.text)), [], 'no secret in any artifact at the moment it was written');
   assert.deepEqual(leaked(r.all), [], 'nor in output or anything left after the run');
+  assert.deepEqual([...state.users.values()].filter((u) => !u.test).map((u) => u.email), [], 'every sign-up, including the one whose custom step failed, was removed by exact id');
 });
 
 test('a run interrupted right after a failure, before any cleanup, leaves no secret on disk', { timeout: 300_000 }, async () => {
@@ -433,11 +443,12 @@ test('no open preview, or no credential for it on this machine: refused before a
 test('the script helper takes the same preview option: the same journey, its own credential only, exact cleanup', { timeout: 300_000 }, async () => {
   reset();
   const before = new Set(state.sessions.keys());
+  const usersBefore = new Set(state.users.keys());
   const r = await run(['tests/check.mjs'], root, configDir);
   assert.equal(r.status, 0, r.all);
   assert.match(r.stdout, new RegExp(`PASSED: 3 passed, 0 failed · preview ${DRAFT} · `));
   assert.deepEqual(state.production, []);
-  assert.deepEqual([...state.users.values()].filter((u) => !u.test), [], 'its sign-up was removed by exact id');
+  assert.deepEqual([...state.users.values()].filter((u) => !u.test && !usersBefore.has(u.id)), [], 'its sign-up was removed by exact id');
   const mine = [...state.sessions].filter(([id]) => !before.has(id));
   assert.equal(mine.length, 1, 'one pinned session for the script');
   assert.ok(mine.every(([, s]) => s.ended), 'and finish() ended it');
@@ -456,10 +467,10 @@ test('the production runner: at the moment of failure no artifact, report or out
   const r = await somewhere(['test', 'tests/fails.spec.ts', '--workers', '1']);
   watched.close(); state.productionAllowed = false;
   assert.equal(r.status, 1, r.all);
-  assert.match(r.stdout, /3 failed/);
+  assert.match(r.stdout, /4 failed/);
   assert.ok(state.requests.some((l) => l === `GET /v1/projects/${PROJECT}/urls`), 'it ran as a production run');
   const contexts = watched.seen.filter((f) => f.name.endsWith('error-context.md'));
-  assert.ok(contexts.length >= 3 && contexts.every((f) => !f.text.includes('# Page snapshot')));
+  assert.ok(contexts.length >= 4 && contexts.every((f) => !f.text.includes('# Page snapshot')));
   assert.deepEqual(leakedIn(watched.seen.map((f) => f.text)), [], 'no secret in any artifact at the moment it was written');
   assert.deepEqual(leaked(r.all), []);
 });

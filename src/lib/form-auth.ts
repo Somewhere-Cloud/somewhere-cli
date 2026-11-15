@@ -157,9 +157,11 @@ async function pageSays(page: Page): Promise<string> {
 }
 
 /** Run one named step; a failure says which step, what the page showed, and the cause, scrubbed. */
-async function step<T>(page: Page, name: string, work: () => Promise<T>): Promise<T> {
+async function step<T>(page: Page, name: string, work: () => Promise<T>, beforeReport?: () => Promise<void>): Promise<T> {
   try { return await span(name, {}, work); }
   catch (error) {
+    // Secrets the failure may quote (a code the page already shows) are registered before any text is built.
+    await beforeReport?.().catch(() => {});
     if (error instanceof StepError) throw error;
     const said = await pageSays(page);
     const cause = scrub(error instanceof Error ? error.message : String(error)).slice(0, 600);
@@ -221,6 +223,13 @@ async function freshCodes(run: FormHost, address: string, mark: InboxMark, what:
   }
 }
 
+/** Register every code mailed to `address` for scrubbing (not consumed), once a form was submitted:
+ *  a custom page can show it, and a failing step can quote it, before the helper would read it. */
+async function registerMailedCodes(run: FormHost, address: string, submitted: boolean): Promise<void> {
+  if (!submitted) return;
+  for (const message of await inbox(run, address)) if (message.verification_code) rememberSecrets(message.verification_code);
+}
+
 export function signUp(run: FormHost, page: Page, options: SignUpOptions): Promise<Person> {
   return onSecretScreen(page, () => signUpSteps(run, page, options));
 }
@@ -247,6 +256,15 @@ async function signUpSteps(run: FormHost, page: Page, options: SignUpOptions): P
       await openSignedOut(page, options.form);
       if (options.steps) await options.steps(page, { email, password });
       else await submitForm(page, 'sign-up', { email, password }, options.form);
+    }, async () => {
+      if (!attempt.submitted) return;
+      await registerMailedCodes(run, email, true);
+      // The form step failed after submitting: learn the new account's id from the sign-up response
+      // already awaited, so cleanup can still remove it by exact id (never by address).
+      const late = await Promise.race([signedUp, new Promise<Error>((resolve) => setTimeout(() => resolve(new Error('no response yet')), 3_000))]);
+      if (late instanceof Error) return;
+      const known = await outcome(Promise.resolve(late), 'sign-up').catch(() => null);
+      if (known?.ok && known.id) { attempt.id = known.id; recordId(attempt.record, known.id); }
     });
     const result = await step(page, 'signUp: wait for the sign-up response', () => outcome(signedUp, 'sign-up'));
     if (!result.ok) {
@@ -278,7 +296,7 @@ async function signUpSteps(run: FormHost, page: Page, options: SignUpOptions): P
     recordId(attempt.record, id);
     // Any code already mailed to the new address is a secret from now on, even one the test never
     // enters (a custom page may show it): registered for scrubbing, not consumed.
-    for (const message of await inbox(run, email)) if (message.verification_code) rememberSecrets(message.verification_code);
+    await registerMailedCodes(run, email, true);
     await step(page, 'signUp: wait for the signed-in page', () => signedIn(page, options.form));
     await run.attach(page);
     const person: Person = { id, email, password, verified };
@@ -345,7 +363,7 @@ async function signInSteps(run: FormHost, page: Page, person: Person, options: S
       await openSignedOut(page, options.form);
       if (options.steps) await options.steps(page, { email: person.email, password: person.password });
       else await submitForm(page, 'sign-in', person, options.form);
-    });
+    }, () => registerMailedCodes(run, person.email, true));
     return step(page, 'signIn: wait for the sign-in response', () => outcome(signedIn, 'sign-in'));
   };
   let result = await submit();

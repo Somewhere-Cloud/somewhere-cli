@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.38.93
+
+- The starter pins @somewhere-cloud/sdk 0.14.2, whose sign-in lockout answer keeps retry_after_ms and sends Retry-After.
+- App.check stops at the first failure and prints the page; --failed reruns only failures; 5 s waits.
+- somewhere test --preview and openAppTest({ preview }) test an app inside its preview (slice 3a).
+- Help and the starter agent guide say server user lookup and roles work in a preview.
+
 ## 0.38.92
 
 - Preview users, test users and captured mail with a preview-only credential.

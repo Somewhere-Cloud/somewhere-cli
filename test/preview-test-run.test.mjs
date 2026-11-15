@@ -511,7 +511,7 @@ test('the script helper\'s finish() fails a script whose every check passed when
   state.candidate = CANDIDATE;
   assert.equal(r.status, 1, r.all);
   assert.match(r.all, /the preview was saved again during the script \(rel_candidate_E001 → rel_candidate_E002\)/);
-  const results = JSON.parse(readFileSync(join(root, '.somewhere', 'app-check-preview.json'), 'utf8'));
+  const results = JSON.parse(readFileSync(join(root, '.somewhere', 'save-unnoticed-preview.json') /* one result file per script */, 'utf8'));
   assert.deepEqual(results.checks.map((c) => [c.name, c.ok]), [['the page loads', true], ['the preview stayed on the same saved version during the script', false]]);
   assert.deepEqual(state.production, []);
 });
@@ -590,13 +590,14 @@ test('the script helper takes the same preview option: the same journey, its own
   const usersBefore = new Set(state.users.keys());
   const r = await run(['tests/check.mjs'], root, configDir);
   assert.equal(r.status, 0, r.all);
-  assert.match(r.stdout, new RegExp(`PASSED: 3 passed, 0 failed · preview ${DRAFT} · `));
+  assert.match(r.stdout, /^PASSED: 3 checks in 1 script$/m);
+  assert.doesNotMatch(r.stdout, new RegExp(`${DRAFT}|rel_|/Volumes/|/Users/`), 'the result names no ids and no absolute paths');
   assert.deepEqual(state.production, []);
   assert.deepEqual([...state.users.values()].filter((u) => !u.test && !usersBefore.has(u.id)), [], 'its sign-up was removed by exact id');
   const mine = [...state.sessions].filter(([id]) => !before.has(id));
   assert.equal(mine.length, 1, 'one pinned session for the script');
   assert.ok(mine.every(([, s]) => s.ended), 'and finish() ended it');
-  const results = JSON.parse(readFileSync(join(root, '.somewhere', 'app-check-preview.json'), 'utf8'));
+  const results = JSON.parse(readFileSync(join(root, '.somewhere', 'check-preview.json') /* one result file per script: tests/check.mjs */, 'utf8'));
   assert.equal(results.environment, 'preview'); assert.equal(results.release, CANDIDATE);
   assert.ok(existsSync(prodRecordPath), 'the production cleanup record is untouched');
   assert.deepEqual(leaked(r.all), []);

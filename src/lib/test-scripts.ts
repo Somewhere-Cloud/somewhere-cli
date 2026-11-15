@@ -1,6 +1,7 @@
 import { createRequire } from 'node:module';
-import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
-import { join, relative, resolve } from 'node:path';
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { describeReport, TEST_COMMAND, type ReportCheck } from './test-report.js';
+import { dirname, join, relative, resolve } from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { cliConfigDir } from './config.js';
 
@@ -9,7 +10,7 @@ import { cliConfigDir } from './config.js';
 // project's Playwright and a browser it can launch, and report each script's result. A script is its own test:
 // its exit code is the verdict.
 
-export interface ScriptResult { script: string; ok: boolean; exitCode: number; ms: number; reason: string | null }
+export interface ScriptResult { script: string; ok: boolean; exitCode: number; ms: number; reason: string | null; checks?: ReportCheck[]; resultFile?: string | null }
 
 /** Whether the project has any Playwright spec under tests/. */
 export function hasSpecFiles(root: string): boolean {
@@ -69,29 +70,35 @@ export async function runScripts(root: string, scripts: string[], extraArgs: str
     process.stdout.write(`\n▶ ${script}\n`);
     const started = performance.now();
     let output = '';
-    const child = spawn(process.execPath, [script, ...extraArgs], { cwd: root, env, stdio: ['inherit', 'pipe', 'pipe'] });
+    // A script using openAppTest hands its checks over here instead of printing its own summary.
+    const handOver = join(root, '.somewhere', 'tests', `report-${results.length}.json`);
+    mkdirSync(dirname(handOver), { recursive: true });
+    rmSync(handOver, { force: true });
+    const child = spawn(process.execPath, [script, ...extraArgs], { cwd: root, env: { ...env, SW_TEST_REPORT: handOver }, stdio: ['inherit', 'pipe', 'pipe'] });
     const keep = (chunk: Buffer, to: NodeJS.WriteStream) => { to.write(chunk); output = (output + chunk.toString('utf8')).slice(-20_000); };
     child.stdout.on('data', (chunk: Buffer) => keep(chunk, process.stdout));
     child.stderr.on('data', (chunk: Buffer) => keep(chunk, process.stderr));
     const exitCode = await new Promise<number>((done) => child.on('close', (code) => done(code ?? 1)));
-    results.push({ script, ok: exitCode === 0, exitCode, ms: Math.round(performance.now() - started), reason: exitCode === 0 ? null : failureReason(output) });
+    let report: { checks?: ReportCheck[]; resultFile?: string } | null = null;
+    try { report = existsSync(handOver) ? JSON.parse(readFileSync(handOver, 'utf8')) : null; } catch { report = null; }
+    rmSync(handOver, { force: true });
+    results.push({ script, ok: exitCode === 0, exitCode, ms: Math.round(performance.now() - started), reason: exitCode === 0 ? null : failureReason(output),
+      checks: report?.checks, resultFile: report?.resultFile ?? null });
   }
   return results;
 }
 
-/** The summary: failures first, one line each, then what to do next. */
-export function describeScriptResults(results: ScriptResult[]): string[] {
-  const failed = results.filter((result) => !result.ok);
-  const seconds = (ms: number) => `${(ms / 1000).toFixed(1)} s`;
-  const lines = [
-    ...failed.map((result) => `FAIL ${result.script} (exit ${result.exitCode}, ${seconds(result.ms)}): ${result.reason ?? 'no output'}`),
-    ...results.filter((result) => result.ok).map((result) => `PASS ${result.script} (${seconds(result.ms)})`),
-  ];
-  if (!results.length) return ['No tests found: add a Playwright script as tests/<name>.mjs or .cjs (somewhere init writes tests/app-check.mjs), then run somewhere test.'];
-  lines.push(failed.length
-    ? `FAILED: ${failed.length} of ${results.length} script${results.length === 1 ? '' : 's'} failed. Fix what each FAIL line names, run somewhere deploy, then somewhere test --failed to rerun only the failed checks.`
-    : `PASSED: ${results.length} script${results.length === 1 ? '' : 's'}.`);
-  return lines;
+/** The result for the whole run: every check that ran, failures first, one line each, then one summary line.
+ *  A script that reports no checks (an ordinary script without openAppTest) counts as one check named by its file. */
+export function describeScriptResults(results: ScriptResult[], options: { verbose?: boolean } = {}): string[] {
+  if (!results.length) return [`No tests found: add a Playwright script as tests/<name>.mjs or .cjs (somewhere init writes tests/app-check.mjs), then run ${TEST_COMMAND}.`];
+  return describeReport(results.map((result) => {
+    const checks = result.checks ?? [{ name: result.script, ok: result.ok, ...(result.ok ? {} : { error: result.reason ?? `exit ${result.exitCode}` }) }];
+    // A script that failed after reporting only passes (it crashed after finish) still fails, by its own name.
+    const crashed = !result.ok && !checks.some((check) => !check.ok);
+    return { script: result.script, resultFile: result.resultFile ?? null,
+      checks: crashed ? [...checks, { name: result.script, ok: false, error: result.reason ?? `exit ${result.exitCode}` }] : checks };
+  }), options);
 }
 
 const LAST = join('.somewhere', 'tests', 'scripts-last.json');

@@ -157,12 +157,25 @@ async function pageSays(page: Page): Promise<string> {
 }
 
 /** Run one named step; a failure says which step, what the page showed, and the cause, scrubbed. */
+/** The browser itself stopped (crashed or was closed), so the step's own error ("Target page, context or browser
+ *  has been closed") says nothing about the app. Said plainly instead of as the step's failure. */
+export function browserStoppedMessage(page: Page, error: unknown): string | null {
+  const message = error instanceof Error ? error.message : String(error);
+  if (!/Target page, context or browser has been closed/.test(message)) return null;
+  let connected = true;
+  try { connected = page.context().browser()?.isConnected() ?? true; } catch { connected = false; }
+  return connected ? null : 'the browser stopped (it crashed or was closed) before this step finished, so this is not an app error. '
+    + 'Run the script again with DEBUG=pw:browser to see the browser\'s own error.';
+}
+
 async function step<T>(page: Page, name: string, work: () => Promise<T>, beforeReport?: () => Promise<void>): Promise<T> {
   try { return await span(name, {}, work); }
   catch (error) {
     // Secrets the failure may quote (a code the page already shows) are registered before any text is built.
     await beforeReport?.().catch(() => {});
     if (error instanceof StepError) throw error;
+    const stopped = browserStoppedMessage(page, error);
+    if (stopped) throw new StepError(`${name.split(':')[0]}: ${stopped}`);
     const said = await pageSays(page);
     const cause = scrub(error instanceof Error ? error.message : String(error)).slice(0, 600);
     throw new StepError(`${name} failed${said ? `; the page says "${said}"` : ''}: ${cause}`);

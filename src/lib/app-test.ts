@@ -3,7 +3,8 @@ import { setDefaultResultOrder } from 'node:dns';
 import { lookup } from 'node:dns/promises';
 import { testAddressOrder } from './test-connectivity.js';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname, join, relative, resolve } from 'node:path';
+import { basename, dirname, join, relative, resolve } from 'node:path';
+import { describeReport, TEST_COMMAND, type ReportCheck } from './test-report.js';
 import type { APIRequestContext, BrowserContext, LaunchOptions, Locator, Page } from '@playwright/test';
 import { loadProjectConfig } from './config.js';
 import type { TestTarget } from './test-target.js';
@@ -12,7 +13,7 @@ import { hashFiles } from './base-files.js';
 import { describeSweep, forgetRecord, sweepAccounts } from './form-accounts.js';
 import { openPreviewControl, openProductionControl, type TestControl } from './test-control.js';
 import { loadPreviewRecord } from './preview-record.js';
-import { ready, signIn, signOut, signUp, verify, type Attempt, type FormAdapter, type FormControl, type FormHost, type Person, type SignInOptions, type SignUpOptions } from './form-auth.js';
+import { browserStoppedMessage, ready, signIn, signOut, signUp, verify, type Attempt, type FormAdapter, type FormControl, type FormHost, type Person, type SignInOptions, type SignUpOptions } from './form-auth.js';
 import { rememberSecrets, scrub } from './test-diagnostics.js';
 import { span } from './test-timeline.js';
 
@@ -204,7 +205,9 @@ export class AppTest {
     if (ipv4First) setDefaultResultOrder('ipv4first');
     process.env.SW_TEST_RUN ??= randomUUID();
     for (const line of describeSweep(await sweepAccounts(control, root), 'Before this script')) process.stderr.write(line + '\n');
-    const app = new AppTest(root, control, resolve(root, options.results ?? join('.somewhere', preview ? 'app-check-preview.json' : 'app-check.json')));
+    // One result file per script (tests/app-check.mjs → .somewhere/app-check.json), so two scripts never overwrite each other.
+    const scriptName = process.argv[1] ? basename(process.argv[1]).replace(/\.[cm]?[jt]s$/, '') : 'app-check';
+    const app = new AppTest(root, control, resolve(root, options.results ?? join('.somewhere', `${scriptName}${preview ? '-preview' : ''}.json`)));
     if (options.onlyFailed ?? process.argv.includes('--failed')) {
       const last = existsSync(app.resultsPath) ? JSON.parse(readFileSync(app.resultsPath, 'utf8')) : null;
       const carried = carriedPasses(last, app.identity());
@@ -292,11 +295,12 @@ export class AppTest {
       // diagnostic is scrubbed: emailed links, remembered passwords or tokens, session cookies.
       await this.rememberPageSecrets();
       const pages = await Promise.all([...this.host.pages].map(pageState));
-      const message = scrub((error instanceof Error ? error.message.split('\n').slice(0, 6).join('\n') : String(error))
+      const stopped = [...this.host.pages].map((page) => browserStoppedMessage(page, error)).find(Boolean);
+      const message = stopped ?? scrub((error instanceof Error ? error.message.split('\n').slice(0, 6).join('\n') : String(error))
         + pages.map((state, i) => `\npage ${i + 1}: ${state}`).join(''));
       this.checks.push({ name, ok: false, ms: Math.round(performance.now() - start), error: message });
       this.stopped = true;
-      process.stdout.write(`FAIL ${name}\n  ${message.replaceAll('\n', '\n  ')}\nStopping here: later checks are skipped. After a fix, rerun only what failed: node <this script> --failed\n`);
+      process.stdout.write(`FAIL ${name}\n  ${message.replaceAll('\n', '\n  ')}\nStopping here: later checks are skipped. After a fix, rerun only what failed: ${TEST_COMMAND} --failed\n`);
       return false;
     }
   }
@@ -306,7 +310,6 @@ export class AppTest {
   async finish(): Promise<{ passed: number; failed: number; file: string }> {
     if (this.finished) throw new Error('finish() already ran');
     this.finished = true;
-    const ranChecks = this.checks.length;
     const preview = this.control.environment === 'preview';
     let ended = '';
     const live = await this.control.currentRelease().catch((error: unknown) => { ended = error instanceof Error ? error.message : ''; return null; });
@@ -338,17 +341,21 @@ export class AppTest {
     if (cleanup.length) this.checks.push({ name: 'cleanup of sign-up accounts', ok: false, ms: 0, error: cleanup.join('; ') });
     const passed = this.checks.filter(check => check.ok).length;
     const failed = this.checks.filter(check => !check.ok && !check.skipped).length;
-    const notRun = this.checks.filter(check => check.skipped === 'after-failure').length;
-    const carried = this.checks.filter(check => check.skipped === 'passed-last-run').length;
     mkdirSync(dirname(this.resultsPath), { recursive: true });
     writeFileSync(this.resultsPath, JSON.stringify({ identity: this.identity(), origin: this.origin, environment: this.control.environment, ...(preview ? { preview_session_id: this.target.previewSessionId } : {}), release: this.release,
       started: this.started.toISOString(), finished: new Date().toISOString(), passed, failed, checks: this.checks.map((check) => ({ ...check, ...(check.error ? { error: scrub(check.error) } : {}) })) }, null, 2) + '\n');
-    // check() printed its own failure when it happened; print the ones finish() found.
-    for (const check of this.checks.slice(ranChecks).filter(c => !c.ok)) process.stdout.write(`FAIL ${scrub(check.name)}\n  ${scrub(check.error ?? '').replaceAll('\n', '\n  ')}\n`);
-    if (!this.checks.length) process.stdout.write('FAIL no check ran: the script stopped before its first check (the error is below)\n');
-    const sources = [...new Set(this.checks.filter((c) => c.carried_from).map((c) => `${c.carried_from!.release} at ${c.carried_from!.run}`))];
-    const extra = `${notRun ? `, ${notRun} not run (stopped at the first failure)` : ''}${carried ? ` (${carried} of the passes were carried from an earlier run, not rerun: ${sources.join('; ')})` : ''}`;
-    process.stdout.write(`${failed || !passed ? 'FAILED' : 'PASSED'}: ${passed} passed, ${failed} failed${extra} · ${preview ? `preview ${this.target.previewSessionId} · ` : ''}${this.origin} · ${this.release} · ${this.resultsPath}\n`);
+    // The result: failures first, one line each, then passes, one summary line, what to do next and (after a
+    // failure, or with --verbose) the result file relative to the project. Under `somewhere test` the runner prints
+    // it for every script together, so this script hands its checks over instead of printing them.
+    const reported: ReportCheck[] = this.checks.map((check) => ({ name: scrub(check.name), ok: check.ok, ...(check.skipped ? { skipped: check.skipped } : {}), ...(check.error ? { error: scrub(check.error) } : {}) }));
+    const resultFile = relative(this.root, this.resultsPath);
+    const handOver = process.env.SW_TEST_REPORT;
+    if (handOver) writeFileSync(handOver, JSON.stringify({ checks: reported, resultFile }) + '\n');
+    else {
+      const verbose = process.argv.includes('--verbose') || process.env.SW_TEST_VERBOSE === '1';
+      const script = process.argv[1] ? relative(this.root, resolve(process.argv[1])) : 'this script';
+      process.stdout.write(describeReport([{ script, checks: reported, resultFile }], { verbose }).join('\n') + '\n');
+    }
     // After the version changed there is no same version to rerun on.
     if (live !== this.release) {
       process.stdout.write(preview

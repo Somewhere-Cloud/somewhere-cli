@@ -3412,7 +3412,7 @@ export function createFeatureTemplate(
     ...starterTests({ privateData }),
     { path: '.gitignore', content: buildScaffoldGitignore() },
     { path: 'AGENTS.md', content: INIT_AGENTS_MD.replace(/## Getting started[^]*?After edits:/, `## Testing
-Run somewhere test after a successful deploy: npx somewhere deploy && npx somewhere test
+Run somewhere test after a successful deploy: npx @somewhere-cloud/cli deploy && npx @somewhere-cloud/cli test
 It runs every tests/*.mjs and tests/*.cjs Playwright script and prints failures first.
 Start from tests/app-check.mjs: change its checks to the journeys you changed and your access boundaries.
 Helpers from @somewhere-cloud/cli/script (import or require): signUp/signIn/signOut through your form,

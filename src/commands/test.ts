@@ -15,7 +15,8 @@ export function registerTest(program: Command): void {
     .option('--url <url>', 'Unsupported in phase 1')
     .option('--phone', 'Run every test again in a 390x844 phone viewport ([phone] in results)')
     .option('--json', 'Print structured results')
-    .action(async (files: string[], opts: { workers: string; failed?: boolean; grep?: string; url?: string; json?: boolean; phone?: boolean; preview?: boolean }) => {
+    .option('--verbose', 'Also print where the full result file is when everything passed')
+    .action(async (files: string[], opts: { workers: string; failed?: boolean; grep?: string; url?: string; json?: boolean; phone?: boolean; preview?: boolean; verbose?: boolean }) => {
       markProcessStart('cli');
       mark('cli:action');
       if (opts.url) throw new Error('--url is unsupported: tests use the linked project canonical production origin only.');
@@ -34,7 +35,7 @@ export function registerTest(program: Command): void {
         mark('cli:exit');
         const failed = results.filter((result) => !result.ok).length;
         if (opts.json) process.stdout.write(JSON.stringify({ passed: results.length - failed, failed, scripts: results }, null, 2) + '\n');
-        else process.stdout.write('\n' + describeScriptResults(results).join('\n') + '\n');
+        else process.stdout.write('\n' + describeScriptResults(results, { verbose: Boolean(opts.verbose) }).join('\n') + '\n');
         process.exitCode = failed || !results.length ? 1 : 0;
         return;
       }

@@ -141,7 +141,7 @@ test('deploy --dry-run, signed in and linked: sends the documented dry run and l
   assert.equal(deploys[0].body.project_id, 'proj_linked');
   assert.ok(!requests.some((q) => q.method === 'POST' && q.url !== '/v1/deploy'), 'no project create, mint or other write');
   assert.match(r.all, /Dry run.*nothing was deployed/);
-  assert.match(r.all, /Not published \(1\): NOTES\.md/);
+  assert.match(r.all, /Not published: 1 local file \(notes, tests, tooling\) stay on your machine\. See them: npx @somewhere-cloud\/cli deploy --list-unpublished/);
   assert.deepEqual(snapshot(fx.app), before.app, 'the publish notice is not remembered by a dry run');
   assert.deepEqual(snapshot(fx.configDir), before.config);
 });

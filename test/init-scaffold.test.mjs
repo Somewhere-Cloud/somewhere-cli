@@ -297,6 +297,18 @@ test('default starter is the auth module: SDK client, packaged handler, hooks, r
   assert.doesNotMatch(Object.values(collectFiles(dir).files).join('\n'), /\bany\b/);
 });
 
+test('the test file, both AGENTS guides and the test output write the commands one way, which works without a global install', () => {
+  const dir = tempDir();
+  writeInitScaffold(dir, createFeatureTemplate({ requested: ['auth'], added: [], modules: ['auth'], ui: 'styled' }, { appName: 'Starter' }));
+  const script = readFileSync(join(dir, 'tests/app-check.mjs'), 'utf8');
+  const guide = readFileSync(join(dir, 'AGENTS.md'), 'utf8');
+  assert.match(script, /npx @somewhere-cloud\/cli test --failed/);
+  for (const [name, text] of [['tests/app-check.mjs', script], ['AGENTS.md', guide]]) {
+    assert.match(text, /npx @somewhere-cloud\/cli deploy && npx @somewhere-cloud\/cli test/, name);
+    assert.doesNotMatch(text, /npx somewhere |node tests\/app-check\.mjs/, `${name}: a bare "npx somewhere" can fetch an unrelated package`);
+  }
+});
+
 test('sw.endpoint declaration types auth, body and rate limit', async () => {
   const dir = tempDir();
   writeInitScaffold(dir, createGreenTemplate());

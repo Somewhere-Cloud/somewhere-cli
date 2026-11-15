@@ -106,7 +106,7 @@ for (const [label, warnings] of [['a server that names private files', [SERVER_W
       assert.deepEqual(uploaded(deploy), EXPECTED_UPLOAD, 'e2e/ still uploads; tests/ is held back');
       assert.ok(!('NOTES.md' in deploy.body.files), 'an unreferenced root note is still held back');
 
-      assert.match(first.all, /Not published \(2\): NOTES\.md, tests\/note\.txt/);
+      assert.match(first.all, /Not published: 2 local files \(notes, tests, tooling\) stay on your machine\. See them: npx @somewhere-cloud\/cli deploy --list-unpublished/);
       assert.match(first.all, /Every other file in this folder, subfolders included, is uploaded with your app\./);
       assert.doesNotMatch(first.all, /A deploy publishes your app/);
       assert.match(first.all, /3 static files uploaded \(/);
@@ -124,7 +124,7 @@ for (const [label, warnings] of [['a server that names private files', [SERVER_W
       // The once-per-project explanation is remembered; the named list is not.
       const second = await run(['deploy'], { cwd: dir, env });
       assert.equal(second.status, 0, second.all);
-      assert.match(second.all, /Not published \(2\): NOTES\.md, tests\/note\.txt/);
+      assert.match(second.all, /Not published: 2 local files \(notes, tests, tooling\) stay on your machine\. See them: npx @somewhere-cloud\/cli deploy --list-unpublished/);
       assert.doesNotMatch(second.all, /Every other file in this folder/);
     });
   });
@@ -165,7 +165,7 @@ test('deploy-check sends the same upload, names held-back root files truthfully,
     assert.equal(human.status, 0, human.all);
     const check = requests.find((r) => r.url === '/v1/deploy/check');
     assert.deepEqual(uploaded(check), EXPECTED_UPLOAD);
-    assert.match(human.all, /Not published \(2\): NOTES\.md, tests\/note\.txt/);
+    assert.match(human.all, /Not published: 2 local files \(notes, tests, tooling\) stay on your machine\. See them: npx @somewhere-cloud\/cli deploy --list-unpublished/);
     assert.match(human.all, /subfolders included, is uploaded with your app/);
     assert.doesNotMatch(human.all, /A deploy publishes your app/);
     assert.equal(human.all.split(SERVER_WARNING).length - 1, 1);
@@ -186,7 +186,7 @@ test('non-TTY deploy prints collection once across all preflight warnings and ke
     const human = await run(['deploy'], { cwd: dir, env });
     assert.equal(human.status, 0, human.all);
     assert.equal(human.stderr.split('Collecting files...').length - 1, 1, human.all);
-    assert.match(human.all, /Not published \(2\): NOTES\.md, tests\/note\.txt/);
+    assert.match(human.all, /Not published: 2 local files \(notes, tests, tooling\) stay on your machine\. See them: npx @somewhere-cloud\/cli deploy --list-unpublished/);
     assert.match(human.all, /1 file\(s\) will NOT be uploaded/);
     assert.match(human.all, /linked\.html — symlink \(not followed\)/);
     assert.match(human.all, /This looks like a Node server app/);

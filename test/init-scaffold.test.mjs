@@ -261,8 +261,11 @@ test('default starter is the auth module: SDK client, packaged handler, hooks, r
   assert.doesNotMatch(script.replace(/^\s*\/\/.*$/gm, ''), /app\.data|'tasks'/, 'only as a comment: the default starter declares no table');
   // The hooks signUp/signIn/signOut find, by action: the submit names what it does.
   const authCard = readFileSync(join(dir, 'src/ui/AuthCard.tsx'), 'utf8');
-  for (const hook of ['email', 'password', 'mode', 'error']) assert.match(authCard, new RegExp(`data-sw-auth="${hook}"`), hook);
-  assert.match(authCard, /data-sw-auth=\{form\.mode === 'sign-up' \? 'sign-up' : 'sign-in'\}/);
+  // Both actions are on the page at once: Sign in and Create account, no mode switch (bench-1115b: every first build
+  // rewrote a one-button card). app.signUp/signIn find each by its hook.
+  for (const hook of ['email', 'password', 'sign-in', 'sign-up', 'error']) assert.match(authCard, new RegExp(`data-sw-auth="${hook}"`), hook);
+  assert.doesNotMatch(authCard, /data-sw-auth="mode"|data-sw-auth-mode|toggleMode/);
+  assert.match(authCard, /onClick=\{\(\) => void form\.submit\('sign-up'\)\}>Create account<\/Button>/);
   assert.doesNotMatch(authCard, /data-sw-auth="submit"/);
   for (const hook of ['mfa-code', 'mfa-submit']) assert.match(readFileSync(join(dir, 'src/ui/MfaStep.tsx'), 'utf8'), new RegExp(`data-sw-auth="${hook}"`), hook);
   assert.match(readFileSync(join(dir, 'src/ui/AppShell.tsx'), 'utf8'), /data-sw-auth="sign-out"/);

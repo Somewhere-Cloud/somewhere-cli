@@ -361,8 +361,8 @@ code, kbd { font-family: var(--font-mono); font-size: 0.9em; }
 .auth__column { display: grid; gap: var(--space-4); }
 .auth__form .button { width: 100%; }
 .auth__providers { display: grid; gap: var(--space-2); }
-.auth__switch { margin: 0; text-align: center; color: var(--color-muted); font-size: var(--text-sm); }
 .auth__forgot { margin: 0; text-align: right; font-size: var(--text-sm); }
+.auth__switch { margin: 0; text-align: center; color: var(--color-muted); font-size: var(--text-sm); }
 .auth__forgot a, .auth__switch a { display: inline-flex; align-items: center; min-height: 44px; }
 .divider { display: flex; align-items: center; gap: var(--space-3); color: var(--color-muted); font-size: var(--text-sm); }
 .divider::before, .divider::after { content: ""; flex: 1; height: 1px; background: var(--color-border); }
@@ -437,23 +437,21 @@ interface AuthCardProps {
  *  the \`providers\` and \`children\` slots; the two-column grid holds exactly
  *  these two columns, so don't add siblings to it. */
 export function AuthCard({ appName, tagline, form, providers, children }: AuthCardProps) {
-  const signUp = form.mode === 'sign-up';
-
+  // Enter signs in; Create account is its own button. Both are always on the page.
   function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    void form.submit();
+    void form.submit('sign-in');
   }
 
   return (
     <main className="auth">
       <div className="auth__intro">
         <p className="auth__app">{appName}</p>
-        <h1 className="auth__title">{signUp ? 'Create your account' : 'Welcome back'}</h1>
-        <p className="muted">{tagline ?? (signUp ? 'It takes a few seconds.' : 'Sign in to continue.')}</p>
+        <h1 className="auth__title">Welcome</h1>
+        <p className="muted">{tagline ?? 'Sign in, or create an account in a few seconds.'}</p>
       </div>
       <div className="auth__column">
-        <form className="panel auth__form" onSubmit={onSubmit} noValidate aria-label={signUp ? 'Create account' : 'Sign in'}
-          data-sw-auth="form" data-sw-auth-mode={form.mode}>
+        <form className="panel auth__form" onSubmit={onSubmit} noValidate aria-label="Sign in or create an account" data-sw-auth="form">
           {providers ? (
             <>
               {providers}
@@ -463,21 +461,14 @@ export function AuthCard({ appName, tagline, form, providers, children }: AuthCa
           <TextField id="auth-email" label="Email" type="email" name="email" autoComplete="email" inputMode="email" autoFocus data-sw-auth="email"
             value={form.email} onChange={(event) => form.setEmail(event.target.value)} />
           <TextField id="auth-password" label="Password" type="password" name="password" data-sw-auth="password"
-            autoComplete={signUp ? 'new-password' : 'current-password'}
-            minLength={signUp ? form.passwordMinLength : undefined}
-            hint={signUp ? \`At least \${form.passwordMinLength} characters.\` : undefined}
+            autoComplete="current-password"
+            hint={\`A new account needs at least \${form.passwordMinLength} characters.\`}
             value={form.password} onChange={(event) => form.setPassword(event.target.value)} />
-          {signUp ? null : <p className="auth__forgot"><a href="/forgot-password">Forgot password?</a></p>}
+          <p className="auth__forgot"><a href="/forgot-password">Forgot password?</a></p>
           {form.error ? <p className="error" role="alert" data-sw-auth="error">{form.error}</p> : null}
-          <Button type="submit" block disabled={!form.canSubmit} pending={form.pending} data-sw-auth={form.mode === 'sign-up' ? 'sign-up' : 'sign-in'}>
-            {signUp ? 'Create account' : 'Sign in'}
-          </Button>
-          <p className="auth__switch">
-            {signUp ? 'Already have an account?' : 'New here?'}{' '}
-            <button type="button" className="link-button" onClick={form.toggleMode} disabled={form.pending} data-sw-auth="mode">
-              {signUp ? 'Sign in' : 'Create an account'}
-            </button>
-          </p>
+          <Button type="submit" block disabled={form.pending !== null} pending={form.pending === 'sign-in'} data-sw-auth="sign-in">Sign in</Button>
+          <Button variant="secondary" block disabled={form.pending !== null} pending={form.pending === 'sign-up'} data-sw-auth="sign-up"
+            onClick={() => void form.submit('sign-up')}>Create account</Button>
         </form>
         {children}
       </div>
@@ -504,37 +495,30 @@ interface AuthCardProps {
 
 /** The sign-in page. Add to it through the \`providers\` and \`children\` slots. */
 export function AuthCard({ appName, tagline, form, providers, children }: AuthCardProps) {
-  const signUp = form.mode === 'sign-up';
-
+  // Enter signs in; Create account is its own button. Both are always on the page.
   function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    void form.submit();
+    void form.submit('sign-in');
   }
 
   return (
     <main>
-      <h1>{signUp ? 'Create your account' : 'Sign in'} · {appName}</h1>
+      <h1>Sign in or create an account · {appName}</h1>
       {tagline ? <p>{tagline}</p> : null}
       {providers}
-      <form onSubmit={onSubmit} noValidate aria-label={signUp ? 'Create account' : 'Sign in'} data-sw-auth="form" data-sw-auth-mode={form.mode}>
+      <form onSubmit={onSubmit} noValidate aria-label="Sign in or create an account" data-sw-auth="form">
         <TextField id="auth-email" label="Email" type="email" name="email" autoComplete="email" inputMode="email" autoFocus data-sw-auth="email"
           value={form.email} onChange={(event) => form.setEmail(event.target.value)} />
         <TextField id="auth-password" label="Password" type="password" name="password" data-sw-auth="password"
-          autoComplete={signUp ? 'new-password' : 'current-password'}
-          minLength={signUp ? form.passwordMinLength : undefined}
-          hint={signUp ? \`At least \${form.passwordMinLength} characters.\` : undefined}
+          autoComplete="current-password"
+          hint={\`A new account needs at least \${form.passwordMinLength} characters.\`}
           value={form.password} onChange={(event) => form.setPassword(event.target.value)} />
-        {signUp ? null : <p><a href="/forgot-password">Forgot password?</a></p>}
+        <p><a href="/forgot-password">Forgot password?</a></p>
         {form.error ? <p role="alert" data-sw-auth="error">{form.error}</p> : null}
-        <Button type="submit" disabled={!form.canSubmit} pending={form.pending} data-sw-auth={form.mode === 'sign-up' ? 'sign-up' : 'sign-in'}>
-          {signUp ? 'Create account' : 'Sign in'}
-        </Button>
+        <Button type="submit" disabled={form.pending !== null} pending={form.pending === 'sign-in'} data-sw-auth="sign-in">Sign in</Button>{' '}
+        <Button variant="secondary" disabled={form.pending !== null} pending={form.pending === 'sign-up'} data-sw-auth="sign-up"
+          onClick={() => void form.submit('sign-up')}>Create account</Button>
       </form>
-      <p>
-        <button type="button" onClick={form.toggleMode} disabled={form.pending} data-sw-auth="mode">
-          {signUp ? 'Sign in' : 'Create an account'}
-        </button>
-      </p>
       {children}
     </main>
   );

@@ -153,6 +153,8 @@ test('minimal starter is a small typed frontend, function, and schema', () => {
   assert.equal(agents, `# somewhere.cloud project contract\n${AGENT_WORKFLOW}\n${SKILLS_POINTER}\n${PORTABILITY_POINTER}\n${MCP_POINTER}\n${PREVIEW_POINTER}\n`);
   assert.match(agents.slice(0, 250), /Enough to start a typical app/);
   assert.match(agents, /Teams are built-in groups/);
+  // Apps that cannot ask for email verification (bench-1115b: every Team Board and Help Desk build looked this up).
+  assert.match(agents, /^No email verification in your app: keep membership in your own table with member\(\) \(somewhere docs sw\.groups --section relationships-that-are-not-teams\) and assign staff with setRoles in the sign-up route \(above\)\.$/m);
   // Pages that need several reads (bench-1115b: a subject shown before its messages; an input overwritten by a late answer).
   assert.match(agents, /show it once every read it depends on has answered/);
   assert.match(agents, /Keep an input disabled until the data it depends on has loaded, including who the user is/);

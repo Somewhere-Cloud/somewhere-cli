@@ -307,6 +307,7 @@ test('sw.endpoint declaration types auth, body and rate limit', async () => {
 export const nullableUser = sw.endpoint({ auth: 'optional', handler: async ({ user }) => user.id });
 export const badRate = sw.endpoint({ rateLimit: 'ten per minute', handler: async () => null });
 export const wrongField = sw.endpoint({ body: { title: 'string' }, handler: async ({ body }) => { const n: number = body.title; return n; } });
+export const staffOnly = sw.endpoint({ roles: ['staff'], body: { note: 'string' }, handler: async ({ user, body }) => user.email.trim() + body.note });
 `);
   const typesDir = join(dir, 'node_modules/@types/scaffold-contract');
   mkdirSync(typesDir, { recursive: true });

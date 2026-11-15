@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.38.96
+
+- somewhere test runs every tests/*.mjs and *.cjs script when the project has no specs; AGENTS.md says "Run somewhere test".
+- One AGENTS.md line for apps that cannot ask for email verification.
+- `sw.endpoint` with roles types the user as signed in when auth is left out.
+- The sign-in card shows Sign in and Create account together, no mode toggle.
+- .gitignore from one source, and it ignores .somewhere/.
+- AGENTS.md says how a page that needs several reads shows, and that a late answer never overwrites typing.
+- The default starter's test file shows the data call, so no script reads the contract digest from the page.
+- A submit always reaches the app's own validation; kit controls turn off the browser's form checks.
+
 ## 0.38.95
 
 - No internal task or design references in public CLI source comments.

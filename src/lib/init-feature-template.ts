@@ -1633,7 +1633,7 @@ export function AssistantPanel({ assistant }: { assistant: AssistantController }
             {view.status === 'error' ? <button type="button" className="button button--quiet" onClick={assistant.reload}>Try again</button> : null}
           </div>
         ) : null}
-        <form className="composer" onSubmit={onSubmit} aria-label="Send a message">
+        <form className="composer" onSubmit={onSubmit} noValidate aria-label="Send a message">
           <div className="field">
             <label htmlFor="assistant-message">Message</label>
             <textarea id="assistant-message" rows={2} maxLength={assistant.limit} disabled={loading || assistant.readOnly}
@@ -1721,7 +1721,7 @@ export function AssistantPanel({ assistant }: { assistant: AssistantController }
             {view.status === 'error' ? <button type="button" onClick={assistant.reload}>Try again</button> : null}
           </div>
         ) : null}
-        <form onSubmit={onSubmit} aria-label="Send a message">
+        <form onSubmit={onSubmit} noValidate aria-label="Send a message">
           <label htmlFor="assistant-message">Message</label>
           <textarea id="assistant-message" rows={2} maxLength={assistant.limit} disabled={loading || assistant.readOnly}
             value={assistant.draft} onChange={(event) => assistant.setDraft(event.target.value)} />
@@ -1867,7 +1867,7 @@ export function MfaStep({ continuation }: { continuation: MfaContinuation }) {
   const busy = continuation.pending || continuation.resending;
   return (
     <main className="loading">
-      <form className="panel auth__form" onSubmit={(event) => { event.preventDefault(); void continuation.submit(); }}>
+      <form className="panel auth__form" onSubmit={(event) => { event.preventDefault(); void continuation.submit(); }} noValidate>
         <h1 className="panel__title">Check your email</h1>
         <p>We emailed you a 6-digit sign-in code. It expires 5 minutes after you signed in.</p>
         <div className="field">
@@ -2805,7 +2805,7 @@ export function MagicLinkStatus({ landing }: { landing: Exclude<MagicLinkLanding
   if (landing.status === 'confirm') {
     return (
       <main className="loading">
-        <form className="panel auth__form" onSubmit={(event) => { event.preventDefault(); landing.confirm(); }} aria-label="Continue with your emailed link">
+        <form className="panel auth__form" onSubmit={(event) => { event.preventDefault(); landing.confirm(); }} noValidate aria-label="Continue with your emailed link">
           <p>This link signs you in with the email address it was sent to, and accepts the invitation if it carries one. It works once.</p>
           {landing.signedInAs
             ? <p className="hint">You are signed in here as {landing.signedInAs}. Continuing signs that account out first.</p>
@@ -2863,7 +2863,7 @@ export function MagicLinkStatus({ landing }: { landing: Exclude<MagicLinkLanding
   if (landing.status === 'confirm') {
     return (
       <main>
-        <form onSubmit={(event) => { event.preventDefault(); landing.confirm(); }} aria-label="Continue with your emailed link">
+        <form onSubmit={(event) => { event.preventDefault(); landing.confirm(); }} noValidate aria-label="Continue with your emailed link">
           <p>This link signs you in with the email address it was sent to, and accepts the invitation if it carries one. It works once.</p>
           {landing.signedInAs ? <p>You are signed in here as {landing.signedInAs}. Continuing signs that account out first.</p> : null}
           {landing.error ? <p role="alert">{landing.error}</p> : null}

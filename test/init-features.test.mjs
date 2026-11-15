@@ -207,6 +207,20 @@ test('views take props only, and both UI modes share pages, hooks and view signa
   }
 });
 
+test('a submit always reaches the app: starter forms and kit controls never let the browser block it', () => {
+  for (const [features, ui] of COMBINATIONS) {
+    const { result, read } = generate(features, ui);
+    for (const path of result.created.filter((p) => p.endsWith('.tsx'))) {
+      for (const [form] of read(path).matchAll(/<form\b(?:=>|[^>])*>/g)) assert.match(form, /\bnoValidate\b/, `${features}/${ui} ${path}: ${form}`);
+    }
+    const field = read('src/ui/Field.tsx');
+    assert.match(field, /control\.form\.noValidate = true/, `${features}/${ui}: kit controls turn off browser checks on their form`);
+    assert.match(field, /hasAttribute\('data-browser-checks'\)/, `${features}/${ui}: data-browser-checks keeps them`);
+    for (const [control] of field.matchAll(/<(input|select|textarea) id=\{id\}[^>]*>/g)) assert.fail(`${features}/${ui}: ${control} has no appValidated ref`);
+    assert.equal(field.match(/<(input|select|textarea) ref=\{appValidated\}/g)?.length, 4, `${features}/${ui}: TextField, SelectField, TextareaField and CheckboxField`);
+  }
+});
+
 test('every auth starter routes /auth/magic before the gate; magic-link adds only the link form', () => {
   for (const ui of ['styled', 'headless']) {
     const plain = generate('auth', ui);

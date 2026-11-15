@@ -271,6 +271,19 @@ async function previewNewUser(control: TestControl, args: { browser: import('@pl
   }
 }
 
+/** The value of each cookie a response sets (`name=value; attributes...`), as sent. */
+export function setCookieValues(response: Pick<APIResponse, 'headersArray'>): string[] {
+  const values: string[] = [];
+  for (const header of response.headersArray()) {
+    if (header.name.toLowerCase() !== 'set-cookie') continue;
+    const pair = header.value.split(';', 1)[0] ?? '';
+    const at = pair.indexOf('=');
+    const value = at < 0 ? '' : pair.slice(at + 1).trim();
+    if (value) values.push(value);
+  }
+  return values;
+}
+
 // Patch the shared-cookie client, preserving its identity and cookie rotation.
 function constrain(client: APIRequestContext, origin: string, info: TestInfo): void {
   for (const method of ['fetch'] as const) {
@@ -282,7 +295,11 @@ function constrain(client: APIRequestContext, origin: string, info: TestInfo): v
       if (headers.has('Authorization')) throw new Error('Fixture clients do not accept Authorization headers');
       headers.set('Origin', origin);
       const response = await timed(info, 'app requests', () => original(url.href, { ...options, headers: Object.fromEntries(headers), maxRedirects: 0 }));
-      rememberSecrets(...(await client.storageState()).cookies.map(cookie => cookie.value));
+      // The cookies THIS request set are on its own response (redirects are not followed); remembering them from
+      // the Set-Cookie headers costs nothing, where reading the whole jar (storageState) is a round trip to the
+      // Playwright driver on every call (~35-40 ms, slow-calls 5.3). Every other cookie in the context is read
+      // whole at fixture teardown, before any report is scrubbed.
+      rememberSecrets(...setCookieValues(response));
       let code = 'none';
       if (response.status() >= 400) {
         try { const body = await response.json() as { error?: unknown }; if (typeof body.error === 'string' && /^[A-Z_]+$/.test(body.error)) code = body.error; } catch {}

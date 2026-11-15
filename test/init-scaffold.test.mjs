@@ -153,6 +153,10 @@ test('minimal starter is a small typed frontend, function, and schema', () => {
   assert.equal(agents, `# somewhere.cloud project contract\n${AGENT_WORKFLOW}\n${SKILLS_POINTER}\n${PORTABILITY_POINTER}\n${MCP_POINTER}\n${PREVIEW_POINTER}\n`);
   assert.match(agents.slice(0, 250), /Enough to start a typical app/);
   assert.match(agents, /Teams are built-in groups/);
+  // Pages that need several reads (bench-1115b: a subject shown before its messages; an input overwritten by a late answer).
+  assert.match(agents, /show it once every read it depends on has answered/);
+  assert.match(agents, /Keep an input disabled until the data it depends on has loaded, including who the user is/);
+  assert.match(agents, /Never let a late answer overwrite what the user typed/);
   assert.equal(claude, 'Read AGENTS.md for project instructions.\n');
 
 });

@@ -140,16 +140,14 @@ export function previewControl(tool: ToolClient, target: TestTarget, _root?: str
   return {
     environment: 'preview', projectId, target,
     async inbox(address, wait) {
-      // The preview's own captured mail. There is no long-poll on the tool route: poll briefly.
-      const deadline = Date.now() + (wait ? wait.ms ?? 10_000 : 0);
-      for (;;) {
-        let body: { messages?: unknown };
-        try { body = await tool.call<{ messages?: unknown }>('GET', '/preview-tools/mail', undefined, { limit: 200 }); }
-        catch (error) { throw previewFailure(error, 'The preview\'s captured mail could not be read'); }
-        const messages = messagesAfter(body.messages, address, 0);
-        if (!wait || messages.some((message) => Date.parse(message.created_at) > wait.since) || Date.now() >= deadline) return messages;
-        await new Promise((resolve) => setTimeout(resolve, 500));
-      }
+      // The preview's own captured mail, for exactly this address, with the same server-side wait
+      // production's test inbox uses (wait_ms up to 10 s for mail newer than `since`): one call per wait.
+      let body: { messages?: unknown };
+      try {
+        body = await tool.call<{ messages?: unknown }>('GET', '/preview-tools/mail', undefined,
+          { address, limit: 20, ...(wait ? { wait_ms: wait.ms ?? 10_000, since: wait.since } : {}) });
+      } catch (error) { throw previewFailure(error, 'The preview\'s captured mail could not be read'); }
+      return messagesAfter(body.messages, address, 0);
     },
     deleteSignups(ids) {
       return inBatches(ids, async (batch) => {

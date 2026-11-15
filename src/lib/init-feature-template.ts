@@ -3425,9 +3425,9 @@ export function createFeatureTemplate(
     ...starterTests({ privateData }),
     { path: '.gitignore', content: 'node_modules\ndist\nbuild\n.env\n# Generated from db/schema.ts by somewhere typecheck, dev and deploy.\n__somewhere_data.d.ts\n__somewhere_files.d.ts\n' },
     { path: 'AGENTS.md', content: INIT_AGENTS_MD.replace(/## Getting started[^]*?After edits:/, `## Testing
-Test the journeys you changed and your access boundaries with an ordinary Playwright script.
-tests/app-check.mjs is a short example to change: npx somewhere deploy && node tests/app-check.mjs
-(after a successful deploy only; one result file, .somewhere/app-check.json; the exit code is the verdict).
+Run somewhere test after a successful deploy: npx somewhere deploy && npx somewhere test
+It runs every tests/*.mjs and tests/*.cjs Playwright script and prints failures first.
+Start from tests/app-check.mjs: change its checks to the journeys you changed and your access boundaries.
 Helpers from @somewhere-cloud/cli/script (import or require): signUp/signIn/signOut through your form,
 data(page, { table, operation, id, values, where }) as that person, expectRefused with a positive control,
 captureResponses, dataReady (the list has loaded), launchOptions. A rebuilt sign-in form keeps

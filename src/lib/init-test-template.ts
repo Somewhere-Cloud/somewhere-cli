@@ -1,15 +1,15 @@
 import type { InitScaffoldFile } from './init-scaffold.js';
 
-// One short, ordinary Playwright script an agent copies and changes, not a second test suite:
-// nothing here is discovered by `somewhere test` (it runs tests/**/*.spec.ts only). The helpers come
+// One short, ordinary Playwright script an agent copies and changes: `somewhere test` runs every
+// tests/*.mjs and tests/*.cjs script when the project has no tests/**/*.spec.ts. The helpers come
 // from @somewhere-cloud/cli/script and work the same from .mjs or .cjs.
 
 const SCRIPT = (privateData: boolean) => `// tests/app-check.mjs — an ordinary Playwright script for this app: change the checks to match
 // what you built. Run it after a successful deploy, never after a refused one:
-//   npx somewhere deploy && node tests/app-check.mjs
+//   npx somewhere deploy && npx somewhere test     (runs every tests/*.mjs and *.cjs script)
 // It writes its result once to .somewhere/app-check.json; the exit code is the verdict.
 // It stops at the first failed check and prints the page's URL and visible error text.
-// After a fix, rerun only what failed: node tests/app-check.mjs --failed (keep setup outside app.check).
+// After a fix, rerun only what failed: npx somewhere test --failed (keep setup outside app.check).
 // From a .cjs script: const { openAppTest } = require('@somewhere-cloud/cli/script');
 import { chromium } from '@playwright/test';
 import { openAppTest${privateData ? ', captureResponses, dataReady' : ''} } from '@somewhere-cloud/cli/script';

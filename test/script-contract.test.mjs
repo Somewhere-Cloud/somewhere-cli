@@ -6,7 +6,8 @@ import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { chromium } from '@playwright/test';
 import { signUp, signIn, signOut, FIND_MS } from '../dist/lib/form-auth.js';
-import { AppTest, classifyData, captureResponses, dataReady, launchOptions, undeployedChanges } from '../dist/lib/app-test.js';
+import { AppTest, carriedPasses, classifyData, captureResponses, dataReady, launchOptions, undeployedChanges } from '../dist/lib/app-test.js';
+import { rememberSecrets } from '../dist/lib/test-diagnostics.js';
 import { productionControl } from '../dist/lib/test-control.js';
 
 const ORIGIN = 'https://app.test';
@@ -193,7 +194,7 @@ test('check() stops at the first failure, prints the page, skips the rest; --fai
     assert.deepEqual(ran, ['one', 'two']);
     assert.deepEqual(app.checks.map((c) => [c.name, c.ok, c.skipped ?? null]), [['one', true, null], ['two', false, null], ['three', false, 'after-failure'], ['four', false, 'after-failure']]);
     const said = out.join('');
-    assert.match(said, /FAIL two\n  the team page did not open\n  page 1: https:\/\/app\.test\/teams shows: Could not open the team/);
+    assert.match(said, /FAIL two\n  the team page did not open\n  page 1: https:\/\/app\.test\/\[redacted-url\] shows: Could not open the team/, 'the page origin and what it shows; its path is scrubbed like every printed URL');
     assert.match(said, /--failed/);
     const { writeFileSync: w } = await import('node:fs');
     w(results, JSON.stringify({ checks: app.checks }));
@@ -201,9 +202,58 @@ test('check() stops at the first failure, prints the page, skips the rest; --fai
     // After a fix: --failed (onlyFailed) skips 'one' and runs the rest.
     ran = [];
     const again = new AppTest(process.env.TMPDIR, productionControl(client, target), results);
-    again.passedLastRun = new Set(app.checks.filter((c) => c.ok).map((c) => c.name));
+    again.passedLastRun = new Map(app.checks.filter((c) => c.ok).map((c) => [c.name, { run: 'r1', release: 'rel_1' }]));
     for (const n of ['one', 'two', 'three', 'four']) await again.check(n, () => { ran.push(n); });
     assert.deepEqual(ran, ['two', 'three', 'four']);
     assert.deepEqual(again.checks.map((c) => [c.name, c.ok, c.skipped ?? null]), [['one', true, 'passed-last-run'], ['two', true, null], ['three', true, null], ['four', true, null]]);
   } finally { process.stdout.write = write; await page.context().close(); }
+});
+
+// tsk_25a5feaf (Astra): a failing check prints nothing a test could have touched in the clear: not an emailed link's
+// token, not a remembered password or token in the assertion text, not the page's session cookie, on stdout or stderr.
+test('a failing check never prints a capability link, a remembered secret or a session cookie', async () => {
+  const page = await pageFor('<!doctype html><html><body><p role="alert">Link expired</p></body></html>');
+  await page.goto('/reset-password/rst_live_capability_9f8e7d?token=tok_secret_ABC123&next=/home');
+  await page.context().addCookies([{ name: '__Host-token', value: 'cookie_session_value_77aa', url: ORIGIN }]);
+  const password = 'Pw-remembered-31337';
+  rememberSecrets(password);
+  const results = join(mkdtempSync(join(process.env.TMPDIR, 'app-check-')), 'app-check.json');
+  const target = { projectId: 'p-1', origin: ORIGIN, host: 'app.test', releaseId: 'rel_1', contractDigest: 'd' };
+  const out = [];
+  const writes = { stdout: process.stdout.write.bind(process.stdout), stderr: process.stderr.write.bind(process.stderr) };
+  process.stdout.write = (chunk) => { out.push(String(chunk)); return true; };
+  process.stderr.write = (chunk) => { out.push(String(chunk)); return true; };
+  try {
+    const app = new AppTest(process.env.TMPDIR, productionControl({ call: async () => ({}) }, target), results);
+    app.host.pages.add(page);
+    await app.check(`sign in as ${password}`, () => {
+      throw new Error(`expected the dashboard at ${ORIGIN}/verify/vrf_capability_42?token=tok_secret_ABC123 for ${password}; cookie cookie_session_value_77aa`);
+    });
+    const said = out.join('');
+    for (const secret of ['rst_live_capability_9f8e7d', 'tok_secret_ABC123', 'vrf_capability_42', password, 'cookie_session_value_77aa']) {
+      assert.ok(!said.includes(secret), `printed ${secret}: ${said}`);
+      assert.ok(!JSON.stringify(app.checks).includes(secret), `recorded ${secret}`);
+    }
+    assert.match(said, /FAIL sign in as \[redacted\]/);
+    assert.match(said, /page 1: https:\/\/app\.test\/\[redacted-url\] shows: Link expired/);
+  } finally { process.stdout.write = writes.stdout; process.stderr.write = writes.stderr; await page.context().close(); }
+});
+
+// tsk_0ff3f897 (Astra): --failed carries passes only from a run against the same project, environment, preview, origin
+// and script, and every carried pass names the run and release it came from.
+test('--failed refuses to carry passes across another target and labels what it carries', () => {
+  const identity = { project_id: 'p-1', environment: 'preview', preview_session_id: 'pv-1', origin: 'https://a.test', script: 'tests/app-check.mjs' };
+  const last = { identity, release: 'rel_1', started: '2026-11-15T05:00:00.000Z', checks: [{ name: 'one', ok: true }, { name: 'two', ok: false },
+    { name: 'old', ok: true, carried_from: { run: '2026-11-14T00:00:00.000Z', release: 'rel_0' } }] };
+  const same = carriedPasses(last, identity);
+  assert.equal(same.ok, true);
+  assert.deepEqual([...same.passes], [['one', { run: '2026-11-15T05:00:00.000Z', release: 'rel_1' }], ['old', { run: '2026-11-14T00:00:00.000Z', release: 'rel_0' }]],
+    'a pass carried twice keeps its original run and release');
+  for (const [key, value] of [['project_id', 'p-2'], ['environment', 'production'], ['preview_session_id', 'pv-2'], ['origin', 'https://b.test'], ['script', 'tests/other.mjs']]) {
+    const r = carriedPasses(last, { ...identity, [key]: value });
+    assert.equal(r.ok, false, key);
+    assert.match(r.reason, new RegExp(`different ${key.replace('_', ' ')}`));
+  }
+  assert.match(carriedPasses({ checks: last.checks }, identity).reason, /does not record what it ran against/, 'a result without identity carries nothing');
+  assert.match(carriedPasses(null, identity).reason, /no previous result/);
 });

@@ -149,15 +149,15 @@ headers: { 'content-type': 'application/json' }, body: JSON.stringify(values) })
 Access cookies refresh automatically. Cookie-auth POST/PATCH/DELETE from scripts
 need Origin equal to the app URL.
 
-Test with an ordinary Playwright script: the journeys you changed and your access boundaries.
-Run it only after a successful deploy: npx @somewhere-cloud/cli deploy && node tests/app-check.mjs
-(the starter's short example; one result file, and the exit code is the verdict).
+Run somewhere test after a successful deploy: npx @somewhere-cloud/cli deploy && npx @somewhere-cloud/cli test
+It runs every tests/*.mjs and tests/*.cjs Playwright script and prints failures first. Start from
+tests/app-check.mjs: change its checks to the journeys you changed and your access boundaries.
 Keep each run short:
 - Short waits: page.setDefaultTimeout(5_000) on every page; a deployed app answers in under
   a second. Never sleep for a fixed time: wait for the thing itself (the text, the response).
 - Stop at the first failure and print what the page showed (page.url(), the visible error
   text). Checks after a failure only wait out their timeouts. app.check() does both.
-- After a fix, rerun only the checks that failed: node tests/app-check.mjs --failed.
+- After a fix, rerun only the checks that failed: npx @somewhere-cloud/cli test --failed.
   Keep setup (sign-ups, rows a check needs) outside app.check() so a rerun still has it.
 Call the data endpoint as a signed-in person: app.data(page, { table, operation, id, values })
 (the raw request: somewhere docs declared-data --section calling-the-data-endpoint-directly).

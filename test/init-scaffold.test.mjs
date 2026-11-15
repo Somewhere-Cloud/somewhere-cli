@@ -252,7 +252,7 @@ test('default starter is the auth module: SDK client, packaged handler, hooks, r
   assert.ok(result.created.includes('src/auth/hooks.ts'));
   assert.ok(result.created.includes('src/ui/AuthCard.tsx'));
   assert.ok(!result.created.includes('db/schema.ts'), 'private data is opt-in');
-  // One ordinary example script, not a suite `somewhere test` would discover.
+  // One ordinary example script, which `somewhere test` runs (the project has no specs).
   assert.deepEqual(result.created.filter(path => path.startsWith('tests/')), ['tests/app-check.mjs']);
   const script = readFileSync(join(dir, 'tests/app-check.mjs'), 'utf8');
   assert.match(script, /await app\.signUp\(page\)[\s\S]*await app\.signOut\(ana\.page\)[\s\S]*await app\.signIn\(ana\.page, ana\.account\)/, 'signs up through the real form');
@@ -481,7 +481,8 @@ test('one generated template consumes the SDK auth adapter and server data/files
   }
 
   const guide = readFileSync(join(dir, 'AGENTS.md'), 'utf8');
-  assert.match(guide, /npx @somewhere-cloud\/cli deploy && node tests\/app-check\.mjs/);
+  assert.match(guide, /^Run somewhere test after a successful deploy: npx @somewhere-cloud\/cli deploy && npx @somewhere-cloud\/cli test$/m);
+  assert.doesNotMatch(guide, /node tests\/app-check\.mjs/, 'one way to run the tests');
   assert.doesNotMatch(guide, /You do not need a separate browser script/);
   assert.doesNotMatch(guide, /allow-type-errors|somewhere verify/);
   assert.match(guide, /Deploy raw source/);

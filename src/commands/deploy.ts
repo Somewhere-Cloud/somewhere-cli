@@ -710,7 +710,7 @@ export function registerDeploy(program: Command) {
       'After the deploy is live, run one browser verification flow at desktop and phone size. Omit the file for the default health check.',
     )
     // Kept working for scripts that already call it; no longer documented. The exit-safe form is
-    // `somewhere deploy && node tests/app-check.mjs` (or `&& somewhere test`).
+    // `somewhere deploy && somewhere test`.
     .addOption(new Option('--test', 'After a successful deploy, run somewhere test once against the new release').hideHelp())
     .option('--json', 'Print the raw deploy response as JSON on stdout; files left out locally are listed on stderr by path and reason')
     .option('--allow-type-errors', 'Upload even when the local TypeScript check fails')
@@ -723,7 +723,7 @@ export function registerDeploy(program: Command) {
       markProcessStart('cli');
       timelineMark('cli:action');
       const runTestsAfter = Boolean(opts.test && !opts.dryRun);
-      if (runTestsAfter) process.stderr.write('deploy --test: the documented form is `somewhere deploy && node tests/app-check.mjs` (or `&& somewhere test`); --test still runs somewhere test once after a successful deploy.\n');
+      if (runTestsAfter) process.stderr.write('deploy --test: the documented form is `somewhere deploy && somewhere test`; --test still runs somewhere test once after a successful deploy.\n');
       let typecheckMs = 0;
       const typecheckStartedAt = performance.now();
       // Collection, authentication and packaging can proceed while tsc runs.

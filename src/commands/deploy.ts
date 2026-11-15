@@ -11,6 +11,7 @@ import prompts from 'prompts';
 import ora, { type Ora } from '../lib/spinner.js';
 import { ApiClient, CliApiError, formatErrorReference, LONG_CALL_TIMEOUT_MS } from '../lib/client.js';
 import { awaitPostLiveRender, POST_LIVE_RENDER_STILL_RUNNING, type PostLiveRenderRecord } from '../lib/post-live-render.js';
+import { formatLiveRefusalMessage, liveRefusal } from '../lib/live-refusal.js';
 import { isBuildError, renderBuildError } from '../lib/build-errors.js';
 import {
   getToken,
@@ -1239,6 +1240,29 @@ export function registerDeploy(program: Command) {
       // The target came from this folder's link, not --project or a project
       // created just now: a not-found then means the link itself is stale.
       const targetFromLink = !opts.project && Boolean(linkedProjectEntry) && projectId === linkedProjectEntry?.config.project_id;
+      // After a publish, this folder matches the new release: record it where
+      // this project's link lives (directory config or the temporary side-car).
+      const rememberDeployedBase = (releaseId: string | undefined) => {
+        if (!releaseId || !projectId || opts.dryRun) return;
+        const deployedProject = projectId;
+        if (besideRealLogin && sideCar && tempProjectFor(sideCar, projectRoot)?.project_id === deployedProject) {
+          const owner = sideCar.token;
+          sideCar = updateTempSession((current) => {
+            const linked = tempProjectFor(current, projectRoot);
+            return current?.token === owner && linked?.project_id === deployedProject
+              ? withTempProject(current, projectRoot, { ...linked, source_base: sourceBaseState(deployedProject, releaseId) })
+              : current;
+          });
+          return;
+        }
+        const baseDir = deployStateEntry?.dir ?? targetDir;
+        saveSourceBase(baseDir, deployedProject, releaseId);
+        if (resolve(baseDir) === resolve(targetDir)) saveBaseFiles(baseDir, { project_id: deployedProject, release_id: releaseId, files: publishedHashes });
+        else clearBaseFiles(baseDir);
+      };
+      // The platform's answer to the publish, once it gave one: a refusal raised after it (the post-live
+      // blank check) still knows the version it published.
+      let answered: DeployResult | undefined;
       try {
         const body: Record<string, unknown> = {
           project_id: projectId,
@@ -1293,26 +1317,6 @@ export function registerDeploy(program: Command) {
             : await readExplicitProjectLiveBase(client, explicitProjectId);
           if (liveBase !== undefined) body.base_release_id = liveBase;
         }
-        // After a publish, this folder matches the new release: record it where
-        // this project's link lives (directory config or the temporary side-car).
-        const rememberDeployedBase = (releaseId: string | undefined) => {
-          if (!releaseId || !projectId || opts.dryRun) return;
-          const deployedProject = projectId;
-          if (besideRealLogin && sideCar && tempProjectFor(sideCar, projectRoot)?.project_id === deployedProject) {
-            const owner = sideCar.token;
-            sideCar = updateTempSession((current) => {
-              const linked = tempProjectFor(current, projectRoot);
-              return current?.token === owner && linked?.project_id === deployedProject
-                ? withTempProject(current, projectRoot, { ...linked, source_base: sourceBaseState(deployedProject, releaseId) })
-                : current;
-            });
-            return;
-          }
-          const baseDir = deployStateEntry?.dir ?? targetDir;
-          saveSourceBase(baseDir, deployedProject, releaseId);
-          if (resolve(baseDir) === resolve(targetDir)) saveBaseFiles(baseDir, { project_id: deployedProject, release_id: releaseId, files: publishedHashes });
-          else clearBaseFiles(baseDir);
-        };
         // Every CLI deploy names its tool, so a later refusal can say "deployed by the somewhere CLI".
         body.source = 'cli';
         if (opts.force) body.force = true;
@@ -1360,6 +1364,7 @@ export function registerDeploy(program: Command) {
           baseText: spinner?.text ?? 'Deploying...',
         }).finally(stopPrestart);
         deployAnswered = true;
+        answered = result;
         const requestMs = performance.now() - requestStartedAt;
 
         // A release undone by a pointer move answers before its blank-page
@@ -1683,6 +1688,40 @@ export function registerDeploy(program: Command) {
             spinner?.fail('Deploy outcome unknown');
             console.error(message);
             const reference = formatErrorReference(unknown.meta);
+            if (reference) info(dim(reference));
+          }
+          process.exit(1);
+        }
+        // The platform switched production to this version and then could not switch it back: the
+        // deploy is live. Say so, and record it as this folder's base so the corrected deploy the
+        // message asks for is admitted without --force. Still exits non-zero: it failed its check.
+        const live = opts.dryRun ? null : liveRefusal(err);
+        if (live && err instanceof CliApiError) {
+          const version = live.version
+            ?? (answered && (answered.active_release_id ?? answered.release_id) === live.releaseId && typeof answered.version === 'number' ? answered.version : null);
+          if (!tempSession && version !== null && deployStateEntry) {
+            saveProjectDeployState(deployStateEntry.dir, deployStateEntry.config.project_id, version, live.releaseId);
+          }
+          rememberDeployedBase(live.releaseId);
+          const envelope = platformErrorEnvelope(err);
+          const message = formatLiveRefusalMessage(envelope?.message ?? err.message);
+          const liveUrl = answered?.url ? httpsOrigin(answered.url) : null;
+          if (opts.json) {
+            printJsonError(err.code, message, {
+              ...(envelope?.extra ?? {}),
+              live: true,
+              deployment_outcome: 'live',
+              release_id: live.releaseId,
+              ...(version !== null ? { version } : {}),
+              ...(liveUrl ? { url: liveUrl } : {}),
+              base_recorded: Boolean(projectId),
+            });
+          } else {
+            spinner?.fail('Live, but this version failed its check');
+            error(`${message} ${dim(err.statusCode ? `[${err.code}, HTTP ${err.statusCode}]` : `[${err.code}]`)}`);
+            if (liveUrl) info(`Live at ${teal(liveUrl)}`);
+            if (projectId) info(`This folder now starts from ${version !== null ? `v${version}` : 'this version'}, so the next \`somewhere deploy\` here replaces it without --force.`);
+            const reference = formatErrorReference(err.meta);
             if (reference) info(dim(reference));
           }
           process.exit(1);

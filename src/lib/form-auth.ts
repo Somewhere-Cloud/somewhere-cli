@@ -276,6 +276,9 @@ async function signUpSteps(run: FormHost, page: Page, options: SignUpOptions): P
     if (!id) throw new StepError('signUp: the sign-up succeeded but its response carried no account id, so the account cannot be cleaned up by id');
     attempt.id = id;
     recordId(attempt.record, id);
+    // Any code already mailed to the new address is a secret from now on, even one the test never
+    // enters (a custom page may show it): registered for scrubbing, not consumed.
+    for (const message of await inbox(run, email)) if (message.verification_code) rememberSecrets(message.verification_code);
     await step(page, 'signUp: wait for the signed-in page', () => signedIn(page, options.form));
     await run.attach(page);
     const person: Person = { id, email, password, verified };

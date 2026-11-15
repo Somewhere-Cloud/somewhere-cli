@@ -9,7 +9,7 @@ import { test, before, after } from 'node:test';
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
 import { randomUUID, randomInt } from 'node:crypto';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, statSync, symlinkSync, watch, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -35,6 +35,20 @@ const platform = createServer(async (req, res) => {
   const raw = await readBody(req);
   const auth = req.headers.authorization ?? '';
   state.requests.push(`${req.method} ${url.pathname}`);
+  // Production routes answer only in the production-runner test, and only to the developer key.
+  if (state.productionAllowed && auth === 'Bearer smt_production_developer_key' && !url.pathname.startsWith('/v1/preview-tools/')) {
+    if (req.method === 'GET' && url.pathname === `/v1/projects/${PROJECT}/urls`) return json(res, 200, { ok: true, data: { prod_fallback: appOrigin, active_release_id: 'rel_live_1' } });
+    if (req.method === 'GET' && url.pathname === '/v1/db/access-map') return json(res, 200, { ok: true, data: { release: { id: 'rel_live_1' }, browser_data: { contract_digest: 'digest-live' } } });
+    if (req.method === 'GET' && url.pathname === '/v1/email/test-inbox') {
+      const address = url.searchParams.get('address');
+      return json(res, 200, { ok: true, data: { messages: [...state.mail].reverse().filter((m) => m.to === address) } });
+    }
+    if (req.method === 'DELETE' && url.pathname.startsWith('/v1/auth/users/')) {
+      const id = decodeURIComponent(url.pathname.split('/')[4]);
+      return state.users.delete(id) ? json(res, 200, { ok: true, data: { deleted: true } }) : json(res, 404, { ok: false, error: 'AUTH_INVALID_CREDS', message: 'User not found in this project.' });
+    }
+    return json(res, 404, { ok: false, error: 'NOT_FOUND', message: url.pathname });
+  }
   if (!url.pathname.startsWith('/v1/preview-tools/') || auth !== `Bearer ${CREDENTIAL}`) {
     state.production.push(`${req.method} ${url.pathname} ${auth.slice(0, 12)}`);
     return json(res, 500, { ok: false, error: 'PRODUCTION_CALL', message: 'a preview run made a non-preview call' });
@@ -94,6 +108,18 @@ document.querySelector('[data-sw-auth="sign-in"]').onclick = () => auth('login')
 out.onclick = async () => { await fetch('/api/auth/logout', { method: 'POST' }); set(null); };
 fetch('/api/auth/me').then((r) => r.json()).then((b) => set(b.user));
 </script></body></html>`;
+const CUSTOM = `<!doctype html><html><body><form id="cf"><input id="cf-email" type="email"><input id="cf-pass" type="password">
+<button type="button" id="cf-up">Join</button><button type="button" id="cf-in">Log in</button></form>
+<script>
+document.getElementById('cf-up').onclick = async () => {
+  const r = await fetch('/api/auth/signup', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: document.getElementById('cf-email').value, password: document.getElementById('cf-pass').value }) });
+  if (!r.ok) return;
+  const w = await (await fetch('/api/custom/welcome', { method: 'POST' })).json();
+  document.getElementById('cf').remove();
+  document.body.insertAdjacentHTML('beforeend', '<div id="banner"></div>');
+  document.getElementById('banner').textContent = w.text;
+};
+</script></body></html>`;
 const appSessions = new Map();
 const cookies = (req) => Object.fromEntries((req.headers.cookie ?? '').split(';').map((c) => c.trim().split('=')).filter((p) => p.length === 2));
 function mail(to, code) { state.mail.push({ id: 'm' + state.mail.length, to, subject: '[Preview] Your verification code', verification_code: code, magic_link: null, created_at: new Date().toISOString(), environment: 'preview', preview_session_id: DRAFT }); state.secrets.add(code); }
@@ -104,7 +130,7 @@ const app = createServer(async (req, res) => {
   // The gate: only a live session pinned to the current candidate (validatePreviewCapabilitySession).
   const [, candidate, sessionId] = (c[COOKIE] ?? '').split('.');
   const session = state.sessions.get(sessionId);
-  if (!session || session.ended || state.dead || session.candidate !== state.candidate || candidate !== state.candidate) { res.writeHead(404); return res.end('Preview not found'); }
+  if (!state.productionAllowed && (!session || session.ended || state.dead || session.candidate !== state.candidate || candidate !== state.candidate)) { res.writeHead(404); return res.end('Preview not found'); }
   const user = appSessions.get(c.app_session) ?? null;
   const body = raw ? JSON.parse(raw) : {};
   const signedIn = (u) => { const token = randomUUID(); appSessions.set(token, u.id); state.secrets.add(token); return { 'set-cookie': `app_session=${token}; Path=/; HttpOnly` }; };
@@ -112,6 +138,13 @@ const app = createServer(async (req, res) => {
   switch (`${req.method} ${url.pathname}`) {
     case 'GET /': res.writeHead(200, { 'content-type': 'text/html' }); return res.end(PAGE);
     case 'GET /plain': res.writeHead(200, { 'content-type': 'text/html' }); return res.end('<p id="plain">A page with nothing secret on it.</p>');
+    // A custom form (no starter hooks) whose confirmation shows the new account's code and password.
+    case 'GET /custom': res.writeHead(200, { 'content-type': 'text/html' }); return res.end(CUSTOM);
+    case 'POST /api/custom/welcome': {
+      if (!me) return json(res, 401, { error: 'AUTH_REQUIRED' });
+      const code = [...state.mail].reverse().find((m) => m.to === me.email)?.verification_code;
+      return json(res, 200, { text: 'Welcome! Your verification code is ' + code + ' and your password is ' + me.password });
+    }
     case 'GET /api/auth/me': return json(res, 200, { user: me ? { id: me.id, email: me.email } : null });
     case 'POST /api/auth/signup': {
       if ([...state.users.values()].some((u) => u.email === body.email)) return json(res, 409, { error: 'AUTH_EMAIL_EXISTS' });
@@ -173,7 +206,12 @@ const FAILS = `import { test, expect } from '@somewhere-cloud/cli/testing';
 test('fails while a password is on the page', async ({ page, signUp }) => {
   const ana = await signUp(page);
   await page.evaluate((p) => document.body.insertAdjacentHTML('beforeend', '<div role="alert" id="leak">Your password is ' + p + '</div>'), ana.password);
-  expect('a password on the page').toBe('photographed');
+  // The assertion error quotes the page text, so the raw error itself carries the password.
+  await expect(page.locator('#leak')).toHaveText('nothing secret', { timeout: 500 });
+});
+test('fails on a custom form that shows the code and password', async ({ page, signUp }) => {
+  await signUp(page, { form: { path: '/custom', email: '#cf-email', password: '#cf-pass', signUp: '#cf-up', signIn: '#cf-in', signedIn: '#banner' } });
+  await expect(page.locator('#banner')).toHaveText('nothing secret', { timeout: 500 });
 });
 test('fails on a page with nothing secret', async ({ page, signUp }) => {
   await signUp(page);
@@ -247,16 +285,29 @@ function makeConfig({ credential = true } = {}) {
   }
   return dir;
 }
-function run(args, cwd, config) {
+function run(args, cwd, config, { detached = false, onChild } = {}) {
   return new Promise((resolve) => {
-    const child = spawn(process.execPath, args, { cwd, env: { ...process.env, SOMEWHERE_API_URL: `http://127.0.0.1:${platform.address().port}/v1`, SOMEWHERE_CONFIG_DIR: config,
+    const child = spawn(process.execPath, args, { cwd, detached, env: { ...process.env, SOMEWHERE_API_URL: `http://127.0.0.1:${platform.address().port}/v1`, SOMEWHERE_CONFIG_DIR: config,
       CI: '1', NO_COLOR: '1', SOMEWHERE_NO_NOTIFICATIONS: '1', SOMEWHERE_NO_UPDATE_CHECK: '1', SOMEWHERE_NO_BROWSER: '1', SW_TEST_TARGET: '', SW_TEST_RUN: '' } });
     let stdout = '', stderr = '';
     child.stdout.on('data', (c) => (stdout += c)); child.stderr.on('data', (c) => (stderr += c));
-    child.on('close', (status) => resolve({ status, stdout, stderr, all: stdout + stderr }));
+    onChild?.(child);
+    child.on('close', (status, signal) => resolve({ status, signal, stdout, stderr, all: stdout + stderr }));
   });
 }
-const somewhere = (args, cwd = root, config = configDir) => run([distIndex, ...args], cwd, config);
+const somewhere = (args, cwd = root, config = configDir, options) => run([distIndex, ...args], cwd, config, options);
+/** Every artifact as it exists the moment it is written or changed (before any later step reads,
+ *  uploads or deletes it), from a recursive watch on the folder's .somewhere directory. */
+function watchArtifacts(dir, onFile) {
+  const seen = [];
+  const watcher = watch(dir, { recursive: true }, (_event, name) => {
+    if (!name) return;
+    const path = join(dir, name);
+    try { if (statSync(path).isFile()) { const text = readFileSync(path).toString('latin1'); seen.push({ name, text }); onFile?.(name, text); } } catch { /* removed already */ }
+  });
+  return { seen, close: () => watcher.close() };
+}
+const leakedIn = (texts) => [...state.secrets].filter((secret) => texts.some((text) => text.includes(secret))).map((secret) => `${secret.slice(0, 4)}…(${secret.length})`);
 function files(dir, out = []) {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     if (entry.name === 'node_modules') continue;
@@ -304,16 +355,40 @@ test('somewhere test --preview runs the journey on the preview with its own cred
   assert.deepEqual(leaked(r.all), [], 'no password, code, cookie, session or credential in any artifact or output');
 });
 
-test('failure screenshots are never taken while a secret can be on screen; a plain page is still photographed', { timeout: 300_000 }, async () => {
+test('at the moment of failure: no artifact, report or output holds a secret, for the starter form and a custom form; a plain page is still photographed', { timeout: 300_000 }, async () => {
   reset();
+  const watched = watchArtifacts(join(root, '.somewhere'));
   const r = await somewhere(['test', '--preview', 'tests/fails.spec.ts', '--workers', '1']);
+  watched.close();
   assert.equal(r.status, 1, r.all);
-  assert.match(r.stdout, /2 failed/);
+  assert.match(r.stdout, /3 failed/);
+  const contexts = watched.seen.filter((f) => f.name.endsWith('error-context.md'));
+  assert.ok(contexts.length >= 3, 'Playwright wrote its error context for each failure (seen at write time)');
+  assert.ok(contexts.every((f) => !f.text.includes('# Page snapshot')), 'no page snapshot is ever written');
+  assert.ok(contexts.some((f) => f.text.includes('[redacted]')), 'the quoted page text was scrubbed before the write');
   const pngs = files(join(root, '.somewhere', 'tests')).filter((path) => path.endsWith('.png'));
-  assert.equal(pngs.length, 1, 'only the plain page');
+  assert.equal(pngs.length, 1, 'only the plain page is photographed');
   assert.match(r.stdout, /screenshot: not captured/);
   assert.deepEqual(state.production, []);
-  assert.deepEqual(leaked(r.all), [], 'the password shown in an alert is in no artifact or output');
+  assert.deepEqual(leakedIn(watched.seen.map((f) => f.text)), [], 'no secret in any artifact at the moment it was written');
+  assert.deepEqual(leaked(r.all), [], 'nor in output or anything left after the run');
+});
+
+test('a run interrupted right after a failure, before any cleanup, leaves no secret on disk', { timeout: 300_000 }, async () => {
+  reset();
+  let killed = false;
+  let child;
+  const watched = watchArtifacts(join(root, '.somewhere'), (name) => {
+    if (!killed && name.endsWith('error-context.md') && child) { killed = true; setTimeout(() => { try { process.kill(-child.pid, 'SIGKILL'); } catch {} }, 300); }
+  });
+  const r = await somewhere(['test', '--preview', 'tests/fails.spec.ts', '--workers', '1'], root, configDir, { detached: true, onChild: (c) => { child = c; } });
+  watched.close();
+  assert.ok(killed, 'the run was interrupted after Playwright wrote a failure report');
+  assert.notEqual(r.status, 0);
+  const left = files(join(root, '.somewhere', 'tests'));
+  assert.ok(left.some((path) => path.endsWith('error-context.md')), 'the failure report is still on disk: cleanup never ran');
+  assert.deepEqual(leakedIn([...watched.seen.map((f) => f.text), ...left.map((path) => readFileSync(path).toString('latin1'))]), [], 'no secret in what an interrupted run leaves');
+  assert.deepEqual(state.production, []);
 });
 
 test('a preview saved again mid-run fails the run as a preview run, never passing for another version or touching production', { timeout: 300_000 }, async () => {
@@ -369,5 +444,22 @@ test('the script helper takes the same preview option: the same journey, its own
   const results = JSON.parse(readFileSync(join(root, '.somewhere', 'app-check-preview.json'), 'utf8'));
   assert.equal(results.environment, 'preview'); assert.equal(results.release, CANDIDATE);
   assert.ok(existsSync(prodRecordPath), 'the production cleanup record is untouched');
+  assert.deepEqual(leaked(r.all), []);
+});
+
+// The production runner had the same raw-artifact hole (Playwright's error-context.md, written before
+// the runner's cleanup); the same fix covers it. Last in this file: a production run legitimately
+// finishes the retained production cleanup record.
+test('the production runner: at the moment of failure no artifact, report or output holds a secret, for the starter form and a custom form', { timeout: 300_000 }, async () => {
+  reset(); state.productionAllowed = true;
+  const watched = watchArtifacts(join(root, '.somewhere'));
+  const r = await somewhere(['test', 'tests/fails.spec.ts', '--workers', '1']);
+  watched.close(); state.productionAllowed = false;
+  assert.equal(r.status, 1, r.all);
+  assert.match(r.stdout, /3 failed/);
+  assert.ok(state.requests.some((l) => l === `GET /v1/projects/${PROJECT}/urls`), 'it ran as a production run');
+  const contexts = watched.seen.filter((f) => f.name.endsWith('error-context.md'));
+  assert.ok(contexts.length >= 3 && contexts.every((f) => !f.text.includes('# Page snapshot')));
+  assert.deepEqual(leakedIn(watched.seen.map((f) => f.text)), [], 'no secret in any artifact at the moment it was written');
   assert.deepEqual(leaked(r.all), []);
 });

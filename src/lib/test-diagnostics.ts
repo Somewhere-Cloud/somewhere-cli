@@ -14,6 +14,21 @@ export function scrub(value: string): string {
   value = value.replace(/swpt\.[A-Za-z0-9._-]+/g, '[redacted]').replace(/draft_[0-9a-f-]{36}\.rel_[A-Za-z0-9_-]+\.[0-9a-f-]{36}/gi, '[redacted]');
   return value.replace(/https?:\/\/[^\s<>"']+/g, raw => { try { const url = new URL(raw); return url.origin + '/[redacted-url]'; } catch { return '[redacted-url]'; } }).replace(/([?&](?:token|code|secret|key|password|access_token|refresh_token)=)[^&\s]+/gi, '$1[redacted]').replace(/(\/(?:reset-password|reset|verify|magic|invite)\/)[^\s?#]+/gi, '$1[redacted]').replace(/\u001b\[[0-9;]*m/g, '').replace(/eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+|smt_[A-Za-z0-9_-]+/g, '[redacted]');
 }
+/**
+ * Scrub a test's errors IN PLACE, before Playwright writes anything from them. Playwright builds
+ * error-context.md from these objects at the end of the test (after the somewhere fixtures' teardown)
+ * and sends the same objects to the reporter, so every message, stack, value and matcher snapshot
+ * (errorContext) loses each registered secret here, before the first write. (The page snapshot that
+ * error-context.md would otherwise add is switched off: PLAYWRIGHT_NO_COPY_PROMPT.)
+ */
+export function scrubTestErrors(errors: Array<Record<string, unknown>>): void {
+  for (const error of errors) {
+    for (const key of ['message', 'stack', 'value', 'errorContext', 'snippet']) {
+      if (typeof error[key] === 'string') error[key] = scrub(error[key] as string);
+    }
+    if (error.cause && typeof error.cause === 'object') scrubTestErrors([error.cause as Record<string, unknown>]);
+  }
+}
 export interface RequestEvidence { method: string; path: string; status: number; code: string }
 export interface Diagnostics { release?: string; request?: RequestEvidence; screenshot?: string; timings: Record<string, number> }
 const reports = new WeakMap<TestInfo, Diagnostics>();

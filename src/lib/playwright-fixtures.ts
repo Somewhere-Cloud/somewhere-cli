@@ -5,7 +5,7 @@ import { fixtureTestTarget } from './test-target.js';
 import { ApiClient } from './client.js';
 import { getToken, loadProjectConfig } from './config.js';
 import { buildStorageState, createTestIdentities, expiryOf, messagesAfter, type IssuedIdentity, type InboxMessage } from './test-identities.js';
-import { diagnostics, rememberSecrets, scrub, describeError, timed, titled } from './test-diagnostics.js';
+import { diagnostics, rememberSecrets, scrub, scrubTestErrors, describeError, timed, titled } from './test-diagnostics.js';
 import { mark as timelineMark, markProcessStart, span, trackPage } from './test-timeline.js';
 import { forgetRecord } from './form-accounts.js';
 import { ready, signUp, signIn, signOut, verify, type FormHost, type FormControl, type Attempt, type Person, type FormSteps, type CodeSteps, type SignUpOptions, type SignInOptions, type FormAdapter } from './form-auth.js';
@@ -15,6 +15,11 @@ export type { Person, FormSteps, CodeSteps, SignUpOptions, SignInOptions, FormAd
 import type { TestTarget } from './test-target.js';
 import type { TestInfo } from '@playwright/test';
 import type { DataRequest } from '../testing.js';
+
+// Playwright adds an accessibility snapshot of the failing page (its visible text, which can show a
+// password, an emailed code or a reset link) to error-context.md. Off in every worker that loads these
+// fixtures, whether or not `somewhere test` started it; the runner sets it too.
+process.env.PLAYWRIGHT_NO_COPY_PROMPT = '1';
 
 export interface TestUser { id: string; email: string; page: Page; request: APIRequestContext }
 /** `role`: an app role declared in db/schema.ts appRoles, granted to this user with your developer
@@ -76,6 +81,9 @@ function runner() {
     },
     _evidence: [async ({}, use, info) => {
       try { await use(); } finally {
+        // Torn down after every other somewhere fixture and before Playwright writes error-context.md
+        // or reports the errors: scrub them in place first.
+        scrubTestErrors(info.errors as unknown as Array<Record<string, unknown>>);
         const report = diagnostics(info);
         await info.attach('somewhere-diagnostics', { body: Buffer.from(JSON.stringify({ ...report, title: titled(info.project.name, scrub(info.title)), errors: info.errors.map(error => describeError(error)), secretAudit: 'issued values scrubbed before reporting' })), contentType: 'application/json' });
       }

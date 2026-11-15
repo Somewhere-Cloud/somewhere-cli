@@ -110,7 +110,7 @@ export async function runTests(input: { root: string; client?: ApiClient; projec
   const resultsPath = join(dir, 'results.json');
   rmSync(resultsPath, { force: true });
   mark('runner:spawn');
-  const child = spawn(process.execPath, args, { cwd: root, stdio: ['inherit', input.toStderr ? 'pipe' : 'inherit', 'inherit'], env: { ...runnerEnv, SW_TEST_TARGET: JSON.stringify(target), SW_TEST_RELEASE: target.releaseId, SW_TEST_ORIGIN: origin, SW_TEST_BROWSER_LAUNCH_MS: String(prepared.browserLaunchMs), SW_TEST_BROWSER: browser, SW_TEST_SUBSET: String(subset), SW_TEST_JSON: String(Boolean(options.json)), SW_TEST_RESULTS: resultsPath, SW_TEST_RUN: process.env.SW_TEST_RUN, SW_TEST_RUN_PID: String(process.pid), SW_TEST_RERUN_FLAGS: rerunFlags } });
+  const child = spawn(process.execPath, args, { cwd: root, stdio: ['inherit', input.toStderr ? 'pipe' : 'inherit', 'inherit'], env: { ...runnerEnv, SW_TEST_TARGET: JSON.stringify(target), SW_TEST_RELEASE: target.releaseId, PLAYWRIGHT_NO_COPY_PROMPT: '1', SW_TEST_ORIGIN: origin, SW_TEST_BROWSER_LAUNCH_MS: String(prepared.browserLaunchMs), SW_TEST_BROWSER: browser, SW_TEST_SUBSET: String(subset), SW_TEST_JSON: String(Boolean(options.json)), SW_TEST_RESULTS: resultsPath, SW_TEST_RUN: process.env.SW_TEST_RUN, SW_TEST_RUN_PID: String(process.pid), SW_TEST_RERUN_FLAGS: rerunFlags } });
   if (input.toStderr) child.stdout?.pipe(process.stderr);
   const status = await new Promise<number | null>(resolve => child.on('close', code => resolve(code)));
   mark('runner:exit', { status: status ?? -1 });

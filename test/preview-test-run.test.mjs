@@ -236,6 +236,25 @@ test('the preview is saved again mid-run', async ({ page }) => {
   expect(again.status()).toBe(200);
 });
 `;
+// Every request the test makes passes; the preview is saved after the last one, so no request can notice
+// (a web tier may admit an old session for up to ten seconds). Only the end-of-run check can.
+const SAVE_UNNOTICED = `import { test, expect } from '@somewhere-cloud/cli/testing';
+test('every request passes; the preview is saved after the last one', async ({ page }) => {
+  expect((await page.goto('/')).status()).toBe(200);
+  expect((await page.request.post('/__test/save')).status()).toBe(200);
+});
+`;
+const SCRIPT_SAVE_UNNOTICED = `import { chromium } from '@playwright/test';
+import { openAppTest } from '@somewhere-cloud/cli/script';
+const app = await openAppTest({ preview: true });
+const browser = await chromium.launch(app.launchOptions({ channel: 'chrome' }));
+try {
+  const page = await browser.newPage({ baseURL: app.origin });
+  await app.prepare(page);
+  await app.check('the page loads', async () => { if ((await page.goto('/')).status() !== 200) throw new Error('not 200'); });
+  await page.request.post('/__test/save');
+} finally { await browser.close(); await app.finish(); }
+`;
 const CLOSE = `import { test, expect } from '@somewhere-cloud/cli/testing';
 test('the preview is closed mid-run', async ({ page, signUp }) => {
   await signUp(page);
@@ -279,7 +298,7 @@ function makeProject() {
   symlinkSync(join(repoRoot, 'node_modules', 'playwright-core'), join(dir, 'node_modules', 'playwright-core'));
   symlinkSync(repoRoot, join(dir, 'node_modules', '@somewhere-cloud', 'cli'));
   mkdirSync(join(dir, 'tests'));
-  for (const [name, content] of [['preview.spec.ts', SPEC], ['fails.spec.ts', FAILS], ['save.spec.ts', SAVE], ['close.spec.ts', CLOSE], ['check.mjs', SCRIPT]]) writeFileSync(join(dir, 'tests', name), content);
+  for (const [name, content] of [['preview.spec.ts', SPEC], ['fails.spec.ts', FAILS], ['save.spec.ts', SAVE], ['save-unnoticed.spec.ts', SAVE_UNNOTICED], ['close.spec.ts', CLOSE], ['check.mjs', SCRIPT], ['save-unnoticed.mjs', SCRIPT_SAVE_UNNOTICED]]) writeFileSync(join(dir, 'tests', name), content);
   // What `somewhere preview` records after a save: the folder's published files exactly as sent.
   writeFileSync(join(dir, '.somewhere', 'preview.json'), JSON.stringify({ project_id: PROJECT, preview_session_id: DRAFT, preview_id: CANDIDATE, files: hashFiles(dir, collectFiles(dir).published), saved_at: new Date().toISOString() }));
   return dir;
@@ -412,6 +431,30 @@ test('a preview saved again mid-run fails the run as a preview run, never passin
   assert.doesNotMatch(r.stdout, /0 failed, 0 expected failures, 0 setup errors/);
   assert.deepEqual(state.production, []);
   assert.deepEqual(leaked(r.all), []);
+});
+
+test('the end-of-run check fails a run whose every request passed when the preview was saved after the last one', { timeout: 300_000 }, async () => {
+  reset(); state.candidate = CANDIDATE;
+  const r = await somewhere(['test', '--preview', 'tests/save-unnoticed.spec.ts', '--workers', '1']);
+  state.candidate = CANDIDATE;
+  assert.equal(r.status, 1, r.all);
+  assert.match(r.stdout, /passed: every request passes; the preview is saved after the last one/, 'the test itself passed');
+  assert.match(r.all, /saved again during this run \(rel_candidate_E001 → rel_candidate_E002\)/);
+  const report = JSON.parse(readFileSync(join(root, '.somewhere', 'tests', 'results.json'), 'utf8'));
+  assert.equal(report.releaseConfirmed, false);
+  assert.equal(report.release, 'release changed during run');
+  assert.deepEqual(state.production, []);
+});
+
+test('the script helper\'s finish() fails a script whose every check passed when the preview was saved after the last one', { timeout: 300_000 }, async () => {
+  reset(); state.candidate = CANDIDATE;
+  const r = await run(['tests/save-unnoticed.mjs'], root, configDir);
+  state.candidate = CANDIDATE;
+  assert.equal(r.status, 1, r.all);
+  assert.match(r.all, /the preview was saved again during the script \(rel_candidate_E001 → rel_candidate_E002\)/);
+  const results = JSON.parse(readFileSync(join(root, '.somewhere', 'app-check-preview.json'), 'utf8'));
+  assert.deepEqual(results.checks.map((c) => [c.name, c.ok]), [['the page loads', true], ['the preview stayed on the same saved version during the script', false]]);
+  assert.deepEqual(state.production, []);
 });
 
 test('a preview closed mid-run fails the run as a preview run; cleanup is reported, never sent to production', { timeout: 300_000 }, async () => {

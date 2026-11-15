@@ -1,7 +1,7 @@
 {
   "esbuild": "0.24.0",
   "source_files": {
-    "shared/cloud-dev-entitlement.ts": "f5ae891bcd3ed05ab2d30e3ef602bfceddf7852005473d094b688cdb2efbd175",
+    "shared/cloud-dev-entitlement.ts": "1993a9e1c781d9daed29b3cfef0e8a370e150ce06d2acc7c408c2a24c50b4960",
     "shared/d1-region.ts": "71cda96cfead241b4f4e35b8cd6b1d8e577f072257e91a8dbe0deaa1b142b378",
     "shared/d1-session.ts": "2ae29b74bba68016c86d25fa2a58f8c2fce4aca8fe57fafc253d380c47a3c0ab",
     "shared/types/placeholder-identity.ts": "089a46e2474a21193d3611eddd9c94b6bbe62441b3039ed80fc8499bada447ca",
@@ -44,8 +44,8 @@
     "worker/src/utils/db-schema-deploy/schema-ownership.ts": "e6c811a87bc657707be3518dfe547c6d97718ac073108b126eb7f791c9c08202",
     "worker/src/utils/dev-health-class.ts": "fd430f31b9c8469f3d90e118fd8c75d1836ebcf705c1f9e93915ffa53a4cb066",
     "worker/src/utils/errors.ts": "f9d22810c285d2a512d258853bdd17cf9c1445c3983d51f3adbbcede273ac07d",
-    "worker/src/utils/event-log.ts": "0c36483fa84c42ce607d195f1ded527ab4383d58808a63353d3cadef81d93948",
-    "worker/src/utils/feed-kinds.ts": "951c609e9dc6ff1944549e9431bbe13b95dd11206b99736478adf3dabbd4c938",
+    "worker/src/utils/event-log.ts": "f14724ce133f07a4e50094965fc99875cdb6480a37f7934e6fccc3b949735d92",
+    "worker/src/utils/feed-kinds.ts": "1b9a986ed8a42271a639daa2e2727e2dbfca62629feea6a353b7f661cb4e03a5",
     "worker/src/utils/journey-segment.ts": "b1d27c58bea03a791193d7120d88d232ea1c8374d6f25f72cd86b5b8c33c73a1",
     "worker/src/utils/json-exact-integers.ts": "e2eb8d3b2e17da363eb14fb46d876208579e2e92bfac173fb27527e6c4fb575e",
     "worker/src/utils/log-sanitize.ts": "21997963eb5de1fa3e5544394996270d9bd073a76d57e6cbb3f8d789cb5c3663",

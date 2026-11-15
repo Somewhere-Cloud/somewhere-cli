@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.38.94
+
+- A fixture request remembers the cookies it set from its own response, not by reading the whole jar each call (slow-calls 5.3.
+- A preview run reads captured mail with one server-side wait per code, for exactly that address part D2).
+- Cleanup deletes a run's sign-ups with the teams only they belong to; a closed preview's record is dropped; no "same preview version" after a save or close.
+- The end-of-run check fails a run whose every request passed when the preview was saved after the last one.
+- A failing app.check prints and records only scrubbed text; --failed carries passes only from the same target, labelled with their source.
+- A refusal that left the new version live says so and records it as the folder's base.
+
 ## 0.38.93
 
 - The starter pins @somewhere-cloud/sdk 0.14.2, whose sign-in lockout answer keeps retry_after_ms and sends Retry-After.

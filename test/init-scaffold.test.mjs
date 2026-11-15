@@ -130,7 +130,7 @@ test('minimal starter is a small typed frontend, function, and schema', () => {
   });
   assert.equal(
     readFileSync(join(dir, '.gitignore'), 'utf8'),
-    'node_modules\ndist\nbuild\n.env\n# Generated from db/schema.ts by somewhere typecheck, dev and deploy.\n__somewhere_data.d.ts\n__somewhere_files.d.ts\n',
+    'node_modules\ndist\nbuild\n.env\n# Generated from db/schema.ts by somewhere typecheck, dev and deploy.\n__somewhere_data.d.ts\n__somewhere_files.d.ts\n.somewhere/\n',
   );
   for (const version of [
     ...Object.values(pkg.dependencies),
@@ -401,7 +401,7 @@ test('one generated template consumes the SDK auth adapter and server data/files
   assert.equal(result.created.length, 18);
   assert.equal(
     readFileSync(join(dir, '.gitignore'), 'utf8'),
-    'node_modules\ndist\nbuild\n.env\n# Generated from db/schema.ts by somewhere typecheck, dev and deploy.\n__somewhere_data.d.ts\n__somewhere_files.d.ts\n',
+    'node_modules\ndist\nbuild\n.env\n# Generated from db/schema.ts by somewhere typecheck, dev and deploy.\n__somewhere_data.d.ts\n__somewhere_files.d.ts\n.somewhere/\n',
   );
 
   const auth = readFileSync(join(dir, 'api/auth/[...path].ts'), 'utf8');

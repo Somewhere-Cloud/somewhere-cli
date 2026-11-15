@@ -24,11 +24,13 @@ export const SCAFFOLD_GITIGNORE_FILENAME = '.gitignore';
  * The starters' .gitignore ( item 8). Deploys skip dotfiles, so a
  * pulled app never brings one down, and `somewhere typecheck`/`dev` then leave
  * the generated schema declarations (thousands of lines under src/) untracked
- * in git. Same text as the `somewhere init` starters; a test pins the two
- * together.
+ * in git. The `somewhere init` starters ship this same text (they call this
+ * function); a test pins them.
  */
 export function buildScaffoldGitignore(): string {
-  return 'node_modules\ndist\nbuild\n.env\n# Generated from db/schema.ts by somewhere typecheck, dev and deploy.\n__somewhere_data.d.ts\n__somewhere_files.d.ts\n';
+  return 'node_modules\ndist\nbuild\n.env\n# Generated from db/schema.ts by somewhere typecheck, dev and deploy.\n__somewhere_data.d.ts\n__somewhere_files.d.ts\n'
+    // This folder's own CLI state: its deploy base, test results and test accounts. Never shared.
+    + '.somewhere/\n';
 }
 
 /**

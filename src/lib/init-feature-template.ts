@@ -1,4 +1,5 @@
 import { starterTests } from './init-test-template.js';
+import { buildScaffoldGitignore } from './scaffold.js';
 import { CLI_VERSION } from './version.js';
 import { ASSET_TYPES_FILE } from './init-asset-types.js';
 import type { InitScaffoldFile } from './init-scaffold.js';
@@ -3423,7 +3424,7 @@ export function createFeatureTemplate(
   const magicLink = selection.modules.includes('magic-link');
   const files: InitScaffoldFile[] = [
     ...starterTests({ privateData }),
-    { path: '.gitignore', content: 'node_modules\ndist\nbuild\n.env\n# Generated from db/schema.ts by somewhere typecheck, dev and deploy.\n__somewhere_data.d.ts\n__somewhere_files.d.ts\n' },
+    { path: '.gitignore', content: buildScaffoldGitignore() },
     { path: 'AGENTS.md', content: INIT_AGENTS_MD.replace(/## Getting started[^]*?After edits:/, `## Testing
 Test the journeys you changed and your access boundaries with an ordinary Playwright script.
 tests/app-check.mjs is a short example to change: npx somewhere deploy && node tests/app-check.mjs

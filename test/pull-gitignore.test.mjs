@@ -63,6 +63,7 @@ test('the pulled .gitignore is the same text every init starter ships', () => {
     const starter = files.find((f) => f.path === '.gitignore');
     assert.ok(starter, 'starter ships a .gitignore');
     assert.equal(buildScaffoldGitignore(), starter.content);
+    assert.ok(starter.content.split('\n').includes('.somewhere/'), 'the CLI\'s own folder state is never committed');
   }
 });
 

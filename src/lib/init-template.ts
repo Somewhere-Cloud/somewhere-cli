@@ -1,4 +1,5 @@
 import type { InitScaffoldFile } from './init-scaffold.js';
+import { buildScaffoldGitignore } from './scaffold.js';
 import { INIT_AGENTS_MD, INIT_CLAUDE_MD } from './init-agent-guide.js';
 
 const PACKAGE_JSON = `{
@@ -399,7 +400,7 @@ Deploy the raw source. There is intentionally no build script.
 
 export function createHappyPathTemplate(): InitScaffoldFile[] {
   return [
-    { path: '.gitignore', content: 'node_modules\ndist\nbuild\n.env\n# Generated from db/schema.ts by somewhere typecheck, dev and deploy.\n__somewhere_data.d.ts\n__somewhere_files.d.ts\n' },
+    { path: '.gitignore', content: buildScaffoldGitignore() },
     { path: 'AGENTS.md', content: INIT_AGENTS_MD },
     { path: 'CLAUDE.md', content: INIT_CLAUDE_MD },
     { path: 'README.md', content: README },

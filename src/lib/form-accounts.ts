@@ -26,7 +26,65 @@ import { CliApiError } from './client.js';
 import { ensurePrivateDir, writePrivateFile } from './test-identities.js';
 
 /** The part of a test control the sweep needs (lib/test-control.ts). */
-export interface SweepControl { environment: 'production' | 'preview'; projectId: string; target: { previewSessionId?: string }; journalDir(root: string): string; deleteSignup(id: string): Promise<string | null> }
+export interface SweepControl { environment: 'production' | 'preview'; projectId: string; target: { previewSessionId?: string }; journalDir(root: string): string; deleteSignups(ids: string[]): Promise<SignupDeletion> }
+
+/**
+ * What one cleanup did with each listed id (DESIGN.md slice 3a follow-ups, part B). The runner
+ * deletes all the sign-ups it created together, with the teams only they belong to.
+ * - `done`: gone (deleted now, or already gone); its record is finished.
+ * - `kept`: still there, with why; the record is kept and the next run retries.
+ * - `dropped`: can never be deleted (a closed preview's accounts went with it); the record is dropped.
+ */
+export interface SignupDeletion {
+  done: string[];
+  kept: Map<string, string>;
+  dropped: Map<string, string>;
+  teamsDeleted: { id: string; name: string }[];
+}
+interface DeletionAnswer {
+  results: { id: string; outcome: 'deleted' | 'not_found' | 'kept' | 'refused'; code?: string; message?: string; groups?: { id: string; name: string }[] }[];
+  groups_deleted?: { id: string; name: string }[];
+}
+const named = (teams: { id: string; name: string }[]) => teams.map((team) => `"${team.name}" (${team.id})`).join(', ');
+
+/** Read the platform's per-id answer. */
+export function readDeletionAnswer(ids: string[], answer: DeletionAnswer): SignupDeletion {
+  const out: SignupDeletion = { done: [], kept: new Map(), dropped: new Map(), teamsDeleted: answer.groups_deleted ?? [] };
+  const byId = new Map(answer.results.map((result) => [result.id, result]));
+  for (const id of ids) {
+    const result = byId.get(id);
+    if (!result) out.kept.set(id, 'the platform did not answer for this account');
+    else if (result.outcome === 'deleted' || result.outcome === 'not_found') out.done.push(id);
+    else if (result.outcome === 'kept') {
+      const teams = result.groups ?? [];
+      out.kept.set(id, `it is the only owner of ${teams.length === 1 ? 'the team' : 'the teams'} ${named(teams)}, which ${teams.length === 1 ? 'has' : 'have'} members outside this run's sign-ups; the team and the account were left alone`);
+    } else out.kept.set(id, `${result.code ?? 'REFUSED'}: ${(result.message ?? '').slice(0, 200)}`);
+  }
+  return out;
+}
+
+/** Every id kept (or, with `drop`, dropped) for one reason: the call itself failed. */
+export function failedDeletion(ids: string[], why: string, drop = false): SignupDeletion {
+  return { done: [], kept: drop ? new Map() : new Map(ids.map((id) => [id, why])), dropped: drop ? new Map(ids.map((id) => [id, why])) : new Map(), teamsDeleted: [] };
+}
+
+/** Merge the answers of several calls (the platform takes 50 ids at a time). */
+export async function inBatches(ids: string[], call: (batch: string[]) => Promise<SignupDeletion>): Promise<SignupDeletion> {
+  const out: SignupDeletion = { done: [], kept: new Map(), dropped: new Map(), teamsDeleted: [] };
+  for (let i = 0; i < ids.length; i += 50) {
+    const part = await call(ids.slice(i, i + 50));
+    out.done.push(...part.done);
+    for (const [id, why] of part.kept) out.kept.set(id, why);
+    for (const [id, why] of part.dropped) out.dropped.set(id, why);
+    out.teamsDeleted.push(...part.teamsDeleted);
+  }
+  return out;
+}
+
+/** What a failed call answered, for the record's line. */
+export function describeCallError(error: unknown): string {
+  return error instanceof CliApiError ? `HTTP ${error.statusCode ?? '?'} ${error.code}: ${error.message.slice(0, 200)}` : String(error).slice(0, 200);
+}
 
 export const RESERVED_DOMAINS_TEXT = 'example.com, example.org, example.net, or a name ending in .example or .test (for example staff.example)';
 export const DEFAULT_SIGNUP_DOMAIN = 'example.com';
@@ -99,16 +157,16 @@ export function recordId(path: string, id: string): void {
 
 export function forgetRecord(path: string): void { rmSync(path, { force: true }); }
 
-/** Delete one account this run created, by exact id, with the developer delete. A 404 means it
- *  is already gone. Returns null when deleted, or what the platform answered when it was not. */
-export async function deleteAccount(client: ApiClient, projectId: string, id: string): Promise<string | null> {
-  try {
-    await client.call('DELETE', `/auth/users/${encodeURIComponent(id)}`, undefined, { project_id: projectId });
-    return null;
-  } catch (error) {
-    if (error instanceof CliApiError && error.statusCode === 404) return null;
-    return error instanceof CliApiError ? `HTTP ${error.statusCode ?? '?'} ${error.code}: ${error.message.slice(0, 200)}` : String(error).slice(0, 200);
-  }
+/** Delete the accounts this run created together, by exact id, with the developer delete, and the
+ *  teams only they belong to. An id that is already gone counts as done. */
+export function deleteAccounts(client: ApiClient, projectId: string, ids: string[]): Promise<SignupDeletion> {
+  return inBatches(ids, async (batch) => {
+    try {
+      return readDeletionAnswer(batch, await client.call<DeletionAnswer>('POST', '/auth/users/delete', { ids: batch, delete_groups_only_they_belong_to: true }, { project_id: projectId }));
+    } catch (error) {
+      return failedDeletion(batch, describeCallError(error));
+    }
+  });
 }
 
 function alive(pid: number): boolean {
@@ -116,16 +174,17 @@ function alive(pid: number): boolean {
   try { process.kill(pid, 0); return true; } catch (error) { return (error as NodeJS.ErrnoException).code === 'EPERM'; }
 }
 
-export interface SweepResult { deleted: string[]; failed: string[]; unknownId: string[] }
+export interface SweepResult { deleted: string[]; failed: string[]; unknownId: string[]; dropped: string[]; teamsDeleted: string[] }
 
 /** Finish the records of runs that ended (this one, or one that was interrupted): delete each
  *  recorded id, and report addresses whose id was never learned (they are never deleted by
  *  address). Records of another `somewhere test` still running are left to it. */
 export async function sweepAccounts(control: SweepControl, root: string): Promise<SweepResult> {
-  const result: SweepResult = { deleted: [], failed: [], unknownId: [] };
+  const result: SweepResult = { deleted: [], failed: [], unknownId: [], dropped: [], teamsDeleted: [] };
   const projectId = control.projectId;
   const dir = control.journalDir(root);
   if (!existsSync(dir)) return result;
+  const pending: { id: string; email: string; path: string }[] = [];
   for (const name of readdirSync(dir).filter((entry) => /^\d+-[0-9a-f]{8}\.json$/.test(entry))) {
     const path = join(dir, name);
     let record: AccountRecord;
@@ -137,17 +196,26 @@ export async function sweepAccounts(control: SweepControl, root: string): Promis
     if (control.environment === 'preview' && record.preview_session_id !== control.target.previewSessionId) continue;
     if (record.run !== process.env.SW_TEST_RUN && alive(record.pid)) continue;
     if (record.id === null) { result.unknownId.push(record.email); forgetRecord(path); continue; }
-    const refused = await control.deleteSignup(record.id);
-    if (refused === null) { result.deleted.push(record.id); forgetRecord(path); }
-    else result.failed.push(`${record.email} (${refused})`);
+    pending.push({ id: record.id, email: record.email, path });
   }
+  // All the finished runs' accounts in one cleanup, so a team only they belong to goes with them.
+  if (!pending.length) return result;
+  const deletion = await control.deleteSignups([...new Set(pending.map((p) => p.id))]);
+  for (const entry of pending) {
+    if (deletion.done.includes(entry.id)) { result.deleted.push(entry.id); forgetRecord(entry.path); }
+    else if (deletion.dropped.has(entry.id)) { result.dropped.push(`${entry.email} (${deletion.dropped.get(entry.id)})`); forgetRecord(entry.path); }
+    else result.failed.push(`${entry.email} (${deletion.kept.get(entry.id) ?? 'not deleted'})`);
+  }
+  result.teamsDeleted.push(...deletion.teamsDeleted.map((team) => `"${team.name}" (${team.id})`));
   return result;
 }
 
 export function describeSweep(result: SweepResult, when: string): string[] {
   const lines: string[] = [];
   if (result.deleted.length) lines.push(`${when}: deleted ${result.deleted.length} leftover form sign-up account(s) by their recorded ids.`);
+  if (result.teamsDeleted.length) lines.push(`${when}: deleted ${result.teamsDeleted.length} team(s) that only those sign-ups belonged to: ${result.teamsDeleted.join(', ')}.`);
   if (result.failed.length) lines.push(`${when}: could not delete ${result.failed.length} form sign-up account(s): ${result.failed.join(', ')}; the record is kept and the next run retries.`);
+  if (result.dropped.length) lines.push(`${when}: dropped the cleanup record of ${result.dropped.length} form sign-up account(s) that can never be deleted: ${result.dropped.join(', ')}.`);
   if (result.unknownId.length) lines.push(`${when}: a sign-up was submitted but its account id was never returned, so it was not deleted (accounts are never deleted by address): ${result.unknownId.join(', ')}. If it exists, delete it from the project's users list.`);
   return lines;
 }

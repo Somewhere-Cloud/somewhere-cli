@@ -87,7 +87,9 @@ export default class TestReporter implements Reporter {
     const subset = process.env.SW_TEST_SUBSET === 'true';
     const flags = process.env.SW_TEST_RERUN_FLAGS ?? '';
     const failures = this.entries.filter(entry => entry.outcome === 'unexpected');
-    const rerun = failures.length ? `somewhere test --failed${flags}` : null;
+    // No confirmed version (saved again, closed, release moved): everything runs again, never --failed.
+    const versionLost = Boolean(startRelease) && !release;
+    const rerun = versionLost ? `somewhere test${preview ? ' --preview' : ''}` : failures.length ? `somewhere test --failed${flags}` : null;
     const report = {
       passed, failed, skipped, expectedFailures, setupDiagnostics: this.setupDiagnostics, notRun: Math.max(0, this.total - this.entries.length), setupErrors: this.errors, target: process.env.SW_TEST_ORIGIN,
       environment: preview ? 'preview' : 'production', ...(preview ? { preview_session_id: preview.previewSessionId } : {}),
@@ -109,7 +111,14 @@ export default class TestReporter implements Reporter {
           const at = /^([^\s:]+\.ts:\d+): /.exec(entry.errors[0] ?? '')?.[1];
           console.log(`  ${at ?? `${entry.file}:${entry.line}`} ${entry.title}${at && at !== `${entry.file}:${entry.line}` ? ` (test at line ${entry.line})` : ''}\n    ${firstLine(entry.errors[0] ?? '') || 'see the error above'}`);
         }
-        console.log(`Rerun the failed tests on the same ${preview ? 'preview version' : 'release'}: ${rerun}`);
+        if (!versionLost) console.log(`Rerun the failed tests on the same ${preview ? 'preview version' : 'release'}: ${rerun}`);
+      }
+      // After the version changed there is no "same version" to rerun on: say how to get one, and run
+      // everything again (DESIGN.md slice 3a follow-ups, part C). Also when every test passed.
+      if (versionLost) {
+        console.log(preview
+          ? 'The preview changed or closed during this run. Save it again with `somewhere preview` (or open a new one if it closed), then run all the tests again: somewhere test --preview'
+          : 'The live release changed during this run. Run all the tests again: somewhere test');
       }
       if (skipped) console.log(`${skipped} skipped: a skipped test proves nothing until it runs.`);
     }

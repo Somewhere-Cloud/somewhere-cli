@@ -25,7 +25,28 @@ const CREDENTIAL = `swpt.${PROJECT}.${DRAFT}.${'s'.repeat(10)}${randomUUID().rep
 const COOKIE = 'sw_draft_cap'; // the platform names it; on an http test origin it cannot be __Host-
 
 // ── Shared state: the preview's store, mail and sessions; every secret seen ─────────────────────
-const state = { candidate: CANDIDATE, dead: false, requests: [], production: [], users: new Map(), sessions: new Map(), mail: [], notes: new Map(), secrets: new Set([CREDENTIAL]) };
+const state = { candidate: CANDIDATE, dead: false, requests: [], production: [], users: new Map(), sessions: new Map(), mail: [], notes: new Map(), teams: new Map(), secrets: new Set([CREDENTIAL]) };
+// Someone in the preview who is not one of a run's sign-ups (a person the app's own users invited).
+state.users.set('pvu_outsider', { id: 'pvu_outsider', email: 'outsider@e5.test', password: 'x', test: false, verified: true });
+/** The platform's rule (DESIGN.md slice 3a follow-ups, part B): delete the listed accounts together, with the
+ *  teams whose every member is listed; the only owner of a team with a member outside the list is kept. */
+function deleteTogether(ids, { option, kindOf }) {
+  const results = new Map(); const ok = [];
+  for (const id of new Set(ids)) { const kind = kindOf(id); if (kind === 'ok') ok.push(id); else results.set(id, kind); }
+  const listed = new Set(ok); const groupsDeleted = [];
+  if (option) for (const [id, team] of [...state.teams]) {
+    if ([...team.members.keys()].every((m) => listed.has(m)) && [...team.members].some(([m, r]) => r === 'owner' && listed.has(m))) { state.teams.delete(id); groupsDeleted.push({ id, name: team.name }); }
+  }
+  const stranded = [...state.teams].filter(([, team]) => [...team.members].some(([m, r]) => r === 'owner' && listed.has(m))
+    && ![...team.members].some(([m, r]) => r === 'owner' && !listed.has(m)));
+  for (const id of ok) {
+    const own = stranded.filter(([, team]) => team.members.get(id) === 'owner');
+    if (own.length) { results.set(id, { id, outcome: 'kept', groups: own.map(([gid, team]) => ({ id: gid, name: team.name })) }); continue; }
+    for (const team of state.teams.values()) team.members.delete(id);
+    state.users.delete(id); results.set(id, { id, outcome: 'deleted' });
+  }
+  return { results: [...new Set(ids)].map((id) => results.get(id)), groups_deleted: groupsDeleted };
+}
 const json = (res, status, body, headers = {}) => { res.writeHead(status, { 'content-type': 'application/json', ...headers }); res.end(JSON.stringify(body)); };
 const readBody = (req) => new Promise((resolve) => { let raw = ''; req.on('data', (c) => (raw += c)); req.on('end', () => resolve(raw)); });
 let appOrigin = '';
@@ -43,9 +64,10 @@ const platform = createServer(async (req, res) => {
       const address = url.searchParams.get('address');
       return json(res, 200, { ok: true, data: { messages: [...state.mail].reverse().filter((m) => m.to === address) } });
     }
-    if (req.method === 'DELETE' && url.pathname.startsWith('/v1/auth/users/')) {
-      const id = decodeURIComponent(url.pathname.split('/')[4]);
-      return state.users.delete(id) ? json(res, 200, { ok: true, data: { deleted: true } }) : json(res, 404, { ok: false, error: 'AUTH_INVALID_CREDS', message: 'User not found in this project.' });
+    if (req.method === 'POST' && url.pathname === '/v1/auth/users/delete') {
+      const body = JSON.parse(raw);
+      state.requests.push(`POST /v1/auth/users/delete ${JSON.stringify(body)}`);
+      return json(res, 200, { ok: true, data: deleteTogether(body.ids, { option: body.delete_groups_only_they_belong_to === true, kindOf: (id) => state.users.has(id) ? 'ok' : { id, outcome: 'not_found' } }) });
     }
     return json(res, 404, { ok: false, error: 'NOT_FOUND', message: url.pathname });
   }
@@ -79,6 +101,14 @@ const platform = createServer(async (req, res) => {
     if (!u) return json(res, 404, { ok: false, error: 'USER_NOT_FOUND', message: 'no' });
     if (!u.test) return json(res, 409, { ok: false, error: 'NOT_A_TEST_USER', message: 'no' });
     state.users.delete(id); return json(res, 200, { ok: true, data: { deleted: true } });
+  }
+  if (req.method === 'POST' && path === '/signups/delete') {
+    return json(res, 200, { ok: true, data: { preview_session_id: DRAFT, ...deleteTogether(body.ids, { option: body.delete_groups_only_they_belong_to === true, kindOf: (id) => {
+      const u = state.users.get(id);
+      if (!id.startsWith('pvu_')) return { id, outcome: 'refused', code: 'VALIDATION_ERROR', message: 'exact id' };
+      if (!u) return { id, outcome: 'not_found' };
+      return u.test ? { id, outcome: 'refused', code: 'NOT_A_SIGNUP', message: 'managed test user' } : 'ok';
+    } }) } });
   }
   if (req.method === 'DELETE' && path.startsWith('/signups/')) {
     const id = decodeURIComponent(path.split('/')[2]); const u = state.users.get(id);
@@ -169,6 +199,8 @@ const app = createServer(async (req, res) => {
     case 'GET /api/auth/verify-email': return json(res, me ? 200 : 401, { email_verified: Boolean(me?.verified) });
     case 'GET /api/verified-only': return me?.verified ? json(res, 200, { ok: true }) : json(res, 403, { error: 'EMAIL_NOT_VERIFIED' });
     case 'POST /api/notes': { if (!me) return json(res, 401, { error: 'AUTH_REQUIRED' }); const id = randomUUID(); state.notes.set(id, { owner: me.id, text: body.text }); return json(res, 200, { id }); }
+    case 'POST /api/teams': { if (!me) return json(res, 401, { error: 'AUTH_REQUIRED' }); const id = 'grp_' + randomUUID().slice(0, 8); state.teams.set(id, { name: body.name, members: new Map([[me.id, 'owner']]) }); return json(res, 201, { team_id: id }); }
+    case 'POST /api/teams/add': { const team = state.teams.get(body.team); if (!me || team?.members.get(me.id) !== 'owner') return json(res, 403, { error: 'OWNER_ONLY' }); team.members.set(body.user, 'member'); return json(res, 200, { added: true }); }
     case 'POST /__test/save': state.candidate = 'rel_candidate_E002'; return json(res, 200, { saved: true });
     case 'POST /__test/close': state.dead = true; return json(res, 200, { closed: true });
   }
@@ -255,6 +287,23 @@ try {
   await page.request.post('/__test/save');
 } finally { await browser.close(); await app.finish(); }
 `;
+// Part B: a team only this test's two sign-ups belong to, and a team one sign-up shares with someone else.
+const TEAMS = `import { test, expect } from '@somewhere-cloud/cli/testing';
+test('a team only this test\\'s sign-ups belong to', async ({ page, signUp, newPage }) => {
+  await signUp(page);
+  const benPage = await newPage();
+  const ben = await signUp(benPage);
+  const { team_id } = await (await page.request.post('/api/teams', { data: { name: 'Proof team' } })).json();
+  expect((await page.request.post('/api/teams/add', { data: { team: team_id, user: ben.id } })).status()).toBe(200);
+});
+`;
+const SHARED = `import { test, expect } from '@somewhere-cloud/cli/testing';
+test('a team shared with someone outside the run', async ({ page, signUp }) => {
+  await signUp(page);
+  const { team_id } = await (await page.request.post('/api/teams', { data: { name: 'Shared' } })).json();
+  expect((await page.request.post('/api/teams/add', { data: { team: team_id, user: 'pvu_outsider' } })).status()).toBe(200);
+});
+`;
 const CLOSE = `import { test, expect } from '@somewhere-cloud/cli/testing';
 test('the preview is closed mid-run', async ({ page, signUp }) => {
   await signUp(page);
@@ -298,7 +347,7 @@ function makeProject() {
   symlinkSync(join(repoRoot, 'node_modules', 'playwright-core'), join(dir, 'node_modules', 'playwright-core'));
   symlinkSync(repoRoot, join(dir, 'node_modules', '@somewhere-cloud', 'cli'));
   mkdirSync(join(dir, 'tests'));
-  for (const [name, content] of [['preview.spec.ts', SPEC], ['fails.spec.ts', FAILS], ['save.spec.ts', SAVE], ['save-unnoticed.spec.ts', SAVE_UNNOTICED], ['close.spec.ts', CLOSE], ['check.mjs', SCRIPT], ['save-unnoticed.mjs', SCRIPT_SAVE_UNNOTICED]]) writeFileSync(join(dir, 'tests', name), content);
+  for (const [name, content] of [['preview.spec.ts', SPEC], ['fails.spec.ts', FAILS], ['save.spec.ts', SAVE], ['save-unnoticed.spec.ts', SAVE_UNNOTICED], ['close.spec.ts', CLOSE], ['teams.spec.ts', TEAMS], ['shared.spec.ts', SHARED], ['check.mjs', SCRIPT], ['save-unnoticed.mjs', SCRIPT_SAVE_UNNOTICED]]) writeFileSync(join(dir, 'tests', name), content);
   // What `somewhere preview` records after a save: the folder's published files exactly as sent.
   writeFileSync(join(dir, '.somewhere', 'preview.json'), JSON.stringify({ project_id: PROJECT, preview_session_id: DRAFT, preview_id: CANDIDATE, files: hashFiles(dir, collectFiles(dir).published), saved_at: new Date().toISOString() }));
   return dir;
@@ -464,9 +513,46 @@ test('a preview closed mid-run fails the run as a preview run; cleanup is report
   assert.equal(r.status, 1, r.all);
   assert.match(r.all, /preview is closed, promoted or expired/);
   assert.match(r.all, /nothing ran against production/);
+  assert.match(r.all, /Dropped the cleanup record of sw-[0-9a-f]+@example\.com: the preview is closed, promoted or expired, and its accounts went with it/);
+  assert.doesNotMatch(r.all, /the next (somewhere test|run) retries/, 'a record that can never succeed is not retried for ever');
+  assert.deepEqual(files(join(root, '.somewhere', 'tests', 'preview-accounts')).filter((f) => f.endsWith('.json')), [], 'the closed preview\'s records are gone');
+  // Part C: no "same preview version" to rerun on.
+  assert.doesNotMatch(r.all, /on the same preview version/);
+  assert.match(r.all, /The preview changed or closed during this run\. Save it again with `somewhere preview` \(or open a new one if it closed\), then run all the tests again: somewhere test --preview/);
   assert.deepEqual(state.production, [], 'no production delete, sweep or lookup as recovery');
   assert.ok(existsSync(prodRecordPath));
   assert.deepEqual(leaked(r.all), []);
+});
+
+test('cleanup deletes the sign-ups of a test together with a team only they belong to (one call, preview tool only)', { timeout: 300_000 }, async () => {
+  reset();
+  const usersBefore = new Set(state.users.keys());
+  const r = await somewhere(['test', '--preview', 'tests/teams.spec.ts', '--workers', '1']);
+  assert.equal(r.status, 0, r.all);
+  assert.match(r.all, /Deleted 1 team\(s\) that only this test's sign-ups belonged to: "Proof team" \(grp_[0-9a-f]+\)/);
+  assert.equal([...state.teams.values()].filter((t) => t.name === 'Proof team').length, 0);
+  assert.deepEqual([...state.users.keys()].filter((id) => !usersBefore.has(id)), [], 'both sign-ups deleted');
+  assert.equal(state.requests.filter((l) => l === 'POST /v1/preview-tools/signups/delete').length, 1, 'one call for the test\'s two accounts');
+  assert.deepEqual(state.production, []);
+});
+
+test('a team with a member outside the run is left alone: its owner is kept, the team named, the record kept', { timeout: 300_000 }, async () => {
+  reset();
+  const r = await somewhere(['test', '--preview', 'tests/shared.spec.ts', '--workers', '1']);
+  assert.equal(r.status, 1, r.all);
+  assert.match(r.all, /it is the only owner of the team "Shared" \(grp_[0-9a-f]+\), which has members outside this run's sign-ups; the team and the account were left alone/);
+  const [teamId, team] = [...state.teams].find(([, t]) => t.name === 'Shared');
+  assert.ok(team.members.has('pvu_outsider') && state.users.has('pvu_outsider'), 'the outsider and the team stay');
+  const kept = files(join(root, '.somewhere', 'tests', 'preview-accounts')).filter((f) => f.endsWith('.json'));
+  assert.equal(kept.length, 1, 'the record is kept for a later run');
+  // Hand the team over as the app would, then the next run finishes the record.
+  const owner = [...team.members].find(([, role]) => role === 'owner')[0];
+  team.members.set('pvu_outsider', 'owner'); team.members.delete(owner);
+  const again = await somewhere(['test', '--preview', 'tests/teams.spec.ts', '--workers', '1']);
+  assert.equal(again.status, 0, again.all);
+  assert.match(again.all, /Before this run: deleted 1 leftover form sign-up account\(s\) by their recorded ids/);
+  assert.ok(state.teams.has(teamId), 'the shared team stays with its new owner');
+  assert.deepEqual(state.production, []);
 });
 
 test('no open preview, or no credential for it on this machine: refused before any request, never minting with your sign-in', async () => {

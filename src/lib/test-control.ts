@@ -19,7 +19,7 @@ import { loadPreviewCredential, previewToolClient, isDeadPreviewCredential } fro
 import { loadPreviewRecord } from './preview-record.js';
 import { liveReleaseId, loadTestTarget, type TestTarget } from './test-target.js';
 import { messagesAfter, type InboxMessage } from './test-identities.js';
-import { deleteAccount, accountsDir } from './form-accounts.js';
+import { deleteAccounts, accountsDir, describeCallError, failedDeletion, inBatches, readDeletionAnswer, type SignupDeletion } from './form-accounts.js';
 import { rememberSecrets } from './test-diagnostics.js';
 
 export interface ManagedUser { id: string; email: string; password: string }
@@ -29,8 +29,9 @@ export interface TestControl {
   readonly target: TestTarget;
   /** Captured mail to exactly `address`, newest first; `wait` long-polls up to `ms` for mail after `since`. */
   inbox(address: string, wait?: { since: number; ms?: number }): Promise<InboxMessage[]>;
-  /** Delete one account this run signed up through the app's form, by exact id: null once it is gone. */
-  deleteSignup(id: string): Promise<string | null>;
+  /** Delete the accounts this run signed up through the app's form, together and by exact id, with
+   *  the teams only they belong to (form-accounts.ts SignupDeletion). */
+  deleteSignups(ids: string[]): Promise<SignupDeletion>;
   /** Where sign-up attempts are recorded for exact-id cleanup (separate per environment and preview). */
   journalDir(root: string): string;
   /** Make a browser context able to reach the target (preview: the run's pinned session). */
@@ -55,7 +56,7 @@ export function productionControl(client: ApiClient, target: TestTarget): TestCo
         { project_id: projectId, address, limit: 20, ...(wait ? { wait_ms: wait.ms ?? 10_000, since: wait.since } : {}) });
       return messagesAfter(body.messages, address, 0);
     },
-    deleteSignup: (id) => deleteAccount(client, projectId, id),
+    deleteSignups: (ids) => deleteAccounts(client, projectId, ids),
     journalDir: (root) => accountsDir(root, projectId),
     async prepareContext() {},
     currentRelease: () => liveReleaseId(client, projectId),
@@ -150,13 +151,17 @@ export function previewControl(tool: ToolClient, target: TestTarget, _root?: str
         await new Promise((resolve) => setTimeout(resolve, 500));
       }
     },
-    async deleteSignup(id) {
-      try { await tool.call('DELETE', `/preview-tools/signups/${encodeURIComponent(id)}`); return null; }
-      catch (error) {
-        if (error instanceof CliApiError && error.statusCode === 404) return null;
-        if (isDeadPreviewCredential(error)) return 'the preview is closed, promoted or expired (a closed preview\'s accounts go with it), or its credential was revoked';
-        return error instanceof CliApiError ? `HTTP ${error.statusCode ?? '?'} ${error.code}: ${error.message.slice(0, 200)}` : String(error).slice(0, 200);
-      }
+    deleteSignups(ids) {
+      return inBatches(ids, async (batch) => {
+        try {
+          return readDeletionAnswer(batch, await tool.call('POST', '/preview-tools/signups/delete', { ids: batch, delete_groups_only_they_belong_to: true }));
+        } catch (error) {
+          // A closed, promoted or expired preview took its accounts with it: nothing is left to delete,
+          // and no later run can reach that preview, so the record is dropped, not retried for ever.
+          if (isDeadPreviewCredential(error)) return failedDeletion(batch, 'the preview is closed, promoted or expired, and its accounts went with it', true);
+          return failedDeletion(batch, describeCallError(error));
+        }
+      });
     },
     journalDir: (root) => previewAccountsDir(root, projectId, draftId),
     async prepareContext(context) {

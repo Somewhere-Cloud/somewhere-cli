@@ -486,20 +486,29 @@ class FormRun implements FormHost {
         diagnostics(this.info).screenshot = path;
       } catch { failures.push('Failure screenshot capture failed'); }
     }
-    // Each account is deleted by its exact id; the deletions run at the same time.
-    await Promise.all(this.attempts.map(async attempt => {
-      if (attempt.id) {
-        const { control } = await this.control();
-        const id = attempt.id;
-        const refused = await timed(this.info, 'sign-up account deletion', () => control.deleteSignup(id));
-        if (refused === null) forgetRecord(attempt.record);
-        else failures.push(`Could not delete the form sign-up account ${attempt.email} (${refused}); its record is kept and the next somewhere test retries`);
-      } else if (attempt.submitted && !attempt.refused) {
+    // This test's accounts are deleted together by their exact ids, with the teams only they belong to.
+    const withIds = this.attempts.filter(attempt => attempt.id);
+    if (withIds.length) {
+      const { control } = await this.control();
+      const deletion = await timed(this.info, 'sign-up account deletion', () => control.deleteSignups([...new Set(withIds.map(attempt => attempt.id!))]));
+      for (const attempt of withIds) {
+        const id = attempt.id!;
+        if (deletion.done.includes(id)) forgetRecord(attempt.record);
+        else if (deletion.dropped.has(id)) {
+          // Not a cleanup failure: there is nothing left to delete (the run fails for the closed preview itself).
+          forgetRecord(attempt.record);
+          process.stderr.write(`Dropped the cleanup record of ${attempt.email}: ${deletion.dropped.get(id)}.\n`);
+        } else failures.push(`Could not delete the form sign-up account ${attempt.email} (${deletion.kept.get(id) ?? 'not deleted'}); its record is kept and the next somewhere test retries`);
+      }
+      if (deletion.teamsDeleted.length) process.stderr.write(`Deleted ${deletion.teamsDeleted.length} team(s) that only this test's sign-ups belonged to: ${deletion.teamsDeleted.map(team => `"${team.name}" (${team.id})`).join(', ')}.\n`);
+    }
+    for (const attempt of this.attempts.filter(attempt => !attempt.id)) {
+      if (attempt.submitted && !attempt.refused) {
         // Never delete by address: the account may exist, but this run never learned its id.
         failures.push(`A sign-up for ${attempt.email} was submitted but no account id came back, so nothing was deleted; if it exists, delete it from the project's users list`);
-        forgetRecord(attempt.record);
-      } else forgetRecord(attempt.record);
-    }));
+      }
+      forgetRecord(attempt.record);
+    }
     if (failures.length) throw new Error(failures.join('; '));
   }
 }

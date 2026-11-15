@@ -644,12 +644,21 @@ interface FieldChrome {
   label: ReactNode;
   hint?: ReactNode;
   error?: string | null;
-  /** Shows "optional" next to the label. Required is the default and needs no mark. */
+  /** Shows "optional" next to the label. Required is the default and needs no mark;
+   *  your onSubmit checks it and shows the error (the browser's check is off). */
   optional?: boolean;
 }
 
 function describedBy(id: string, hint: ReactNode, error: string | null | undefined) {
   return [hint ? \`\${id}-hint\` : null, error ? \`\${id}-error\` : null].filter(Boolean).join(' ') || undefined;
+}
+
+/** Kit controls turn off the browser's own form checks (required, type="email",
+ *  pattern, min/max, minLength) on the form they sit in, so every submit reaches
+ *  your onSubmit and your app's own error message is what people and tests see.
+ *  To keep the browser's checks on one form, give it data-browser-checks. */
+function appValidated(control: HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement | null) {
+  if (control?.form && !control.form.hasAttribute('data-browser-checks')) control.form.noValidate = true;
 }
 
 /** The label/hint/error frame. Prefer TextField, SelectField and
@@ -673,7 +682,7 @@ type TextFieldProps = FieldChrome & Omit<InputHTMLAttributes<HTMLInputElement>, 
 export function TextField({ id, label, hint, error, optional, className, ...input }: TextFieldProps) {
   return (
     <Field id={id} label={label} hint={hint} error={error} optional={optional}>
-      <input id={id} className={['control', className].filter(Boolean).join(' ')} aria-invalid={error ? true : undefined}
+      <input ref={appValidated} id={id} className={['control', className].filter(Boolean).join(' ')} aria-invalid={error ? true : undefined}
         aria-describedby={describedBy(id, hint, error)} required={!optional && input.required !== false} {...input} />
     </Field>
   );
@@ -690,7 +699,7 @@ type SelectFieldProps = FieldChrome & Omit<SelectHTMLAttributes<HTMLSelectElemen
 export function SelectField({ id, label, hint, error, optional, options, placeholder, className, ...select }: SelectFieldProps) {
   return (
     <Field id={id} label={label} hint={hint} error={error} optional={optional}>
-      <select id={id} className={['control', className].filter(Boolean).join(' ')} aria-invalid={error ? true : undefined}
+      <select ref={appValidated} id={id} className={['control', className].filter(Boolean).join(' ')} aria-invalid={error ? true : undefined}
         aria-describedby={describedBy(id, hint, error)} {...select}>
         {placeholder ? <option value="" disabled>{placeholder}</option> : null}
         {options.map((option) => <option key={option.value} value={option.value} disabled={option.disabled}>{option.label}</option>)}
@@ -704,7 +713,7 @@ type TextareaFieldProps = FieldChrome & Omit<TextareaHTMLAttributes<HTMLTextArea
 export function TextareaField({ id, label, hint, error, optional, className, ...textarea }: TextareaFieldProps) {
   return (
     <Field id={id} label={label} hint={hint} error={error} optional={optional}>
-      <textarea id={id} className={['control', className].filter(Boolean).join(' ')} aria-invalid={error ? true : undefined}
+      <textarea ref={appValidated} id={id} className={['control', className].filter(Boolean).join(' ')} aria-invalid={error ? true : undefined}
         aria-describedby={describedBy(id, hint, error)} required={!optional && textarea.required !== false} {...textarea} />
     </Field>
   );
@@ -714,7 +723,7 @@ export function TextareaField({ id, label, hint, error, optional, className, ...
 export function CheckboxField({ id, label, hint, className, ...input }: { id: string; label: ReactNode; hint?: ReactNode } & Omit<InputHTMLAttributes<HTMLInputElement>, 'id' | 'type'>) {
   return (
     <div className="field field--inline">
-      <input id={id} type="checkbox" className={className} aria-describedby={hint ? \`\${id}-hint\` : undefined} {...input} />
+      <input ref={appValidated} id={id} type="checkbox" className={className} aria-describedby={hint ? \`\${id}-hint\` : undefined} {...input} />
       <label className="field__label" htmlFor={id}><span>{label}</span></label>
       {hint ? <p id={\`\${id}-hint\`} className="field__hint" style={{ gridColumn: 2 }}>{hint}</p> : null}
     </div>
@@ -1138,12 +1147,21 @@ interface FieldChrome {
   label: ReactNode;
   hint?: ReactNode;
   error?: string | null;
-  /** Shows "optional" next to the label. Required is the default and needs no mark. */
+  /** Shows "optional" next to the label. Required is the default and needs no mark;
+   *  your onSubmit checks it and shows the error (the browser's check is off). */
   optional?: boolean;
 }
 
 function describedBy(id: string, hint: ReactNode, error: string | null | undefined) {
   return [hint ? \`\${id}-hint\` : null, error ? \`\${id}-error\` : null].filter(Boolean).join(' ') || undefined;
+}
+
+/** Kit controls turn off the browser's own form checks (required, type="email",
+ *  pattern, min/max, minLength) on the form they sit in, so every submit reaches
+ *  your onSubmit and your app's own error message is what people and tests see.
+ *  To keep the browser's checks on one form, give it data-browser-checks. */
+function appValidated(control: HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement | null) {
+  if (control?.form && !control.form.hasAttribute('data-browser-checks')) control.form.noValidate = true;
 }
 
 /** The label/hint/error frame. Prefer TextField, SelectField and
@@ -1164,7 +1182,7 @@ type TextFieldProps = FieldChrome & Omit<InputHTMLAttributes<HTMLInputElement>, 
 export function TextField({ id, label, hint, error, optional, className, ...input }: TextFieldProps) {
   return (
     <Field id={id} label={label} hint={hint} error={error} optional={optional}>
-      <input id={id} className={className} aria-invalid={error ? true : undefined}
+      <input ref={appValidated} id={id} className={className} aria-invalid={error ? true : undefined}
         aria-describedby={describedBy(id, hint, error)} required={!optional && input.required !== false} {...input} />
     </Field>
   );
@@ -1181,7 +1199,7 @@ type SelectFieldProps = FieldChrome & Omit<SelectHTMLAttributes<HTMLSelectElemen
 export function SelectField({ id, label, hint, error, optional, options, placeholder, className, ...select }: SelectFieldProps) {
   return (
     <Field id={id} label={label} hint={hint} error={error} optional={optional}>
-      <select id={id} className={className} aria-invalid={error ? true : undefined}
+      <select ref={appValidated} id={id} className={className} aria-invalid={error ? true : undefined}
         aria-describedby={describedBy(id, hint, error)} {...select}>
         {placeholder ? <option value="" disabled>{placeholder}</option> : null}
         {options.map((option) => <option key={option.value} value={option.value} disabled={option.disabled}>{option.label}</option>)}
@@ -1195,7 +1213,7 @@ type TextareaFieldProps = FieldChrome & Omit<TextareaHTMLAttributes<HTMLTextArea
 export function TextareaField({ id, label, hint, error, optional, className, ...textarea }: TextareaFieldProps) {
   return (
     <Field id={id} label={label} hint={hint} error={error} optional={optional}>
-      <textarea id={id} className={className} aria-invalid={error ? true : undefined}
+      <textarea ref={appValidated} id={id} className={className} aria-invalid={error ? true : undefined}
         aria-describedby={describedBy(id, hint, error)} required={!optional && textarea.required !== false} {...textarea} />
     </Field>
   );
@@ -1205,7 +1223,7 @@ export function TextareaField({ id, label, hint, error, optional, className, ...
 export function CheckboxField({ id, label, hint, className, ...input }: { id: string; label: ReactNode; hint?: ReactNode } & Omit<InputHTMLAttributes<HTMLInputElement>, 'id' | 'type'>) {
   return (
     <p>
-      <input id={id} type="checkbox" className={className} aria-describedby={hint ? \`\${id}-hint\` : undefined} {...input} />{' '}
+      <input ref={appValidated} id={id} type="checkbox" className={className} aria-describedby={hint ? \`\${id}-hint\` : undefined} {...input} />{' '}
       <label htmlFor={id}>{label}</label>
       {hint ? <><br /><small id={\`\${id}-hint\`}>{hint}</small></> : null}
     </p>

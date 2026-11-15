@@ -54,3 +54,38 @@ test('a script that hands over its checks gets one line per check, one summary l
     'Full result: .somewhere/app-check.json',
   ]);
 });
+
+test('a crashed script names its real error, never a stack-frame marker; a browser crash says so', async () => {
+  const { failureReason } = await import('../dist/lib/test-scripts.js');
+  const node = [
+    'Warning: Detected unsettled top-level await at file:///p/tests/app-check.mjs:16',
+    'const [ana, ben] = await Promise.all([person(), person()]);',
+    '                   ^',
+    '',
+    'file:///p/node_modules/@somewhere-cloud/cli/dist/lib/form-auth.js:122',
+    '        throw new StepError(`${name} failed`);',
+    '              ^',
+    '',
+    'StepError: signUp: the browser stopped (it crashed or was closed) before this step finished, so this is not an app error.',
+    '    at step (file:///p/form-auth.js:122:15)',
+    '',
+    'Node.js v26.13.0',
+  ].join('\n');
+  assert.equal(failureReason(node), 'StepError: signUp: the browser stopped (it crashed or was closed) before this step finished, so this is not an app error.');
+  assert.match(failureReason('[err] icudtl.dat not found in bundle\n[err] GPU process isn\'t usable. Goodbye.\n          ^\n'), /^the browser could not read its own files/);
+});
+
+test('a browser that cannot read its own files is named, with what to do, and its log stays off the screen', async () => {
+  const root = project({ 'tests/app-check.mjs': `
+    if (!/pw:browser/.test(process.env.DEBUG ?? '')) { console.log('FAIL the runner did not turn the browser log on'); process.exit(1); }
+    console.error('2026-11-15T21:52:19.297Z pw:browser [pid=1][err] ERROR:icu_util.cc(188)] icudtl.dat not found in bundle');
+    console.error('2026-11-15T21:52:19.476Z pw:browser [pid=1][err] FATAL:gpu_data_manager_impl_private.cc(385)] GPU process isn\\'t usable. Goodbye.');
+    console.error('StepError: signUp: the browser stopped (it crashed or was closed) before this step finished, so this is not an app error.');
+    process.exit(1);
+  ` });
+  const results = await runScripts(root, listScripts(root, []), [], { ...process.env, DEBUG: '' });
+  assert.equal(results[0].browserCrashed, true);
+  const lines = describeScriptResults(results);
+  assert.ok(lines.includes('Next: give the browser access as the FAIL line says, then run npx @somewhere-cloud/cli test again.'), lines.join('\n'));
+  assert.match(lines[0], /^FAIL tests\/app-check\.mjs: the browser could not read its own files .* On macOS this is the disk-access permission for the volume it is on: give the app that runs this command access to removable volumes .*, or start it as node node_modules\/@somewhere-cloud\/cli\/bin\/somewhere\.js test\.$/);
+});

@@ -120,12 +120,16 @@ jobs:
         env:
           EXPECTED_VERSION: ${{ steps.candidate.outputs.version }}
         run: |
-          actual=$(npm view "@somewhere-cloud/cli@$EXPECTED_VERSION" version --registry=https://registry.npmjs.org --fetch-retries=0 --fetch-timeout=15000) || {
-            echo "::error::publish reported success but npm does not have it"
-            exit 1
-          }
+          # The registry serves a new version some minutes after a successful publish (0.38.95 and 0.38.96:
+          # about 7 min), so read until it does, for at most 15 min, instead of failing on the first read.
+          actual=""
+          for attempt in $(seq 1 60); do
+            actual=$(npm view "@somewhere-cloud/cli@$EXPECTED_VERSION" version --registry=https://registry.npmjs.org --fetch-retries=0 --fetch-timeout=15000 2>/dev/null) || actual=""
+            if [ "$actual" = "$EXPECTED_VERSION" ]; then echo "npm serves $EXPECTED_VERSION after $attempt read(s)"; break; fi
+            sleep 15
+          done
           if [ "$actual" != "$EXPECTED_VERSION" ]; then
-            echo "::error::publish reported success but npm does not have it"
+            echo "::error::publish reported success but npm still does not serve $EXPECTED_VERSION after 15 minutes"
             exit 1
           fi
           latest=$(npm view @somewhere-cloud/cli dist-tags.latest --registry=https://registry.npmjs.org --fetch-retries=0 --fetch-timeout=15000)

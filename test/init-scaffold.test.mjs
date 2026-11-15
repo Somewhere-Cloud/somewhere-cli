@@ -251,6 +251,10 @@ test('default starter is the auth module: SDK client, packaged handler, hooks, r
   const script = readFileSync(join(dir, 'tests/app-check.mjs'), 'utf8');
   assert.match(script, /await app\.signUp\(page\)[\s\S]*await app\.signOut\(ana\.page\)[\s\S]*await app\.signIn\(ana\.page, ana\.account\)/, 'signs up through the real form');
   assert.doesNotMatch(script, /'notes'/, 'the default script must not refer to an absent table');
+  // The data call an agent would otherwise look up (and scrape the contract digest for) is on the page, as a comment.
+  assert.match(script, /^  \/\/   const \{ data: \[task\] \} = await app\.data\(ana\.page, \{ table: 'tasks', operation: 'list' \}\);$/m);
+  assert.match(script, /^  \/\/   await app\.expectRefused\(ben\.page, /m);
+  assert.doesNotMatch(script.replace(/^\s*\/\/.*$/gm, ''), /app\.data|'tasks'/, 'only as a comment: the default starter declares no table');
   // The hooks signUp/signIn/signOut find, by action: the submit names what it does.
   const authCard = readFileSync(join(dir, 'src/ui/AuthCard.tsx'), 'utf8');
   for (const hook of ['email', 'password', 'mode', 'error']) assert.match(authCard, new RegExp(`data-sw-auth="${hook}"`), hook);

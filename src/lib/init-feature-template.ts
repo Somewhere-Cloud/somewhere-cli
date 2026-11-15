@@ -129,19 +129,19 @@ export interface MfaContinuation {
   capture(reason: unknown): boolean;
 }
 
+/** One form, both actions: Sign in and Create account are both on the page. */
 export interface CredentialsForm {
   mfa: MfaContinuation;
-  mode: CredentialsMode;
   email: string;
   password: string;
   passwordMinLength: number;
-  pending: boolean;
+  /** The action under way, or null. */
+  pending: CredentialsMode | null;
   error: string | null;
-  canSubmit: boolean;
   setEmail(value: string): void;
   setPassword(value: string): void;
-  toggleMode(): void;
-  submit(): Promise<void>;
+  /** Runs the action with the fields as typed. A missing field or a short new password is the app's own error. */
+  submit(action: CredentialsMode): Promise<void>;
 }
 
 export interface SignOutAction {
@@ -328,50 +328,36 @@ export function useAuthState(): AuthState {
   }
 }
 
-export function useCredentialsForm(initialMode: CredentialsMode = 'sign-in'): CredentialsForm {
+export function useCredentialsForm(): CredentialsForm {
   const auth = useAuth();
-  const [mode, setMode] = useState<CredentialsMode>(initialMode);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [pending, setPending] = useState(false);
+  const [pending, setPending] = useState<CredentialsMode | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const mfa = useMfaContinuation();
-  const passwordReady = mode === 'sign-up' ? password.length >= PASSWORD_MIN_LENGTH : password.length > 0;
-  const canSubmit = !pending && email.trim() !== '' && passwordReady;
 
-  async function submit() {
-    if (!canSubmit) return;
-    setPending(true);
+  async function submit(action: CredentialsMode) {
+    if (pending) return;
+    if (!email.trim() || !password) { setError('Enter your email and password.'); return; }
+    if (action === 'sign-up' && password.length < PASSWORD_MIN_LENGTH) {
+      setError('Use at least ' + PASSWORD_MIN_LENGTH + ' characters for a new password.');
+      return;
+    }
+    setPending(action);
     setError(null);
     try {
       const credentials = { email: email.trim(), password };
-      await (mode === 'sign-in' ? auth.signIn(credentials) : auth.signUp(credentials));
+      await (action === 'sign-in' ? auth.signIn(credentials) : auth.signUp(credentials));
       // The provider now has the user; App replaces the sign-in page.
     } catch (reason: unknown) {
       if (!mfa.capture(reason)) setError(authErrorMessage(reason));
       setPassword('');
-      setPending(false);
+      setPending(null);
     }
   }
 
-  return {
-    mfa,
-    mode,
-    email,
-    password,
-    passwordMinLength: PASSWORD_MIN_LENGTH,
-    pending,
-    error,
-    canSubmit,
-    setEmail,
-    setPassword,
-    toggleMode() {
-      setMode(mode === 'sign-in' ? 'sign-up' : 'sign-in');
-      setError(null);
-    },
-    submit,
-  };
+  return { mfa, email, password, passwordMinLength: PASSWORD_MIN_LENGTH, pending, error, setEmail, setPassword, submit };
 }
 
 export function useSignOut(): SignOutAction {

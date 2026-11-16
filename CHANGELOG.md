@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.38.97
+
+- Failures name the page, --failed reruns whole scripts, the reference check shows, lint says where access is proven; verify and test are separate.
+- somewhere preview run-job runs a handler path once in the preview and waits for its result; cron run --preview runs a schedule's handler and payload there.
+- The test helper's calls in AGENTS.md, test ids on the auth controls, exact emails, init beside hidden files.
+- When the test browser cannot read its own files, the FAIL line says so and what to do, instead of "^".
+- somewhere test and the script helper name every check, print one summary line, no release ids or absolute paths; one command form everywhere; short deploy note.
+- The npm confirmation waits up to 15 minutes for the registry instead of failing on its first read.
+- somewhere typecheck checks db/schema.ts with the platform's current rules.
+
 ## 0.38.96
 
 - somewhere test runs every tests/*.mjs and *.cjs script when the project has no specs; AGENTS.md says "Run somewhere test".

@@ -54,7 +54,7 @@ function createConsoleDiagnostics() {
       const name = typeof record2.name === "string" ? sanitizeMessage(record2.name).slice(0, 80) : "Error";
       const message = typeof record2.message === "string" ? record2.message : typeof value === "string" ? value : "Unknown error";
       const status = typeof record2.status === "number" && Number.isInteger(record2.status) && record2.status >= 100 && record2.status <= 599 ? record2.status : 0;
-      const failure = /Network connection lost/i.test(message) ? "connection_lost" : /DEADLINE|timed? ?out/i.test(message) ? "deadline_exceeded" : /object.*reset|reset.*object/i.test(message) ? "object_reset" : /no such column/i.test(message) ? "missing_column" : /no such table/i.test(message) ? "missing_table" : /SQLITE_CONSTRAINT|constraint failed/i.test(message) ? "constraint" : /overload|too many requests/i.test(message) ? "overloaded" : "unclassified";
+      const failure = /Network connection lost/i.test(message) ? "connection_lost" : /DEADLINE|timed? ?out/i.test(message) ? "deadline_exceeded" : /object.*reset|reset.*object/i.test(message) ? "object_reset" : /no such column/i.test(message) ? "missing_column" : /no such table/i.test(message) ? "missing_table" : /SQLITE_CONSTRAINT|constraint failed/i.test(message) ? "constraint" : /overload|too many requests|too many resources consumed/i.test(message) ? "overloaded" : "unclassified";
       const code = typeof record2.code === "string" && /^[A-Z][A-Z0-9_]{0,63}$/.test(record2.code) ? sanitizeMessage(record2.code) : void 0;
       const frames = typeof record2.stack === "string" ? record2.stack.split("\n").slice(1).flatMap((line) => {
         const match = line.match(/([^\s()]+?):(\d+)(?::\d+)?\)?$/);

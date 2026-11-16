@@ -54,6 +54,7 @@ For optional after-edit checking, explicitly run `somewhere hooks install --host
 | `somewhere dev` | Frontend hot reload on localhost with your project's own Vite; API requests go to your deployed project |
 | `somewhere preview` | Run your whole app on the platform — every save goes to a private URL, and production is untouched until you promote |
 | `somewhere deploy` | Deploy current directory to linked project |
+| `somewhere privacy` | Read privacy facts stored with the active release |
 | `somewhere deploy --dry-run` | Upload source to compute the deploy diff without publishing |
 | `somewhere deploy --scope functions` | Deploy backend only (leave the site untouched) |
 | `somewhere deploy --force` | Intentionally overwrite remote changes made since this machine last deployed |

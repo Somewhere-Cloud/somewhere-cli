@@ -50,6 +50,7 @@ import { registerSupport } from './commands/support.js';
 import { buildRecord, commandPath, writeLastError } from './lib/repro-packet.js';
 import { registerSkills } from './commands/skills.js';
 import { registerAi } from './commands/ai.js';
+import { registerApp } from './commands/app.js';
 import { collectNotices } from './lib/notify/index.js';
 import { startupNotice } from './lib/startup-notice.js';
 import { error, info, printJsonError, setFailureHook, setJsonOutputMode, stripAnsi } from './lib/output.js';
@@ -166,6 +167,7 @@ registerCron(program);
 registerEmail(program);
 registerSkills(program);
 registerAi(program);
+registerApp(program);
 
 // Configure only the root after registration: command help keeps its full contract.
 program.configureHelp({
@@ -195,8 +197,9 @@ collectNotices(process.argv)
   .catch(() => {});
 try {
   const command = process.argv[2] || '';
-  // Help, version and update never wait on, or fail because of, an API call.
-  const skipRecovery = ['lint', 'upgrade', 'update', 'login', 'signup', 'logout', 'docs', 'help', '--help', '-h', '--version', '-V'].includes(command);
+  // Help, version and update never wait on, or fail because of, an API call. `app` speaks
+  // only to an app as its user: it never touches the developer login.
+  const skipRecovery = ['app', 'lint', 'upgrade', 'update', 'login', 'signup', 'logout', 'docs', 'help', '--help', '-h', '--version', '-V'].includes(command);
   const recovery = skipRecovery ? { kind: 'none' as const } : await recoverClaimHandoff();
   if (recovery.kind === 'recovered' && recovery.message && !jsonOutputRequested) info(recovery.message);
   if (recovery.kind === 'stale' && recovery.message) {

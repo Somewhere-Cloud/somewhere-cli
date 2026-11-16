@@ -9,7 +9,7 @@ const SCRIPT = (privateData: boolean) => `// tests/app-check.mjs — an ordinary
 //   npx @somewhere-cloud/cli deploy && npx @somewhere-cloud/cli test
 // It writes its result once to .somewhere/app-check.json; the exit code is the verdict.
 // It stops at the first failed check and prints the page's URL and visible error text.
-// After a fix, rerun only what failed: npx @somewhere-cloud/cli test --failed (keep setup outside app.check).
+// After a fix, rerun the scripts that failed, each one whole: npx @somewhere-cloud/cli test --failed.
 // From a .cjs script: const { openAppTest } = require('@somewhere-cloud/cli/script');
 import { chromium } from '@playwright/test';
 import { openAppTest${privateData ? ', captureResponses, dataReady' : ''} } from '@somewhere-cloud/cli/script';

@@ -19,7 +19,7 @@ export function registerLint(program: Command): void {
         for (const skipped of result.skipped) console.log(`Not checked: ${skipped.path} — ${skipped.reason}`);
         console.log(`${result.findings.length + result.generic.findings.length} warning(s); ${result.checked_files} source files; ${result.duration_ms.toFixed(1)} ms.`);
         if (result.generic.reason) console.log(result.generic.reason);
-        console.log('Authorization is not assessed. Type checking is separate; generic rules run only with --generic.');
+        console.log('Access rules are not checked here: deploy validates db/schema.ts, and your tests/*.mjs prove who can read and change what (npx @somewhere-cloud/cli test). Type checking is separate; generic rules run only with --generic.');
       }
       // Findings are advisory. An incomplete file read is a failed check, not a
       // clean result. Existing deploy guards retain their own refusal behavior.

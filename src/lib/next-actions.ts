@@ -50,7 +50,7 @@ const SEE_IT_LINKED: NextAction = {
 
 const CHECK_IT_LINKED: NextAction = {
   command: 'somewhere verify',
-  why: 'run it at desktop and phone size; exits non-zero if the page is unhealthy',
+  why: 'the page loads and looks right at desktop and phone size; nothing to write',
 };
 
 /** EYES mode on a public URL, which REQUIRES `--store` — commands/browser.ts
@@ -93,9 +93,10 @@ export function nextActions(ctx: NextActionContext): NextAction[] {
       ];
 
     case 'deploy': {
-      const test = { command: 'somewhere test', why: 'run project tests against production origin' }; 
+      const test = { command: 'somewhere test', why: 'journeys, several users and access rules: your tests/*.mjs' };
       if (ctx.temporary) return ctx.liveUrl ? [seeItByUrl(ctx.liveUrl), test] : [];
-      if (ctx.projectLinked) return [SEE_IT_LINKED, CHECK_IT_LINKED, test];
+      // Test first, then verify (the AGENTS.md split); the screenshot link last.
+      if (ctx.projectLinked) return [test, CHECK_IT_LINKED, SEE_IT_LINKED];
       if (ctx.liveUrl) return [seeItByUrl(ctx.liveUrl), test];
       return [];
     }

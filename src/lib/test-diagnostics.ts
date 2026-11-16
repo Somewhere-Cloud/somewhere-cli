@@ -7,12 +7,35 @@ export function containsSecret(text: string): boolean {
   for (const secret of secrets) if (secret.length >= 4 && text.includes(secret)) return true;
   return false;
 }
+/** Signed download, upload and scratch links: everything after the prefix is the credential. */
+const SIGNED_PATH = /^\/v1\/(?:fs-signed|upload|scratch)[^/]*/i;
+/** A path segment that looks like a credential: long, from a token's alphabet, and either mixing upper case,
+ *  lower case and digits (random base64) or 40+ characters (hex tokens). Ids such as UUIDs are kept. */
+function tokenShaped(segment: string): boolean {
+  if (segment.length < 20 || !/^[A-Za-z0-9._~+=%-]+$/.test(segment)) return false;
+  return segment.length >= 40 || (/[a-z]/.test(segment) && /[A-Z]/.test(segment) && /\d/.test(segment));
+}
+/** A URL in test output. The app's own pages (SW_TEST_ORIGIN) keep their path, so a failure says which page;
+ *  the query and fragment are hidden, and so is any credential-shaped segment. Any other address keeps only
+ *  its origin. */
+function scrubUrl(match: string): string {
+  const [, raw, trailing] = /^(.*?)([).,;:!]*)$/.exec(match)!;
+  let url: URL;
+  try { url = new URL(raw); } catch { return '[redacted-url]' + trailing; }
+  let app: string | null = null;
+  try { app = process.env.SW_TEST_ORIGIN ? new URL(process.env.SW_TEST_ORIGIN).origin : null; } catch { /* not a URL: no app origin */ }
+  if (url.origin !== app) return url.origin + '/[redacted-url]' + trailing;
+  const signed = SIGNED_PATH.exec(url.pathname);
+  const path = signed ? `${signed[0]}/[redacted]`
+    : url.pathname.split('/').map((segment) => tokenShaped(segment) ? '[redacted]' : segment).join('/').replaceAll('%5Bredacted%5D', '[redacted]');
+  return url.origin + path + (url.search ? '?[redacted]' : '') + (url.hash ? '#[redacted]' : '') + trailing;
+}
 export function scrub(value: string): string {
   for (const secret of secrets) value = value.split(secret).join('[redacted]');
   // Preview tool credentials (swpt.<project>.<preview>.<secret>) and preview browser sessions
   // (draft_….rel_….<uuid>), whether or not this process registered them.
   value = value.replace(/swpt\.[A-Za-z0-9._-]+/g, '[redacted]').replace(/draft_[0-9a-f-]{36}\.rel_[A-Za-z0-9_-]+\.[0-9a-f-]{36}/gi, '[redacted]');
-  return value.replace(/https?:\/\/[^\s<>"']+/g, raw => { try { const url = new URL(raw); return url.origin + '/[redacted-url]'; } catch { return '[redacted-url]'; } }).replace(/([?&](?:token|code|secret|key|password|access_token|refresh_token)=)[^&\s]+/gi, '$1[redacted]').replace(/(\/(?:reset-password|reset|verify|magic|invite)\/)[^\s?#]+/gi, '$1[redacted]').replace(/\u001b\[[0-9;]*m/g, '').replace(/eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+|smt_[A-Za-z0-9_-]+/g, '[redacted]');
+  return value.replace(/https?:\/\/[^\s<>"']+/g, scrubUrl).replace(/([?&](?:token|code|secret|key|password|access_token|refresh_token)=)[^&\s]+/gi, '$1[redacted]').replace(/(\/(?:reset-password|reset|verify|magic|invite)\/)[^\s?#]+/gi, '$1[redacted]').replace(/\u001b\[[0-9;]*m/g, '').replace(/eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+|smt_[A-Za-z0-9_-]+/g, '[redacted]');
 }
 /**
  * Scrub a test's errors IN PLACE, before Playwright writes anything from them. Playwright builds

@@ -59,7 +59,7 @@ test('init and deploy both name the browser check, so it is discoverable without
 test('a linked deploy suggests the project-default browser and verify runs', () => {
   assert.deepEqual(
     commandsOf(nextActions({ stage: 'deploy', projectLinked: true, liveUrl: 'https://app.somewhere.site', temporary: false })),
-    ['somewhere browser --screenshot', 'somewhere verify', 'somewhere test'],
+    ['somewhere test', 'somewhere verify', 'somewhere browser --screenshot'],
   );
 });
 

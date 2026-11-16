@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.38.98
+
+- somewhere tasks list --type filters by type, so decisions and directives list on their own.
+
 ## 0.38.97
 
 - Failures name the page, --failed reruns whole scripts, the reference check shows, lint says where access is proven; verify and test are separate.

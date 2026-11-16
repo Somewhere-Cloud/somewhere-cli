@@ -27,7 +27,7 @@ test('somewhere test with no specs runs every tests/*.mjs and *.cjs script and r
     'FAIL tests/e2e.cjs: owner adds a member - member-error never appeared',
     'PASS tests/app-check.mjs',
     'FAILED: 1 of 2 checks in 2 scripts',
-    'Next: fix what each FAIL line names, run npx @somewhere-cloud/cli deploy, then npx @somewhere-cloud/cli test --failed to rerun only what failed.',
+    'Next: fix what each FAIL line names, run npx @somewhere-cloud/cli deploy, then npx @somewhere-cloud/cli test --failed to rerun each script that failed.',
   ]);
   recordScriptResults(root, results, false);
   assert.deepEqual(lastFailedScripts(root), ['tests/e2e.cjs'], '--failed reruns only the failed script');
@@ -50,7 +50,7 @@ test('a script that hands over its checks gets one line per check, one summary l
     'PASS sign up',
     'NOT RUN phone width (after the first failure)',
     'FAILED: 1 of 3 checks in 1 script (1 not run)',
-    'Next: fix what each FAIL line names, run npx @somewhere-cloud/cli deploy, then npx @somewhere-cloud/cli test --failed to rerun only what failed.',
+    'Next: fix what each FAIL line names, run npx @somewhere-cloud/cli deploy, then npx @somewhere-cloud/cli test --failed to rerun each script that failed.',
     'Full result: .somewhere/app-check.json',
   ]);
 });

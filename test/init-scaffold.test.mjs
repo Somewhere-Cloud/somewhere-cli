@@ -514,7 +514,10 @@ test('one generated template consumes the SDK auth adapter and server data/files
   assert.match(guide, /^Run somewhere test after a successful deploy: npx @somewhere-cloud\/cli deploy && npx @somewhere-cloud\/cli test$/m);
   assert.doesNotMatch(guide, /node tests\/app-check\.mjs/, 'one way to run the tests');
   assert.doesNotMatch(guide, /You do not need a separate browser script/);
-  assert.doesNotMatch(guide, /allow-type-errors|somewhere verify/);
+  assert.doesNotMatch(guide, /allow-type-errors/);
+  // The split, next to the testing line (FACTS-VERIFY): verify needs nothing written; journeys, users and access go in tests.
+  assert.match(guide, /After every deploy, somewhere verify checks the page loads and looks right at desktop and phone size, with no\ntest to write\. Journeys, several users and access rules go in tests\/\*\.mjs with somewhere test\./);
+  assert.match(guide, /rerun the scripts that failed, each one whole: npx @somewhere-cloud\/cli test --failed/);
   assert.match(guide, /Deploy raw source/);
   assert.doesNotMatch(guide, /worker\/src\/runtime\/auth\.ts/);
   assert.equal(

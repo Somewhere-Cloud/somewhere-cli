@@ -40,27 +40,10 @@ export type DataKind = 'ok' | 'empty' | 'refused' | 'missing-or-refused' | 'malf
 export interface DataResult { status: number; kind: DataKind; data: unknown; error: string | null; message: string | null }
 type Who = Page | BrowserContext | APIRequestContext;
 
-/** One check's outcome. `skipped` says why it did not run: an earlier check failed, or (with --failed) it passed last run. */
-/** One check's outcome. `skipped` says why it did not run; a pass carried by --failed names the run and release it came from. */
-export interface Check { name: string; ok: boolean; ms: number; error?: string; skipped?: 'after-failure' | 'passed-last-run'; carried_from?: { run: string; release: string } }
-/** What a result file was run against; --failed carries passes only between runs with the same identity. */
+/** One check's outcome. `skipped` says it did not run because an earlier check failed. */
+export interface Check { name: string; ok: boolean; ms: number; error?: string; skipped?: 'after-failure' }
+/** What a result file was run against. */
 export interface RunIdentity { project_id: string; environment: string; preview_session_id: string | null; origin: string; script: string | null }
-/** Passes the previous result may carry into this run, or the reason it may not. */
-export function carriedPasses(last: { checks?: Check[]; identity?: Partial<RunIdentity>; release?: string; started?: string } | null, identity: RunIdentity):
-  { ok: true; passes: Map<string, { run: string; release: string }> } | { ok: false; reason: string } {
-  if (!last) return { ok: false, reason: 'there is no previous result; run the whole script once first' };
-  if (!last.identity) return { ok: false, reason: 'the previous result does not record what it ran against (an older CLI wrote it); run the whole script once' };
-  for (const key of ['project_id', 'environment', 'preview_session_id', 'origin', 'script'] as const) {
-    if ((last.identity[key] ?? null) !== identity[key]) {
-      return { ok: false, reason: `the previous result ran against a different ${key.replace('_', ' ')} (${String(last.identity[key] ?? 'none')}, now ${String(identity[key] ?? 'none')}); run the whole script once` };
-    }
-  }
-  const passes = new Map<string, { run: string; release: string }>();
-  for (const check of last.checks ?? []) {
-    if (check.ok) passes.set(check.name, check.carried_from ?? { run: last.started ?? 'unknown', release: last.release ?? 'unknown' });
-  }
-  return { ok: true, passes };
-}
 export interface OpenOptions {
   /** The linked project folder (default: the current directory). */
   projectDir?: string;
@@ -75,9 +58,6 @@ export interface OpenOptions {
    *  and never touches production. Prepare each browser context with app.prepare(context), or let
    *  signUp/signIn/verify/data do it for the page they get. */
   preview?: boolean | string;
-  /** Run only the checks that did not pass in the previous result file (default: true when the
-   *  script was started with --failed). Use it after a fix instead of rerunning everything. */
-  onlyFailed?: boolean;
 }
 
 /** Where a page is and what it says: its URL and any visible alert or error text (scrubbed). */
@@ -146,7 +126,6 @@ export class AppTest {
   private readonly started = new Date();
   private finished = false;
   private stopped = false;
-  private passedLastRun = new Map<string, { run: string; release: string }>();
 
   private readonly prepared = new WeakSet<BrowserContext>();
   private readonly target: TestTarget;
@@ -204,16 +183,12 @@ export class AppTest {
     const [ipv4First] = await Promise.all([testAddressOrder(target.origin), lookup(new URL(target.origin).hostname).catch(() => null)]);
     if (ipv4First) setDefaultResultOrder('ipv4first');
     process.env.SW_TEST_RUN ??= randomUUID();
+    // Failure output keeps the path of this app's own pages (test-diagnostics scrub).
+    process.env.SW_TEST_ORIGIN = target.origin;
     for (const line of describeSweep(await sweepAccounts(control, root), 'Before this script')) process.stderr.write(line + '\n');
     // One result file per script (tests/app-check.mjs → .somewhere/app-check.json), so two scripts never overwrite each other.
     const scriptName = process.argv[1] ? basename(process.argv[1]).replace(/\.[cm]?[jt]s$/, '') : 'app-check';
     const app = new AppTest(root, control, resolve(root, options.results ?? join('.somewhere', `${scriptName}${preview ? '-preview' : ''}.json`)));
-    if (options.onlyFailed ?? process.argv.includes('--failed')) {
-      const last = existsSync(app.resultsPath) ? JSON.parse(readFileSync(app.resultsPath, 'utf8')) : null;
-      const carried = carriedPasses(last, app.identity());
-      if (!carried.ok) throw new Error(`--failed: not carrying earlier passes: ${carried.reason} (${app.resultsPath}).`);
-      app.passedLastRun = carried.passes;
-    }
     return app;
   }
 
@@ -281,13 +256,12 @@ export class AppTest {
 
   /** Run one named check. The first failure stops the run: it prints the check, the error and
    *  what each signed-in page shows (URL, visible error text), and every later check is skipped
-   *  instead of waiting out its own timeout. With --failed, checks that passed last run are skipped. */
+   *  instead of waiting out its own timeout. `somewhere test --failed` reruns a failed script whole,
+   *  so setup done inside earlier checks runs again. */
   async check(label: string, work: () => unknown | Promise<unknown>): Promise<boolean> {
-    // The name is recorded, matched by --failed and printed scrubbed: a check named after a password never stores it.
+    // The name is recorded and printed scrubbed: a check named after a password never stores it.
     const name = scrub(label);
     if (this.stopped) { this.checks.push({ name, ok: false, ms: 0, skipped: 'after-failure' }); return false; }
-    const carried = this.passedLastRun.get(name);
-    if (carried) { this.checks.push({ name, ok: true, ms: 0, skipped: 'passed-last-run', carried_from: carried }); return true; }
     const start = performance.now();
     try { await work(); this.checks.push({ name, ok: true, ms: Math.round(performance.now() - start) }); return true; }
     catch (error) {
@@ -300,7 +274,7 @@ export class AppTest {
         + pages.map((state, i) => `\npage ${i + 1}: ${state}`).join(''));
       this.checks.push({ name, ok: false, ms: Math.round(performance.now() - start), error: message });
       this.stopped = true;
-      process.stdout.write(`FAIL ${name}\n  ${message.replaceAll('\n', '\n  ')}\nStopping here: later checks are skipped. After a fix, rerun only what failed: ${TEST_COMMAND} --failed\n`);
+      process.stdout.write(`FAIL ${name}\n  ${message.replaceAll('\n', '\n  ')}\nStopping here: later checks are skipped. After a fix, rerun the scripts that failed: ${TEST_COMMAND} --failed\n`);
       return false;
     }
   }

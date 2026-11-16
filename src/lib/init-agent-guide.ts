@@ -149,6 +149,8 @@ headers: { 'content-type': 'application/json' }, body: JSON.stringify(values) })
 Access cookies refresh automatically. Cookie-auth POST/PATCH/DELETE from scripts
 need Origin equal to the app URL.
 
+After every deploy, somewhere verify checks the page loads and looks right at desktop and phone size, with no
+test to write. Journeys, several users and access rules go in tests/*.mjs with somewhere test.
 Run somewhere test after a successful deploy: npx @somewhere-cloud/cli deploy && npx @somewhere-cloud/cli test
 It runs every tests/*.mjs and tests/*.cjs Playwright script and prints failures first. Start from
 tests/app-check.mjs: change its checks to the journeys you changed and your access boundaries.
@@ -157,8 +159,7 @@ Keep each run short:
   a second. Never sleep for a fixed time: wait for the thing itself (the text, the response).
 - Stop at the first failure and print what the page showed (page.url(), the visible error
   text). Checks after a failure only wait out their timeouts. app.check() does both.
-- After a fix, rerun only the checks that failed: npx @somewhere-cloud/cli test --failed.
-  Keep setup (sign-ups, rows a check needs) outside app.check() so a rerun still has it.
+- After a fix, rerun the scripts that failed, each one whole: npx @somewhere-cloud/cli test --failed.
 The test helper, @somewhere-cloud/cli/script (import or require); these are all the calls a test needs:
   const app = await openAppTest();              // the live origin, release and data contract
   const ana = await app.signUp(page);           // through your form: { id, email, password, verified }

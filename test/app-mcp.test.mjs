@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawn } from 'node:child_process';
@@ -24,7 +24,7 @@ const b64url = (buf) => buf.toString('base64').replace(/=+$/, '').replace(/\+/g,
 async function world() {
   const log = []; // every request any server saw: { server, method, path, auth, origin, body }
   const state = { clients: new Map(), codes: new Map(), access: new Map(), refresh: new Map(), seq: 0,
-    rejectAccess: false, refreshStatus: 200, revokeStatus: 200, tools: [{ name: 'add_note', description: 'Add a note', inputSchema: { type: 'object', properties: { text: { type: 'string' } }, required: ['text'] } }] };
+    rejectAccess: false, refreshStatus: 200, revokeStatus: 200, used: new Set(), reuseRevocations: 0, tokenDelayMs: 0, echoToken: false, tools: [{ name: 'add_note', description: 'Add a note', inputSchema: { type: 'object', properties: { text: { type: 'string' } }, required: ['text'] } }] };
   const token = (prefix) => `${prefix}${String(++state.seq).padStart(43, 'x')}`;
   const record = async (server, req) => {
     const body = await readBody(req);
@@ -62,10 +62,22 @@ async function world() {
           res.writeHead(400, { 'content-type': 'application/json' }).end('{"error":"invalid_grant"}');
           return;
         }
-      } else if (state.refreshStatus !== 200 || !state.refresh.has(p.get('refresh_token'))) {
-        res.writeHead(state.refreshStatus === 200 ? 400 : state.refreshStatus, { 'content-type': 'application/json' }).end('{"error":"invalid_grant"}');
-        return;
-      } else state.refresh.delete(p.get('refresh_token'));
+      } else {
+        // Like the platform issuer: a refresh token is single-use, and presenting a
+        // used one revokes the whole grant (every token of this project here).
+        await new Promise((r) => setTimeout(r, state.tokenDelayMs));
+        const presented = p.get('refresh_token');
+        if (state.used.has(presented)) {
+          state.reuseRevocations++;
+          for (const map of [state.access, state.refresh]) for (const [k, v] of map) if (v === m[1]) map.delete(k);
+        }
+        if (state.refreshStatus !== 200 || !state.refresh.has(presented)) {
+          res.writeHead(state.refreshStatus === 200 ? 400 : state.refreshStatus, { 'content-type': 'application/json' }).end('{"error":"invalid_grant"}');
+          return;
+        }
+        state.refresh.delete(presented);
+        state.used.add(presented);
+      }
       const access = token('sam_a_'), refresh = token('sam_r_');
       state.access.set(access, m[1]);
       state.refresh.set(refresh, m[1]);
@@ -94,7 +106,8 @@ async function world() {
       if (msg.method === 'tools/list') return reply({ result: { tools: state.tools } });
       if (msg.method === 'tools/call') {
         if (!state.tools.some((t) => t.name === msg.params.name)) return reply({ error: { code: -32602, message: 'Tool unavailable or renewed consent required.' } });
-        return reply({ result: { content: [{ type: 'text', text: JSON.stringify({ saved: msg.params.arguments.text }) }], structuredContent: { saved: msg.params.arguments.text } } });
+        const saved = state.echoToken ? `${msg.params.arguments.text} ${bearer}` : msg.params.arguments.text;
+        return reply({ result: { content: [{ type: 'text', text: JSON.stringify({ saved }) }], structuredContent: { saved } } });
       }
       reply({ error: { code: -32601, message: 'Method not found' } });
     });
@@ -278,6 +291,16 @@ test('failures say what failed: unknown tool, consent refused, no MCP, ports in 
     assert.equal(ssh.status, 1);
     assert.match(ssh.stderr, /SSH session.*not supported/s);
 
+    const api = new URL(w.env.SOMEWHERE_API_URL);
+    for (const issuer of [`${api.href}/app-mcp/proj_a?x=1`, `${api.href}/app-mcp/proj_a/../other`, `${api.href}/app-mcp/a%2Fb`, 'https://evil.example/v1/app-mcp/proj_a']) {
+      const odd = await listen((req, res) => res.writeHead(200, { 'content-type': 'application/json' })
+        .end(JSON.stringify({ resource: `http://127.0.0.1:${odd.address().port}/mcp`, authorization_servers: [issuer] })));
+      const refused = await cli(w, ['app', 'login', `http://127.0.0.1:${odd.address().port}`]);
+      odd.close();
+      assert.equal(refused.status, 1);
+      assert.match(refused.stderr, /not a Somewhere app sign-in server/, issuer);
+    }
+
     const http = await cli(w, ['app', 'tools', 'http://notes.example.com']);
     assert.match(http.stderr, /not https/);
   } finally { w.close(); }
@@ -290,5 +313,76 @@ test('the token file lives only in the CLI config directory', async () => {
     assert.equal(existsSync(join(w.root, 'app-mcp')), false);
     assert.equal(existsSync(join(w.root, '.somewhere.json')), false);
     assert.equal(JSON.parse(readFileSync(join(w.config, 'config.json'), 'utf8')).token, DEV_KEY, 'developer login untouched');
+  } finally { w.close(); }
+});
+
+// Two commands at once (agents do this) must not both spend the single-use refresh token:
+// the issuer would read the second as reuse and revoke the grant.
+test('two concurrent calls with an expired token refresh once; both succeed and the grant survives', async () => {
+  const w = await world();
+  try {
+    assert.equal((await cli(w, ['app', 'login', w.appA.origin])).status, 0);
+    w.state.tokenDelayMs = 300; // keep the first refresh in flight while the second process arrives
+    const path = join(w.config, 'app-mcp', 'tokens.json');
+    const expire = () => {
+      const s = store(w);
+      s.apps[w.appA.origin].access_expires_at = Date.now() - 1000;
+      writeFileSync(path, JSON.stringify(s), { mode: 0o600 });
+    };
+    // Expired by the clock: both processes would refresh before calling.
+    expire();
+    w.log.length = 0;
+    const [a, b] = await Promise.all([1, 2].map((n) => cli(w, ['app', 'call', w.appA.origin, 'add_note', `{"text":"${n}"}`])));
+    assert.equal(a.status, 0, a.stderr);
+    assert.equal(b.status, 0, b.stderr);
+    assert.equal(w.log.filter((r) => r.path.endsWith('/token')).length, 1, 'one refresh');
+    assert.equal(w.state.reuseRevocations, 0);
+
+    // Refused by the app (401) while the clock says valid: same outcome.
+    w.state.access.delete(store(w).apps[w.appA.origin].access_token);
+    w.log.length = 0;
+    const [c, d] = await Promise.all([3, 4].map((n) => cli(w, ['app', 'call', w.appA.origin, 'add_note', `{"text":"${n}"}`])));
+    assert.equal(c.status, 0, c.stderr);
+    assert.equal(d.status, 0, d.stderr);
+    assert.equal(w.log.filter((r) => r.path.endsWith('/token')).length, 1, 'one refresh');
+    assert.equal(w.state.reuseRevocations, 0);
+
+    const after = await cli(w, ['app', 'tools', w.appA.origin]);
+    assert.equal(after.status, 0, 'still signed in: ' + after.stderr);
+  } finally { w.close(); }
+});
+
+test('a lock left by a process that died is taken over, silently', async () => {
+  const w = await world();
+  try {
+    assert.equal((await cli(w, ['app', 'login', w.appA.origin])).status, 0);
+    // Expired, so this call must take the lock to refresh.
+    const s = store(w);
+    s.apps[w.appA.origin].access_expires_at = Date.now() - 1000;
+    writeFileSync(join(w.config, 'app-mcp', 'tokens.json'), JSON.stringify(s), { mode: 0o600 });
+    const lock = join(w.config, 'app-mcp', 'tokens.lock');
+    mkdirSync(lock);
+    const old = new Date(Date.now() - 10 * 60 * 1000);
+    utimesSync(lock, old, old);
+    const out = await cli(w, ['app', 'tools', w.appA.origin]);
+    assert.equal(out.status, 0, out.stderr);
+    assert.equal(out.stderr, '');
+    assert.equal(existsSync(lock), false);
+    assert.equal(w.log.filter((r) => r.path.endsWith('/token')).length, 2, 'login, then the refresh behind the dead lock');
+  } finally { w.close(); }
+});
+
+test('a token the app reflects back is not printed', async () => {
+  const w = await world();
+  try {
+    assert.equal((await cli(w, ['app', 'login', w.appA.origin])).status, 0);
+    w.state.echoToken = true;
+    const token = store(w).apps[w.appA.origin].access_token;
+    for (const extra of [[], ['--json']]) {
+      const out = await cli(w, ['app', 'call', w.appA.origin, 'add_note', '{"text":"x"}', ...extra]);
+      assert.equal(out.status, 0, out.stderr);
+      assert.ok(!(out.stdout + out.stderr).includes(token), 'token redacted');
+      assert.match(out.stdout, /\[redacted\]/);
+    }
   } finally { w.close(); }
 });

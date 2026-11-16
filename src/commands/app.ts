@@ -6,13 +6,20 @@ import {
   callTool,
   inputShape,
   listTools,
+  redactTokens,
 } from '../lib/app-mcp.js';
-import { bold, dim, error, printJson, printJsonError, success, warn } from '../lib/output.js';
+import { bold, dim, error, printJsonError, success, warn } from '../lib/output.js';
 
 interface JsonOption { json?: boolean }
 
+// Everything these commands print passes through redactTokens: an app can echo the
+// token it received in a result or an error, and the terminal never shows one.
+function printJson(value: unknown): void {
+  console.log(redactTokens(JSON.stringify(value ?? null, null, 2)));
+}
+
 function fail(err: unknown, json: boolean | undefined): void {
-  const message = err instanceof Error ? err.message : String(err);
+  const message = redactTokens(err instanceof Error ? err.message : String(err));
   if (json) printJsonError(err instanceof AppMcpCliError ? err.code : 'CLI_ERROR', message);
   else error(message, err);
   process.exitCode = 1;
@@ -68,7 +75,7 @@ Examples:
         }
         for (const tool of tools) {
           console.log(bold(tool.name));
-          if (tool.description) console.log(`  ${tool.description}`);
+          if (tool.description) console.log(redactTokens(`  ${tool.description}`));
           console.log(dim(`  arguments: ${inputShape(tool)}`));
         }
       } catch (err) {
@@ -101,12 +108,12 @@ Examples:
           return;
         }
         if (result.isError) {
-          error(`${tool} failed: ${text || 'the app returned an error with no message.'}`);
+          error(redactTokens(`${tool} failed: ${text || 'the app returned an error with no message.'}`));
           process.exitCode = 1;
           return;
         }
         if (result.structuredContent !== undefined) printJson(result.structuredContent);
-        else console.log(text);
+        else console.log(redactTokens(text));
       } catch (err) {
         fail(err, opts.json);
       }
@@ -130,7 +137,7 @@ Examples:
           return;
         }
         if (!result.revoked) {
-          warn(`Could not revoke the sign-in at the server (${result.revokeProblem}). It stays valid there until it expires or you sign out of the app in the browser.`);
+          warn(redactTokens(`Could not revoke the sign-in at the server (${result.revokeProblem}). It stays valid there until it expires or you sign out of the app in the browser.`));
         }
         success(`Removed the sign-in to ${result.origin} from this computer${result.revoked ? ' and revoked it at the server' : ''}.`);
       } catch (err) {

@@ -1,6 +1,6 @@
 import http from 'node:http';
 import { createHash, randomBytes } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, readFileSync, rmdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { API_BASE_URL } from './client.js';
 import { cliConfigDir, writePrivateConfigFile } from './config.js';
@@ -25,6 +25,9 @@ const PROTOCOL_VERSION = '2025-06-18';
 const LOGIN_TIMEOUT_MS = 5 * 60 * 1000;
 const STORE_DIR = 'app-mcp';
 const STORE_FILE = 'tokens.json';
+/** The store lock is held for at most one refresh or revoke (30 s request timeout). */
+const LOCK_STALE_MS = 60_000;
+const LOCK_WAIT_MS = 90_000;
 
 export class AppMcpCliError extends Error {
   constructor(message: string, readonly code: string) {
@@ -54,9 +57,30 @@ export function appOrigin(input: string): string {
   return url.origin;
 }
 
-/** Issuers this CLI sends a refresh token to: the app's own Somewhere issuer, nothing else. */
+/**
+ * Issuers this CLI sends a refresh token to: exactly <API base>/app-mcp/<project id>. The API
+ * base is https://api.somewhere.cloud/v1 unless this shell sets SOMEWHERE_API_URL (local
+ * tests); an app cannot change it.
+ */
 function issuerPrefix(): string {
   return `${API_BASE_URL}/app-mcp/`;
+}
+
+export function isSomewhereIssuer(issuer: string): boolean {
+  const prefix = issuerPrefix();
+  if (!issuer.startsWith(prefix) || !/^[A-Za-z0-9_-]{1,128}$/.test(issuer.slice(prefix.length))) return false;
+  try {
+    const url = new URL(issuer);
+    return url.href === issuer && !url.username && !url.password;
+  } catch {
+    return false;
+  }
+}
+
+function assertIssuer(issuer: string, origin: string): void {
+  if (!isSomewhereIssuer(issuer)) {
+    throw new AppMcpCliError(`${origin} names ${issuer} as its sign-in server, which is not a Somewhere app sign-in server. Nothing was sent.`, 'ISSUER_REFUSED');
+  }
 }
 
 function callbackUri(port: number): string {
@@ -100,23 +124,84 @@ function writeStore(store: Store): void {
   writePrivateConfigFile(STORE_DIR, STORE_FILE, JSON.stringify(store, null, 2) + '\n');
 }
 
+/** Every token this process has held, so output can never show one (an app may echo it back). */
+const heldTokens = new Set<string>();
+function remember(entry: AppEntry | undefined): AppEntry | undefined {
+  for (const token of [entry?.access_token, entry?.refresh_token]) if (token) heldTokens.add(token);
+  return entry;
+}
+
+export function redactTokens(text: string): string {
+  let out = text;
+  for (const token of heldTokens) out = out.split(token).join('[redacted]');
+  return out;
+}
+
 export function loadEntry(origin: string): AppEntry | undefined {
-  return readStore().apps[origin];
+  return remember(readStore().apps[origin]);
 }
 
-function saveEntry(origin: string, entry: AppEntry): void {
-  const store = readStore();
-  store.apps[origin] = entry;
-  writeStore(store);
+let lockHeld = false;
+const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * One process at a time reads, changes and writes the store, and refreshes. Two commands
+ * at once would otherwise both spend the same single-use refresh token, and the issuer
+ * revokes the whole sign-in on the second use. The lock is a directory (mkdir is atomic);
+ * one left by a process that died is taken over after LOCK_STALE_MS. Waiting is silent.
+ */
+async function withStoreLock<T>(work: () => Promise<T>): Promise<T> {
+  if (lockHeld) return work();
+  const dir = join(cliConfigDir(), STORE_DIR);
+  mkdirSync(dir, { recursive: true, mode: 0o700 });
+  chmodSync(dir, 0o700);
+  const lock = join(dir, 'tokens.lock');
+  const deadline = Date.now() + LOCK_WAIT_MS;
+  for (;;) {
+    try {
+      mkdirSync(lock, { mode: 0o700 });
+      break;
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== 'EEXIST') throw err;
+    }
+    let age = 0;
+    try { age = Date.now() - statSync(lock).mtimeMs; } catch { continue; /* released meanwhile */ }
+    if (age > LOCK_STALE_MS) {
+      try { rmdirSync(lock); } catch { /* another waiter took it over */ }
+      continue;
+    }
+    if (Date.now() > deadline) {
+      throw new AppMcpCliError(`Another somewhere app command has held ${lock} for ${Math.round(age / 1000)} s. If none is running, delete that folder and try again.`, 'APP_STORE_LOCKED');
+    }
+    await pause(20 + Math.random() * 30);
+  }
+  lockHeld = true;
+  try {
+    return await work();
+  } finally {
+    lockHeld = false;
+    try { rmdirSync(lock); } catch { /* already gone */ }
+  }
 }
 
-/** Forget the tokens; keep the registered client so the next sign-in reuses it. */
-function dropTokens(origin: string): void {
-  const store = readStore();
-  const entry = store.apps[origin];
-  if (!entry) return;
-  store.apps[origin] = { issuer: entry.issuer, client_id: entry.client_id, redirect_uris: entry.redirect_uris };
-  writeStore(store);
+function saveEntry(origin: string, entry: AppEntry): Promise<void> {
+  return withStoreLock(async () => {
+    const store = readStore();
+    store.apps[origin] = entry;
+    writeStore(store);
+  });
+}
+
+/** Forget the tokens of the sign-in that holds `token`; keep the registered client so the
+ *  next sign-in reuses it. A newer sign-in stored by another process is left alone. */
+function dropTokens(origin: string, token: string): Promise<void> {
+  return withStoreLock(async () => {
+    const store = readStore();
+    const entry = store.apps[origin];
+    if (!entry || (entry.access_token !== token && entry.refresh_token !== token)) return;
+    store.apps[origin] = { issuer: entry.issuer, client_id: entry.client_id, redirect_uris: entry.redirect_uris };
+    writeStore(store);
+  });
 }
 
 // ---------------------------------------------------------------- HTTP
@@ -165,9 +250,7 @@ async function discover(origin: string): Promise<{ issuer: string; resource: str
   const body = await readJson(response) as { resource?: unknown; authorization_servers?: unknown } | null;
   const issuer = Array.isArray(body?.authorization_servers) ? body.authorization_servers[0] : undefined;
   if (!body || body.resource !== resource || typeof issuer !== 'string') throw noServer;
-  if (!issuer.startsWith(issuerPrefix()) || issuer.slice(issuerPrefix().length).includes('/')) {
-    throw new AppMcpCliError(`${origin} names ${issuer} as its sign-in server, which is not a Somewhere app sign-in server. Nothing was sent.`, 'ISSUER_REFUSED');
-  }
+  assertIssuer(issuer, origin);
   return { issuer, resource };
 }
 
@@ -208,13 +291,20 @@ async function bindCallback(): Promise<{ server: http.Server; redirectUri: strin
 const page = (title: string, text: string) => `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>${title}</title><body style="font-family:system-ui,sans-serif;max-width:32rem;margin:4rem auto;padding:0 1rem"><h1 style="font-size:1.25rem">${title}</h1><p>${text}</p></body></html>`;
 
 /** Wait for the one redirect that carries this sign-in's state; anything else is ignored. */
-function awaitCallback(server: http.Server, state: string, issuer: string): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => {
+function awaitCallback(server: http.Server, state: string, issuer: string): { done: Promise<string>; cancel: () => void } {
+  let timer: NodeJS.Timeout | undefined;
+  const done = new Promise<string>((resolve, reject) => {
+    timer = setTimeout(() => {
       reject(new AppMcpCliError('Sign-in was not finished in the browser within 5 minutes. Run the command again.', 'LOGIN_TIMED_OUT'));
     }, LOGIN_TIMEOUT_MS);
     server.on('request', (req, res) => {
-      const url = new URL(req.url ?? '/', 'http://127.0.0.1');
+      let url: URL;
+      try {
+        url = new URL(req.url ?? '/', 'http://127.0.0.1');
+      } catch {
+        res.writeHead(400).end();
+        return;
+      }
       if (url.pathname !== '/callback' || url.searchParams.get('state') !== state) {
         res.writeHead(404).end();
         return;
@@ -223,6 +313,7 @@ function awaitCallback(server: http.Server, state: string, issuer: string): Prom
         res.writeHead(status, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
         res.end(page(title, text));
         clearTimeout(timer);
+        server.close(); // The one answer arrived: stop listening before the token exchange.
         outcome();
       };
       const iss = url.searchParams.get('iss');
@@ -248,13 +339,15 @@ function awaitCallback(server: http.Server, state: string, issuer: string): Prom
       finish(200, 'Signed in', 'You can close this tab and return to your terminal.', () => resolve(code));
     });
   });
+  done.catch(() => { /* awaited by the caller; never an unhandled rejection if login stops early */ });
+  return { done, cancel: () => clearTimeout(timer) };
 }
 
 // ---------------------------------------------------------------- sign-in
 
 const base64url = (bytes: Buffer) => bytes.toString('base64').replace(/=+$/, '').replace(/\+/g, '-').replace(/\//g, '_');
 
-function storeTokens(origin: string, entry: AppEntry, body: unknown): AppEntry {
+async function storeTokens(origin: string, entry: AppEntry, body: unknown): Promise<AppEntry> {
   const tokens = body as { access_token?: unknown; refresh_token?: unknown; expires_in?: unknown } | null;
   if (typeof tokens?.access_token !== 'string' || typeof tokens.refresh_token !== 'string') {
     throw new AppMcpCliError('The sign-in server answered without tokens. Nothing was stored.', 'TOKEN_RESPONSE_INVALID');
@@ -268,7 +361,8 @@ function storeTokens(origin: string, entry: AppEntry, body: unknown): AppEntry {
     refresh_token: tokens.refresh_token,
     access_expires_at: Date.now() + expiresIn * 1000,
   };
-  saveEntry(origin, next);
+  remember(next);
+  await saveEntry(origin, next);
   return next;
 }
 
@@ -284,6 +378,7 @@ export async function appLogin(
 
   const { issuer, resource } = await discover(origin);
   const { server, redirectUri } = await bindCallback();
+  let callback: ReturnType<typeof awaitCallback> | undefined;
   try {
     const redirectUris = CALLBACK_PORTS.map(callbackUri);
     let entry = loadEntry(origin);
@@ -307,7 +402,7 @@ export async function appLogin(
       }
       entry = { issuer, client_id: body.client_id, redirect_uris: redirectUris };
       // Kept at once: a sign-in abandoned in the browser still reuses this client next time.
-      saveEntry(origin, entry);
+      await saveEntry(origin, entry);
     }
 
     const verifier = base64url(randomBytes(32));
@@ -325,7 +420,7 @@ export async function appLogin(
       resource,
     });
 
-    const callback = awaitCallback(server, state, issuer);
+    callback = awaitCallback(server, state, issuer);
     log(`Opening your browser to sign in to ${origin}.`);
     log(`If it does not open, visit this address on this computer:`);
     log(authorize.toString());
@@ -336,7 +431,7 @@ export async function appLogin(
         throw new AppMcpCliError(`No browser could be opened (${err instanceof Error ? err.message : String(err)}). ${NO_BROWSER_HINT}`, 'NO_BROWSER');
       }
     }
-    const code = await callback;
+    const code = await callback.done;
 
     const response = await send(`${issuer}/token`, {
       method: 'POST',
@@ -347,9 +442,10 @@ export async function appLogin(
     if (!response.ok) {
       throw new AppMcpCliError(`The sign-in server would not exchange the code (HTTP ${response.status}${errorCode(body) ? `, ${errorCode(body)}` : ''}). Nothing was stored; run the command again.`, 'TOKEN_REFUSED');
     }
-    storeTokens(origin, entry, body);
+    await storeTokens(origin, entry, body);
     return { origin, clientReused };
   } finally {
+    callback?.cancel();
     server.close();
     server.closeAllConnections();
   }
@@ -364,23 +460,34 @@ function signInAgain(origin: string): AppMcpCliError {
   );
 }
 
-/** One POST /token. Rotates the refresh token; a refused refresh ends the local sign-in. */
-async function refresh(origin: string, entry: AppEntry): Promise<AppEntry> {
-  if (!entry.refresh_token) throw signInAgain(origin);
-  const response = await send(`${entry.issuer}/token`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/x-www-form-urlencoded', accept: 'application/json' },
-    body: form({ grant_type: 'refresh_token', refresh_token: entry.refresh_token, client_id: entry.client_id, resource: `${origin}/mcp` }),
+/**
+ * Renew the sign-in that `stale` holds: one POST /token, under the store lock. Another
+ * process may have renewed it while this one waited; then its result is used and nothing is
+ * sent, because a refresh token works once and a second use revokes the whole sign-in.
+ */
+async function refresh(origin: string, stale: AppEntry): Promise<AppEntry> {
+  return withStoreLock(async () => {
+    const current = loadEntry(origin);
+    if (!current?.refresh_token) throw signInAgain(origin);
+    if (current.access_token && current.access_token !== stale.access_token && (current.access_expires_at ?? 0) > Date.now() + 30_000) {
+      return current;
+    }
+    assertIssuer(current.issuer, origin);
+    const response = await send(`${current.issuer}/token`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded', accept: 'application/json' },
+      body: form({ grant_type: 'refresh_token', refresh_token: current.refresh_token, client_id: current.client_id, resource: `${origin}/mcp` }),
+    });
+    const body = await readJson(response);
+    if (response.status === 400 || response.status === 401) {
+      await dropTokens(origin, current.refresh_token);
+      throw signInAgain(origin);
+    }
+    if (!response.ok) {
+      throw new AppMcpCliError(`Could not renew the sign-in to ${origin} (HTTP ${response.status}${errorCode(body) ? `, ${errorCode(body)}` : ''}). Try again shortly.`, 'REFRESH_FAILED');
+    }
+    return storeTokens(origin, current, body);
   });
-  const body = await readJson(response);
-  if (response.status === 400 || response.status === 401) {
-    dropTokens(origin);
-    throw signInAgain(origin);
-  }
-  if (!response.ok) {
-    throw new AppMcpCliError(`Could not renew the sign-in to ${origin} (HTTP ${response.status}${errorCode(body) ? `, ${errorCode(body)}` : ''}). Try again shortly.`, 'REFRESH_FAILED');
-  }
-  return storeTokens(origin, entry, body);
 }
 
 interface RpcResult { result?: unknown; error?: { code?: number; message?: string } }
@@ -415,7 +522,7 @@ async function rpc(origin: string, method: string, params: Record<string, unknow
     if (response.status === 401) {
       await response.text();
       if (refreshed) {
-        dropTokens(origin);
+        await dropTokens(origin, entry.access_token!);
         throw signInAgain(origin);
       }
       entry = await refresh(origin, entry);
@@ -490,21 +597,24 @@ export interface LogoutResult { origin: string; signedIn: boolean; revoked: bool
 /** Revoke at the issuer, then remove the local tokens whatever the issuer said. */
 export async function appLogout(input: string): Promise<LogoutResult> {
   const origin = appOrigin(input);
-  const entry = loadEntry(origin);
-  const token = entry?.refresh_token ?? entry?.access_token;
-  if (!entry || !token) return { origin, signedIn: false, revoked: false };
-  let revokeProblem: string | undefined;
-  try {
-    const response = await send(`${entry.issuer}/revoke`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/x-www-form-urlencoded' },
-      body: form({ token, client_id: entry.client_id }),
-    });
-    await response.text();
-    if (!response.ok) revokeProblem = `HTTP ${response.status}`;
-  } catch (err) {
-    revokeProblem = err instanceof Error ? err.message : String(err);
-  }
-  dropTokens(origin);
-  return { origin, signedIn: true, revoked: !revokeProblem, ...(revokeProblem ? { revokeProblem } : {}) };
+  return withStoreLock(async () => {
+    const entry = loadEntry(origin);
+    const token = entry?.refresh_token ?? entry?.access_token;
+    if (!entry || !token) return { origin, signedIn: false, revoked: false };
+    let revokeProblem: string | undefined;
+    try {
+      assertIssuer(entry.issuer, origin);
+      const response = await send(`${entry.issuer}/revoke`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        body: form({ token, client_id: entry.client_id }),
+      });
+      await response.text();
+      if (!response.ok) revokeProblem = `HTTP ${response.status}`;
+    } catch (err) {
+      revokeProblem = err instanceof Error ? err.message : String(err);
+    }
+    await dropTokens(origin, token);
+    return { origin, signedIn: true, revoked: !revokeProblem, ...(revokeProblem ? { revokeProblem } : {}) };
+  });
 }

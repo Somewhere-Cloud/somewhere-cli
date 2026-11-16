@@ -87,6 +87,11 @@ export async function run(blob: Blob) {
   await files.avatars.upload(blob);
   const avatar: string = files.avatars.publicUrl('f1', 'me.png');
   const asset: string = files.assets.publicUrl('/assets/logo.svg');
+  for (const width of [192, 384, 768, 1536] as const) {
+    const sizedAvatar: string = files.avatars.publicUrl('f1', 'me.png', width);
+    const sizedAsset: string = files.assets.publicUrl('/assets/logo.svg', width);
+    void [sizedAvatar, sizedAsset];
+  }
   return [first, up.data?.url, link.data?.expires_at, team.data?.id, avatar, asset, files.uploads.url('f1')];
 }
 ` });
@@ -104,6 +109,8 @@ export async function run(blob: Blob) {
   await files.attachments.upload(blob);
   await files.uploads.get(42);
   await files.missing.list();
+  files.avatars.publicUrl('f1', 'me.png', 256);
+  files.assets.publicUrl('/assets/logo.svg', 256);
 }
 ` });
   const result = await check(root);
@@ -115,6 +122,8 @@ export async function run(blob: Blob) {
     'src/main.ts:6 TS2554', // a member collection needs its group on upload
     'src/main.ts:7 TS2345', // ids are strings
     'src/main.ts:8 TS2339', // undeclared collection
+    'src/main.ts:9 TS2345', // unsupported image width
+    'src/main.ts:10 TS2345', // unsupported server-only image width
   ], result.raw);
 });
 

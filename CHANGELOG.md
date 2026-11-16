@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.38.102
+
+- `somewhere privacy` reads the active release privacy facts; deploy prints the same stored source facts when the platform supplies them.
+
 ## 0.38.101
 
 - Local file-helper types accept the optional public image width (192, 384, 768 or 1536), matching the deployed compiler.

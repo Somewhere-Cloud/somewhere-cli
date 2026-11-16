@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.38.101
+
+- Local file-helper types accept the optional public image width (192, 384, 768 or 1536), matching the deployed compiler.
+
 ## 0.38.100
 
 - The sign-in confirmation page uses system serif fonts without contacting Google.

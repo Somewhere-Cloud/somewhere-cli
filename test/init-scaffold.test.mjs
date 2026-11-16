@@ -5,6 +5,7 @@ import {
   mkdtempSync,
   readFileSync,
   realpathSync,
+  rmSync,
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -69,6 +70,13 @@ test('rule 9: init scaffolds only an empty or init-metadata-only directory', () 
   writeFileSync(join(empty, '.somewhere.json'), '{}\n');
   writeFileSync(join(empty, '.mcp.json'), '{}\n');
   assert.equal(canWriteInitScaffold(empty), true);
+
+  // A hidden file is not app source (bench-1115c: every builder moved a .t_start out and back).
+  writeFileSync(join(empty, '.t_start'), '1763242440\n');
+  assert.equal(canWriteInitScaffold(empty), true);
+  mkdirSync(join(empty, '.vscode'));
+  assert.equal(canWriteInitScaffold(empty), false, 'a hidden folder still counts as source');
+  rmSync(join(empty, '.vscode'), { recursive: true });
 
   writeFileSync(join(empty, 'existing-app.ts'), 'export {};\n');
   assert.equal(canWriteInitScaffold(empty), false);
@@ -153,6 +161,10 @@ test('minimal starter is a small typed frontend, function, and schema', () => {
   assert.equal(agents, `# somewhere.cloud project contract\n${AGENT_WORKFLOW}\n${SKILLS_POINTER}\n${PORTABILITY_POINTER}\n${MCP_POINTER}\n${PREVIEW_POINTER}\n`);
   assert.match(agents.slice(0, 250), /Enough to start a typical app/);
   assert.match(agents, /Teams are built-in groups/);
+  // The test helper's calls, options and result kinds are in AGENTS.md (bench-1115c: every builder read the .d.ts files).
+  for (const call of ['await openAppTest()', 'await app.signUp(page)', "{ email: 'Ana@Staff.Example' } is used exactly as typed", 'const benPage = await browser.newPage(); const ben = await app.signUp(benPage)',
+    'r.kind: ok | empty | refused | missing-or-refused | malformed | stale-contract | error', 'await app.expectRefused(benPage,', 'captureResponses(benPage)', 'await app.finish()',
+    'clicking the item element itself']) assert.ok(agents.includes(call), call);
   // Apps that cannot ask for email verification (bench-1115b: every Team Board and Help Desk build looked this up).
   assert.match(agents, /^No email verification in your app: keep membership in your own table with member\(\) \(somewhere docs sw\.groups --section relationships-that-are-not-teams\) and assign staff with setRoles in the sign-up route \(above\)\.$/m);
   // Pages that need several reads (bench-1115b: a subject shown before its messages; an input overwritten by a late answer).
@@ -243,7 +255,7 @@ export const views = [<Logo className="logo" />, <Icon width={16} />];
   }
 });
 
-test('default starter is the auth module: SDK client, packaged handler, hooks, replaceable views', () => {
+test('default starter is the auth module: SDK client, packaged handler, hooks, replaceable views', async () => {
   const dir = tempDir();
   const result = writeInitScaffold(dir, createFeatureTemplate(
     { requested: ['auth'], added: [], modules: ['auth'], ui: 'styled' },
@@ -266,6 +278,12 @@ test('default starter is the auth module: SDK client, packaged handler, hooks, r
   // Both actions are on the page at once: Sign in and Create account, no mode switch (bench-1115b: every first build
   // rewrote a one-button card). app.signUp/signIn find each by its hook.
   for (const hook of ['email', 'password', 'sign-in', 'sign-up', 'error']) assert.match(authCard, new RegExp(`data-sw-auth="${hook}"`), hook);
+  // The same controls carry plain test ids, and the helper finds a form by either.
+  for (const id of ['auth-email', 'auth-password', 'auth-signin', 'auth-signup', 'auth-error']) assert.match(authCard, new RegExp(`data-testid="${id}"`), id);
+  for (const id of ['signout', 'current-user']) assert.match(readFileSync(join(dir, 'src/ui/AppShell.tsx'), 'utf8'), new RegExp(`data-testid="${id}"`), id);
+  const { DEFAULT_FORM } = await import('../dist/lib/form-auth.js');
+  assert.match(DEFAULT_FORM.email, /\[data-testid="auth-email"\]/); assert.match(DEFAULT_FORM.signUp, /\[data-testid="auth-signup"\]/);
+  assert.match(DEFAULT_FORM.signIn, /\[data-testid="auth-signin"\]/); assert.match(DEFAULT_FORM.signOut, /\[data-testid="signout"\]/);
   assert.doesNotMatch(authCard, /data-sw-auth="mode"|data-sw-auth-mode|toggleMode/);
   assert.match(authCard, /onClick=\{\(\) => void form\.submit\('sign-up'\)\}>Create account<\/Button>/);
   assert.doesNotMatch(authCard, /data-sw-auth="submit"/);

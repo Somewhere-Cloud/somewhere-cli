@@ -27,12 +27,16 @@ const INIT_METADATA = new Set([
 /**
  * Rule-9 boundary for `somewhere init`: a new/empty directory receives the
  * starter, while a directory containing application source keeps the original
- * link-only behavior. Dotfiles count as source unless they are metadata the
- * init command itself owns.
+ * link-only behavior. Metadata the init command owns and other hidden files
+ * (a `.t_start` timestamp, `.env`, `.nvmrc`) are not source, so the starter is
+ * written beside them; a hidden file the starter also writes (`.gitignore`) is
+ * refused by the writer's overwrite check, never replaced. Hidden folders still
+ * count as source.
  */
 export function canWriteInitScaffold(dir: string): boolean {
   if (!existsSync(dir)) return true;
-  return readdirSync(dir).every((name) => INIT_METADATA.has(name));
+  return readdirSync(dir, { withFileTypes: true })
+    .every((entry) => INIT_METADATA.has(entry.name) || (entry.name.startsWith('.') && entry.isFile()));
 }
 
 /**

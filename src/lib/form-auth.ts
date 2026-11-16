@@ -66,9 +66,10 @@ export interface FormHost {
 
 export const FIND_MS = 5_000;
 export const DEFAULT_FORM: Required<Omit<FormAdapter, 'path' | 'signedIn'>> = {
-  email: '[data-sw-auth="email"]', password: '[data-sw-auth="password"]',
-  signUp: '[data-sw-auth="sign-up"]', signIn: '[data-sw-auth="sign-in"]',
-  mode: '[data-sw-auth="mode"]', signOut: '[data-sw-auth="sign-out"]',
+  // The starter marks each control both ways; a rebuilt form may keep either.
+  email: '[data-sw-auth="email"], [data-testid="auth-email"]', password: '[data-sw-auth="password"], [data-testid="auth-password"]',
+  signUp: '[data-sw-auth="sign-up"], [data-testid="auth-signup"]', signIn: '[data-sw-auth="sign-in"], [data-testid="auth-signin"]',
+  mode: '[data-sw-auth="mode"]', signOut: '[data-sw-auth="sign-out"], [data-testid="signout"]',
 };
 const pick = (page: Page, control: Control): Locator => typeof control === 'string' ? page.locator(control) : control(page);
 const describe = (control: Control): string => typeof control === 'string' ? control : 'your locator';
@@ -104,7 +105,7 @@ async function submitForm(page: Page, action: 'sign-up' | 'sign-in', input: { em
   const f = { ...DEFAULT_FORM, ...form };
   const wanted = pick(page, action === 'sign-up' ? f.signUp : f.signIn).first();
   const missing = (what: string, control: Control) => new StepError(`${action === 'sign-up' ? 'signUp' : 'signIn'}: no ${what} (${describe(control)}) on ${form.path ?? '/'} within ${FIND_MS / 1000} s. `
-    + 'Mark your form\'s controls with data-sw-auth="email", "password", "sign-up" and "sign-in" (and "mode" if one control switches between them), '
+    + 'Mark your form\'s controls with data-testid="auth-email", "auth-password", "auth-signup" and "auth-signin" (or data-sw-auth="email", "password", "sign-up", "sign-in", and "mode" if one control switches between them), '
     + 'or pass { form: { email, password, signUp, signIn } } with your own selectors.');
   await pick(page, f.email).first().waitFor({ state: 'visible', timeout: FIND_MS }).catch(() => { throw missing('email field', f.email); });
   if (!(await wanted.isVisible())) {

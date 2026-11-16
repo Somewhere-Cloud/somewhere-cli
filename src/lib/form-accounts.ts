@@ -98,7 +98,8 @@ function refuse(value: string, why: string): never {
 }
 
 /** The one rule for a chosen sign-up address. ASCII only, one @, an ordinary local part, DNS
- *  labels, case-folded, no trailing dot; the domain is exactly example.com/.org/.net, or has
+ *  labels (checked case-insensitively; the address is returned exactly as given, so a test of a
+ *  case-insensitive app rule sees the case it typed), no trailing dot; the domain is exactly example.com/.org/.net, or has
  *  .example or .test as its last label with at least one label before it. Nothing is converted
  *  (no IDN mapping, no trimming): input that is not already in this form is refused. Plus
  *  addressing is a literal part of the local part, never a signal. */
@@ -116,7 +117,7 @@ export function admitReservedAddress(value: unknown): string {
   if (labels.some((label) => !LABEL.test(label))) refuse(value, 'the domain must be dot-separated letters, digits and -');
   const tld = labels[labels.length - 1];
   if (!EXACT.has(domain) && !(labels.length >= 2 && SUFFIX_TLDS.has(tld))) refuse(value, 'not a reserved domain');
-  return lower;
+  return value;
 }
 
 /** A fresh address at `domain` (reserved-checked); the random part makes a collision with an

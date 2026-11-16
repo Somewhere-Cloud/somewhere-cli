@@ -11,7 +11,7 @@ import { rememberSecrets, scrub } from '../dist/lib/test-diagnostics.js';
 test('a chosen sign-up address is admitted only at a reserved name, by one strict rule', () => {
   for (const ok of ['ana@example.com', 'ana@example.org', 'ana@example.net', 'ana@staff.example', 'ana@qa.acme.test',
     'Ana.B+tag@STAFF.Example', 'a_b-c@x.y.test', 'ana@xn--bcher-kva.example']) {
-    assert.equal(admitReservedAddress(ok), ok.toLowerCase(), ok);
+    assert.equal(admitReservedAddress(ok), ok, `${ok}: returned as given, never lowercased`);
   }
   const refused = {
     'ana@acme.com': 'not a reserved domain',

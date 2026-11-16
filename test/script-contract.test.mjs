@@ -47,6 +47,8 @@ const FORMS = {
   // A rewritten form with the brief's testids and no hooks at all (needs an adapter).
   testids: `<form><input type="email" data-testid="auth-email"><input type="password" data-testid="auth-password">
     <button data-action="sign-in" data-testid="auth-signin">Sign in</button><button data-action="sign-up" data-testid="auth-signup">Sign up</button></form>`,
+  // A form neither naming fits: only an adapter can drive it.
+  unmarked: `<form><input type="email" id="e"><input type="password" id="p"><button data-action="sign-in" id="in">Sign in</button><button data-action="sign-up" id="up">Sign up</button></form>`,
   // Earlier starters (0.38.81–0.38.87): one submit, the mode on the form element.
   legacy: `<form data-sw-auth="form" data-sw-auth-mode="sign-in"><input type="email" data-sw-auth="email"><input type="password" data-sw-auth="password">
     <button data-action="current" data-sw-auth="submit">submit</button><button data-toggle data-sw-auth="mode">switch</button></form>`,
@@ -75,7 +77,7 @@ async function pageFor(html) {
   return page;
 }
 
-for (const [layout, form] of Object.entries(FORMS)) {
+for (const [layout, form] of Object.entries(FORMS).filter(([name]) => name !== 'unmarked')) {
   test(`signUp and signIn work on the ${layout} form`, async () => {
     const page = await pageFor(app(form));
     const run = host();
@@ -90,12 +92,19 @@ for (const [layout, form] of Object.entries(FORMS)) {
   });
 }
 
-test('a form no adapter fits fails within seconds and says what to add', async () => {
+test('a form marked only with the starter\'s test ids signs up with no adapter', async () => {
   const page = await pageFor(app(FORMS.testids));
+  const person = await signUp(host(), page, {});
+  assert.equal(await page.locator('#who').textContent(), person.email);
+  await page.context().close();
+});
+
+test('a form no adapter fits fails within seconds and says what to add', async () => {
+  const page = await pageFor(app(FORMS.unmarked));
   const started = Date.now();
   await assert.rejects(signUp(host(), page, {}), (error) => {
-    assert.match(error.message, /no email field \(\[data-sw-auth="email"\]\)/);
-    assert.match(error.message, /data-sw-auth="email", "password", "sign-up" and "sign-in"/);
+    assert.match(error.message, /no email field \(\[data-sw-auth="email"\], \[data-testid="auth-email"\]\)/);
+    assert.match(error.message, /data-testid="auth-email", "auth-password", "auth-signup" and "auth-signin"/);
     assert.match(error.message, /\{ form: \{ email, password, signUp, signIn \} \}/);
     return true;
   });

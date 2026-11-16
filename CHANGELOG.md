@@ -1,3 +1,7 @@
+# 0.38.104
+
+- Remove the app login, tools, call and logout commands. Existing app tokens are left untouched at <SOMEWHERE_CONFIG_DIR or ~/.somewhere>/app-mcp/tokens.json; use the app MCP server as a custom connector in your AI client.
+
 # 0.38.103
 
 - Describe app MCP terminal commands as developer testing tools; register a neutral Terminal client name.

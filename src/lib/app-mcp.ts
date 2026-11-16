@@ -18,7 +18,7 @@ import open from './open.js';
  * (refresh token, revoke).
  */
 
-export const CLIENT_NAME = 'Somewhere CLI (terminal)';
+export const CLIENT_NAME = 'Terminal client';
 /** One fixed loopback port and one fixed fallback, both registered on the one client. */
 export const CALLBACK_PORTS = [47623, 47624] as const;
 const PROTOCOL_VERSION = '2025-06-18';

@@ -1,3 +1,7 @@
+# 0.38.103
+
+- Describe app MCP terminal commands as developer testing tools; register a neutral Terminal client name.
+
 # Changelog
 
 ## 0.38.102

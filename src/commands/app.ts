@@ -28,7 +28,7 @@ function fail(err: unknown, json: boolean | undefined): void {
 export function registerApp(program: Command): void {
   const app = program
     .command('app')
-    .description('Sign in to an app built on Somewhere as its user, and call its MCP tools from this terminal')
+    .description('For app developers and their agents: try the app MCP tools from a terminal while building')
     .addHelpText('after', `
 Sign-in opens a browser on this computer, where you sign in to the app and approve
 this terminal. Signing in over SSH, in a container or in a headless shell is not supported.
@@ -43,7 +43,7 @@ Examples:
 
   app
     .command('login <app-url>')
-    .description('Sign in to the app in your browser and approve this terminal')
+    .description('Sign in with an app test account in your browser and approve this development terminal')
     .option('--json', 'Print the outcome as JSON')
     .action(async (url: string, opts: JsonOption) => {
       try {
@@ -60,7 +60,7 @@ Examples:
 
   app
     .command('tools <app-url>')
-    .description('List the tools the app offers you: name, description and arguments')
+    .description('Inspect the app MCP tools while building: names, descriptions and arguments')
     .option('--json', 'Print the tool list as JSON')
     .action(async (url: string, opts: JsonOption) => {
       try {

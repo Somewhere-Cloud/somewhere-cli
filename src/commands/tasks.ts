@@ -17,6 +17,7 @@ interface ProjectOptions {
 
 interface TaskListOptions extends ProjectOptions {
   status?: string;
+  type?: string;
   assignee?: string;
   area?: string;
   parent?: string;
@@ -124,6 +125,7 @@ export function registerTasks(program: Command): void {
     .description('List tasks')
     .option('-p, --project <project>', 'Project slug or ID; defaults to the linked project')
     .option('--status <status>', 'Filter by status')
+    .option('--type <type>', 'Filter by type, or a comma-separated list (e.g. decision, directive)')
     .option('--assignee <assignee>', 'Filter by assignee')
     .option('--area <area>', 'Filter by area')
     .option('--parent <task-id>', 'Filter by parent task; use "null" for top-level tasks')
@@ -141,6 +143,7 @@ export function registerTasks(program: Command): void {
       const args = compactRecord([
         ['project_id', resolveProjectRef(opts.project)],
         ['status', opts.status],
+        ['type', opts.type],
         ['assignee', opts.assignee],
         ['area', opts.area],
         ['parent_id', opts.parent],

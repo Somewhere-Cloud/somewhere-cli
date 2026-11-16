@@ -46,8 +46,6 @@ export async function browserLogin(): Promise<CliConfig> {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>somewhere.cloud — Logged in</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
@@ -77,7 +75,7 @@ export async function browserLogin(): Promise<CliConfig> {
       padding: 48px;
     }
     .brand {
-      font-family: 'Instrument Serif', serif;
+      font-family: Georgia, 'Times New Roman', serif;
       font-style: italic;
       font-size: 28px;
       color: #2dd4bf;

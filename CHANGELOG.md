@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.38.100
+
+- The sign-in confirmation page uses system serif fonts without contacting Google.
+
 ## 0.38.99
 
 - somewhere app login, tools, call and logout: sign in to an app built on Somewhere as its user, in a browser on this computer, and call its MCP tools from the terminal. Signing out of the app in the browser also signs the terminal out.

@@ -22,6 +22,7 @@ import { promoteCommandForShell, promoteCommandLines } from '../lib/promote-hand
 import { hashFiles } from '../lib/base-files.js';
 import { table } from '../lib/output.js';
 import { forgetPreviewCredential, isDeadPreviewCredential, loadPreviewCredential, mintPreviewCredential, previewToolClient } from '../lib/preview-credential.js';
+import { folderPreviewTool, waitForPreviewJob } from '../lib/preview-jobs.js';
 import {
   clearPreviewRecord,
   decideContinue,
@@ -408,15 +409,7 @@ export function registerPreview(program: Command) {
   // ── Preview tools: the preview's own users, test users and captured mail ─────────────────────
   // Every call carries ONLY this preview's tool credential (lib/preview-credential.ts); your own
   // sign-in is used for nothing but minting that credential, and never for the preview's data.
-  async function previewToolTarget(opts: { project?: string; previewSession?: string }): Promise<{ projectId: string; previewSessionId: string; credential: string }> {
-    const projectId = opts.project ?? loadProjectConfig()?.project_id;
-    if (!projectId) throw new Error('No project linked. Run `somewhere init` or pass --project <id>.');
-    const previewSessionId = opts.previewSession ?? loadPreviewRecord(process.cwd(), projectId)?.preview_session_id;
-    if (!previewSessionId) throw new Error('This folder has no open preview. Open one with `somewhere preview`, or name one with --preview-session <id> (`somewhere preview list`).');
-    const credential = loadPreviewCredential(projectId, previewSessionId)
-      ?? await mintPreviewCredential(new ApiClient(getToken()), projectId, previewSessionId);
-    return { projectId, previewSessionId, credential };
-  }
+  const previewToolTarget = folderPreviewTool;
   function previewToolFailed(err: unknown, json: boolean | undefined, fallbackCode: string, target?: { projectId: string; previewSessionId: string }): void {
     if (target && isDeadPreviewCredential(err)) forgetPreviewCredential(target.projectId, target.previewSessionId);
     const message = isDeadPreviewCredential(err)
@@ -488,6 +481,58 @@ export function registerPreview(program: Command) {
         if (opts.json) { printJson(result); return; }
         success(`Deleted test user ${idOrEmail} from preview ${result.preview_session_id}; its sessions ended.`);
       } catch (err) { previewToolFailed(err, opts.json, 'PREVIEW_USER_REMOVE_FAILED', target); }
+    });
+
+  preview
+    .command('run-job <handler-path>')
+    .description('Run one handler path once in this folder\'s open preview, as one signed job delivery, and wait for its result (a scheduled task is a handler path plus a payload)')
+    .option('--payload <json>', 'JSON payload the handler receives (default: none)')
+    .option('--no-wait', 'Return as soon as the run is queued instead of waiting for its result')
+    .option('--timeout <seconds>', 'How long to wait for the result (default 300; a preview run is capped at 270 s)')
+    .option('--project <id>', 'Override project ID')
+    .option('--preview-session <id>', 'Which preview (its preview_session_id); default: this folder\'s')
+    .option('--json', 'Print the run (and its result) as JSON')
+    .addHelpText('after', '\nThe run uses the preview\'s own code, data, files, users and mail; it has no signed-in user (like a scheduled\n'
+      + 'run in production), one attempt and at most 270 seconds. Nothing in your live app runs or changes.\n'
+      + 'To run a production schedule\'s handler and payload this way: somewhere cron run <name> --preview\n')
+    .action(async (handlerPath: string, _opts: unknown, cmd: Command) => {
+      const opts = cmd.optsWithGlobals() as { payload?: string; wait?: boolean; timeout?: string; project?: string; previewSession?: string; json?: boolean };
+      let target;
+      try {
+        let payload: unknown;
+        if (opts.payload !== undefined) {
+          try { payload = JSON.parse(opts.payload); } catch { throw new Error('--payload must be JSON, for example --payload \'{"id":1}\'. Nothing ran.'); }
+        }
+        const timeout = opts.timeout === undefined ? 300 : Number(opts.timeout);
+        if (!Number.isFinite(timeout) || timeout < 1 || timeout > 3600) throw new Error('--timeout must be a number of seconds from 1 to 3600. Nothing ran.');
+        target = await previewToolTarget(opts);
+        const queued = await previewToolClient(target.credential).call<{ job_id: string; preview_session_id: string; preview_id: string; timeout_seconds: number }>(
+          'POST', '/preview-tools/run-job', { handler: handlerPath, ...(payload !== undefined ? { payload } : {}) });
+        if (opts.wait === false) {
+          if (opts.json) { printJson(queued); return; }
+          success(`Queued ${handlerPath} in preview ${queued.preview_session_id}: job ${queued.job_id} (not finished yet).`);
+          console.log(dim('Run without --no-wait to wait for its result.'));
+          return;
+        }
+        if (!opts.json) console.log(dim(`Job ${queued.job_id} queued in preview ${queued.preview_session_id} (version ${queued.preview_id}); waiting up to ${timeout}s…`));
+        const { job, timedOut } = await waitForPreviewJob(target.credential, queued.job_id, timeout);
+        const succeeded = !timedOut && job.status === 'complete';
+        if (!succeeded) process.exitCode = 1;
+        if (opts.json) {
+          if (succeeded) printJson({ ok: true, data: job });
+          else printJsonError(timedOut ? 'PREVIEW_RUN_WAIT_TIMEOUT' : 'PREVIEW_RUN_JOB_FAILED',
+            timedOut ? `Job ${job.job_id} has not finished after ${timeout}s (status: ${job.status}).` : `Job ${job.job_id} ${job.status}${job.error_code ? ` (${job.error_code})` : ''}.`, { data: job });
+          return;
+        }
+        if (succeeded) {
+          success(`${handlerPath} ran once in the preview: complete.`);
+          if (job.result !== null && job.result !== undefined) console.log(JSON.stringify(job.result, null, 2).slice(0, 4000));
+        } else if (timedOut) {
+          error(`Job ${job.job_id} has not finished after ${timeout}s (status: ${job.status}). It keeps running on its own (one attempt, at most 270 s); nothing needs to be run again.`);
+        } else {
+          error(`${handlerPath} ${job.status} in the preview${job.error_code ? ` (${job.error_code})` : ''}${job.error ? `: ${job.error}` : '.'}`);
+        }
+      } catch (err) { previewToolFailed(err, opts.json, 'PREVIEW_RUN_JOB_FAILED', target); }
     });
 
   preview

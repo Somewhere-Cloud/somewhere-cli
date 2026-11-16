@@ -2,6 +2,7 @@ import { Command } from 'commander';
 import { loadProjectConfig } from '../lib/config.js';
 import { shellQuote } from '../lib/next-actions.js';
 import { callPlatformTool } from '../lib/platform-tools.js';
+import { folderPreviewTool, previewCurrentVersion, waitForPreviewJob } from '../lib/preview-jobs.js';
 import {
   compactRecord,
   isRecord,
@@ -47,6 +48,7 @@ interface CronRow extends Record<string, unknown> {
 interface CronRunOptions extends ProjectOptions {
   wait?: boolean;
   timeout?: string;
+  preview?: boolean;
 }
 
 interface CronRunsOptions extends ProjectOptions {
@@ -458,6 +460,38 @@ function printCronMutation(verb: string, value: unknown): void {
   success(`${verb}${id ? ` ${id}` : ''}.`);
 }
 
+/** `cron run <task> --preview`: the task's handler and payload, once, in this folder's open preview, through the
+ *  platform's preview admission (one attempt, at most 270 s, no user). The production schedule is only read. Its
+ *  outcome is read through the preview's own credential: a production job read never sees a preview job. */
+async function runCronInPreview(cronId: string, opts: CronRunOptions, timeoutSeconds: number): Promise<void> {
+  const tool = await folderPreviewTool({});
+  const version = await previewCurrentVersion(tool.credential);
+  const value = await callPlatformTool('cron_run', { cron_id: cronId, preview_session_id: version.preview_session_id, preview_id: version.preview_id }, { allTools: true });
+  const result = cronRunResult(value);
+  if (!opts.wait) {
+    if (opts.json) { printJson(value); return; }
+    success(`Scheduled task queued in preview ${version.preview_session_id} (not finished yet). Job ${result.job_id}.`);
+    console.log(dim('The production schedule did not change. Pass --wait to wait for the run to finish and see its result.'));
+    return;
+  }
+  if (!opts.json) console.log(dim(`Job ${result.job_id} queued in preview ${version.preview_session_id} for cron ${result.cron_id}; waiting up to ${timeoutSeconds}s…`));
+  const { job, timedOut } = await waitForPreviewJob(tool.credential, result.job_id, timeoutSeconds);
+  const succeeded = !timedOut && job.status === JOB_SUCCESS_STATUS;
+  if (!succeeded) process.exitCode = 1;
+  if (opts.json) {
+    const run = { cron_id: result.cron_id, job_id: result.job_id, trigger: result.trigger, environment: 'preview', preview_session_id: version.preview_session_id };
+    if (timedOut) printJsonError('CRON_RUN_WAIT_TIMEOUT', `Job ${job.job_id} has not finished after ${timeoutSeconds}s (status: ${job.status}).`, { data: { ...run, job } });
+    else if (!succeeded) printJsonError('CRON_RUN_JOB_FAILED', `Job ${job.job_id} ${job.status}.`, { data: { ...run, job } });
+    else printJson({ ok: true, data: { ...run, job } });
+    return;
+  }
+  if (timedOut) {
+    error(`Job ${job.job_id} has not finished after ${timeoutSeconds}s (status: ${job.status}). It keeps running on its own in the preview (one attempt, at most 270 s).`);
+    return;
+  }
+  printWaitedJob(job as unknown as JobView, false, timeoutSeconds);
+}
+
 export function registerCron(program: Command): void {
   const cron = program
     .command('cron')
@@ -519,6 +553,7 @@ export function registerCron(program: Command): void {
     .description('Queue one run of a scheduled task now without changing its schedule; --wait waits for it to finish')
     .option('-p, --project <project>', 'Project slug or ID used to resolve a task name; defaults to the linked project')
     .option('--wait', 'Wait for the queued job to finish and print its result; exits non-zero on failure or timeout')
+    .option('--preview', 'Run the task\'s handler and payload once in this folder\'s open preview instead (its code, data, files and mail); the production schedule never changes')
     .option('--timeout <seconds>', `With --wait, how long to wait before giving up (default ${DEFAULT_WAIT_TIMEOUT_SECONDS})`)
     .option('--json', 'Print the complete response as JSON')
     .addHelpText(
@@ -534,6 +569,10 @@ export function registerCron(program: Command): void {
           throw new Error('USAGE_ERROR: --timeout only applies with --wait.');
         }
         const cronId = await resolveCronRunId(target, opts.project);
+        if (opts.preview) {
+          await runCronInPreview(cronId, opts, timeoutSeconds);
+          return;
+        }
         const value = await callPlatformTool('cron_run', { cron_id: cronId }, { allTools: true });
         queued = true;
         if (!opts.wait) {

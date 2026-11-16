@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.38.99
+
+- somewhere app login, tools, call and logout: sign in to an app built on Somewhere as its user, in a browser on this computer, and call its MCP tools from the terminal. Signing out of the app in the browser also signs the terminal out.
+
 ## 0.38.98
 
 - somewhere tasks list --type filters by type, so decisions and directives list on their own.

@@ -1,12 +1,12 @@
 {
   "name": "@somewhere-cloud/cli",
-  "version": "0.38.98",
+  "version": "0.38.99",
   "lockfileVersion": 3,
   "requires": true,
   "packages": {
     "": {
       "name": "@somewhere-cloud/cli",
-      "version": "0.38.98",
+      "version": "0.38.99",
       "bundleDependencies": [
         "@modelcontextprotocol/sdk",
         "chokidar",

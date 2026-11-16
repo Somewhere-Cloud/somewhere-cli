@@ -159,15 +159,24 @@ Keep each run short:
   text). Checks after a failure only wait out their timeouts. app.check() does both.
 - After a fix, rerun only the checks that failed: npx @somewhere-cloud/cli test --failed.
   Keep setup (sign-ups, rows a check needs) outside app.check() so a rerun still has it.
-Call the data endpoint as a signed-in person: app.data(page, { table, operation, id, values })
-(the raw request: somewhere docs declared-data --section calling-the-data-endpoint-directly).
-Helpers from @somewhere-cloud/cli/script (import or require): openAppTest() then app.signUp/signIn/signOut(page)
-through your form, app.data(page, { table, operation, id, values, where }) as that person,
-app.expectRefused(page, request, { allowed: ownerPage }), captureResponses, dataReady, launchOptions.
-A rebuilt sign-in form keeps data-sw-auth="email", "password", "sign-up", "sign-in" on its controls,
-or pass app.signUp(page, { form: { email, password, signUp, signIn } }) with your own selectors.
+The test helper, @somewhere-cloud/cli/script (import or require); these are all the calls a test needs:
+  const app = await openAppTest();              // the live origin, release and data contract
+  const ana = await app.signUp(page);           // through your form: { id, email, password, verified }
+    //   { email: 'Ana@Staff.Example' } is used exactly as typed; or { domain: 'staff.example' };
+    //   then app.verify(page, ana) if your app needs a verified address
+  const benPage = await browser.newPage(); const ben = await app.signUp(benPage);   // a second user
+  await app.signOut(page); await app.signIn(page, ana);
+  const r = await app.data(page, { table, operation, id, values, where, limit });   // as that person
+    //   r.kind: ok | empty | refused | missing-or-refused | malformed | stale-contract | error
+    //   (also r.status, r.data, r.error); the contract and Origin are added for you
+  await app.expectRefused(benPage, { table, operation: 'get', id }, { allowed: page });
+    //   401/403 passes; an empty or 404 answer passes only with allowed: someone it succeeds for
+  const seen = captureResponses(benPage); await seen.find(secret);   // where a secret appeared
+  await app.check('name', async () => { ... }); await app.finish();  // finish deletes the sign-ups
+It finds your form by data-testid "auth-email", "auth-password", "auth-signup", "auth-signin",
+"signout" (or data-sw-auth); otherwise pass app.signUp(page, { form: { email, password, signUp, signIn } }).
+Open a list item by clicking the item element itself (what a person clicks), not a link inside it.
 Deploy raw source, no frontend build; type errors stop upload.
-Email-domain role: app.signUp(page, { domain: 'staff.example' }), then app.verify(page, person).
 The complete team spec, with removal and leaving: somewhere docs sw.groups --section team-example.
 Diagnose with somewhere errors and somewhere logs.
 

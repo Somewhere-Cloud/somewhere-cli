@@ -2119,8 +2119,8 @@ export function AppShell({ appName, homeLink, account, busy, children }: AppShel
         <a className="brand" {...homeLink}>{appName}</a>
         {account ? (
           <div className="account">
-            <span className="account__label" title={account.label}>{account.label}</span>
-            <button type="button" className="button button--quiet" onClick={account.onSignOut} disabled={account.signingOut} data-sw-auth="sign-out">
+            <span className="account__label" title={account.label} data-testid="current-user">{account.label}</span>
+            <button type="button" className="button button--quiet" onClick={account.onSignOut} disabled={account.signingOut} data-sw-auth="sign-out" data-testid="signout">
               {account.signingOut ? 'Signing out…' : 'Sign out'}
             </button>
           </div>
@@ -2295,8 +2295,8 @@ export function AppShell({ appName, homeLink, account, busy, children }: AppShel
         <a {...homeLink}>{appName}</a>
         {account ? (
           <>
-            {' '}<span>{account.label}</span>{' '}
-            <button type="button" onClick={account.onSignOut} disabled={account.signingOut} data-sw-auth="sign-out">
+            {' '}<span data-testid="current-user">{account.label}</span>{' '}
+            <button type="button" onClick={account.onSignOut} disabled={account.signingOut} data-sw-auth="sign-out" data-testid="signout">
               {account.signingOut ? 'Signing out…' : 'Sign out'}
             </button>
             {account.error ? <p role="alert">{account.error}</p> : null}

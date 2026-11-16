@@ -49,7 +49,11 @@ ${privateData ? `  await app.check('a note stays private to its owner', async ()
   // data contract and the Origin, and says ok, empty or refused. No need to read either from the page.
   //   const { data: [task] } = await app.data(ana.page, { table: 'tasks', operation: 'list' });
   //   await app.expectRefused(ben.page, { table: 'tasks', operation: 'get', id: task.id }, { allowed: ana.page });
-`}  await app.check('at phone width nothing scrolls sideways', async () => {
+`}  // A list item opens its page when a person clicks the item itself. Click the item element, not a link
+  // inside it: a test that clicks the inner link passes even when clicking the item does nothing.
+  //   await ana.page.getByTestId('team-item').first().click();
+  //   await ana.page.getByTestId('team-name').waitFor();   // the item's own page, reached in the app
+  await app.check('at phone width nothing scrolls sideways', async () => {
     await ana.page.setViewportSize({ width: 390, height: 844 });
     await ana.page.reload();
     await ana.page.getByText(ana.account.email).waitFor();

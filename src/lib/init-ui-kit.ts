@@ -458,16 +458,16 @@ export function AuthCard({ appName, tagline, form, providers, children }: AuthCa
               <p className="divider" aria-hidden="true">or use email</p>
             </>
           ) : null}
-          <TextField id="auth-email" label="Email" type="email" name="email" autoComplete="email" inputMode="email" autoFocus data-sw-auth="email"
+          <TextField id="auth-email" label="Email" type="email" name="email" autoComplete="email" inputMode="email" autoFocus data-sw-auth="email" data-testid="auth-email"
             value={form.email} onChange={(event) => form.setEmail(event.target.value)} />
-          <TextField id="auth-password" label="Password" type="password" name="password" data-sw-auth="password"
+          <TextField id="auth-password" label="Password" type="password" name="password" data-sw-auth="password" data-testid="auth-password"
             autoComplete="current-password"
             hint={\`A new account needs at least \${form.passwordMinLength} characters.\`}
             value={form.password} onChange={(event) => form.setPassword(event.target.value)} />
           <p className="auth__forgot"><a href="/forgot-password">Forgot password?</a></p>
-          {form.error ? <p className="error" role="alert" data-sw-auth="error">{form.error}</p> : null}
-          <Button type="submit" block disabled={form.pending !== null} pending={form.pending === 'sign-in'} data-sw-auth="sign-in">Sign in</Button>
-          <Button variant="secondary" block disabled={form.pending !== null} pending={form.pending === 'sign-up'} data-sw-auth="sign-up"
+          {form.error ? <p className="error" role="alert" data-sw-auth="error" data-testid="auth-error">{form.error}</p> : null}
+          <Button type="submit" block disabled={form.pending !== null} pending={form.pending === 'sign-in'} data-sw-auth="sign-in" data-testid="auth-signin">Sign in</Button>
+          <Button variant="secondary" block disabled={form.pending !== null} pending={form.pending === 'sign-up'} data-sw-auth="sign-up" data-testid="auth-signup"
             onClick={() => void form.submit('sign-up')}>Create account</Button>
         </form>
         {children}
@@ -507,16 +507,16 @@ export function AuthCard({ appName, tagline, form, providers, children }: AuthCa
       {tagline ? <p>{tagline}</p> : null}
       {providers}
       <form onSubmit={onSubmit} noValidate aria-label="Sign in or create an account" data-sw-auth="form">
-        <TextField id="auth-email" label="Email" type="email" name="email" autoComplete="email" inputMode="email" autoFocus data-sw-auth="email"
+        <TextField id="auth-email" label="Email" type="email" name="email" autoComplete="email" inputMode="email" autoFocus data-sw-auth="email" data-testid="auth-email"
           value={form.email} onChange={(event) => form.setEmail(event.target.value)} />
-        <TextField id="auth-password" label="Password" type="password" name="password" data-sw-auth="password"
+        <TextField id="auth-password" label="Password" type="password" name="password" data-sw-auth="password" data-testid="auth-password"
           autoComplete="current-password"
           hint={\`A new account needs at least \${form.passwordMinLength} characters.\`}
           value={form.password} onChange={(event) => form.setPassword(event.target.value)} />
         <p><a href="/forgot-password">Forgot password?</a></p>
-        {form.error ? <p role="alert" data-sw-auth="error">{form.error}</p> : null}
-        <Button type="submit" disabled={form.pending !== null} pending={form.pending === 'sign-in'} data-sw-auth="sign-in">Sign in</Button>{' '}
-        <Button variant="secondary" disabled={form.pending !== null} pending={form.pending === 'sign-up'} data-sw-auth="sign-up"
+        {form.error ? <p role="alert" data-sw-auth="error" data-testid="auth-error">{form.error}</p> : null}
+        <Button type="submit" disabled={form.pending !== null} pending={form.pending === 'sign-in'} data-sw-auth="sign-in" data-testid="auth-signin">Sign in</Button>{' '}
+        <Button variant="secondary" disabled={form.pending !== null} pending={form.pending === 'sign-up'} data-sw-auth="sign-up" data-testid="auth-signup"
           onClick={() => void form.submit('sign-up')}>Create account</Button>
       </form>
       {children}

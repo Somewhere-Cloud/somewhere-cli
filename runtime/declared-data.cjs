@@ -4106,7 +4106,7 @@ var require_typed_files = __commonJS({
       if (collection.client.replace && field && field.parent) ops.push(`move(id: string, to: { ${fieldOption}}): Promise<FileResult<${meta}>>`);
       if (collection.client.delete) ops.push("delete(id: string): Promise<FileResult<{ id: string; deleted: true }>>");
       if (collection.public) {
-        ops.push(collection.scope.kind === "server_only" ? "publicUrl(path: string): string" : "publicUrl(id: string, name: string): string");
+        ops.push(collection.scope.kind === "server_only" ? "publicUrl(path: string, width?: 192 | 384 | 768 | 1536): string" : "publicUrl(id: string, name: string, width?: 192 | 384 | 768 | 1536): string");
       }
       return `${JSON.stringify(collection.name)}: { ${ops.join("; ")} }`;
     }
@@ -4177,7 +4177,8 @@ function typeAllowed(types,type){if(!types.length)return true;const t=type.split
 function makeCollection(shape){
   const c={};const has=op=>shape.ops.indexOf(op)!==-1;
   const doorUrl=id=>"/__sw/files/"+encodeURIComponent(shape.name)+"/"+encodeURIComponent(id);
-  const publicUrl=(id,name)=>shape.public==="path"?"/storage"+shape.root+"/"+encodePath(id):"/storage"+shape.root+"/"+encodeURIComponent(id)+"/"+encodeURIComponent(name);
+  const publicUrl=(id,name,width)=>{const w=shape.public==="path"?name:width;return basePublicUrl(id,name)+([192,384,768,1536].includes(w)?"?w="+w:"");};
+  const basePublicUrl=(id,name)=>shape.public==="path"?"/storage"+shape.root+"/"+encodePath(id):"/storage"+shape.root+"/"+encodeURIComponent(id)+"/"+encodeURIComponent(name);
   async function put(operation,id,file,options){
     options=options||{};
     if(!file||typeof file.size!=="number")return fail(400,"FILES_INPUT_INVALID","Pass a File or Blob.");

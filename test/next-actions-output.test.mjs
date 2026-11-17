@@ -9,11 +9,8 @@
  * The negative half matters just as much: `--json` stdout stays the raw
  * platform response, byte for byte, with none of this in it.
  *
- * The anonymous `--temporary` path gets its own case because it is a MAIN
- * fresh-agent route, and because its guidance has to be addressed by URL: the
- * throwaway project is not always in `.somewhere.json`. Its stub mirrors the
- * real temp-create contract, including the `browser` scope the suggestion
- * depends on (worker TEMP_ACCOUNT_KEY_SCOPES).
+ * A first anonymous deploy has its own three-line handoff. Its stub includes
+ * routine starter schema output and the privacy advisory.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -221,7 +218,8 @@ async function withStubTempPlatform(fn) {
             active_release_id: 'rel_temp_out',
             files_deployed: 1,
             has_functions: false,
-            warnings: [],
+            warnings: ['Database schema: table "notes" is created (4 columns).', 'A real warning.'],
+            privacy_lines: ['Privacy facts', 'Warning: no privacy page found.'],
             status: 'success',
           },
         });
@@ -245,7 +243,7 @@ async function withStubTempPlatform(fn) {
   }
 }
 
-test('an anonymous temporary deploy gets the same browser guidance, addressed by URL', async () => {
+test('first anonymous deploy ends with live URL, expiry and one claim instruction', async () => {
   const home = mkdtempSync(join(tmpdir(), 'sw-temp-out-home-'));
   const dir = mkdtempSync(join(tmpdir(), 'sw-temp-out-fixture-'));
   writeFileSync(join(dir, 'index.html'), '<html><body>hi</body></html>\n');
@@ -257,27 +255,19 @@ test('an anonymous temporary deploy gets the same browser guidance, addressed by
     });
 
     assert.equal(result.status, 0, `stdout:\n${result.stdout}\nstderr:\n${result.stderr}`);
-    // The claim and expiry lines are the point of this path — they survive.
-    assert.match(result.stdout, /Live URL:/);
-    assert.match(result.stdout, /Claim URL: https:\/\/somewhere\.cloud\/claim\?token=swtc_temp_out/);
-    assert.match(result.stdout, /Expires at:/);
-    assert.match(result.stdout, /"Save project and connect agent".*signs in on its next command/i);
+    const last = result.stdout.trimEnd().split('\n').slice(-3);
+    assert.match(last[0], /^✓ Live URL: https:\/\//);
+    assert.match(last[1], /^  Temporary app\. Expires in about 3 hours\./);
+    assert.equal(last[2], '  Open https://somewhere.cloud/claim?token=swtc_temp_out and select "Save project and connect agent" to save the project to your account and connect this terminal automatically.');
+    assert.doesNotMatch(result.stdout + result.stderr, /no privacy page|table "notes" is created|somewhere (claim|browser|preview)/);
+    assert.match(result.stderr, /A real warning/);
 
-    // By URL, not the bare project form: the throwaway project is not always
-    // the directory's linked project.
-    const liveUrl = /Live URL: (\S+)/.exec(result.stdout)?.[1];
-    assert.ok(liveUrl, result.stdout);
-    assert.ok(
-      result.stdout.includes(`somewhere browser ${liveUrl} --screenshot --store`),
-      `expected the URL form for ${liveUrl}:\n${result.stdout}`,
-    );
-    assert.doesNotMatch(result.stdout, /^ {2}somewhere browser --screenshot$/m);
-
-    // One step, not a capability dump, and no account-path hint on this branch.
-    const suggestionLines = result.stdout
-      .split('\n')
-      .filter((line) => /^ {2}somewhere \S/.test(line));
-    assert.equal(suggestionLines.length, 1, result.stdout);
-    assert.doesNotMatch(result.stdout, /somewhere preview/);
+    const detail = await run(['deploy', '--timing'], {
+      cwd: dir,
+      env: { HOME: home, USERPROFILE: home, SOMEWHERE_API_URL: apiUrl },
+    });
+    assert.equal(detail.status, 0, detail.stderr);
+    assert.match(detail.stdout, /Warning: no privacy page found/);
+    assert.match(detail.stderr, /table "notes" is created/);
   });
 });

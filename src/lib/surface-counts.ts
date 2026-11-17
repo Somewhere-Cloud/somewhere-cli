@@ -1,3 +1,4 @@
+import { cliInvocation } from './cli-invocation.js';
 /**
  * How many files, said the same way everywhere.
  *
@@ -146,5 +147,5 @@ export function formatUploadInventory(inventory: UploadInventory): string {
   const paths = [...inventory.static_files, ...inventory.functions];
   if (paths.length === 0) return 'Uploaded: nothing';
   if (paths.length <= INLINE_UPLOAD_LIST_MAX) return `Uploaded: ${paths.join(', ')}`;
-  return `Uploaded ${paths.length} paths; the full list is "uploaded" in the output of somewhere deploy --dry-run --json`;
+  return `Uploaded ${paths.length} paths; the full list is "uploaded" in the output of ${cliInvocation()} deploy --dry-run --json`;
 }

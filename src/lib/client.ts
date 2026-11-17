@@ -1,3 +1,4 @@
+import { cliInvocation } from './cli-invocation.js';
 import { operationLabel } from './repro-packet.js';
 import type { ApiResponse } from '../types.js';
 import type { BodyInit, Response as UndiciResponse } from 'undici';
@@ -136,7 +137,7 @@ export class ApiClient {
       await response.body?.cancel().catch(() => {});
       throw new CliApiError(
         'API_KEY_EXPIRED',
-        'Your somewhere access key expired and could not be refreshed. Run `somewhere login`.',
+        `Your somewhere access key expired and could not be refreshed. Run \`${cliInvocation()} login\`.`,
         401,
       );
     }
@@ -217,7 +218,7 @@ export class ApiClient {
       throw new CliApiError(
         'SESSION_EXPIRED',
         'Your somewhere session expired and there is no refresh token saved ' +
-          '(old login format). Run `somewhere login` to sign in again — that ' +
+          `(old login format). Run \`${cliInvocation()} login\` to sign in again — that ` +
           'upgrades your config so sessions refresh automatically from now on.',
         401,
       );
@@ -236,7 +237,7 @@ export class ApiClient {
       if (err instanceof CliApiError && err.code === 'INVALID_REFRESH_TOKEN') {
         throw new CliApiError(
           'SESSION_EXPIRED',
-          'Your CLI session has expired (refresh token is no longer valid). Run `somewhere login` to sign in again.',
+          `Your CLI session has expired (refresh token is no longer valid). Run \`${cliInvocation()} login\` to sign in again.`,
           401,
         );
       }
@@ -300,7 +301,7 @@ export class ApiClient {
         throw new CliApiError(
           'TIMEOUT',
           `No response from ${method} ${url.split('?')[0]} after ${Math.round(timeoutMs / 1000)}s. ` +
-            'The request may still be processing server-side — check `somewhere status` before retrying a deploy.',
+            `The request may still be processing server-side — check \`${cliInvocation()} status\` before retrying a deploy.`,
           0,
         );
       }
@@ -322,7 +323,7 @@ export class ApiClient {
           'SERVER_SLOW',
           `${method} ${url.split('?')[0]} connected, but the server didn't finish responding in time. ` +
             'This is usually a first deploy while your project is being provisioned — the request may ' +
-            'still be completing server-side. Check `somewhere status` before retrying ' +
+            `still be completing server-side. Check \`${cliInvocation()} status\` before retrying ` +
             '(retrying a first deploy is safe — it just creates a new version).',
           0,
         );

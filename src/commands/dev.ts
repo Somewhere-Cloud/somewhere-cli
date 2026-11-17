@@ -1,3 +1,4 @@
+import { cliInvocation } from '../lib/cli-invocation.js';
 import { Command } from 'commander';
 import { startFrontendDev } from '../lib/frontend-dev.js';
 import { randomUUID } from 'node:crypto';
@@ -136,7 +137,7 @@ export async function mintPreviewHandoff(
       await mintPreviewCredential(client, projectId, draftId);
     } catch (err) {
       warn(`The preview works, but its tool credential was not minted (${err instanceof Error ? err.message : String(err)}). `
-        + '`somewhere preview users` and `somewhere preview mail` mint it when first used.');
+        + `\`${cliInvocation()} preview users\` and \`${cliInvocation()} preview mail\` mint it when first used.`);
     }
   }
   return {
@@ -327,16 +328,16 @@ export function registerPreview(program: Command) {
         + 'change production rows. Nothing your users see changes — production keeps serving what you last '
         + 'promoted, until you promote a preview. Reach for this when you want your change running on the platform '
         + 'against a copy of your data, or when your agent reaches the platform over MCP and cannot serve on localhost. '
-        + 'A preview starts with no users: sign up in it, or add test users with `somewhere preview user-add`; its sign-in '
-        + 'mail is captured, never sent (`somewhere preview mail`). Copied rows private to a production user are not visible '
+        + `A preview starts with no users: sign up in it, or add test users with \`${cliInvocation()} preview user-add\`; its sign-in `
+        + `mail is captured, never sent (\`${cliInvocation()} preview mail\`). Copied rows private to a production user are not visible `
         + 'to new preview users. Server code can list the preview\'s users and set their roles (sw.auth.server), and '
         + 'built-in teams work with the preview\'s own users (invitations are captured). '
         + 'Test your change in the preview before you promote it: `somewhere test --preview`. '
         + 'Not available in a preview yet: jobs and cron handlers, '
-        + 'rooms and AI (somewhere docs dev-environments lists them). '
+        + `rooms and AI (${cliInvocation()} docs dev-environments lists them). `
         + 'It continues the preview this folder opened while that is open; --new opens a fresh one. '
         + 'The plans that include it are listed at https://somewhere.cloud/pricing; '
-        + '`somewhere dev` provides frontend hot reload against the deployed backend.',
+        + `\`${cliInvocation()} dev\` provides frontend hot reload against the deployed backend.`,
     )
     .option('--project <id>', 'Override project ID')
     .option(
@@ -363,7 +364,7 @@ export function registerPreview(program: Command) {
       const opts = cmd.optsWithGlobals() as { project?: string; json?: boolean };
       try {
         const projectId = opts.project ?? loadProjectConfig()?.project_id;
-        if (!projectId) throw new Error('No project linked. Run `somewhere init` or pass --project <id>.');
+        if (!projectId) throw new Error(`No project linked. Run \`${cliInvocation()} init\` or pass --project <id>.`);
         const { activeReleaseId, previews } = openPreviewsFromStatus(
           await callPlatformTool('deploy_status', { project_id: projectId }, { allTools: true }),
         );
@@ -385,7 +386,7 @@ export function registerPreview(program: Command) {
           return;
         }
         if (rows.length === 0) {
-          console.log('No open previews. Start one with: somewhere preview');
+          console.log(`No open previews. Start one with: ${cliInvocation()} preview`);
           return;
         }
         table(['Preview session', 'Preview id', 'Opened', 'Last saved', 'Closes in', 'Promotable', 'Folder'], rows.map((row) => [
@@ -398,7 +399,7 @@ export function registerPreview(program: Command) {
           row.this_folder ? 'this folder' : '',
         ]));
         console.log(dim('Each open preview holds a copy of production data until it is promoted, closed, or unused for 24 h (7 days at most).'));
-        console.log(dim('Close one: somewhere preview close <preview_session_id>. Promote one: somewhere promote <preview_session_id> <preview_id>.'));
+        console.log(dim(`Close one: ${cliInvocation()} preview close <preview_session_id>. Promote one: ${cliInvocation()} promote <preview_session_id> <preview_id>.`));
       } catch (err) {
         if (opts.json) printJsonError(typedErrorCode(err) ?? 'PREVIEW_LIST_FAILED', err instanceof Error ? err.message : String(err));
         else error(err instanceof Error ? err.message : String(err), err);
@@ -413,7 +414,7 @@ export function registerPreview(program: Command) {
   function previewToolFailed(err: unknown, json: boolean | undefined, fallbackCode: string, target?: { projectId: string; previewSessionId: string }): void {
     if (target && isDeadPreviewCredential(err)) forgetPreviewCredential(target.projectId, target.previewSessionId);
     const message = isDeadPreviewCredential(err)
-      ? 'That preview is closed, promoted or expired, or its credential was revoked. Start or continue a preview with `somewhere preview`.'
+      ? `That preview is closed, promoted or expired, or its credential was revoked. Start or continue a preview with \`${cliInvocation()} preview\`.`
       : err instanceof Error ? err.message : String(err);
     if (json) printJsonError(typedErrorCode(err) ?? fallbackCode, message);
     else error(message, err);
@@ -434,7 +435,7 @@ export function registerPreview(program: Command) {
         const result = await previewToolClient(target.credential).call<{ preview_session_id: string; users: Array<Record<string, unknown>> }>('GET', '/preview-tools/users');
         if (opts.json) { printJson(result); return; }
         if (result.users.length === 0) {
-          console.log(`Preview ${result.preview_session_id} has no users yet. Sign up in the app, or add one: somewhere preview user-add`);
+          console.log(`Preview ${result.preview_session_id} has no users yet. Sign up in the app, or add one: ${cliInvocation()} preview user-add`);
           return;
         }
         table(['Email', 'User id', 'Verified', 'Kind'], result.users.map((u) => [
@@ -494,7 +495,7 @@ export function registerPreview(program: Command) {
     .option('--json', 'Print the run (and its result) as JSON')
     .addHelpText('after', '\nThe run uses the preview\'s own code, data, files, users and mail; it has no signed-in user (like a scheduled\n'
       + 'run in production), one attempt and at most 270 seconds. Nothing in your live app runs or changes.\n'
-      + 'To run a production schedule\'s handler and payload this way: somewhere cron run <name> --preview\n')
+      + `To run a production schedule\'s handler and payload this way: ${cliInvocation()} cron run <name> --preview\n`)
     .action(async (handlerPath: string, _opts: unknown, cmd: Command) => {
       const opts = cmd.optsWithGlobals() as { payload?: string; wait?: boolean; timeout?: string; project?: string; previewSession?: string; json?: boolean };
       let target;
@@ -576,7 +577,7 @@ export function registerPreview(program: Command) {
       const opts = cmd.optsWithGlobals() as { project?: string; all?: boolean; json?: boolean };
       try {
         const projectId = opts.project ?? loadProjectConfig()?.project_id;
-        if (!projectId) throw new Error('No project linked. Run `somewhere init` or pass --project <id>.');
+        if (!projectId) throw new Error(`No project linked. Run \`${cliInvocation()} init\` or pass --project <id>.`);
         if (opts.all && previewSessionId) throw new Error('Pass a preview_session_id or --all, not both.');
         const { previews } = openPreviewsFromStatus(
           await callPlatformTool('deploy_status', { project_id: projectId }, { allTools: true }),
@@ -610,7 +611,7 @@ export function registerPreview(program: Command) {
             if (deleted) success(`Closed preview ${id}. Its copy of the production data and files was deleted.`);
             else {
               failed = true;
-              warn(`Closed preview ${id}, but deleting its copy of the production data has not finished. Run the same close again to finish it: somewhere preview close ${id}`);
+              warn(`Closed preview ${id}, but deleting its copy of the production data has not finished. Run the same close again to finish it: ${cliInvocation()} preview close ${id}`);
             }
           } catch (err) {
             failed = true;
@@ -618,7 +619,7 @@ export function registerPreview(program: Command) {
             results.push({ preview_session_id: id, status: code ?? 'error', data_deleted: false });
             if (!opts.json) {
               error(`Preview ${id} was not closed: ${err instanceof Error ? err.message : String(err)}`, err);
-              if (code === 'DRAFT_NOT_FOUND') info('`somewhere preview list` shows the open previews.');
+              if (code === 'DRAFT_NOT_FOUND') info(`\`${cliInvocation()} preview list\` shows the open previews.`);
             }
           }
         }
@@ -643,7 +644,7 @@ export function registerPreview(program: Command) {
       const opts = cmd.optsWithGlobals() as { project?: string; previewSession?: string; json?: boolean };
       try {
         const projectId = opts.project ?? loadProjectConfig()?.project_id;
-        if (!projectId) throw new Error('No project linked. Run `somewhere init` or pass --project <id>.');
+        if (!projectId) throw new Error(`No project linked. Run \`${cliInvocation()} init\` or pass --project <id>.`);
         const status = await callPlatformTool('deploy_status', { project_id: projectId }, { allTools: true });
         // Without a choice, this folder's own open preview is the one meant.
         const folderPreview = loadPreviewRecord(process.cwd(), projectId)?.preview_session_id;
@@ -662,7 +663,7 @@ export function registerPreview(program: Command) {
           return;
         }
         printPreviewHandoff(handoff);
-        console.log(dim('   This link works once; run `somewhere preview link` again for another.'));
+        console.log(dim(`   This link works once; run \`${cliInvocation()} preview link\` again for another.`));
       } catch (err) {
         if (opts.json) printJsonError(typedErrorCode(err) ?? 'PREVIEW_LINK_FAILED', err instanceof Error ? err.message : String(err));
         else error(err instanceof Error ? err.message : String(err), err);
@@ -685,7 +686,7 @@ export function choosePreviewCandidate(
     if (!match) throw new Error(`No open preview has preview_session_id ${previewSessionId}. Open previews: ${open.map((item) => item.draftId).join(', ') || 'none'}.`);
     return match;
   }
-  if (open.length === 0) throw new Error('No open preview for this project. Start one with: somewhere preview --once');
+  if (open.length === 0) throw new Error(`No open preview for this project. Start one with: ${cliInvocation()} preview --once`);
   if (open.length > 1) {
     throw new Error(`${open.length} previews are open; name one with --preview-session <id>: ${open.map((item) => item.draftId).join(', ')}.`);
   }
@@ -703,7 +704,7 @@ export function registerDev(program: Command) {
     .action(async (opts: { project?: string; port: string; open?: boolean }) => {
       try {
         const projectId = opts.project ?? loadProjectConfig()?.project_id;
-        if (!projectId) throw new Error('No project linked. Run somewhere init or pass --project <id>.');
+        if (!projectId) throw new Error(`No project linked. Run ${cliInvocation()} init or pass --project <id>.`);
         const client = new ApiClient(getToken());
         const target = await getDeployedProjectServingUrl(client, projectId);
         await startFrontendDev(process.cwd(), target, Number(opts.port), opts.open);
@@ -715,7 +716,7 @@ export function registerDev(program: Command) {
 }
 
 export const CLOUD_DEV_UNAVAILABLE_MESSAGE =
-  '`somewhere preview` is not included in this account\'s plan. '
+  `\`${cliInvocation()} preview\` is not included in this account\'s plan. `
   + 'Plans that include hosted previews are listed at https://somewhere.cloud/pricing.';
 
 /**
@@ -780,7 +781,7 @@ export function cloudDevUnavailableMessage(planNames: string[] | null): string {
   const list = planNames.length === 1
     ? planNames[0]
     : `${planNames.slice(0, -1).join(', ')} and ${planNames[planNames.length - 1]}`;
-  return '`somewhere preview` is not included in this account\'s plan. '
+  return `\`${cliInvocation()} preview\` is not included in this account\'s plan. `
     + `It is included on the ${list} plan${planNames.length === 1 ? '' : 's'}: https://somewhere.cloud/pricing.`;
 }
 
@@ -888,7 +889,7 @@ export type PublishConsent = 'granted' | 'declined' | 'not-asked';
 export class SourceBaseRequiredError extends Error {
   readonly code = 'BASE_RELEASE_REQUIRED';
   constructor() {
-    super('This folder has no usable source base. Save your edits, run `somewhere pull`, then reapply them before starting a preview. Nothing was published.');
+    super(`This folder has no usable source base. Save your edits, run \`${cliInvocation()} pull\`, then reapply them before starting a preview. Nothing was published.`);
     this.name = 'SourceBaseRequiredError';
   }
 }
@@ -900,8 +901,8 @@ export class SourceBaseStaleError extends Error {
   readonly code = 'STALE_RELEASE_BASE';
   constructor(readonly baseReleaseId: string, readonly activeReleaseId: string) {
     super('Production changed since this folder was last pulled or deployed, so a new preview cannot start from it. '
-      + 'Nothing was uploaded. Next: run `somewhere pull` (it keeps your edits and stops if a file changed both here '
-      + 'and live), then `somewhere preview` again.');
+      + `Nothing was uploaded. Next: run \`${cliInvocation()} pull\` (it keeps your edits and stops if a file changed both here `
+      + `and live), then \`${cliInvocation()} preview\` again.`);
     this.name = 'SourceBaseStaleError';
   }
 }
@@ -909,7 +910,7 @@ export class SourceBaseStaleError extends Error {
 export class FirstPublishReleaseUnknownError extends Error {
   readonly code = 'PUBLISHED_RELEASE_UNKNOWN';
   constructor() {
-    super('The first publish completed but did not return its release. Save your edits, run `somewhere pull`, then reapply them before starting a preview.');
+    super(`The first publish completed but did not return its release. Save your edits, run \`${cliInvocation()} pull\`, then reapply them before starting a preview.`);
     this.name = 'FirstPublishReleaseUnknownError';
   }
 }
@@ -985,7 +986,7 @@ async function runHotDeploy(opts: { project?: string; publishFirst?: boolean; js
   if (!projectId) {
     const config = loadProjectConfig();
     if (!config) {
-      error('No project linked. Run `somewhere init` or pass --project <id>.');
+      error(`No project linked. Run \`${cliInvocation()} init\` or pass --project <id>.`);
       process.exit(1);
     }
     projectId = config.project_id;
@@ -1044,13 +1045,13 @@ async function runHotDeploy(opts: { project?: string; publishFirst?: boolean; js
     if (decision.reason === 'stale') {
       if (!opts.json) {
         warn(`This folder's preview ${decision.recorded.preview_session_id} was opened from an older production version, so it can no longer be promoted. Opening a new one.`);
-        info(`It still holds a copy of production data until it expires; close it with: somewhere preview close ${decision.recorded.preview_session_id}`);
+        info(`It still holds a copy of production data until it expires; close it with: ${cliInvocation()} preview close ${decision.recorded.preview_session_id}`);
       }
     } else if (decision.reason === 'not-open') {
       say(`This folder's last preview ${decision.recorded.preview_session_id} is no longer open; opening a new one.`);
       clearPreviewRecord(cwd);
     } else if (decision.reason === 'none-recorded' && openNow.previews.length > 0) {
-      say(`${openNow.previews.length} other preview${openNow.previews.length === 1 ? ' is' : 's are'} open for this project (somewhere preview list). Opening a new one for this folder.`);
+      say(`${openNow.previews.length} other preview${openNow.previews.length === 1 ? ' is' : 's are'} open for this project (${cliInvocation()} preview list). Opening a new one for this folder.`);
     }
   }
 
@@ -1104,7 +1105,7 @@ async function runHotDeploy(opts: { project?: string; publishFirst?: boolean; js
       }
       error(message);
       info('Nothing was created or changed — whatever is live stays live.');
-      info('`somewhere deploy` publishes to production on any plan, and `somewhere dev` runs the same app on your machine.');
+      info(`\`${cliInvocation()} deploy\` publishes to production on any plan, and \`${cliInvocation()} dev\` runs the same app on your machine.`);
       process.exit(1);
     }
     if (err instanceof BaseReleaseUnknownError) {
@@ -1115,7 +1116,7 @@ async function runHotDeploy(opts: { project?: string; publishFirst?: boolean; js
       }
       error(err.message);
       info('Nothing was created or changed — whatever is live stays live.');
-      info('Try `somewhere preview` again. To publish this directory to production deliberately, run `somewhere deploy`.');
+      info(`Try \`${cliInvocation()} preview\` again. To publish this directory to production deliberately, run \`${cliInvocation()} deploy\`.`);
       process.exit(1);
     }
     if (err instanceof PublishConsentRequiredError) {
@@ -1132,7 +1133,7 @@ async function runHotDeploy(opts: { project?: string; publishFirst?: boolean; js
         warn('Nothing was published — whatever is live stays live.');
       } else {
         error('This project has never been published, so a preview has no live version to build on.');
-        info('Re-run as `somewhere preview --publish-first` to publish this directory to production first, or run `somewhere deploy` yourself.');
+        info(`Re-run as \`${cliInvocation()} preview --publish-first\` to publish this directory to production first, or run \`${cliInvocation()} deploy\` yourself.`);
         info('Nothing was created or changed — whatever is live stays live.');
       }
       process.exit(1);
@@ -1210,7 +1211,7 @@ async function runHotDeploy(opts: { project?: string; publishFirst?: boolean; js
     // number and then a later line counted it separately, so one project
     // reported three different sizes of itself.
     success(`Synced ${formatPublishSurface(countPublishSurface({ files, binaryFiles, functions }))} to preview`);
-    if (expectedPreviewId === null) say(`Opened preview ${draftId} for this folder; \`somewhere preview\` continues it until it is promoted, closed or expires.`);
+    if (expectedPreviewId === null) say(`Opened preview ${draftId} for this folder; \`${cliInvocation()} preview\` continues it until it is promoted, closed or expires.`);
     if (res.warnings?.length) for (const w of res.warnings) warn(w);
   } catch (err) {
     spinner?.fail('Initial sync failed');
@@ -1219,9 +1220,9 @@ async function runHotDeploy(opts: { project?: string; publishFirst?: boolean; js
     }
     const code = typedErrorCode(err);
     if (code === 'STALE_RELEASE_BASE') {
-      info('Next: run `somewhere pull` (it keeps your edits), then `somewhere preview` again.');
+      info(`Next: run \`${cliInvocation()} pull\` (it keeps your edits), then \`${cliInvocation()} preview\` again.`);
     } else if (expectedPreviewId !== null && code && ['DRAFT_SESSION_TERMINAL', 'DRAFT_CANDIDATE_CONFLICT', 'DRAFT_VERSION_MISMATCH', 'DRAFT_NOT_FOUND'].includes(code)) {
-      info(`Preview ${draftId} cannot take this save. Next: \`somewhere preview --new\` opens a fresh preview.`);
+      info(`Preview ${draftId} cannot take this save. Next: \`${cliInvocation()} preview --new\` opens a fresh preview.`);
     }
     process.exit(1);
   }
@@ -1233,7 +1234,7 @@ async function runHotDeploy(opts: { project?: string; publishFirst?: boolean; js
     console.log('');
     printPreviewHandoff(initialHandoff);
     console.log(dim('   private to you. The preview stays open until you promote it or it expires.'));
-    console.log(dim('   Each link works once; mint another with: somewhere preview link'));
+    console.log(dim(`   Each link works once; mint another with: ${cliInvocation()} preview link`));
     process.exit(0);
   }
 
@@ -1287,9 +1288,9 @@ async function runHotDeploy(opts: { project?: string; publishFirst?: boolean; js
       info('This preview had already finished, so your save was not applied. It is still in your local files.');
     }
     if (savedChangeWaiting) {
-      info(`Run ${teal('somewhere preview')} again to preview that save.`);
+      info(`Run ${teal(`${cliInvocation()} preview`)} again to preview that save.`);
     } else {
-      info(`Run ${teal('somewhere preview')} to keep previewing.`);
+      info(`Run ${teal(`${cliInvocation()} preview`)} to keep previewing.`);
     }
     if (timer) clearTimeout(timer);
     if (pollTimer) clearInterval(pollTimer);
@@ -1375,7 +1376,7 @@ async function runHotDeploy(opts: { project?: string; publishFirst?: boolean; js
         staleWarned = true;
         console.log('');
         warn('Production changed since this preview opened (a deploy, promote or rollback), so this preview can no longer be promoted. Saves still update it for review.');
-        info(`To ship these edits: stop here (Ctrl-C), run ${teal('somewhere pull')} (it keeps your edits), then ${teal('somewhere preview')}; it opens a fresh preview. Close this one with ${teal(`somewhere preview close ${draftId}`)}.`);
+        info(`To ship these edits: stop here (Ctrl-C), run ${teal(`${cliInvocation()} pull`)} (it keeps your edits), then ${teal(`${cliInvocation()} preview`)}; it opens a fresh preview. Close this one with ${teal(`${cliInvocation()} preview close ${draftId}`)}.`);
       }
       if (state === 'active') {
         observedSessionActive = true;

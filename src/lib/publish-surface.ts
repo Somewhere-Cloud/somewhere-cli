@@ -1,3 +1,4 @@
+import { cliInvocation } from './cli-invocation.js';
 import { extname } from 'node:path';
 
 /**
@@ -96,5 +97,5 @@ export function isAppSurfaceRootFile(name: string): boolean {
  * excluded and how to publish it on purpose — no internals, no ticket ids.
  */
 export function excludedRootFileReason(name: string): string {
-  return `not part of the app (nothing references ${name}) — publish it with \`somewhere deploy --include ${name}\``;
+  return `not part of the app (nothing references ${name}) — publish it with \`${cliInvocation()} deploy --include ${name}\``;
 }

@@ -1,3 +1,4 @@
+import { cliInvocation } from '../lib/cli-invocation.js';
 import { spawn } from 'node:child_process';
 import { fetchWithProxy as fetch } from '../lib/http.js';
 import { randomBytes } from 'node:crypto';
@@ -330,7 +331,7 @@ export async function runUpdate(
 
   info(`Update available: ${dim(installedVersion)} → ${teal(release.version)}`);
   if (opts.check) {
-    info(`Run ${teal('somewhere update')} to install it.`);
+    info(`Run ${teal(`${cliInvocation()} update`)} to install it.`);
     return 0;
   }
 
@@ -354,7 +355,7 @@ export async function runUpdate(
     if (tempDir) rmSync(tempDir, { recursive: true, force: true });
   }
 
-  success(`Updated to ${release.version}. Run ${teal('somewhere --version')} to confirm.`);
+  success(`Updated to ${release.version}. Run ${teal(`${cliInvocation()} --version`)} to confirm.`);
   info(PROJECT_PIN_NOTE);
   return 0;
 }

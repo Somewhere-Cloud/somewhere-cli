@@ -1,3 +1,4 @@
+import { cliInvocation } from '../lib/cli-invocation.js';
 import { readFileSync } from 'node:fs';
 import { Command } from 'commander';
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
@@ -16,7 +17,7 @@ function parseArguments(value: string | undefined, file?: string): Record<string
   } catch (err) {
     throw new Error(`${where} must be valid JSON. ${err instanceof Error ? err.message : String(err)}. `
       + (file === undefined
-        ? 'The requested tool was not called. Pass one JSON object as a single argument, with double-quoted property names and string values; run `somewhere call --help` for usage.'
+        ? `The requested tool was not called. Pass one JSON object as a single argument, with double-quoted property names and string values; run \`${cliInvocation()} call --help\` for usage.`
         : 'The requested tool was not called. The file holds one JSON object with double-quoted property names and string values.'));
   }
   if (!isRecord(parsed)) {
@@ -89,7 +90,7 @@ export function registerCall(program: Command): void {
     .addHelpText('after', '\nIn a directory linked with .somewhere.json, a tool that takes project_id runs against the\n'
       + 'linked project unless the JSON names one. Use --all-projects to omit the default; the tool decides its scope.\n'
       + '\nLarge arguments, such as many project_patch edits, go in a file:\n'
-      + '  somewhere call project_patch --file edits.json\n')
+      + `  ${cliInvocation()} call project_patch --file edits.json\n`)
     .action(async (
       tool: string | undefined,
       jsonArgs: string | undefined,
@@ -97,7 +98,7 @@ export function registerCall(program: Command): void {
     ) => {
       try {
         if (opts.list) {
-          if (tool || jsonArgs || opts.file !== undefined) throw new Error('Do not pass a tool name with --list. The requested tool was not called. Run `somewhere call --list` without a tool name or JSON arguments.');
+          if (tool || jsonArgs || opts.file !== undefined) throw new Error(`Do not pass a tool name with --list. The requested tool was not called. Run \`${cliInvocation()} call --list\` without a tool name or JSON arguments.`);
           const tools = await listPlatformTools({ allTools: true });
           if (opts.json) {
             printJson({ tools, count: tools.length });
@@ -111,7 +112,7 @@ export function registerCall(program: Command): void {
         }
 
         if (!tool) {
-          throw new Error('Missing tool name. The requested tool was not called. Run `somewhere call --list` to discover tools.');
+          throw new Error(`Missing tool name. The requested tool was not called. Run \`${cliInvocation()} call --list\` to discover tools.`);
         }
         let args = readCallArguments(jsonArgs, opts.file);
         const linked = loadProjectConfig();
@@ -133,7 +134,7 @@ export function registerCall(program: Command): void {
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         const next = /unknown tool|not found/i.test(message)
-          ? ' Run `somewhere call --list` to see exact tool names.'
+          ? ` Run \`${cliInvocation()} call --list\` to see exact tool names.`
           : '';
         error(`${message}${next}`, err);
         process.exitCode = 1;

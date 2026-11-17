@@ -1,3 +1,4 @@
+import { cliInvocation } from './cli-invocation.js';
 import { posix } from 'node:path';
 
 const ROOT_FOLDERS = new Set(['scripts', 'fixtures', 'e2e', 'tooling', 'tools', 'design-v2', 'build', 'out', 'storybook-static', 'artifacts', 'reports']);
@@ -12,7 +13,7 @@ export function operationalExclusionReason(path: string, optedIn: (path: string,
   if (folder < 0 && !output) return null;
   if (optedIn(path, false) || parts.slice(0,-1).some((_, i) => optedIn(parts.slice(0,i+1).join('/'), true))) return null;
   const name = folder < 0 ? path : parts.slice(0,folder+1).join('/');
-  return `operational file — publish it with \`somewhere deploy --include ${name}\` or a "!${name}${folder < 0 ? '' : '/'}" line in .somewhereignore`;
+  return `operational file — publish it with \`${cliInvocation()} deploy --include ${name}\` or a "!${name}${folder < 0 ? '' : '/'}" line in .somewhereignore`;
 }
 
 /** Conservative retention: a quoted app path, import, URL or HTML/CSS reference

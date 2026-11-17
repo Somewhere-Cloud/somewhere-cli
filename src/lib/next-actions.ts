@@ -1,3 +1,4 @@
+import { cliInvocation } from './cli-invocation.js';
 /**
  * What to run next, decided in ONE place.
  *
@@ -44,12 +45,12 @@ export function shellQuote(value: string): string {
 const SEE_IT_LINKED: NextAction = {
   // VERIFY mode: a linked project saves the screenshot into the project files
   // and prints a link that opens it.
-  command: 'somewhere browser --screenshot',
+  command: `${cliInvocation()} browser --screenshot`,
   why: 'see the live page — console errors, failed requests, and a screenshot link',
 };
 
 const CHECK_IT_LINKED: NextAction = {
-  command: 'somewhere verify',
+  command: `${cliInvocation()} verify`,
   why: 'the page loads and looks right at desktop and phone size; nothing to write',
 };
 
@@ -58,7 +59,7 @@ const CHECK_IT_LINKED: NextAction = {
  *  scope (worker TEMP_ACCOUNT_KEY_SCOPES), so this works on that path too. */
 function seeItByUrl(liveUrl: string): NextAction {
   return {
-    command: `somewhere browser ${shellQuote(liveUrl)} --screenshot --store`,
+    command: `${cliInvocation()} browser ${shellQuote(liveUrl)} --screenshot --store`,
     why: 'see the live page — console errors, failed requests, and a screenshot link',
   };
 }
@@ -68,7 +69,7 @@ export function nextActions(ctx: NextActionContext): NextAction[] {
     case 'init':
       return [
         {
-          command: 'somewhere deploy',
+          command: `${cliInvocation()} deploy`,
           why: ctx.scaffolded
             ? 'publish the starter and get its live URL — the deploy is the backend'
             : 'publish this source and get its live URL — the deploy is the backend',
@@ -77,7 +78,7 @@ export function nextActions(ctx: NextActionContext): NextAction[] {
         {
           // Last, and explicitly "after that": frontend hot reload proxies to
           // the deployed backend and refuses on a project with no release.
-          command: 'somewhere dev',
+          command: `${cliInvocation()} dev`,
           why: 'after that, frontend hot reload against the deployed backend',
         },
       ];
@@ -85,15 +86,15 @@ export function nextActions(ctx: NextActionContext): NextAction[] {
     case 'login':
       return [
         ctx.linkedProject
-          ? { command: 'somewhere deploy', why: 'publish this directory and get its live URL' }
+          ? { command: `${cliInvocation()} deploy`, why: 'publish this directory and get its live URL' }
           : {
-              command: 'somewhere init',
+              command: `${cliInvocation()} init`,
               why: 'create or link a project here, with a full-stack starter',
             },
       ];
 
     case 'deploy': {
-      const test = { command: 'somewhere test', why: 'journeys, several users and access rules: your tests/*.mjs' };
+      const test = { command: `${cliInvocation()} test`, why: 'journeys, several users and access rules: your tests/*.mjs' };
       if (ctx.temporary) return ctx.liveUrl ? [seeItByUrl(ctx.liveUrl)] : [];
       // Test first, then verify (the AGENTS.md split); the screenshot link last.
       if (ctx.projectLinked) return [test, CHECK_IT_LINKED, SEE_IT_LINKED];

@@ -1,3 +1,4 @@
+import { cliInvocation } from '../lib/cli-invocation.js';
 import { writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { registerDbRows } from './db-rows.js';
@@ -89,11 +90,11 @@ export function registerDb(program: Command) {
 
   db
     .command('apply-schema [path]', { hidden: true })
-    .description('Schema changes ship with deploy: edit db/schema.ts and run somewhere deploy')
+    .description(`Schema changes ship with deploy: edit db/schema.ts and run ${cliInvocation()} deploy`)
     .option('--project <id>', 'Project ID')
     .option('--json', 'Print the error as JSON')
     .action((_schemaPath: string | undefined, opts: { json?: boolean }) => {
-      const message = 'Schema changes ship with deploy: edit db/schema.ts, then run somewhere deploy from the app root with the complete app source (or create a preview). That release applies the schema. Nothing was changed.';
+      const message = `Schema changes ship with deploy: edit db/schema.ts, then run ${cliInvocation()} deploy from the app root with the complete app source (or create a preview). That release applies the schema. Nothing was changed.`;
       if (opts.json) printJson({ ok: false, error: 'SCHEMA_APPLY_RETIRED', message });
       else error(`SCHEMA_APPLY_RETIRED: ${message}`);
       process.exitCode = 1;
@@ -101,7 +102,7 @@ export function registerDb(program: Command) {
 
   db
     .command('dump')
-    .description('Export the database as SQL (schema + every row). Pipe to a file: somewhere db dump > backup.sql. Tables declared in db/schema.ts: --plane managed (project owner only); what each plane holds: --manifest')
+    .description(`Export the database as SQL (schema + every row). Pipe to a file: ${cliInvocation()} db dump > backup.sql. Tables declared in db/schema.ts: --plane managed (project owner only); what each plane holds: --manifest`)
     .option('--project <id>', 'Project ID (defaults to .somewhere.json)')
     .option('--plane <plane>', 'raw (SQL tables, default) or managed (tables declared in db/schema.ts; owner only)')
     .option('--manifest', 'Print the export manifest (tables per plane, name collisions, schema and access) as JSON')
@@ -242,7 +243,7 @@ export function registerDb(program: Command) {
         // future object shape still works.
         const rows = (r.tables ?? []).map((t) => (typeof t === 'string' ? { name: t } : t));
         if (!rows.length) {
-          info(dim('No tables yet. Create one with `somewhere db query "CREATE TABLE …"`.'));
+          info(dim(`No tables yet. Create one with \`${cliInvocation()} db query "CREATE TABLE …"\`.`));
           return;
         }
         table(

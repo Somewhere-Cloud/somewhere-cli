@@ -1,3 +1,4 @@
+import { cliInvocation } from '../lib/cli-invocation.js';
 import { Command } from 'commander';
 import { CLI_VERSION } from '../lib/version.js';
 import { BUNDLED_SKILLS_PACK } from '../lib/skills-pack.generated.js';
@@ -56,14 +57,14 @@ export function registerSkills(program: Command) {
       } catch (err) {
         // A pack that fails its hash check is never installed, and the
         // bundled one is not silently swapped in for it.
-        fail(err, opts.json, 'Nothing was installed; `somewhere skills update --offline` installs the pack inside this CLI.');
+        fail(err, opts.json, `Nothing was installed; \`${cliInvocation()} skills update --offline\` installs the pack inside this CLI.`);
         return;
       }
       const pack = latest ?? BUNDLED_SKILLS_PACK;
       const source = latest ? 'docs-host' : 'bundled';
       let result: ReturnType<typeof installSkills>;
       try { result = installSkills(process.cwd(), pack, { cli: CLI_VERSION, source }); }
-      catch (err) { fail(err, opts.json, 'Installation did not complete; inspect `somewhere skills status`.', 'SKILLS_INSTALL_FAILED'); return; }
+      catch (err) { fail(err, opts.json, `Installation did not complete; inspect \`${cliInvocation()} skills status\`.`, 'SKILLS_INSTALL_FAILED'); return; }
       if (opts.json) {
         printJson({ ...result, source });
         return;

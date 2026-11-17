@@ -1,3 +1,9 @@
+## 0.38.111
+
+- Show one claim instruction and how long a temporary app has left.
+- Keep starter privacy advice in deploy details.
+- Match the current CLI invocation in suggestions and show a runnable rollback command.
+
 ## 0.38.110
 
 - Install the starter's pinned dependencies when signed out, too.

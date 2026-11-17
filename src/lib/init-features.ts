@@ -1,3 +1,4 @@
+import { cliInvocation } from './cli-invocation.js';
 // The module menu for `somewhere init --features`. A const table, not a
 // plugin system: each module names what it requires, and the resolver adds
 // those requirements and reports them. Files come from init-feature-template.ts.
@@ -17,7 +18,7 @@ interface InitModuleDefinition {
 const MODULES: readonly InitModuleDefinition[] = [
   {
     id: 'auth',
-    summary: 'Email/password sign-up, sign-in and sign-out through the SDK cookie session: the packaged /api/auth route, auth hooks over the SDK provider, a sign-in page, a "Forgot password?" link with /forgot-password and /reset-password pages over api/forgot-password.ts and api/reset-password.ts (sw.auth.forgot, sw.auth.reset), a "Verify your email" code panel for password accounts (the session decides the account; no token in page code), the /auth/magic page that sign-in and sw.auth.invite (group) invitation links open, routed in front of the sign-in gate (an explicit Continue press redeems the one-time token once and opens the link\'s redirect_uri only when it is a page of this app), and a per-user private boundary behind a loading state. Plain `somewhere init` includes this and private-data.',
+    summary: `Email/password sign-up, sign-in and sign-out through the SDK cookie session: the packaged /api/auth route, auth hooks over the SDK provider, a sign-in page, a "Forgot password?" link with /forgot-password and /reset-password pages over api/forgot-password.ts and api/reset-password.ts (sw.auth.forgot, sw.auth.reset), a "Verify your email" code panel for password accounts (the session decides the account; no token in page code), the /auth/magic page that sign-in and sw.auth.invite (group) invitation links open, routed in front of the sign-in gate (an explicit Continue press redeems the one-time token once and opens the link\'s redirect_uri only when it is a page of this app), and a per-user private boundary behind a loading state. Plain \`${cliInvocation()} init\` includes this and private-data.`,
     requires: [],
   },
   {
@@ -44,13 +45,13 @@ const UI_MODES: readonly { id: InitUiMode; summary: string }[] = [
 
 // Listed so an agent reading the catalog does not invent them from scratch.
 const NOT_OFFERED: readonly { id: string; reason: string }[] = [
-  { id: 'private-files', reason: 'Not offered by init yet; see `somewhere docs declared-files`.' },
-  { id: 'oauth', reason: 'Not a module: every auth starter has it. List `google`, `github` or `discord` in `SIGN_IN_PROVIDERS` (src/config.ts); the buttons and `/auth/callback` page are already wired. See `somewhere docs auth-client`.' },
+  { id: 'private-files', reason: `Not offered by init yet; see \`${cliInvocation()} docs declared-files\`.` },
+  { id: 'oauth', reason: `Not a module: every auth starter has it. List \`google\`, \`github\` or \`discord\` in \`SIGN_IN_PROVIDERS\` (src/config.ts); the buttons and \`/auth/callback\` page are already wired. See \`${cliInvocation()} docs auth-client\`.` },
   { id: 'mfa', reason: 'Not generated.' },
-  { id: 'payments', reason: 'Not generated. See `somewhere docs payments`.' },
-  { id: 'teams', reason: 'Not generated. See member() scopes in `somewhere docs declared-data`.' },
-  { id: 'public-sharing', reason: 'Not generated. See publicRead in `somewhere docs declared-data`.' },
-  { id: 'agent-durable', reason: 'Not generated. The agent module runs inline; durable runs, cancel, streaming, memory and external tools need their own design. See `somewhere docs sw.agent`.' },
+  { id: 'payments', reason: `Not generated. See \`${cliInvocation()} docs payments\`.` },
+  { id: 'teams', reason: `Not generated. See member() scopes in \`${cliInvocation()} docs declared-data\`.` },
+  { id: 'public-sharing', reason: `Not generated. See publicRead in \`${cliInvocation()} docs declared-data\`.` },
+  { id: 'agent-durable', reason: `Not generated. The agent module runs inline; durable runs, cancel, streaming, memory and external tools need their own design. See \`${cliInvocation()} docs sw.agent\`.` },
 ];
 
 export interface InitSelection {
@@ -135,7 +136,7 @@ export function initCatalog(generate: (selection: InitSelection) => { path: stri
   const everything = [...INIT_MODULE_IDS];
   return {
     version: 1,
-    command: 'somewhere init --name <slug> --features <ids> [--ui styled|headless] [--dry-run] [--json]',
+    command: `${cliInvocation()} init --name <slug> --features <ids> [--ui styled|headless] [--dry-run] [--json]`,
     modules: MODULES.map((entry) => ({
       id: entry.id,
       summary: entry.summary,

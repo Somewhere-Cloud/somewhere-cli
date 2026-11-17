@@ -1,3 +1,4 @@
+import { cliInvocation } from '../lib/cli-invocation.js';
 import { Command } from 'commander';
 import semver from 'semver';
 import { CLI_VERSION } from '../lib/version.js';
@@ -31,7 +32,7 @@ export function upgradeProject(dir: string, running: string, changelog: () => st
   if (!pins.length) {
     if (!recordPinIfMissing(dir, running)) {
       throw new Error(
-        `This folder records no CLI version and is not a linked project. Add "${CLI_PACKAGE_NAME}": "${running}" to package.json devDependencies, or run \`somewhere init --link\` first.`,
+        `This folder records no CLI version and is not a linked project. Add "${CLI_PACKAGE_NAME}": "${running}" to package.json devDependencies, or run \`${cliInvocation()} init --link\` first.`,
       );
     }
     return { from: null, to: running, updated: ['.somewhere.json'], changes: [], next: [] };
@@ -62,7 +63,7 @@ export function registerUpgrade(program: Command) {
         + 'project pinned to another version print one line saying so, and hand off to the\n'
         + 'pinned version when it is installed in node_modules. To move to the newest release:\n'
         + `  npx -y ${CLI_PACKAGE_NAME}@latest upgrade\n`
-        + 'Agent skills are not changed; `somewhere skills update` refreshes them.\n',
+        + `Agent skills are not changed; \`${cliInvocation()} skills update\` refreshes them.\n`,
     )
     .action((opts: UpgradeOptions) => {
       let result: UpgradeResult;
@@ -91,6 +92,6 @@ export function registerUpgrade(program: Command) {
         }
       }
       if (result.next.includes('npm install')) info(`Run ${teal('npm install')} to install ${result.to} in node_modules and update the lockfile.`);
-      info('Agent skills were not changed; `somewhere skills status` compares them with the latest pack.');
+      info(`Agent skills were not changed; \`${cliInvocation()} skills status\` compares them with the latest pack.`);
     });
 }

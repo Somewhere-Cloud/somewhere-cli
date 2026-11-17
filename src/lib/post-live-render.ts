@@ -1,3 +1,4 @@
+import { cliInvocation } from './cli-invocation.js';
 /**
  * Close the loop on a release whose blank-page check runs after the deploy
  * answered.
@@ -16,7 +17,7 @@ import { CliApiError, type ApiClient } from './client.js';
 
 export const POST_LIVE_RENDER_WAIT_MS = 5000;
 export const POST_LIVE_RENDER_POLL_MS = 100;
-export const POST_LIVE_RENDER_STILL_RUNNING = "Render check still running; see its result with: somewhere call project_deploy_log '{}'";
+export const POST_LIVE_RENDER_STILL_RUNNING = `Render check still running; see its result with: ${cliInvocation()} call project_deploy_log '{}'`;
 
 export interface PostLiveRenderRecord {
   status: string;

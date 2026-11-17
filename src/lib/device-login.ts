@@ -1,3 +1,4 @@
+import { cliInvocation } from './cli-invocation.js';
 /**
  * Device-code login. Same pattern as `npm login` and `gh auth login`.
  *
@@ -86,7 +87,7 @@ export interface DeviceLoginCallbacks {
 
 export class DeviceLoginTimeout extends Error {
   constructor() {
-    super('Login timed out. Run `somewhere login` to try again.');
+    super(`Login timed out. Run \`${cliInvocation()} login\` to try again.`);
     this.name = 'DeviceLoginTimeout';
   }
 }
@@ -100,7 +101,7 @@ export class DeviceCodeUnsupported extends Error {
 
 export class DeviceLoginDenied extends Error {
   constructor() {
-    super('Sign-in was denied in the browser. Nothing was granted. Run `somewhere login` again if that was a mistake.');
+    super(`Sign-in was denied in the browser. Nothing was granted. Run \`${cliInvocation()} login\` again if that was a mistake.`);
     this.name = 'DeviceLoginDenied';
   }
 }
@@ -155,7 +156,7 @@ export async function deviceLogin(callbacks: DeviceLoginCallbacks): Promise<Devi
   if (!startRes.ok) {
     const text = await startRes.text();
     // A sandbox proxy that blocks the host answers here too (often 403): name it.
-    throw new Error(`Failed to start login: ${new URL(API_BASE).host} answered HTTP ${startRes.status} ${text.slice(0, 200)}. If this shell only allows listed sites (an agent sandbox), add ${new URL(API_BASE).host}, or run \`somewhere login\` in your own terminal.`);
+    throw new Error(`Failed to start login: ${new URL(API_BASE).host} answered HTTP ${startRes.status} ${text.slice(0, 200)}. If this shell only allows listed sites (an agent sandbox), add ${new URL(API_BASE).host}, or run \`${cliInvocation()} login\` in your own terminal.`);
   }
   const start = (await startRes.json()) as StartResponse & { data: { verifier_bound?: boolean } };
   if (start.data.verifier_bound !== true) throw new Error('This server does not support secure device redemption. Update the platform before login.');

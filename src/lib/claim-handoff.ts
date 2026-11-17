@@ -1,3 +1,4 @@
+import { cliInvocation } from './cli-invocation.js';
 import { createDecipheriv, createHash, randomBytes } from 'node:crypto';
 import type { ClaimCliHandoff, ClaimCliHandoffAck, CliConfig } from '../types.js';
 import { loadConfig, saveConfig, temporaryConfigExpired } from './config.js';
@@ -199,13 +200,13 @@ export async function recoverClaimHandoff(): Promise<ClaimHandoffRecovery> {
       dropExpiredHandoff(config.token, state);
       return {
         kind: 'stale',
-        message: `The temporary workspace on this machine expired at ${config.temp_expires_at}. If you claimed it in the browser, \`somewhere login\` signs in to it.`,
+        message: `The temporary workspace on this machine expired at ${config.temp_expires_at}. If you claimed it in the browser, \`${cliInvocation()} login\` signs in to it.`,
       };
     }
     if (['CLAIM_CLI_HANDOFF_DENIED', 'CLAIM_CLI_HANDOFF_EXPIRED', 'CLAIM_CLI_HANDOFF_CONSUMED', 'CLAIM_CLI_HANDOFF_OWNERSHIP_MISMATCH'].includes(envelope.error || '')) {
       return {
         kind: 'manual',
-        message: envelope.message || 'Run `somewhere login` in this directory. Keep the existing project link; do not unlink or redeploy.',
+        message: envelope.message || `Run \`${cliInvocation()} login\` in this directory. Keep the existing project link; do not unlink or redeploy.`,
       };
     }
     return { kind: 'none' };

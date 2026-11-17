@@ -1,3 +1,4 @@
+import { cliInvocation } from './cli-invocation.js';
 import { operationalExclusionReason, operationalReferenceMatcher } from './operational-files.js';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { extname, isAbsolute, join, relative } from 'node:path';
@@ -75,11 +76,11 @@ export function testExclusionReason(
     const segments = relPath.split('/');
     const ancestors = segments.slice(0, -1).map((_, i) => segments.slice(0, i + 1).join('/'));
     if (!ancestors.some((dir) => optedIn(dir, true))) {
-      return `in the ${folder}/ test folder — publish it with \`somewhere deploy --include ${folder}\` or a "!${folder}/" line in .somewhereignore`;
+      return `in the ${folder}/ test folder — publish it with \`${cliInvocation()} deploy --include ${folder}\` or a "!${folder}/" line in .somewhereignore`;
     }
   }
   if (isTestSourcePath(relPath) && !fileOptIn) {
-    return `test file — publish it with \`somewhere deploy --include ${relPath}\` or a "!${relPath}" line in .somewhereignore`;
+    return `test file — publish it with \`${cliInvocation()} deploy --include ${relPath}\` or a "!${relPath}" line in .somewhereignore`;
   }
   return null;
 }
@@ -542,7 +543,7 @@ export function sensitiveReferenceRefusal(collected: Pick<CollectedFiles, 'sensi
     'Nothing was sent. Your source references a file blocked by the sensitive-path policy, which is never uploaded:',
     ...referenced.map((entry) => `  ${entry.referencedBy.join(', ')} mentions ${entry.path}`),
     'This is a filename match in your source, not an import analysis. Code that loads the file would fail once deployed, because the file is not published.',
-    `To use it, keep it out of your source: save it as a project secret (somewhere env set ${envName} --stdin < ${shellQuote(example.path)}) and read it inside a function with sw.env.${envName}.`,
+    `To use it, keep it out of your source: save it as a project secret (${cliInvocation()} env set ${envName} --stdin < ${shellQuote(example.path)}) and read it inside a function with sw.env.${envName}.`,
     'If nothing loads it (for example, only a comment mentions it), add it to .somewhereignore or move it out of this folder, then run the command again.',
   ].join('\n');
 }

@@ -1,3 +1,4 @@
+import { cliInvocation } from './cli-invocation.js';
 /**
  * Run the `somewhere browser` health check against a page on this machine.
  *
@@ -160,8 +161,8 @@ export async function assertLocalTargetReachable(url: string, timeoutMs = REACHA
       );
     }
     throw new Error(
-      `Nothing is serving ${url} on this machine. Start your app with \`somewhere dev\` and point this at the ` +
-      'address it prints — or check the deployed app instead with `somewhere browser --project <name>`.',
+      `Nothing is serving ${url} on this machine. Start your app with \`${cliInvocation()} dev\` and point this at the ` +
+      `address it prints — or check the deployed app instead with \`${cliInvocation()} browser --project <name>\`.`,
     );
   }
 }

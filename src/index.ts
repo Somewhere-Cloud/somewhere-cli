@@ -1,3 +1,4 @@
+import { cliInvocation } from './lib/cli-invocation.js';
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -51,7 +52,7 @@ import { registerSupport } from './commands/support.js';
 import { buildRecord, commandPath, writeLastError } from './lib/repro-packet.js';
 import { registerSkills } from './commands/skills.js';
 import { registerAi } from './commands/ai.js';
-import { collectNotices } from './lib/notify/index.js';
+import { collectNotices, printExitNotices } from './lib/notify/index.js';
 import { startupNotice } from './lib/startup-notice.js';
 import { error, info, printJsonError, setFailureHook, setJsonOutputMode, stripAnsi } from './lib/output.js';
 import { loadProjectConfig } from './lib/config.js';
@@ -84,8 +85,8 @@ const pkg = JSON.parse(
 ) as { version: string };
 
 const program = new Command()
-  .name('somewhere')
-  .description('CLI for somewhere.cloud. Run somewhere init first, then read generated AGENTS.md: call shapes and access patterns for a typical app; docs are for exceptions.')
+  .name(cliInvocation())
+  .description(`CLI for somewhere.cloud. Run ${cliInvocation()} init first, then read generated AGENTS.md: call shapes and access patterns for a typical app; docs are for exceptions.`)
   .version(pkg.version);
 
 recordLastRun(pkg.version);
@@ -173,7 +174,7 @@ registerAi(program);
 program.configureHelp({
   subcommandDescription: (command) => command.summary() || helpSummary(command.description()),
 });
-program.addHelpText('after', '\nRun somewhere <command> --help for full command details.');
+program.addHelpText('after', `\nRun ${cliInvocation()} <command> --help for full command details.`);
 
 // User-notification pipeline (update-available, advisories, announcements…).
 // Centrally gated to interactive, non-CI, non-pass-through commands and emitted to
@@ -192,7 +193,7 @@ process.stdout.on('error', (err: NodeJS.ErrnoException) => {
 });
 collectNotices(process.argv)
   .then((notices) => {
-    if (notices.length) process.on('exit', () => process.stderr.write('\n' + notices.join('\n') + '\n'));
+    if (notices.length) process.on('exit', () => printExitNotices(notices));
   })
   .catch(() => {});
 try {

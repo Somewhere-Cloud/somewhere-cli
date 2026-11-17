@@ -1,3 +1,4 @@
+import { cliInvocation } from '../lib/cli-invocation.js';
 import { Command } from 'commander';
 import prompts from 'prompts';
 import ora from '../lib/spinner.js';
@@ -76,7 +77,7 @@ interface LinkProject {
 export function registerInit(program: Command) {
   program
     .command('init')
-    .description('Run somewhere init first, then read generated AGENTS.md: call shapes and access patterns for a typical app; docs are for exceptions.')
+    .description(`Run ${cliInvocation()} init first, then read generated AGENTS.md: call shapes and access patterns for a typical app; docs are for exceptions.`)
     .option('--name <name>', 'Project name (skip prompt); sign-in and invitation emails show it')
     .option('--subdomain <slug>', 'Subdomain for the new project; default: derived from --name')
     .option('--link', 'Scaffold an empty directory and link an existing project; non-empty directories are link-only')
@@ -90,7 +91,7 @@ export function registerInit(program: Command) {
     .option('--json', 'Print the created or linked project as JSON')
     .addHelpText(
       'after',
-      '\nRecommended for a new app: run `somewhere init` in an empty directory.\n'
+      `\nRecommended for a new app: run \`${cliInvocation()} init\` in an empty directory.\n`
         + 'The starter is a deployable React + TypeScript app with cookie sign-in (the\n'
         + '`auth` module): the SDK\'s packaged handler as a one-line api/auth/[...path].ts,\n'
         + 'the SDK client in src/services/auth.ts, hooks in src/auth/, pages in src/pages/,\n'
@@ -105,10 +106,10 @@ export function registerInit(program: Command) {
         + 'file) is refused before anything is created. Use --bare only to bring your own\n'
         + 'layout; existing AGENTS.md/CLAUDE.md are never replaced.\n'
         + '\nPick modules instead of a template (agents: no questions asked):\n'
-        + '  somewhere init --catalog --json\n'
-        + '  somewhere init --name my-app --features private-data --dry-run --json\n'
-        + '  somewhere init --name my-app --features auth,private-data --ui styled\n'
-        + '  somewhere init --name "Crew" --subdomain crew-app --features magic-link\n'
+        + `  ${cliInvocation()} init --catalog --json\n`
+        + `  ${cliInvocation()} init --name my-app --features private-data --dry-run --json\n`
+        + `  ${cliInvocation()} init --name my-app --features auth,private-data --ui styled\n`
+        + `  ${cliInvocation()} init --name "Crew" --subdomain crew-app --features magic-link\n`
         + 'Requirements are added and reported (magic-link, private-data and agent add auth). --features only\n'
         + 'writes into an empty directory and is checked before the project is created.\n',
     )
@@ -167,10 +168,10 @@ export async function runInit(opts: InitOptions, command: Command): Promise<void
   // tool, a script, a pipe): fail fast with the flag instead of waiting.
   if (!process.stdin.isTTY) {
     if (!opts.link && !opts.name) {
-      failNonInteractive('Pass --name <project-name> to create a project in a non-interactive shell (e.g. `somewhere init --name my-app`).');
+      failNonInteractive(`Pass --name <project-name> to create a project in a non-interactive shell (e.g. \`${cliInvocation()} init --name my-app\`).`);
     }
     if (opts.link && !opts.project) {
-      failNonInteractive('Pass --project <ref> to link a project in a non-interactive shell (e.g. `somewhere init --link --project my-app`).');
+      failNonInteractive(`Pass --project <ref> to link a project in a non-interactive shell (e.g. \`${cliInvocation()} init --link --project my-app\`).`);
     }
   }
 
@@ -181,7 +182,7 @@ export async function runInit(opts: InitOptions, command: Command): Promise<void
   if (!shouldScaffold && !opts.bare && !opts.link) {
     const entries = initSourceEntries(dir);
     if (entries.source.length === 0) {
-      error(`This directory has no app source, only ${entries.other.join(', ')}. somewhere init writes its starter into an empty directory and links a directory that already holds an app, so nothing was created. Run it in a new empty directory, move these files out, or pass --bare to link this directory without a starter.`);
+      error(`This directory has no app source, only ${entries.other.join(', ')}. ${cliInvocation()} init writes its starter into an empty directory and links a directory that already holds an app, so nothing was created. Run it in a new empty directory, move these files out, or pass --bare to link this directory without a starter.`);
       process.exit(2);
     }
   }
@@ -201,7 +202,7 @@ export async function runInit(opts: InitOptions, command: Command): Promise<void
   if (!hasUsableCredential(storedConfig) && !opts.link && !opts.bare) {
     const expiredTemporaryAt = temporaryConfigExpired(storedConfig) ? storedConfig.temp_expires_at : undefined;
     if (existing || existsSync(join(dir, '.somewhere.json')) || !shouldScaffold) {
-      error('Local starter generation requires an empty, unlinked directory. Existing files were kept. Run somewhere docs start for the anonymous deploy workflow.');
+      error(`Local starter generation requires an empty, unlinked directory. Existing files were kept. Run ${cliInvocation()} docs start for the anonymous deploy workflow.`);
       process.exit(1);
     }
     let localName = opts.name;
@@ -213,7 +214,7 @@ export async function runInit(opts: InitOptions, command: Command): Promise<void
     try {
       const scaffold = writeInitScaffold(dir, scaffoldFiles(localName));
       const skills = writeInitSkills(dir);
-      const next = ['somewhere deploy', 'somewhere docs start'];
+      const next = [`${cliInvocation()} deploy`, `${cliInvocation()} docs start`];
       if (!opts.json) info(INSTALL_STARTER_MESSAGE);
       await installInitDependencies({ cwd: dir, quiet: Boolean(opts.json) });
       if (opts.json) {
@@ -222,11 +223,11 @@ export async function runInit(opts: InitOptions, command: Command): Promise<void
           ...(plan ? { selection: plan.selection, extension_points: extensionPoints(plan.selection) } : {}), next });
       } else {
         success(`Local starter written to ${dir} (${scaffold.created.length} files); no account or project was created.`);
-        if (expiredTemporaryAt) info(`Ignored the temporary session on this machine that expired at ${expiredTemporaryAt}; somewhere deploy starts a new one.`);
+        if (expiredTemporaryAt) info(`Ignored the temporary session on this machine that expired at ${expiredTemporaryAt}; ${cliInvocation()} deploy starts a new one.`);
         reportSkills(skills);
         reportPin(dir);
-        info('Next: somewhere deploy — publish with a temporary workspace, no login needed.');
-        info('Quickstart: somewhere docs start');
+        info(`Next: ${cliInvocation()} deploy — publish with a temporary workspace, no login needed.`);
+        info(`Quickstart: ${cliInvocation()} docs start`);
       }
     } catch (err) {
       error(err instanceof Error ? err.message : String(err), err);
@@ -242,7 +243,7 @@ export async function runInit(opts: InitOptions, command: Command): Promise<void
       process.exit(1);
     }
     if (!process.stdin.isTTY) {
-      failNonInteractive(`This directory is already linked to ${existing.name}. Run init in an empty directory, or relink with \`somewhere init --link --project <ref>\`.`);
+      failNonInteractive(`This directory is already linked to ${existing.name}. Run init in an empty directory, or relink with \`${cliInvocation()} init --link --project <ref>\`.`);
     }
     warn(`This directory is already linked to ${teal(existing.name)}`);
     const { overwrite } = await prompts({
@@ -437,7 +438,7 @@ function printCatalog(opts: InitOptions, command: Command): void {
     printJson(catalog);
     return;
   }
-  info(bold('Modules for somewhere init --features'));
+  info(bold(`Modules for ${cliInvocation()} init --features`));
   for (const entry of catalog.modules) {
     console.log(`  ${teal(entry.id)}${entry.requires.length ? dim(` (requires ${entry.requires.join(', ')})`) : ''}`);
     console.log(`    ${entry.summary}`);
@@ -474,7 +475,7 @@ export async function linkExisting(
   spinner?.stop();
 
   if (!result.projects.length) {
-    error('No projects found. Create one first: somewhere project create <name>');
+    error(`No projects found. Create one first: ${cliInvocation()} project create <name>`);
     process.exit(1);
   }
 
@@ -552,12 +553,12 @@ export function writeInitSkills(dir: string): { version: string } | { kept: stri
 function reportPin(dir: string): void {
   recordPinIfMissing(dir, CLI_VERSION);
   const pin = readProjectPin(dir);
-  if (pin) info(`Pinned to somewhere CLI ${teal(pin.spec)} (${pin.source}); \`somewhere upgrade\` moves it.`);
+  if (pin) info(`Pinned to somewhere CLI ${teal(pin.spec)} (${pin.source}); \`${cliInvocation()} upgrade\` moves it.`);
 }
 
 function reportSkills(result: ReturnType<typeof writeInitSkills>): void {
   if ('version' in result) success(`Agent skills ${teal(result.version)} written to ${SKILLS_DIR}`);
-  else info(`Agent skills kept unchanged: ${result.kept}. Run somewhere skills status to inspect them.`);
+  else info(`Agent skills kept unchanged: ${result.kept}. Run ${cliInvocation()} skills status to inspect them.`);
 }
 
 function writeBareGuide(dir: string) {

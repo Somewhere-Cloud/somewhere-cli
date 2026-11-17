@@ -1,3 +1,4 @@
+import { cliInvocation } from '../lib/cli-invocation.js';
 import { readFileSync } from 'node:fs';
 import { Command } from 'commander';
 import prompts from 'prompts';
@@ -86,7 +87,7 @@ const options = (cmd: Command) => cmd.optsWithGlobals<KeyOptions>();
 function statusUnavailable(project: string, json: boolean | undefined): never {
   const message =
     'Listing keys needs a newer platform, so which keys are set is not known here; set and remove work now ' +
-    `(somewhere ai keys set anthropic --project ${project}).`;
+    `(${cliInvocation()} ai keys set anthropic --project ${project}).`;
   if (json) printJsonError('AI_KEY_STATUS_UNAVAILABLE', message);
   else error(message);
   process.exit(1);
@@ -117,7 +118,7 @@ async function listKeys(_opts: unknown, cmd: Command) {
     .filter((k): k is { provider: string; updated_at?: unknown } => typeof k?.provider === 'string');
   if (!keys.length) {
     info(dim('No AI provider keys set for this project.'));
-    info(dim(`Set one with: somewhere ai keys set anthropic --project ${project}`));
+    info(dim(`Set one with: ${cliInvocation()} ai keys set anthropic --project ${project}`));
     return;
   }
   for (const k of keys) {

@@ -1,3 +1,4 @@
+import { cliInvocation } from './cli-invocation.js';
 type Style = (value: string) => string;
 
 let jsonOutputMode = false;
@@ -125,7 +126,7 @@ export function printSupportPacketRecovery(cause: unknown): void {
   const value = platformErrorEnvelope(cause)?.extra.request_id;
   if (typeof value !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/.test(value)
       || /^(?:smt_|eyJ|sk_live_|sk_test_)/.test(value)) return;
-  console.error(`  Recovery: somewhere support packet --request ${value} --json`);
+  console.error(`  Recovery: ${cliInvocation()} support packet --request ${value} --json`);
 }
 
 /** Notices and warnings go to stderr: stdout carries only the output a command was asked for,

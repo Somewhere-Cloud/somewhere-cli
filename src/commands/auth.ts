@@ -1,3 +1,4 @@
+import { cliInvocation } from '../lib/cli-invocation.js';
 import { Command } from 'commander';
 import {
   closeSync,
@@ -135,7 +136,7 @@ async function signupAction(): Promise<void> {
       // Browser didn't open — the URL is already printed above
     });
   }
-  info(dim('Once your account exists, run: somewhere login'));
+  info(dim(`Once your account exists, run: ${cliInvocation()} login`));
 }
 
 async function loginAction(opts: { browserCallback?: boolean; signup?: boolean }): Promise<void> {
@@ -186,7 +187,7 @@ export async function describeProjectCount(client: ApiClient, owned: number): Pr
     const listedOwned = owned - deleting - archivedOwned;
     const hidden = [archivedOwned ? `${archivedOwned} archived` : '', deleting ? `${deleting} being deleted` : ''].filter(Boolean);
     if (!hidden.length && !shared) return `${plural(owned, 'project')} you own`;
-    return `${plural(owned, 'project')} you own (\`somewhere projects\` lists ${listedOwned} of them`
+    return `${plural(owned, 'project')} you own (\`${cliInvocation()} projects\` lists ${listedOwned} of them`
       + `${shared ? ` plus ${shared} shared with you` : ''}${hidden.length ? `; not listed: ${hidden.join(', ')}` : ''})`;
   } catch {
     return `${plural(owned, 'project')} you own (any status)`;
@@ -196,14 +197,14 @@ export async function describeProjectCount(client: ApiClient, owned: number): Pr
 export function registerAuth(program: Command) {
   program
     .command('login')
-    .description('Authenticate with somewhere.cloud (no account yet? run `somewhere signup`)')
+    .description(`Authenticate with somewhere.cloud (no account yet? run \`${cliInvocation()} signup\`)`)
     .addHelpText('after', [
       '',
       'Sign-in without a browser on this machine (SSH, a VM, an agent\'s sandboxed shell):',
-      '  somewhere login prints a code; a person approves it in a browser on any device. The shell only',
+      `  ${cliInvocation()} login prints a code; a person approves it in a browser on any device. The shell only`,
       '  needs to reach https://api.somewhere.cloud (sign-in, deploy and project commands all use that host).',
       'No person to approve (CI): save an smt_ key once with',
-      '  printf %s "$SOMEWHERE_TOKEN" | somewhere auth set',
+      `  printf %s "$SOMEWHERE_TOKEN" | ${cliInvocation()} auth set`,
       '  Setting SOMEWHERE_TOKEN alone does not sign commands in; `auth set` saves it to ~/.somewhere/config.json.',
     ].join('\n'))
     .option('--browser-callback', 'Sign in with Google in the browser and receive the key on a localhost port, instead of entering a device code')
@@ -264,7 +265,7 @@ export function registerAuth(program: Command) {
     .action(async (opts) => {
       const config = loadConfig();
       if (!config) {
-        error('Not logged in. Run: somewhere login');
+        error(`Not logged in. Run: ${cliInvocation()} login`);
         process.exit(1);
       }
 
@@ -310,7 +311,7 @@ export function registerAuth(program: Command) {
         const [code, message] = typed
           ? [typed.code, `${typed.code}: ${typed.message}`]
           : rejected
-            ? ['WHOAMI_FAILED', 'Could not fetch account details — token may be expired. Run: somewhere login']
+            ? ['WHOAMI_FAILED', `Could not fetch account details — token may be expired. Run: ${cliInvocation()} login`]
             : ['WHOAMI_UNAVAILABLE', `Could not check this login: ${err instanceof Error ? err.message : String(err)}. The stored login was not changed; run the command again once the platform answers.`];
         if (opts.json) {
           printJson({ error: code, message: typed ? typed.message : message });
@@ -329,7 +330,7 @@ export function registerAuth(program: Command) {
   // memory both expect `somewhere auth login` to work.
   auth
     .command('login')
-    .description('Authenticate with somewhere.cloud (alias of `somewhere login`)')
+    .description(`Authenticate with somewhere.cloud (alias of \`${cliInvocation()} login\`)`)
     .option('--browser-callback', 'Sign in with Google in the browser and receive the key on a localhost port, instead of entering a device code')
     .option('--signup', 'Create a new account instead — opens the sign-up page')
     .action(loginAction);
@@ -340,7 +341,7 @@ export function registerAuth(program: Command) {
     .allowExcessArguments(false)
     .showHelpAfterError(
       'Do not pass tokens as arguments: they are visible in the process table. ' +
-      'Use `printf %s "$SOMEWHERE_TOKEN" | somewhere auth set` or set SOMEWHERE_TOKEN.',
+      `Use \`printf %s "$SOMEWHERE_TOKEN" | ${cliInvocation()} auth set\` or set SOMEWHERE_TOKEN.`,
     )
     .action(async () => {
       const token = await readAuthToken();
@@ -376,7 +377,7 @@ export function registerAuth(program: Command) {
       saveConfig({ token, user: { email, username } });
       saveGlobalMcpConfig();
       success(`Token saved.${email ? ` Logged in as ${teal(email)}.` : ''}`);
-      info('Run `somewhere projects` to verify.');
+      info(`Run \`${cliInvocation()} projects\` to verify.`);
     });
 
   auth
@@ -391,7 +392,7 @@ export function registerAuth(program: Command) {
         info('Not logged in.');
         info(`Device ID:  ${deviceId}`);
         info(`Key name:   ${keyName}`);
-        info(dim('Run `somewhere login` to authenticate.'));
+        info(dim(`Run \`${cliInvocation()} login\` to authenticate.`));
         return;
       }
 
@@ -541,9 +542,9 @@ function registerAuthRoles(auth: Command): void {
       'their app user id. The address does not have to be verified: you vouch for the person. The grant lands',
       'in the same place sw.groups.appRoles uses, so every appRole() rule on your tables applies at once.',
       '',
-      '  somewhere auth roles grant ann@example.com staff',
-      '  somewhere auth roles revoke ann@example.com staff',
-      '  somewhere auth roles list --role staff',
+      `  ${cliInvocation()} auth roles grant ann@example.com staff`,
+      `  ${cliInvocation()} auth roles revoke ann@example.com staff`,
+      `  ${cliInvocation()} auth roles list --role staff`,
     ].join('\n'));
 
   roles
@@ -606,7 +607,7 @@ function registerAuthRoles(auth: Command): void {
         if (opts.json) { printJson({ items, declared_roles: declared }); return; }
         if (!items.length) {
           info(declared.length
-            ? `No app roles granted yet. Declared roles: ${declared.join(', ')}. Grant one: somewhere auth roles grant <user> <role>`
+            ? `No app roles granted yet. Declared roles: ${declared.join(', ')}. Grant one: ${cliInvocation()} auth roles grant <user> <role>`
             : 'This project declares no app roles. Add appRoles to db/schema.ts and deploy.');
           return;
         }

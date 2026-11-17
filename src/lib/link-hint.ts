@@ -1,3 +1,4 @@
+import { cliInvocation } from './cli-invocation.js';
 import { loadConfig } from './config.js';
 
 /** Appended wherever a command needs a project and this folder has no link
@@ -8,6 +9,6 @@ export function unlinkedFolderHint(): string {
   const config = loadConfig();
   const signedIn = Boolean(config?.token) && config?.temporary !== true;
   return signedIn
-    ? ' Link this folder to a project: `somewhere init --link --project <name-or-id>` (list yours with `somewhere projects`), or create one: `somewhere init --bare --name <name>`.'
-    : ' Sign in first (`somewhere login`), then link this folder: `somewhere init --link --project <name-or-id>`.';
+    ? ` Link this folder to a project: \`${cliInvocation()} init --link --project <name-or-id>\` (list yours with \`${cliInvocation()} projects\`), or create one: \`${cliInvocation()} init --bare --name <name>\`.`
+    : ` Sign in first (\`${cliInvocation()} login\`), then link this folder: \`${cliInvocation()} init --link --project <name-or-id>\`.`;
 }

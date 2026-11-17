@@ -1,3 +1,4 @@
+import { cliInvocation } from './cli-invocation.js';
 /**
  * After-edit checking for coding agents: the deploy's reference check
  * (deploy-check.ts) run by the agent host after each file edit, and the
@@ -299,14 +300,14 @@ const MAX_LISTED = 20;
 function findingsText(result: DeployCheckResult): string {
   const lines = result.findings.slice(0, MAX_LISTED)
     .map((f) => `${f.file}:${f.line}:${f.column} ${f.code} ${f.message}`);
-  const more = result.findings.length > MAX_LISTED ? [`…and ${result.findings.length - MAX_LISTED} more (somewhere typecheck --deploy)`] : [];
+  const more = result.findings.length > MAX_LISTED ? [`…and ${result.findings.length - MAX_LISTED} more (${cliInvocation()} typecheck --deploy)`] : [];
   const n = result.findings.length;
   return [`Somewhere deploy check: ${n} finding${n === 1 ? '' : 's'} a deploy would report (undefined names fail at runtime):`, ...lines, ...more].join('\n');
 }
 
 function couldNotRunText(result: DeployCheckResult): string {
   const detail = (result.error ?? 'unknown error').split('\n').slice(0, 3).join(' | ');
-  return `Somewhere deploy check could not run (TypeScript ${result.typescript}): ${detail}. Edits since then are unchecked; run \`somewhere typecheck --deploy\` to see the full error.`;
+  return `Somewhere deploy check could not run (TypeScript ${result.typescript}): ${detail}. Edits since then are unchecked; run \`${cliInvocation()} typecheck --deploy\` to see the full error.`;
 }
 
 /** The host's envelope for "add this context" (not a failure). */
@@ -333,7 +334,7 @@ export async function runAgentHook(
     // An unexpected failure (unreadable settings, a check that threw) is
     // shown to the agent, never lost or mistaken for a clean check.
     const detail = failure instanceof Error ? failure.message : String(failure);
-    return contextEnvelope(host, `Somewhere deploy check could not run: ${detail.split('\n')[0]}. Run \`somewhere typecheck --deploy\` to see more.`);
+    return contextEnvelope(host, `Somewhere deploy check could not run: ${detail.split('\n')[0]}. Run \`${cliInvocation()} typecheck --deploy\` to see more.`);
   }
 }
 

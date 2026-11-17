@@ -1,3 +1,4 @@
+import { cliInvocation } from './cli-invocation.js';
 // Preview jobs from the CLI: `somewhere preview run-job` and `somewhere cron run --preview`.
 // Every call about the preview's own jobs carries ONLY that preview's tool credential (lib/preview-credential.ts); your
 // own sign-in is used for nothing but minting it, and a production job read never sees a preview job.
@@ -11,9 +12,9 @@ export interface FolderPreview { projectId: string; previewSessionId: string; cr
 /** This folder's open preview (or the one named) and its tool credential. */
 export async function folderPreviewTool(opts: { project?: string; previewSession?: string }): Promise<FolderPreview> {
   const projectId = opts.project ?? loadProjectConfig()?.project_id;
-  if (!projectId) throw new Error('No project linked. Run `somewhere init` or pass --project <id>.');
+  if (!projectId) throw new Error(`No project linked. Run \`${cliInvocation()} init\` or pass --project <id>.`);
   const previewSessionId = opts.previewSession ?? loadPreviewRecord(process.cwd(), projectId)?.preview_session_id;
-  if (!previewSessionId) throw new Error('This folder has no open preview. Open one with `somewhere preview`, or name one with --preview-session <id> (`somewhere preview list`).');
+  if (!previewSessionId) throw new Error(`This folder has no open preview. Open one with \`${cliInvocation()} preview\`, or name one with --preview-session <id> (\`${cliInvocation()} preview list\`).`);
   const credential = loadPreviewCredential(projectId, previewSessionId)
     ?? await mintPreviewCredential(new ApiClient(getToken()), projectId, previewSessionId);
   return { projectId, previewSessionId, credential };

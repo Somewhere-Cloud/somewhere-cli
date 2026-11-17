@@ -1,3 +1,4 @@
+import { cliInvocation } from './cli-invocation.js';
 import { createHash } from 'node:crypto';
 import {
   existsSync,
@@ -257,7 +258,7 @@ export function skillsStatus(
   if (!lock) {
     return {
       ...base, state: 'missing', installed: null, lock_cli: null, missing: [], modified: [],
-      message: 'No skills installed here. Run `somewhere skills update` to add them.',
+      message: `No skills installed here. Run \`${cliInvocation()} skills update\` to add them.`,
     };
   }
   const { missing, modified } = inspectFiles(dir, lock);
@@ -265,7 +266,7 @@ export function skillsStatus(
   if (missing.length || modified.length) {
     return {
       ...common, state: 'modified',
-      message: `${missing.length + modified.length} skill file(s) differ from the installed pack. \`somewhere skills update\` preserves conflicts; review your edits first.`,
+      message: `${missing.length + modified.length} skill file(s) differ from the installed pack. \`${cliInvocation()} skills update\` preserves conflicts; review your edits first.`,
     };
   }
   const reference = latest ?? bundled;
@@ -280,7 +281,7 @@ export function skillsStatus(
   }
   return {
     ...common, state: 'stale',
-    message: `Skills ${lock.version} are out of date (latest ${reference.version}). Run \`somewhere skills update\`.`,
+    message: `Skills ${lock.version} are out of date (latest ${reference.version}). Run \`${cliInvocation()} skills update\`.`,
   };
 }
 

@@ -1,3 +1,4 @@
+import { cliInvocation } from './cli-invocation.js';
 /**
  * The promote command the CLI hands back, and the two things it must say after
  * a promote lands.
@@ -38,7 +39,7 @@ export function promoteCommands(args: {
   interactive: boolean;
 }): string[] {
   const project = shellArgument(args.projectRef);
-  const base = `somewhere promote ${args.previewSessionId} ${args.previewId} --project ${project}`;
+  const base = `${cliInvocation()} promote ${args.previewSessionId} ${args.previewId} --project ${project}`;
   if (!args.interactive) return [`${base} --yes`];
   return [base, `${base} --yes`];
 }

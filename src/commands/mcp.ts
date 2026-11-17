@@ -1,3 +1,4 @@
+import { cliInvocation } from '../lib/cli-invocation.js';
 import { fetchWithProxy as fetch } from '../lib/http.js';
 import { Command } from 'commander';
 import { spawnSync } from 'node:child_process';
@@ -61,7 +62,7 @@ export function registerMcp(program: Command) {
   // true rather than breaking copies already cached in agents and scrapes.
   mcp
     .command('stdio', { hidden: true })
-    .description('Alias of bare `somewhere mcp`')
+    .description(`Alias of bare \`${cliInvocation()} mcp\``)
     .action(runStdioBridge);
 
   mcp
@@ -116,7 +117,7 @@ function recoverableReason(err: unknown): Omit<Recovery, 'token'> | null {
 function recoveryText(recovery: Recovery): string {
   const next = recovery.kind === 'update'
     ? 'After updating, restart this MCP session so it runs the new CLI.'
-    : `Run \`somewhere login\` in a terminal, then call ${BRIDGE_STATUS_TOOL} again: the bridge picks up the new login without a restart.`;
+    : `Run \`${cliInvocation()} login\` in a terminal, then call ${BRIDGE_STATUS_TOOL} again: the bridge picks up the new login without a restart.`;
   return `Somewhere is not connected. ${recovery.code}: ${recovery.message} ${next}`
     + (recovery.lastAttempt ? ` Last connection attempt: ${recovery.lastAttempt}` : '');
 }
@@ -280,7 +281,7 @@ async function runStdioBridge(): Promise<void> {
         reply(id, {
           tools: [{
             name: BRIDGE_STATUS_TOOL,
-            description: 'Somewhere is not connected in this session. Call this to see why and what fixes it; after `somewhere login` it reconnects and the full tool list returns.',
+            description: `Somewhere is not connected in this session. Call this to see why and what fixes it; after \`${cliInvocation()} login\` it reconnects and the full tool list returns.`,
             inputSchema: { type: 'object', properties: {} },
           }],
         });
@@ -408,7 +409,7 @@ function installCodex(loggedIn: boolean): void {
   if (probe.error || probe.status !== 0) {
     error('Codex CLI not found on PATH.');
     info('Install Codex first, then either re-run this command or add the entry manually:');
-    info(dim(`  codex mcp add somewhere ${codexEnvArgs().join(' ')}${codexEnvArgs().length ? ' ' : ''}-- somewhere mcp`));
+    info(dim(`  codex mcp add somewhere ${codexEnvArgs().join(' ')}${codexEnvArgs().length ? ' ' : ''}-- ${cliInvocation()} mcp`));
     process.exit(1);
   }
 
@@ -425,7 +426,7 @@ function installCodex(loggedIn: boolean): void {
     success(`Codex configured: ${teal('somewhere')} → somewhere mcp (stdio bridge)`);
   }
 
-  if (!loggedIn) info(`Not logged in yet — run: ${teal('somewhere login')}`);
+  if (!loggedIn) info(`Not logged in yet — run: ${teal(`${cliInvocation()} login`)}`);
   printVerify('codex');
 }
 
@@ -437,14 +438,14 @@ function installClaudeCode(): void {
   // Cursor (saveCursorMcpConfig) and Codex (installCodex).
   saveGlobalMcpConfig();
   success(`Claude Code configured (~/.claude.json): ${teal('somewhere')} → somewhere mcp (stdio bridge)`);
-  if (!loggedIn) info(`Not logged in yet — run: ${teal('somewhere login')}`);
+  if (!loggedIn) info(`Not logged in yet — run: ${teal(`${cliInvocation()} login`)}`);
   printVerify('claude-code');
 }
 
 function installCursor(loggedIn: boolean): void {
   saveCursorMcpConfig();
   success(`Cursor configured (${CURSOR_MCP_PATH}): ${teal('somewhere')} → somewhere mcp (stdio bridge)`);
-  if (!loggedIn) info(`Not logged in yet — run: ${teal('somewhere login')}`);
+  if (!loggedIn) info(`Not logged in yet — run: ${teal(`${cliInvocation()} login`)}`);
   printVerify('cursor');
 }
 
@@ -462,7 +463,7 @@ function printVerify(host: InstallHost): void {
       break;
   }
   info(RESTART_HINT);
-  info(dim('Full setup check: somewhere mcp doctor'));
+  info(dim(`Full setup check: ${cliInvocation()} mcp doctor`));
 }
 
 /* ─── somewhere mcp doctor ────────────────────────────────────────── */
@@ -483,7 +484,7 @@ async function runDoctor(version: string): Promise<void> {
   if (config?.token) {
     success(`Logged in as ${teal(config.user.email || '(unknown)')} (${cliConfigPathForDisplay()})`);
   } else {
-    fail(`Not logged in — no token in ${cliConfigPathForDisplay()}.`, 'somewhere login');
+    fail(`Not logged in — no token in ${cliConfigPathForDisplay()}.`, `${cliInvocation()} login`);
   }
 
   // 2. Token actually valid against the API. /auth/whoami is the endpoint
@@ -497,7 +498,7 @@ async function runDoctor(version: string): Promise<void> {
       // The platform's typed refusal says what is wrong; only an untyped 401 is a guess at the login.
       const typed = typedServerError(err);
       if (typed) fail(`Token check refused: ${typed.code}: ${typed.message}`);
-      else if (err instanceof CliApiError && err.statusCode === 401) fail('Token rejected by the platform (HTTP 401).', 'somewhere login');
+      else if (err instanceof CliApiError && err.statusCode === 401) fail('Token rejected by the platform (HTTP 401).', `${cliInvocation()} login`);
       else fail(`Could not check the token: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
@@ -529,7 +530,7 @@ async function runDoctor(version: string): Promise<void> {
     } else if (res.status === 401 && !config?.token) {
       success('MCP server reachable (responded 401 — expected without a login)');
     } else if (res.status === 401) {
-      fail('MCP server reachable but it rejected the token.', 'somewhere login');
+      fail('MCP server reachable but it rejected the token.', `${cliInvocation()} login`);
     } else {
       // Same parsing as the bridge, so the platform's code and message are printed.
       const text = await res.text().catch(() => '');
@@ -545,7 +546,7 @@ async function runDoctor(version: string): Promise<void> {
   if (hasGlobalMcpConfig()) {
     success('Claude Code: "somewhere" entry in ~/.claude.json');
   } else {
-    info(dim('Claude Code: not configured — somewhere mcp install claude-code (or just somewhere login)'));
+    info(dim(`Claude Code: not configured — ${cliInvocation()} mcp install claude-code (or just ${cliInvocation()} login)`));
   }
   const codexProbe = spawnSync('codex', ['--version'], { stdio: 'ignore', shell: CODEX_SHELL });
   if (codexProbe.error || codexProbe.status !== 0) {
@@ -553,12 +554,12 @@ async function runDoctor(version: string): Promise<void> {
   } else if (spawnSync('codex', ['mcp', 'get', 'somewhere'], { stdio: 'ignore', shell: CODEX_SHELL }).status === 0) {
     success('Codex: "somewhere" MCP server configured');
   } else {
-    info(dim('Codex: not configured — somewhere mcp install codex'));
+    info(dim(`Codex: not configured — ${cliInvocation()} mcp install codex`));
   }
   if (hasCursorMcpConfig()) {
     success(`Cursor: "somewhere" entry in ${CURSOR_MCP_PATH}`);
   } else {
-    info(dim('Cursor: not configured — somewhere mcp install cursor'));
+    info(dim(`Cursor: not configured — ${cliInvocation()} mcp install cursor`));
   }
 
   info('');

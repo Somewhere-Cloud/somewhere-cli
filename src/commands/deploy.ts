@@ -1,5 +1,6 @@
 import { roleMethodHints } from '../lib/role-method-hints.js';
-import { DEPLOY_COMMAND } from '../lib/test-report.js';
+import { cliInvocation } from '../lib/cli-invocation.js';
+import { suppressExitNotices } from '../lib/notify/index.js';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { missingProjectDependencies, runTypecheck } from '../lib/typecheck.js';
@@ -48,7 +49,7 @@ import { showProjectNotices } from '../lib/project-notices.js';
 import { prepareRunner } from '../lib/test-run.js';
 import { formatDeployTestsLine, prepareDeployTests, runDeployTests, type DeployTests } from '../lib/deploy-tests.js';
 import { mark as timelineMark, markProcessStart } from '../lib/test-timeline.js';
-import { formatNextActions, nextActions } from '../lib/next-actions.js';
+import { formatNextActions, nextActions, shellQuote } from '../lib/next-actions.js';
 import { countFromResponse, countFunctionRoutes, formatPublishSurface, formatUploadInventory, uploadInventory } from '../lib/surface-counts.js';
 import {
   formatVerifyOutput,
@@ -108,7 +109,7 @@ const NEXT_DEPENDENCY_SECTIONS = [
 ] as const;
 const NEXT_APP_WARNING =
   "Next.js apps do not run here. Somewhere supports HTML responses from ordinary server functions. " +
-  'Port API routes to api/ handlers and HTML pages to root routes such as [...path].ts, or start from a Vite React app. Read somewhere docs functions; deploy raw JSX/TSX.';
+  `Port API routes to api/ handlers and HTML pages to root routes such as [...path].ts, or start from a Vite React app. Read ${cliInvocation()} docs functions; deploy raw JSX/TSX.`;
 const DEPLOY_HEARTBEAT_MS = 30_000;
 const DEPLOY_MAX_ATTEMPTS = 2;
 // The CLI's OWN verdicts — transport failures it detected itself, where no
@@ -121,8 +122,8 @@ const RETRYABLE_DEPLOY_CODES = new Set(['TIMEOUT', 'SERVER_SLOW', 'NETWORK_ERROR
 const DEPLOY_RETRY_MAX_WAIT_MS = 10_000;
 
 export const POST_DEPLOY_HINT =
-  'Next: keep building with `somewhere dev`; run `somewhere deploy` to update this live app. ' +
-  'Once it has real users or data, use `somewhere preview` before changing what they see.';
+  `Next: keep building with \`${cliInvocation()} dev\`; run \`${cliInvocation()} deploy\` to update this live app. ` +
+  `Once it has real users or data, use \`${cliInvocation()} preview\` before changing what they see.`;
 
 export function isNextAppShapeSignal(signal: string): boolean {
   return signal.startsWith(`${NEXT_APP_SIGNAL_PREFIX} (`);
@@ -210,24 +211,22 @@ export function formatTtlHours(ttlSeconds?: number): number {
   return Math.round(ttlSeconds / 3600) || 3;
 }
 
-export function formatRemainingTempTime(expiresAt: string, nowMs = Date.now()): string | null {
-  const expiresMs = new Date(expiresAt).getTime();
-  if (!Number.isFinite(expiresMs)) return null;
-
-  const totalMinutes = Math.max(0, Math.ceil((expiresMs - nowMs) / 60_000));
-  const hours = Math.floor(totalMinutes / 60);
-  const minutes = totalMinutes % 60;
-  return hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
-}
-
-export function formatTempExpiry(expiresAt: string, ttlSeconds?: number, nowMs = Date.now()): string {
-  const delta = Date.parse(expiresAt) - nowMs;
-  // The server expiry is authoritative. An implausible local clock must not
-  // turn a freshly issued lifetime into a longer promise.
-  const clockDisagrees = ttlSeconds !== undefined && Number.isFinite(ttlSeconds)
-    && (delta > ttlSeconds * 1000 + 60_000 || delta < -60_000);
-  const remaining = !clockDisagrees && Number.isFinite(nowMs) ? formatRemainingTempTime(expiresAt, nowMs) : null;
-  return `Expires at: ${expiresAt} (UTC${remaining ? `; about ${remaining} remaining` : ''})`;
+export function formatTempExpiry(expiresAt?: string, ttlSeconds?: number, nowMs = Date.now()): string {
+  const remainingMs = expiresAt ? Date.parse(expiresAt) - nowMs : NaN;
+  // If this terminal's clock disagrees with the server, describe the lifetime
+  // from creation rather than making a promise about how much is left.
+  if (!Number.isFinite(remainingMs) || (
+    ttlSeconds !== undefined && Number.isFinite(ttlSeconds)
+    && (remainingMs > ttlSeconds * 1000 + 60_000 || remainingMs < -60_000)
+  )) {
+    return `Temporary app. Expires about ${plural(formatTtlHours(ttlSeconds), 'hour')} after it was created.`;
+  }
+  if (remainingMs <= 0) return 'Temporary app. It has expired.';
+  const minutes = Math.ceil(remainingMs / 60_000);
+  const remaining = minutes >= 60
+    ? plural(Math.round(minutes / 60), 'hour')
+    : plural(minutes < 5 ? minutes : Math.min(55, Math.round(minutes / 5) * 5), 'minute');
+  return `Temporary app. Expires in about ${remaining}.`;
 }
 
 function plural(count: number, singular: string, pluralWord = `${singular}s`): string {
@@ -314,8 +313,8 @@ export function formatStaleBaseExplanation(
     versionSummary,
     '',
     'Next steps:',
-    '  Run `somewhere pull` to bring the latest deployed source into this directory, review it, then deploy again.',
-    '  Run `somewhere deploy --force` to overwrite those remote changes intentionally.',
+    `  Run \`${cliInvocation()} pull\` to bring the latest deployed source into this directory, review it, then deploy again.`,
+    `  Run \`${cliInvocation()} deploy --force\` to overwrite those remote changes intentionally.`,
   ].filter((line): line is string => line !== null).join('\n');
 }
 
@@ -396,8 +395,8 @@ export function formatStaleReleaseBaseExplanation(
       : d.history_unavailable ? 'The earlier version is no longer available to compare, so the differing files cannot be listed.' : null,
     '',
     own
-      ? `Next step: run \`somewhere pull\` to bring this folder to live (local-only files are kept), or \`somewhere restore ${d.base_version ?? '<version>'}\` to make ${folder} live again.`
-      : 'Next step: run `somewhere pull`. It brings the published files up to live, keeps local-only files and your local edits, and stops on a file changed both here and live. Then deploy again.',
+      ? `Next step: run \`${cliInvocation()} pull\` to bring this folder to live (local-only files are kept), or \`${cliInvocation()} restore ${d.base_version ?? '<version>'}\` to make ${folder} live again.`
+      : `Next step: run \`${cliInvocation()} pull\`. It brings the published files up to live, keeps local-only files and your local edits, and stops on a file changed both here and live. Then deploy again.`,
   ].filter((line): line is string => line !== null).join('\n');
 }
 
@@ -414,8 +413,8 @@ export function formatAmbiguousRetryStaleExplanation(transportFailure: string): 
     `The first deploy attempt ${what} before the platform answered, so it may already have gone live. The automatic retry was refused because the live release is now newer than the version this folder came from; that refusal changed nothing.`,
     '',
     'Next steps:',
-    '  Check the live release before deploying again: run `somewhere pull` into a separate folder (or open the dashboard) and compare it with your changes.',
-    '  If your changes are live, you are done. If they are not, deploy again from the pulled source, or run `somewhere deploy --force` to replace the live release intentionally.',
+    `  Check the live release before deploying again: run \`${cliInvocation()} pull\` into a separate folder (or open the dashboard) and compare it with your changes.`,
+    `  If your changes are live, you are done. If they are not, deploy again from the pulled source, or run \`${cliInvocation()} deploy --force\` to replace the live release intentionally.`,
   ].join('\n');
 }
 
@@ -426,8 +425,8 @@ export function formatSignedInUnlinkedExplanation(): string {
     'No project is linked to this folder. You are signed in, so deploy will not create or pick a project in your account on its own.',
     '',
     'Next steps:',
-    '  New project: run `somewhere init --bare --name <name>` (creates it in your account and links this folder; adds .somewhere.json, AGENTS.md/CLAUDE.md and agent skills, no app source), then `somewhere deploy`.',
-    '  Existing project: run `somewhere init --link --project <name-or-id>` (list yours with `somewhere projects`), or deploy once with `somewhere deploy --project <name-or-id>`.',
+    `  New project: run \`${cliInvocation()} init --bare --name <name>\` (creates it in your account and links this folder; adds .somewhere.json, AGENTS.md/CLAUDE.md and agent skills, no app source), then \`${cliInvocation()} deploy\`.`,
+    `  Existing project: run \`${cliInvocation()} init --link --project <name-or-id>\` (list yours with \`${cliInvocation()} projects\`), or deploy once with \`${cliInvocation()} deploy --project <name-or-id>\`.`,
   ].join('\n');
 }
 
@@ -439,14 +438,14 @@ export function formatSignedInUnlinkedExplanation(): string {
 export function linkedProjectNotFoundSteps(signedIn: boolean): string[] {
   return signedIn
     ? [
-        'See your projects: `somewhere projects`.',
-        'Deploy this folder to one of them: `somewhere init --link --project <name-or-id>`, then `somewhere deploy`.',
+        `See your projects: \`${cliInvocation()} projects\`.`,
+        `Deploy this folder to one of them: \`${cliInvocation()} init --link --project <name-or-id>\`, then \`${cliInvocation()} deploy\`.`,
         // init refuses a linked folder without a terminal, so the stale link goes first.
-        'Or create a new project for it: delete this folder\'s .somewhere.json (your other files are kept), run `somewhere init --bare --name <name>`, then `somewhere deploy`.',
+        `Or create a new project for it: delete this folder\'s .somewhere.json (your other files are kept), run \`${cliInvocation()} init --bare --name <name>\`, then \`${cliInvocation()} deploy\`.`,
       ]
     : [
-        'If the project is in your account, sign in with `somewhere login` and deploy again.',
-        'Start a new temporary project: delete this folder\'s .somewhere.json, then run `somewhere deploy` again.',
+        `If the project is in your account, sign in with \`${cliInvocation()} login\` and deploy again.`,
+        `Start a new temporary project: delete this folder\'s .somewhere.json, then run \`${cliInvocation()} deploy\` again.`,
       ];
 }
 
@@ -466,12 +465,12 @@ export function formatSignedOutExistingTargetExplanation(projectId: string, from
     '',
     'Next steps:',
     ...(fromLink
-      ? ['  If you deployed this folder signed out earlier, its temporary credential is in ~/.somewhere/config.json of the terminal you used then: run `somewhere deploy` there. An agent\'s sandboxed shell or another user account does not see it.']
+      ? [`  If you deployed this folder signed out earlier, its temporary credential is in ~/.somewhere/config.json of the terminal you used then: run \`${cliInvocation()} deploy\` there. An agent\'s sandboxed shell or another user account does not see it.`]
       : []),
-    '  If the project is in your account, run `somewhere login` (it prints a code; approve it in any browser), then deploy again. Without a person to approve: `printf %s "$SOMEWHERE_TOKEN" | somewhere auth set` saves an smt_ key; the SOMEWHERE_TOKEN variable on its own does not sign commands in.',
+    `  If the project is in your account, run \`${cliInvocation()} login\` (it prints a code; approve it in any browser), then deploy again. Without a person to approve: \`printf %s "$SOMEWHERE_TOKEN" | ${cliInvocation()} auth set\` saves an smt_ key; the SOMEWHERE_TOKEN variable on its own does not sign commands in.`,
     fromLink
-      ? '  Start a new temporary project instead: delete this folder\'s .somewhere.json, then run `somewhere deploy` again.'
-      : '  Start a new temporary project instead: run `somewhere deploy` without --project in a folder that is not linked.',
+      ? `  Start a new temporary project instead: delete this folder\'s .somewhere.json, then run \`${cliInvocation()} deploy\` again.`
+      : `  Start a new temporary project instead: run \`${cliInvocation()} deploy\` without --project in a folder that is not linked.`,
   ].join('\n');
 }
 
@@ -483,9 +482,9 @@ export function formatExpiredTemporaryProjectExplanation(expiredAt: string): str
     `The temporary workspace on this machine expired at ${expiredAt}, and this machine has no record of a claim. Its projects can no longer be deployed to, and a new temporary workspace cannot deploy to this folder's linked project. Nothing was deployed.`,
     '',
     'Next steps:',
-    '  If you claimed this workspace in the browser, sign in with `somewhere login` and deploy again; your projects are in your account.',
-    '  Start a new temporary project: delete this folder\'s .somewhere.json, then run `somewhere deploy` again.',
-    '  Keep your work in an account: sign in (`somewhere login`, or `somewhere signup`), then run `somewhere init --bare --name <name>` and `somewhere deploy`.',
+    `  If you claimed this workspace in the browser, sign in with \`${cliInvocation()} login\` and deploy again; your projects are in your account.`,
+    `  Start a new temporary project: delete this folder\'s .somewhere.json, then run \`${cliInvocation()} deploy\` again.`,
+    `  Keep your work in an account: sign in (\`${cliInvocation()} login\`, or \`${cliInvocation()} signup\`), then run \`${cliInvocation()} init --bare --name <name>\` and \`${cliInvocation()} deploy\`.`,
   ].join('\n');
 }
 
@@ -502,8 +501,8 @@ export function formatBaseRequiredExplanation(): string {
     'This folder has no record of which published version its files came from, so the deploy was NOT applied.',
     '',
     'Next steps:',
-    '  Run `somewhere pull` to start from the current version, re-apply your changes, then deploy again.',
-    '  Run `somewhere deploy --force` to replace the current version with this folder intentionally.',
+    `  Run \`${cliInvocation()} pull\` to start from the current version, re-apply your changes, then deploy again.`,
+    `  Run \`${cliInvocation()} deploy --force\` to replace the current version with this folder intentionally.`,
   ].join('\n');
 }
 
@@ -515,9 +514,9 @@ export function formatLinkedProjectMismatchExplanation(linkedProjectId: string, 
     `This folder is linked to project ${linkedProjectId} (in .somewhere.json), but --project ${ref} names a different project (${resolvedProjectId}). Your deploy was NOT applied.`,
     '',
     'Next steps:',
-    '  Deploy this folder to its linked project: run `somewhere deploy` (no --project).',
-    `  Move this folder to ${ref} deliberately: delete this folder's .somewhere.json, then run \`somewhere init --link --project ${ref}\`, \`somewhere pull\`, re-apply your changes, and \`somewhere deploy\`.`,
-    `  Deploy a copy elsewhere: copy the files into an unlinked folder and run \`somewhere deploy --project ${ref}\` there.`,
+    `  Deploy this folder to its linked project: run \`${cliInvocation()} deploy\` (no --project).`,
+    `  Move this folder to ${ref} deliberately: delete this folder's .somewhere.json, then run \`${cliInvocation()} init --link --project ${ref}\`, \`${cliInvocation()} pull\`, re-apply your changes, and \`${cliInvocation()} deploy\`.`,
+    `  Deploy a copy elsewhere: copy the files into an unlinked folder and run \`${cliInvocation()} deploy --project ${ref}\` there.`,
   ].join('\n');
 }
 
@@ -529,8 +528,8 @@ export function formatExplicitProjectBaseRequiredExplanation(ref: string): strin
     `The live version of project ${ref} could not be read before deploying, and this folder has no record of which published version its files came from, so the deploy was NOT applied.`,
     '',
     'Next steps:',
-    `  Link and pull first: \`somewhere init --link --project ${ref}\`, then \`somewhere pull\`, re-apply your changes, then \`somewhere deploy\`.`,
-    `  Or replace the live release deliberately: \`somewhere deploy --project ${ref} --force --yes\`.`,
+    `  Link and pull first: \`${cliInvocation()} init --link --project ${ref}\`, then \`${cliInvocation()} pull\`, re-apply your changes, then \`${cliInvocation()} deploy\`.`,
+    `  Or replace the live release deliberately: \`${cliInvocation()} deploy --project ${ref} --force --yes\`.`,
   ].join('\n');
 }
 
@@ -653,16 +652,16 @@ export function registerDeploy(program: Command) {
   program
     .command('deploy [dir]')
     .description('Deploy the current directory (anonymous automatically when logged out)')
-    .addHelpText('after', '\nFunctions missing from the directory: a full `somewhere deploy` REMOVES deployed functions that\n'
+    .addHelpText('after', `\nFunctions missing from the directory: a full \`${cliInvocation()} deploy\` REMOVES deployed functions that\n`
       + 'are not in this directory (each one is named in the output). `--scope functions` keeps them unless\n'
-      + '--replace-functions. `somewhere promote` is the opposite: it keeps them unless --prune.\n'
+      + `--replace-functions. \`${cliInvocation()} promote\` is the opposite: it keeps them unless --prune.\n`
       + '\nNo project yet? Signed in, deploy never creates one on its own:\n'
-      + '  somewhere init --bare --name <name>   create a project in your account and link this folder\n'
-      + '  somewhere deploy                       then deploy it\n'
-      + 'Existing project: `somewhere init --link --project <ref>` (see `somewhere projects`), or `--project <ref>` here.\n')
+      + `  ${cliInvocation()} init --bare --name <name>   create a project in your account and link this folder\n`
+      + `  ${cliInvocation()} deploy                       then deploy it\n`
+      + `Existing project: \`${cliInvocation()} init --link --project <ref>\` (see \`${cliInvocation()} projects\`), or \`--project <ref>\` here.\n`)
     .option(
       '--project <ref>',
-      'Existing project to deploy to — accepts the project UUID, slug, or subdomain (all three resolve server-side). To create one, run `somewhere init --bare --name <name>`',
+      `Existing project to deploy to — accepts the project UUID, slug, or subdomain (all three resolve server-side). To create one, run \`${cliInvocation()} init --bare --name <name>\``,
     )
     .option(
       '--scope <scope>',
@@ -715,7 +714,7 @@ export function registerDeploy(program: Command) {
     .option('--json', 'Print the raw deploy response as JSON on stdout; files left out locally are listed on stderr by path and reason')
     .option('--list-unpublished', 'List the local files this deploy keeps on your machine, and how to publish one on purpose')
     .option('--allow-type-errors', 'Upload even when the local TypeScript check fails')
-    .option('--timing', 'Print collection, upload, release, activation, and verification timings')
+    .option('--timing', 'Print deploy details and timings')
     .action(async (dir: string | undefined, opts) => {
       // performance.now() counts from process start, so this is the real
       // start-up cost (runtime boot + module load) before the command ran.
@@ -776,7 +775,7 @@ export function registerDeploy(program: Command) {
       ) {
         const message =
           'No deployable source found. Create an index.html or add raw app source files, ' +
-          'or add serverless handlers under functions/, then run `somewhere deploy` again.';
+          `or add serverless handlers under functions/, then run \`${cliInvocation()} deploy\` again.`;
         if (opts.json) printJsonError('NO_DEPLOYABLE_SOURCE', message);
         else error(message);
         process.exit(1);
@@ -1129,7 +1128,7 @@ export function registerDeploy(program: Command) {
       if (opts.force && !opts.yes) {
         await settleNotices();
         if (!process.stdin.isTTY) {
-          const message = 'Refusing to force deploy without confirmation in a non-interactive shell. Run `somewhere deploy --force --yes` to overwrite remote changes intentionally.';
+          const message = `Refusing to force deploy without confirmation in a non-interactive shell. Run \`${cliInvocation()} deploy --force --yes\` to overwrite remote changes intentionally.`;
           if (opts.json) {
             printJsonError('CONFIRMATION_REQUIRED', message);
           } else {
@@ -1160,7 +1159,7 @@ export function registerDeploy(program: Command) {
       // folder it was built in. Name every held-back file — a silent exclusion
       // is how a private note gets published, and how a needed file goes
       // missing without anyone noticing.
-      if (excluded.length && !opts.json) {
+      if (excluded.length && !opts.json && (!tempSession || tempSession.reused || opts.listUnpublished || opts.timing)) {
         spinner?.stop();
         // A dry run leaves .somewhere.json as it found it.
         printExcludedFiles(excluded, targetDir, { list: Boolean(opts.listUnpublished) });
@@ -1205,7 +1204,7 @@ export function registerDeploy(program: Command) {
           warn('server source will be publicly readable at its file path.');
           warn('The platform shape: static files at the root + API handlers under functions/');
           warn('(each default-exports async (req, sw) and becomes a route).');
-          warn('Full quickstart: somewhere docs start');
+          warn(`Full quickstart: ${cliInvocation()} docs start`);
         }
         if (process.stderr.isTTY) spinner?.start();
       }
@@ -1334,7 +1333,7 @@ export function registerDeploy(program: Command) {
           if (!opts.allowTypeErrors) {
             stopPrestart();
             spinner?.stop();
-            error('Deploy stopped before upload. To proceed anyway: somewhere deploy --allow-type-errors');
+            error(`Deploy stopped before upload. To proceed anyway: ${cliInvocation()} deploy --allow-type-errors`);
             process.exitCode = 1;
             return;
           }
@@ -1405,7 +1404,7 @@ export function registerDeploy(program: Command) {
           // one that deployed it (never a throwaway beside a real login: the
           // folder's .somewhere.json is the developer's own link).
           if (!besideRealLogin && recordPinIfMissing(deployStateEntry?.dir ?? targetDir, CLI_VERSION) && !opts.json) {
-            info(`Recorded somewhere CLI ${CLI_VERSION} in .somewhere.json (cli_version). \`somewhere upgrade\` moves it.`);
+            info(`Recorded somewhere CLI ${CLI_VERSION} in .somewhere.json (cli_version). \`${cliInvocation()} upgrade\` moves it.`);
           }
           if (!tempSession && deployStateEntry && result.project_id === deployStateEntry.config.project_id) {
             saveProjectAppUrl(deployStateEntry.dir, deployStateEntry.config.project_id, httpsOrigin(result.url));
@@ -1449,10 +1448,10 @@ export function registerDeploy(program: Command) {
         };
         const verificationNextSteps = besideRealLogin ? [
           'Inspect the live URL; keep this project and its claim URL.',
-          'After claiming and connecting this project, run: somewhere verify --project <PROJECT>',
+          `After claiming and connecting this project, run: ${cliInvocation()} verify --project <PROJECT>`,
         ] : [
-          'Read the live release: somewhere status --project <PROJECT>',
-          'Run verification without deploying: somewhere verify --project <PROJECT>',
+          `Read the live release: ${cliInvocation()} status --project <PROJECT>`,
+          `Run verification without deploying: ${cliInvocation()} verify --project <PROJECT>`,
         ];
         if (opts.json) {
           // A temporary session adds the claim fields to the server's result;
@@ -1491,9 +1490,13 @@ export function registerDeploy(program: Command) {
         // static-only deploy or counts static files on a backend-only deploy
         // (audit #3: the old output printed "Functions deployed" + a static
         // count + "the other layer was left untouched" all at once).
-        success(formatted.headline);
-        info(dim(formatUploadInventory(inventory)));
-        if (formatted.projectRef) info(`Project: ${teal(formatted.projectRef)}`);
+        const firstTemporaryRelease = Boolean(tempSession && result.version === 1);
+        const cwdDeploysToProject = loadProjectConfig()?.project_id === (result.project_id ?? projectId);
+        if (!firstTemporaryRelease || opts.timing) {
+          success(formatted.headline);
+          info(dim(formatUploadInventory(inventory)));
+          if (formatted.projectRef) info(`Project: ${teal(formatted.projectRef)}`);
+        }
 
         // Build log: entry chunk, chunks + sizes, functions + sizes (returned
         // by the worker since ). Surface it instead of a bare
@@ -1516,7 +1519,7 @@ export function registerDeploy(program: Command) {
         if (result.removed_functions && result.removed_functions.length > 0) {
           warn(
             `Removed ${result.removed_functions.length} function(s) no longer in this directory: ${result.removed_functions.join(', ')}. `
-              + 'A full deploy publishes exactly this directory (unlike `somewhere promote`, which keeps them unless --prune).',
+              + `A full deploy publishes exactly this directory (unlike \`${cliInvocation()} promote\`, which keeps them unless --prune).`,
           );
         }
 
@@ -1532,11 +1535,25 @@ export function registerDeploy(program: Command) {
         if (result.warnings && result.warnings.length > 0) {
           const buildWarnings = warningsInBuildLog(result.build_log);
           for (const w of result.warnings) {
+            // The first release normally creates tables and indexes. Keep the
+            // receipt in --json and --timing, and still print actual warnings.
+            const schemaCreated = /^Database schema: (?:table |index on ).+ is created(?:[ .(]|$)/.test(w);
+            if (firstTemporaryRelease && !opts.timing && schemaCreated) continue;
             if (!buildWarnings.has(normalizeWarning(w))) warn(w);
           }
         }
-        if (result.previous) console.log(result.previous.message);
-        if (Array.isArray(result.privacy_lines)) console.log(result.privacy_lines.filter((line): line is string => typeof line === 'string').join('\n'));
+        if (result.previous) {
+          const target = cwdDeploysToProject ? '' : ` --project ${shellQuote(result.project_id ?? projectId ?? '<project>')}`;
+          const confirmation = process.stdin.isTTY ? '' : ' --yes';
+          console.log(result.previous.rollback_available
+            ? `Version ${result.previous.version} is kept; ${cliInvocation()} rollback${target}${confirmation} returns to it.`
+            : result.previous.message);
+        }
+        if (Array.isArray(result.privacy_lines) && (!firstTemporaryRelease || opts.timing)) {
+          const lines = result.privacy_lines.filter(line =>
+            typeof line === 'string' && (opts.timing || !/^warning:/i.test(line)));
+          if (lines.length) console.log(lines.join('\n'));
+        }
         if (result.runtime_fixes && result.runtime_fixes.length > 0) {
           for (const fix of result.runtime_fixes) success(fix.message);
         }
@@ -1545,59 +1562,23 @@ export function registerDeploy(program: Command) {
         const unpromotable = Array.isArray(listed) ? listed.filter((id): id is string => typeof id === 'string') : [];
         if (unpromotable.length > 0) {
           warn(`${unpromotable.length} open preview${unpromotable.length === 1 ? ' was' : 's were'} opened from the previous production version and can no longer be promoted: ${unpromotable.join(', ')}.`);
-          info('To ship a change from one: run `somewhere preview` here (it opens a fresh preview from this release), and close the old ones with `somewhere preview close <preview_session_id>` (`somewhere preview list` shows them).');
+          info(`To ship a change from one: run \`${cliInvocation()} preview\` here (it opens a fresh preview from this release), and close the old ones with \`${cliInvocation()} preview close <preview_session_id>\` (\`${cliInvocation()} preview list\` shows them).`);
         }
 
-        if (tempSession) {
-          // Every anonymous deploy ends with stable, machine-scannable labels.
-          // The absolute server expiry avoids making a reused credential look
-          // like it received a fresh three-hour window.
-          if (formatted.liveUrl) {
-            success(`Live URL: ${teal(formatted.liveUrl)}`);
-          } else {
-            info(`Live URL not reported by the platform; \`somewhere project view ${formatted.projectRef ?? '<project>'}\` shows it.`);
+        if (tempSession && !firstTemporaryRelease && !hasFunctionErrors && !verificationFailed) {
+          if (!besideRealLogin) {
+            const hint = formatReferenceCheckHint(result, cwdDeploysToProject);
+            if (hint) info(hint);
           }
-          if (renderLine) warn(renderLine);
-          info(`Claim URL: ${teal(tempSession.claimUrl)}`);
-          if (tempSession.expiresAt) {
-            info(formatTempExpiry(tempSession.expiresAt, tempSession.ttlSeconds));
-          } else {
-            const hours = formatTtlHours(tempSession.ttlSeconds);
-            info(`Expires: about ${hours} hour${hours === 1 ? '' : 's'} after the temporary session was created`);
+          for (const line of formatNextActions(
+            nextActions({ stage: 'deploy', projectLinked: false, liveUrl: formatted.liveUrl, temporary: true }),
+            { command: teal, why: dim },
+          )) {
+            console.log(line);
           }
-          // Same discoverability the account path gets — this is a main
-          // fresh-agent route, not a side door. Addressed by URL on purpose:
-          // beside a real login the throwaway project is deliberately NOT in
-          // `.somewhere.json`, so a bare `somewhere browser` would open the
-          // developer's own app. Temporary credentials carry the `browser`
-          // scope, so the URL form works on both temporary paths.
-          if (!hasFunctionErrors && !verificationFailed) {
-            for (const line of formatNextActions(
-              nextActions({
-                stage: 'deploy',
-                projectLinked: false,
-                liveUrl: formatted.liveUrl ?? null,
-                temporary: true,
-              }),
-              { command: teal, why: dim },
-            )) {
-              console.log(line);
-            }
-          }
-          info(besideRealLogin
-            ? 'Next: open the claim URL above. Tests that need the email inbox work after you claim the app.'
-            : 'Next: run `somewhere claim` and open its link. Tests that need the email inbox work after you claim the app.');
-          // Beside a real login the CLI's own credentials cannot read the throwaway project.
-          const tempCheckHint = besideRealLogin ? null : formatReferenceCheckHint(result, loadProjectConfig()?.project_id === projectId);
-          if (tempCheckHint) info(tempCheckHint);
-          info(
-            besideRealLogin
-              ? `Your permanent login is untouched. After claiming, keep this project and run ${teal(`somewhere init --link --project ${projectId}`)} only if this directory has no link. Do not unlink, create a replacement, or redeploy to recover it.`
-              : tempSession.handoffReady
-                ? 'Tell the owner to choose "Save project and connect agent" on the claim page. This CLI then signs in on its next command, to this project only unless they choose all projects. If they save without connecting, they can connect it later from the same link, or run `somewhere login` here.'
-                : `After claiming, run ${teal('somewhere login')} in this directory, then deploy as usual. Keep the existing project link, so deploys keep going to the claimed project.`,
-          );
-        } else {
+        }
+
+        if (!tempSession) {
           if (formatted.liveUrl) {
             success(`Live at ${teal(formatted.liveUrl)}`);
           } else {
@@ -1649,18 +1630,34 @@ export function registerDeploy(program: Command) {
           else error(formatDeployTestsLine(tests));
         }
 
-        // Exit non-zero if any function failed to deploy — a CI step that
-        // shells out to `somewhere deploy` should fail, not pass green.
-        if (hasFunctionErrors) {
-          process.exit(1);
-        }
         if (verificationFailed) {
           warn(verificationError
             ? `The deploy is live, but verification could not finish: ${verificationError.message} [${verificationError.code}]`
             : 'The deploy is live, but verification did not pass.');
           for (const step of verificationNextSteps) info(step);
+        }
+        if (tempSession) {
+          suppressExitNotices();
+          if (renderLine) warn(renderLine);
+          if (formatted.liveUrl) success(`Live URL: ${teal(formatted.liveUrl)}`);
+          else info(`Live URL not reported by the platform; \`${cliInvocation()} project view ${formatted.projectRef ?? '<project>'}\` shows it.`);
+          info(formatTempExpiry(tempSession.expiresAt, tempSession.ttlSeconds));
+          const link = teal(tempSession.claimUrl);
+          if (tempSession.handoffReady) {
+            info(`Open ${link} and select "Save project and connect agent" to save the project to your account and connect this terminal automatically.`);
+          } else if (besideRealLogin) {
+            info(`Open ${link} to save the project to your account, then run \`${cliInvocation()} init --link --project ${projectId}\` in an unlinked folder to work on it.`);
+          } else {
+            info(`Open ${link} to save the project to your account, then run \`${cliInvocation()} login\` to connect this terminal.`);
+          }
+        }
+
+        // Exit non-zero if any function failed to deploy — a CI step that
+        // shells out to `somewhere deploy` should fail, not pass green.
+        if (hasFunctionErrors) {
           process.exit(1);
         }
+        if (verificationFailed) process.exit(1);
         if (tests && tests.status !== 'passed') process.exit(1);
       } catch (err) {
         spinner?.stop();
@@ -1730,7 +1727,7 @@ export function registerDeploy(program: Command) {
             spinner?.fail('Live, but this version failed its check');
             error(`${message} ${dim(err.statusCode ? `[${err.code}, HTTP ${err.statusCode}]` : `[${err.code}]`)}`);
             if (liveUrl) info(`Live at ${teal(liveUrl)}`);
-            if (projectId) info(`This folder now starts from ${version !== null ? `v${version}` : 'this version'}, so the next \`somewhere deploy\` here replaces it without --force.`);
+            if (projectId) info(`This folder now starts from ${version !== null ? `v${version}` : 'this version'}, so the next \`${cliInvocation()} deploy\` here replaces it without --force.`);
             const reference = formatErrorReference(err.meta);
             if (reference) info(dim(reference));
           }
@@ -1831,7 +1828,7 @@ export function formatReferenceCheckHint(
   const args = linkedHere
     ? { version: result.version }
     : { project_id: result.project_id, version: result.version };
-  return `A reference check is running in the background; read its result with: somewhere call project_deploy_log '${JSON.stringify(args)}'`;
+  return `A reference check is running in the background; read its result with: ${cliInvocation()} call project_deploy_log '${JSON.stringify(args)}'`;
 }
 
 export function formatDeployTiming(input: {
@@ -1991,7 +1988,7 @@ export function formatDeploySuccess(
     // Only an older platform omits the URL; name the command that shows it.
     liveMessage: liveUrl
       ? `Live at ${liveUrl}`
-      : `Deployed. The platform did not report the live URL; \`somewhere project view ${
+      : `Deployed. The platform did not report the live URL; \`${cliInvocation()} project view ${
         typeof result.project_id === 'string' && result.project_id.trim() ? result.project_id.trim() : '<project>'
       }\` shows it.`,
   };
@@ -2115,7 +2112,7 @@ export function formatUnknownDeployOutcomeExplanation(err: CliApiError, projectI
     `The deploy request ${what} after it may have reached the platform. Its outcome is unknown: it may have gone live, may have been refused, or may still be running. It was not sent again, and this CLI cannot confirm what happened to it.`,
     '',
     'What you can do:',
-    `  Look, for investigation only: somewhere call project_deploys '${JSON.stringify({ project_id: projectId })}' lists the project's recent deploys. No entry there is tied to this request, and deploys by anyone else can appear in it, so a later entry does not show what happened to this one.`,
+    `  Look, for investigation only: ${cliInvocation()} call project_deploys '${JSON.stringify({ project_id: projectId })}' lists the project's recent deploys. No entry there is tied to this request, and deploys by anyone else can appear in it, so a later entry does not show what happened to this one.`,
     `  Ask for help with this reference so the platform can find this exact request: project ${projectId}, sent at ${startedAt} (this machine's clock)${ids.length ? `, ${ids.join(', ')}` : ''}.`,
     '  Deploying again is your call; nothing here says this request has finished, and a deploy sent while it may still be running can race it.',
   ].join('\n');
@@ -2212,11 +2209,7 @@ const isInternalPath = (p: string) =>
 
 
 // ── Publish-surface notice ────────────────────────────────
-// Rule 8: the customer sees WHAT was held back and HOW to publish it. Nothing
-// about how the rule is implemented, no ticket ids. The "how" line prints once
-// per linked project — stored in the project's own .somewhere.json, never as a
-// new stray file in the customer's repo. An unlinked (anonymous) deploy has
-// nowhere to remember it, so it prints every time, which is the safe direction.
+// Routine exclusions are summarized on deploy and listed by --list-unpublished or --json.
 export function printExcludedFiles(
   excluded: Array<{ path: string; reason: string }>,
   _targetDir: string,
@@ -2224,12 +2217,12 @@ export function printExcludedFiles(
 ): void {
   // One plain sentence and the count; the list, and how to publish one on purpose, behind --list-unpublished.
   if (!list) {
-    info(`Not published: ${excluded.length} local file${excluded.length === 1 ? '' : 's'} (notes, tests, tooling) stay on your machine. See them: ${DEPLOY_COMMAND} --list-unpublished`);
+    info(`Not published: ${excluded.length} local file${excluded.length === 1 ? '' : 's'} (notes, tests, tooling) stay on your machine. See them: ${cliInvocation()} deploy --list-unpublished`);
     return;
   }
   info(`Not published (${excluded.length}): ${excluded.map((e) => e.path).join(', ')}`);
   info(dim('Notes and scratch files nothing in your app uses, tests, and tooling folders stay local; everything else is uploaded. '
-    + `To publish one of these on purpose: ${DEPLOY_COMMAND} --include <file>, or add a "!<file>" line to .somewhereignore.`));
+    + `To publish one of these on purpose: ${cliInvocation()} deploy --include <file>, or add a "!<file>" line to .somewhereignore.`));
 }
 
 /** The --json form of the omission notices: one stderr line per file, stdout
@@ -2252,7 +2245,7 @@ export function printLocalOmissionsToStderr(omitted: Pick<CollectedFiles, 'exclu
  *  Neither --include nor a "!" line publishes them. */
 export function printSensitiveFiles(sensitive: CollectedFiles['sensitive']): void {
   info(`Never uploaded (${sensitive.length}): ${sensitive.map((e) => e.path).join(', ')}`);
-  info(dim('Files blocked by the sensitive-path policy stay on your machine; --include and "!" lines do not publish them. The policy matches file names only: a secret under any other name uploads like any other file. Store a secret your code needs with `somewhere env set` and read it with sw.env in a function.'));
+  info(dim(`Files blocked by the sensitive-path policy stay on your machine; --include and "!" lines do not publish them. The policy matches file names only: a secret under any other name uploads like any other file. Store a secret your code needs with \`${cliInvocation()} env set\` and read it with sw.env in a function.`));
 }
 
 /** Why a dry run stops before reaching the platform. */
@@ -2262,8 +2255,8 @@ export function formatDryRunNeedsProjectExplanation(): string {
     'this folder is not linked to a project, or you are not signed in.',
     'Nothing was created, no temporary workspace was started, and no project or login files were changed.',
     '',
-    'To check your code without contacting Somewhere: `somewhere typecheck` and `somewhere lint`.',
-    'To deploy for real (signed out, this starts a temporary workspace): `somewhere deploy`.',
+    `To check your code without contacting Somewhere: \`${cliInvocation()} typecheck\` and \`${cliInvocation()} lint\`.`,
+    `To deploy for real (signed out, this starts a temporary workspace): \`${cliInvocation()} deploy\`.`,
   ].join('\n');
 }
 

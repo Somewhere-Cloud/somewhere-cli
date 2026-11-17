@@ -1,3 +1,4 @@
+import { cliInvocation } from '../lib/cli-invocation.js';
 import { Command } from 'commander';
 import { createReadStream } from 'node:fs';
 import { stat } from 'node:fs/promises';
@@ -219,7 +220,7 @@ export function normalizeApiPath(input: string, apiBase: string = API_BASE_URL):
   // URL parsing silently strips tab/LF/CR (so "..<TAB>" becomes ".."); refuse
   // every control character instead of guessing how a parser reads it.
   if (/[\u0000-\u001F\u007F]/.test(input)) return refuse('the path must not contain control characters such as tabs or line breaks');
-  if (/^[a-z][a-z0-9+.-]*:/i.test(input)) return refuse('`somewhere api` takes a path, not a full URL');
+  if (/^[a-z][a-z0-9+.-]*:/i.test(input)) return refuse(`\`${cliInvocation()} api\` takes a path, not a full URL`);
   if (input.startsWith('//') || input.includes('\\')) return refuse('the path must not start with // or contain a backslash');
   if (input.includes('#')) return refuse('the path must not contain a fragment (#)');
   const queryAt = input.indexOf('?');

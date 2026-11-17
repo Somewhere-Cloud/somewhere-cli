@@ -1,3 +1,4 @@
+import { cliInvocation } from '../lib/cli-invocation.js';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { Command } from 'commander';
@@ -64,7 +65,7 @@ export function registerEnv(program: Command) {
     .description(
       'Write a local .env file listing the env vars this project expects (for ' +
         'the local-dev loop). Values are NOT included — the platform never ' +
-        'returns secret values; fill them in for `somewhere dev`.',
+        `returns secret values; fill them in for \`${cliInvocation()} dev\`.`,
     )
     .option('--project <id>', 'Project ID')
     .option('--out <file>', 'Output path', '.env')
@@ -178,7 +179,7 @@ export function registerEnv(program: Command) {
       // stderr. --json: as an additive input_note field in the JSON result,
       // which env set's --json contract keeps as its only output.
       const inputNote = opts.stdin ? null
-        : `A value passed as an argument can be seen in your shell history and the process list. To keep it out, pipe it in: printf %s "$VALUE" | somewhere env set ${key} --stdin`;
+        : `A value passed as an argument can be seen in your shell history and the process list. To keep it out, pipe it in: printf %s "$VALUE" | ${cliInvocation()} env set ${key} --stdin`;
       if (inputNote && !opts.json) process.stderr.write(`Note: ${inputNote}\n`);
       const value = opts.stdin ? readFileSync(0, 'utf8').replace(/\r?\n$/, '') : positionalValue!;
       const client = new ApiClient(getToken());

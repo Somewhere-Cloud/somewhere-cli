@@ -1,3 +1,4 @@
+import { cliInvocation } from '../lib/cli-invocation.js';
 import { Command } from 'commander';
 import { loadProjectConfig } from '../lib/config.js';
 import { shellQuote } from '../lib/next-actions.js';
@@ -127,7 +128,7 @@ export function cronPolicyLine(value: unknown): string | null {
   if (!policy) return null;
   const plan = typeof policy.plan === 'string' && policy.plan ? `${policy.plan} plan` : 'This plan';
   if (policy.enabled === false) {
-    return `${plan}: creating or editing scheduled triggers is not available. See: somewhere docs cron`;
+    return `${plan}: creating or editing scheduled triggers is not available. See: ${cliInvocation()} docs cron`;
   }
   const limits = [
     typeof policy.max_per_project === 'number' ? `up to ${policy.max_per_project} per project` : null,
@@ -300,7 +301,7 @@ function formatJobValue(value: unknown): string {
 
 function printWaitedJob(job: JobView, timedOut: boolean, timeoutSeconds: number): void {
   if (timedOut) {
-    error(`Job ${job.job_id} has not finished after ${timeoutSeconds}s (status: ${job.status}). It may still complete; check it with \`somewhere call job_get '{"job_id":"${job.job_id}"}'\`.`);
+    error(`Job ${job.job_id} has not finished after ${timeoutSeconds}s (status: ${job.status}). It may still complete; check it with \`${cliInvocation()} call job_get '{"job_id":"${job.job_id}"}'\`.`);
   } else if (job.status === JOB_SUCCESS_STATUS) {
     success(`Scheduled task finished: job ${job.job_id} complete.`);
   } else {
@@ -498,12 +499,12 @@ export function registerCron(program: Command): void {
     .description('Manage scheduled triggers')
     .addHelpText(
       'after',
-      '\nExamples:\n  somewhere cron list                 # linked project; --all lists every project\n'
-        + '  somewhere cron create "0 8 * * *" /api/daily-digest --project my-app\n'
-        + '  somewhere cron create "0 9 * * *" /api/daily-digest --project my-app --timezone America/Los_Angeles\n'
-        + '  somewhere cron run daily-digest --wait   # queue one run now and wait for its result\n'
-        + '  somewhere cron runs daily-digest         # recent scheduled and manual runs, and the next run\n'
-        + '  somewhere cron runs daily-digest --wait-next --timeout 3600  # observe a natural future occurrence\n'
+      `\nExamples:\n  ${cliInvocation()} cron list                 # linked project; --all lists every project\n`
+        + `  ${cliInvocation()} cron create "0 8 * * *" /api/daily-digest --project my-app\n`
+        + `  ${cliInvocation()} cron create "0 9 * * *" /api/daily-digest --project my-app --timezone America/Los_Angeles\n`
+        + `  ${cliInvocation()} cron run daily-digest --wait   # queue one run now and wait for its result\n`
+        + `  ${cliInvocation()} cron runs daily-digest         # recent scheduled and manual runs, and the next run\n`
+        + `  ${cliInvocation()} cron runs daily-digest --wait-next --timeout 3600  # observe a natural future occurrence\n`
         + '\nA new schedule is read in UTC unless --timezone names an IANA zone. `cron list` shows the\n'
         + 'zone each trigger is stored in, and `cron update --schedule` keeps that zone unless --timezone changes it.\n',
     );
@@ -715,7 +716,7 @@ export function registerCron(program: Command): void {
           printCronMutation('Scheduled trigger created', value);
           const data = unwrapPlatformData(value);
           const id = isRecord(data) ? cronRowId(data) : null;
-          if (id) console.log(dim(`Run it now; do not wait for its scheduled time:\n  somewhere cron run ${shellQuote(id)} --project ${shellQuote(project)} --wait`));
+          if (id) console.log(dim(`Run it now; do not wait for its scheduled time:\n  ${cliInvocation()} cron run ${shellQuote(id)} --project ${shellQuote(project)} --wait`));
         });
       } catch (err) {
         error(err instanceof Error ? err.message : String(err), err);

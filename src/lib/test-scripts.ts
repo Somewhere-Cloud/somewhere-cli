@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, wri
 import { describeReport, TEST_COMMAND, type ReportCheck } from './test-report.js';
 import { dirname, join, relative, resolve } from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
+import { testDependencyError } from './test-run.js';
 import { cliConfigDir } from './config.js';
 
 // `somewhere test` for a project with no tests/**/*.spec.ts: run each tests/*.mjs and tests/*.cjs script (an
@@ -48,7 +49,7 @@ function scriptBrowserEnv(root: string): NodeJS.ProcessEnv {
   const require = createRequire(join(root, 'package.json'));
   let cli: string;
   try { cli = require.resolve('@playwright/test/cli'); }
-  catch { throw new Error('Install project test dependencies: npm install -D @playwright/test @somewhere-cloud/cli'); }
+  catch { throw testDependencyError(root); }
   const env: NodeJS.ProcessEnv = { ...process.env, PLAYWRIGHT_NO_COPY_PROMPT: '1' };
   const probe = spawnSync(process.execPath, ['-e', 'require(process.argv[1]).chromium.launch().then(b => b.close()).then(() => process.exit(0), () => process.exit(3))', require.resolve('@playwright/test')], { env, stdio: 'ignore' });
   if (probe.status === 0) return env;
@@ -59,7 +60,7 @@ function scriptBrowserEnv(root: string): NodeJS.ProcessEnv {
   return env;
 }
 
-/** The line that says why a script failed: its first "FAIL ..." line, else its last error line, else the last line. */
+/** The line that says why a script failed: its first "FAIL ..." line, else its first error header, else the last line. */
 export function failureReason(output: string): string | null {
   // A browser that could not read its own files says so in its own log lines; name that, not the error it caused later.
   if (BROWSER_CRASH.test(output)) return BROWSER_CRASH_REASON;
@@ -69,8 +70,10 @@ export function failureReason(output: string): string | null {
   const lines = output.split(/\r?\n/).map((line) => line.trimEnd()).filter((line) => line.trim() && !frame(line));
   const fail = lines.find((line) => /^(FAIL\b|✗|not ok\b)/.test(line.trimStart()));
   if (fail) return fail.trim().replace(/^(FAIL\b|✗|not ok\b)\s*/, '');
-  const error = [...lines].reverse().find((line) => /(Error|assert|Timeout|refused|ECONN|closed)/i.test(line));
-  return (error ?? lines.at(-1) ?? null)?.trim().slice(0, 300) ?? null;
+  const detail = lines.filter((line) => !/^\s*(?:hint:|Usage details:|Platform bug reports:)/i.test(line));
+  const error = detail.find((line) => /^\s*(?:[\w.]*Error|[\w.]*Exception)(?: \[[^\]]+\])?:/.test(line))
+    ?? detail.find((line) => /(?:assert|Timeout|refused|ECONN|closed)/i.test(line));
+  return (error ?? detail.at(-1) ?? null)?.trim().slice(0, 300) ?? null;
 }
 
 /** Run each script once, streaming its output, and return one result per script. */

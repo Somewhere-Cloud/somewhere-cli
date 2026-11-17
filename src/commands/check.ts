@@ -9,7 +9,7 @@ import { collectFiles, formatBytes, sensitiveReferenceRefusal, type CollectedFil
 import { shellQuote } from '../lib/next-actions.js';
 import { printExcludedFiles, printSensitiveFiles } from './deploy.js';
 import { MISSING_TSCONFIG_GUIDANCE } from './typecheck.js';
-import { announceNpxTypeScriptFetch, missingTypePackagesMessage, planDeclaredTypePackages, runTypecheck, typecheckCompilerSource, type TypecheckResult } from '../lib/typecheck.js';
+import { announceNpxTypeScriptFetch, missingProjectDependencies, missingTypecheckDependenciesMessage, runTypecheck, typecheckCompilerSource, type TypecheckResult } from '../lib/typecheck.js';
 import { TYPECHECK_TYPESCRIPT_VERSION } from '../lib/typecheck-version.js';
 import { bold, dim, error, green, info, printJson, red, success, warn, yellow } from '../lib/output.js';
 
@@ -226,8 +226,6 @@ export async function runLocalPreflight(
   collected: CollectedFiles,
   typecheck: (dir: string) => Promise<TypecheckResult> = async (dir) => {
     // Read-only, like `somewhere typecheck`: never installs into the project.
-    const missing = planDeclaredTypePackages(dir).missing;
-    if (missing.length) return { ok: false, errors: [], via: typecheckCompilerSource(dir), raw: '', spawnError: missingTypePackagesMessage(missing, dir) };
     if (typecheckCompilerSource(dir) === 'npx') announceNpxTypeScriptFetch(TYPECHECK_TYPESCRIPT_VERSION);
     return runTypecheck(dir);
   },
@@ -249,6 +247,8 @@ export async function runLocalPreflight(
   let typecheckStep: LocalCheckStep;
   if (!existsSync(join(targetDir, 'tsconfig.json'))) {
     typecheckStep = { name: 'typecheck', status: 'skipped', reason: MISSING_TSCONFIG_GUIDANCE };
+  } else if (missingProjectDependencies(targetDir).length) {
+    typecheckStep = { name: 'typecheck', status: 'skipped', reason: missingTypecheckDependenciesMessage() };
   } else {
     const result = await typecheck(targetDir);
     if (result.ok) {

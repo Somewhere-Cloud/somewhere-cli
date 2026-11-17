@@ -1,5 +1,5 @@
 import type { APIResponse, Locator, Page } from '@playwright/test';
-import type { TestControl } from './test-control.js';
+import { TestInboxNeedsClaim, type TestControl } from './test-control.js';
 import type { InboxMessage } from './test-identities.js';
 import { rememberSecrets, scrub } from './test-diagnostics.js';
 import { mark as timelineMark, span } from './test-timeline.js';
@@ -174,7 +174,7 @@ async function step<T>(page: Page, name: string, work: () => Promise<T>, beforeR
   catch (error) {
     // Secrets the failure may quote (a code the page already shows) are registered before any text is built.
     await beforeReport?.().catch(() => {});
-    if (error instanceof StepError) throw error;
+    if (error instanceof StepError || error instanceof TestInboxNeedsClaim) throw error;
     const stopped = browserStoppedMessage(page, error);
     if (stopped) throw new StepError(`${name.split(':')[0]}: ${stopped}`);
     const said = await pageSays(page);

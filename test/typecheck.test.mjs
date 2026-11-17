@@ -287,6 +287,7 @@ test('an already installed type package plans nothing, so a warm tree pays no co
   const dir = typesFixture({
     'package.json': JSON.stringify({ devDependencies: { '@types/react': '^18.3.0' } }),
     'node_modules/@types/react/index.d.ts': 'export {};',
+    'node_modules/@types/react/package.json': '{}',
   });
   assert.deepEqual(planDeclaredTypePackages(dir), { specs: [], missing: [] });
 

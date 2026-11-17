@@ -11,7 +11,7 @@ import type { TestTarget } from './test-target.js';
 import { collectFiles } from './files.js';
 import { hashFiles } from './base-files.js';
 import { describeSweep, forgetRecord, sweepAccounts } from './form-accounts.js';
-import { openPreviewControl, openProductionControl, type TestControl } from './test-control.js';
+import { openPreviewControl, openProductionControl, TestInboxNeedsClaim, type TestControl } from './test-control.js';
 import { loadPreviewRecord } from './preview-record.js';
 import { browserStoppedMessage, ready, signIn, signOut, signUp, verify, type Attempt, type FormAdapter, type FormControl, type FormHost, type Person, type SignInOptions, type SignUpOptions } from './form-auth.js';
 import { rememberSecrets, scrub } from './test-diagnostics.js';
@@ -40,8 +40,8 @@ export type DataKind = 'ok' | 'empty' | 'refused' | 'missing-or-refused' | 'malf
 export interface DataResult { status: number; kind: DataKind; data: unknown; error: string | null; message: string | null }
 type Who = Page | BrowserContext | APIRequestContext;
 
-/** One check's outcome. `skipped` says it did not run because an earlier check failed. */
-export interface Check { name: string; ok: boolean; ms: number; error?: string; skipped?: 'after-failure' }
+/** One check's outcome, including whether a prerequisite kept it from running. */
+export interface Check { name: string; ok: boolean; ms: number; error?: string; skipped?: ReportCheck['skipped'] }
 /** What a result file was run against. */
 export interface RunIdentity { project_id: string; environment: string; preview_session_id: string | null; origin: string; script: string | null }
 export interface OpenOptions {
@@ -265,6 +265,10 @@ export class AppTest {
     const start = performance.now();
     try { await work(); this.checks.push({ name, ok: true, ms: Math.round(performance.now() - start) }); return true; }
     catch (error) {
+      if (error instanceof TestInboxNeedsClaim) {
+        this.checks.push({ name, ok: false, ms: 0, skipped: 'needs-claim', error: error.message });
+        return false;
+      }
       // Nothing about the failure is printed before every secret it could carry is registered and the whole
       // diagnostic is scrubbed: emailed links, remembered passwords or tokens, session cookies.
       await this.rememberPageSecrets();
@@ -290,7 +294,7 @@ export class AppTest {
     if (live !== this.release) this.checks.push({ name: preview ? 'the preview stayed on the same saved version during the script' : 'the release stayed the same during the script', ok: false, ms: 0,
       error: preview
         ? (live ? `the preview was saved again during the script (${this.release} → ${live}); these results describe no single version` : `${ended || 'the preview could not be confirmed at the end'}; nothing ran against production`)
-        : live ? `the live release changed from ${this.release} to ${live} during the script; these results describe no single release` : 'the live release could not be confirmed at the end' });
+        : live ? `the live release changed from ${this.release} to ${live} during the script; these results describe no single release` : (ended || 'the live release could not be confirmed at the end') });
     const cleanup: string[] = [];
     // The script's accounts are deleted together by their exact ids, with the teams only they belong to.
     const withIds = this.host.attempts.filter(attempt => attempt.id);
@@ -336,7 +340,7 @@ export class AppTest {
         ? 'The preview changed or closed during this script. Save it again with `somewhere preview` (or open a new one if it closed), then run the whole script again.\n'
         : 'The live release changed during this script. Run the whole script again.\n');
     }
-    if (failed || !passed) process.exitCode = 1;
+    if (failed || !this.checks.length) process.exitCode = 1;
     return { passed, failed, file: this.resultsPath };
   }
 }

@@ -1,3 +1,9 @@
+## 0.38.110
+
+- Install the starter's pinned dependencies when signed out, too.
+- Deploy without a local typecheck when project dependencies are missing. Local commands explain how to install them.
+- Show how to claim after a temporary deploy. Tests skip inbox checks until the app is claimed and report the reason for failures.
+
 ## 0.38.109
 
 - Refresh platform declarations for user deletion results and durable search acceptance.

@@ -154,28 +154,51 @@ export interface DeclaredTypesPlan {
 
 export type TypePackageInstaller = (specs: string[], projectDir: string) => void;
 
-export function planDeclaredTypePackages(projectDir: string): DeclaredTypesPlan {
+function declaredDependencies(projectDir: string): Record<string, string> {
   let manifest: unknown;
   try {
     manifest = JSON.parse(readFileSync(join(projectDir, 'package.json'), 'utf8'));
   } catch {
-    return { specs: [], missing: [] }; // no manifest, nothing declared
+    return {}; // no manifest, nothing declared
   }
-  if (!manifest || typeof manifest !== 'object') return { specs: [], missing: [] };
+  if (!manifest || typeof manifest !== 'object') return {};
   const record = manifest as Record<string, unknown>;
-  const declared: Record<string, string> = {};
+  const declared: Record<string, string> = Object.create(null);
   for (const field of ['dependencies', 'devDependencies']) {
     const group = record[field];
     if (!group || typeof group !== 'object') continue;
     for (const [name, range] of Object.entries(group as Record<string, unknown>)) {
-      if (name.startsWith('@types/') && typeof range === 'string' && range) declared[name] = range;
+      if (/^(?:@[\w.-]+\/)?[\w.-]+$/.test(name) && typeof range === 'string' && range) declared[name] = range;
     }
   }
 
+  const optional = record.optionalDependencies;
+  if (optional && typeof optional === 'object') {
+    for (const name of Object.keys(optional)) delete declared[name];
+  }
+  return declared;
+}
+
+function dependencyInstalled(projectDir: string, name: string): boolean {
+  // Check package manifests rather than resolving an entry point: type-only and
+  // export-restricted packages have no public Node entry point. Walk up for workspace hoists.
+  for (let dir = projectDir; ; dir = dirname(dir)) {
+    if (existsSync(join(dir, 'node_modules', name, 'package.json'))) return true;
+    if (dirname(dir) === dir) return false;
+  }
+}
+
+export function missingProjectDependencies(projectDir: string): string[] {
+  return Object.keys(declaredDependencies(projectDir)).filter((name) => !dependencyInstalled(projectDir, name));
+}
+
+export const INSTALL_PROJECT_DEPENDENCIES = 'Run `npm install` in this directory, then try again.';
+
+export function planDeclaredTypePackages(projectDir: string): DeclaredTypesPlan {
   const specs: string[] = [];
   const missing: string[] = [];
-  for (const [name, range] of Object.entries(declared)) {
-    if (existsSync(join(projectDir, 'node_modules', ...name.split('/')))) continue;
+  for (const [name, range] of Object.entries(declaredDependencies(projectDir))) {
+    if (!name.startsWith('@types/') || dependencyInstalled(projectDir, name)) continue;
     missing.push(name);
     // `name@range` is npm's spec form for a semver range, a file:/link: path,
     // and a git/URL range alike, so one shape covers every declaration.
@@ -204,12 +227,8 @@ export function ensureDeclaredTypePackages(
   }
 }
 
-/** Why a check did not run: declared type packages are not installed. The
- *  typecheck never installs them itself (it would change the project tree and
- *  run package scripts). */
-export function missingTypePackagesMessage(missing: string[], projectDir: string): string {
-  return `Not checked: this project's declared type packages are not installed (${missing.join(', ')}). `
-    + `somewhere typecheck does not install the project's dependencies. Install them (npm install in ${projectDir}), then run it again.`;
+export function missingTypecheckDependenciesMessage(): string {
+  return `Types were not checked because project dependencies are not installed. ${INSTALL_PROJECT_DEPENDENCIES}`;
 }
 
 /** Longest a typecheck child may run before it and its children are stopped.

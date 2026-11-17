@@ -11,11 +11,18 @@ import { describeSweep, sweepAccounts } from './form-accounts.js';
 import { loadTestTarget, type TestTarget } from './test-target.js';
 import { openPreviewControl, productionControl, type TestControl } from './test-control.js';
 import { testAddressOrder } from './test-connectivity.js';
+import { INSTALL_PROJECT_DEPENDENCIES, missingProjectDependencies } from './typecheck.js';
 import { mark, span } from './test-timeline.js';
 
 export interface PreparedRunner { cli: string; channel: 'chrome' | undefined; version: string; browserLaunchMs: number; playwright: string }
 export interface RunOptions { workers: string; files?: string[]; grep?: string; failed?: boolean; json?: boolean; phone?: boolean; preview?: boolean }
 export interface RunOutcome { exitCode: number; results: Record<string, unknown> | null; target: TestTarget }
+
+export function testDependencyError(root: string): Error {
+  return new Error(missingProjectDependencies(root).includes('@playwright/test')
+    ? INSTALL_PROJECT_DEPENDENCIES
+    : 'Install project test dependencies: npm install -D @playwright/test @somewhere-cloud/cli');
+}
 
 /** Resolve the project's Playwright and confirm a browser (installing Chromium only when Chrome is
  *  missing). Local only: no request to the app or the platform, so it can overlap a deploy. */
@@ -24,7 +31,7 @@ export async function prepareRunner(root: string): Promise<PreparedRunner> {
   let cli: string;
   let pw: typeof import('@playwright/test');
   try { cli = require.resolve('@playwright/test/cli'); pw = require('@playwright/test') as typeof import('@playwright/test'); }
-  catch { throw new Error('Install project test dependencies: npm install -D @playwright/test @somewhere-cloud/cli'); }
+  catch { throw testDependencyError(root); }
   let channel: 'chrome' | undefined = 'chrome';
   let browser;
   const launchStart = performance.now();

@@ -7,11 +7,14 @@
  *  with no global install (the starter pins @somewhere-cloud/cli). */
 export const DEPLOY_COMMAND = 'npx @somewhere-cloud/cli deploy';
 export const TEST_COMMAND = 'npx @somewhere-cloud/cli test';
+export const TEST_INBOX_CLAIM_REASON = 'needs a claimed app: run somewhere claim';
+export const TEST_INBOX_CLAIM_NEXT = 'Next: run somewhere claim, open its link, then run somewhere test again.';
 
-export interface ReportCheck { name: string; ok: boolean; skipped?: 'after-failure'; error?: string }
+export interface ReportCheck { name: string; ok: boolean; skipped?: 'after-failure' | 'needs-claim'; error?: string }
 export interface ReportGroup { script: string; checks: ReportCheck[]; resultFile: string | null }
 
-const firstLine = (text: string | undefined) => (text ?? '').split('\n').map((line) => line.trim()).find(Boolean) ?? '';
+const firstLine = (text: string | undefined) => (text ?? '').split('\n').map((line) => line.trim())
+  .find((line) => line && !/^(?:hint:|Usage details:|Platform bug reports:)/i.test(line)) ?? '';
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
 export function describeReport(groups: ReportGroup[], options: { verbose?: boolean } = {}): string[] {
@@ -21,17 +24,21 @@ export function describeReport(groups: ReportGroup[], options: { verbose?: boole
   const note = (script: string | null, extra?: string) => { const parts = [script, extra].filter(Boolean); return parts.length ? ` (${parts.join(', ')})` : ''; };
   const failed = checks.filter((check) => !check.ok && !check.skipped);
   const notRun = checks.filter((check) => check.skipped === 'after-failure');
+  const skipped = checks.filter((check) => check.skipped === 'needs-claim');
   const lines = [
     ...failed.map((check) => `FAIL ${check.name}${note(check.script)}: ${firstLine(check.error) || 'failed'}`),
     ...checks.filter((check) => check.ok).map((check) => `PASS ${check.name}${note(check.script)}`),
+    ...skipped.map((check) => `SKIPPED ${check.name}${note(check.script)}: ${firstLine(check.error)}`),
     ...notRun.map((check) => `NOT RUN ${check.name}${note(check.script, 'after the first failure')}`),
   ];
   const scripts = plural(groups.length, 'script');
   if (!checks.length) lines.push(`FAILED: no check ran in ${scripts}: it stopped before its first check (its error is in the script's output).`);
   else if (failed.length) lines.push(`FAILED: ${failed.length} of ${plural(checks.length, 'check')} in ${scripts}${notRun.length ? ` (${notRun.length} not run)` : ''}`);
+  else if (skipped.length) lines.push(`${checks.length - skipped.length} passed, ${skipped.length} skipped in ${scripts}`);
   else lines.push(`PASSED: ${plural(checks.length, 'check')} in ${scripts}`);
   if (!checks.length) lines.push(`Next: fix the error in the script's output, then run ${TEST_COMMAND} again.`);
   else if (failed.length) lines.push(`Next: fix what each FAIL line names, run ${DEPLOY_COMMAND}, then ${TEST_COMMAND} --failed to rerun each script that failed.`);
+  if (skipped.length) lines.push(TEST_INBOX_CLAIM_NEXT);
   const files = [...new Set(groups.map((group) => group.resultFile).filter((file): file is string => Boolean(file)))];
   if (files.length && (failed.length || !checks.length || options.verbose)) lines.push(`Full result: ${files.join(', ')}`);
   return lines;

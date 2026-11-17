@@ -89,3 +89,30 @@ test('a browser that cannot read its own files is named, with what to do, and it
   assert.ok(lines.includes('Next: give the browser access as the FAIL line says, then run npx @somewhere-cloud/cli test again.'), lines.join('\n'));
   assert.match(lines[0], /^FAIL tests\/app-check\.mjs: the browser could not read its own files .* On macOS this is the disk-access permission for the volume it is on: give the app that runs this command access to removable volumes .*, or start it as node node_modules\/@somewhere-cloud\/cli\/bin\/somewhere\.js test\.$/);
 });
+
+test('a platform hint cannot hide the error that caused a script to fail', async () => {
+  const root = project({ 'tests/app-check.cjs': `
+    class CliApiError extends Error { name = 'CliApiError'; }
+    const error = new CliApiError('The platform refused the inbox request.');
+    error.hint = 'Usage details: read the troubleshooting guide. Platform bug reports: contact support.';
+    throw error;
+  ` });
+  const results = await runScripts(root, listScripts(root, []), [], process.env);
+  assert.equal(describeScriptResults(results)[0], 'FAIL tests/app-check.cjs: CliApiError: The platform refused the inbox request.');
+});
+
+test('an inbox check that needs a claim is skipped and names the claim step', () => {
+  const lines = describeScriptResults([{
+    script: 'tests/app-check.mjs', ok: true, exitCode: 0, ms: 1, reason: null,
+    checks: [
+      { name: 'the sign-in page loads', ok: true },
+      { name: 'sign up through the app', ok: false, skipped: 'needs-claim', error: 'needs a claimed app: run somewhere claim' },
+    ],
+  }]);
+  assert.deepEqual(lines, [
+    'PASS the sign-in page loads',
+    'SKIPPED sign up through the app: needs a claimed app: run somewhere claim',
+    '1 passed, 1 skipped in 1 script',
+    'Next: run somewhere claim, open its link, then run somewhere test again.',
+  ]);
+});

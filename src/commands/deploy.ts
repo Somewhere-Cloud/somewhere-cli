@@ -2,7 +2,7 @@ import { roleMethodHints } from '../lib/role-method-hints.js';
 import { DEPLOY_COMMAND } from '../lib/test-report.js';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { runTypecheck } from '../lib/typecheck.js';
+import { missingProjectDependencies, runTypecheck } from '../lib/typecheck.js';
 import { reportTypecheck } from './typecheck.js';
 import { clearBaseFiles, hashFiles, loadLastActivation, saveBaseFiles } from '../lib/base-files.js';
 import { withVerifyProgress } from '../lib/verify-progress.js';
@@ -729,7 +729,9 @@ export function registerDeploy(program: Command) {
       const typecheckStartedAt = performance.now();
       // Collection, authentication and packaging can proceed while tsc runs.
       // Observe rejection immediately, then enforce the result before upload.
-      const typecheck = existsSync(join(targetDir, 'tsconfig.json'))
+      const hasTsconfig = existsSync(join(targetDir, 'tsconfig.json'));
+      const missingDependencies = hasTsconfig && missingProjectDependencies(targetDir).length > 0;
+      const typecheck = hasTsconfig && !missingDependencies
         ? runTypecheck(targetDir).then(value => ({ value }), (error: unknown) => ({ error }))
           .finally(() => { typecheckMs = performance.now() - typecheckStartedAt; })
         : Promise.resolve(null);
@@ -1323,6 +1325,7 @@ export function registerDeploy(program: Command) {
         body.source = 'cli';
         if (opts.force) body.force = true;
 
+        if (missingDependencies) process.stderr.write('Types were not checked locally because project dependencies are not installed.\n');
         const checked = await typecheck;
         if (checked && 'error' in checked) throw checked.error;
         if (checked && !checked.value.ok) {
@@ -1581,6 +1584,9 @@ export function registerDeploy(program: Command) {
               console.log(line);
             }
           }
+          info(besideRealLogin
+            ? 'Next: open the claim URL above. Tests that need the email inbox work after you claim the app.'
+            : 'Next: run `somewhere claim` and open its link. Tests that need the email inbox work after you claim the app.');
           // Beside a real login the CLI's own credentials cannot read the throwaway project.
           const tempCheckHint = besideRealLogin ? null : formatReferenceCheckHint(result, loadProjectConfig()?.project_id === projectId);
           if (tempCheckHint) info(tempCheckHint);

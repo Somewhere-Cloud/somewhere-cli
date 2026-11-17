@@ -27,7 +27,7 @@ async function run(args, { token, config: storedConfig, prepare, explicitLink = 
   for (const dir of [cwd, config, bin]) mkdirSync(dir);
   if (token) writeFileSync(join(config, 'config.json'), JSON.stringify({ token }));
   if (storedConfig) writeFileSync(join(config, 'config.json'), JSON.stringify(storedConfig));
-  // Only a sentinel, never npm: authenticated init's existing install call is observed locally.
+  // Only a sentinel, never npm: the install call is observed locally.
   writeFileSync(join(bin, 'npm'), '#!/bin/sh\nprintf fixture > "$PWD/install-called"\n', { mode: 0o700 });
   // Existing user-wide hook settings must remain untouched by setup.
   for (const [host, file] of [['.claude', 'settings.json'], ['.codex', 'hooks.json'], ['.cursor', 'hooks.json']]) {
@@ -54,14 +54,15 @@ async function run(args, { token, config: storedConfig, prepare, explicitLink = 
   return { ...output, stdout: lines.filter(line => !line.startsWith('{"event":"project_created"')).join('\n'), events, cwd, config, base };
 }
 for (const selection of [[], ['--template', 'minimal'], ['--features', 'private-data', '--ui', 'headless']]) {
-  test(`anonymous init writes valid raw starter without account, requests or install: ${selection.join(' ') || 'default'}`, async () => {
+  test(`anonymous init writes valid raw starter and installs dependencies without creating an account: ${selection.join(' ') || 'default'}`, async () => {
     const result = await run(['--name', 'starter', '--json', ...selection]);
     assert.equal(result.status, 0, result.stdout + result.stderr);
     const body = JSON.parse(result.stdout);
-    assert.equal(body.local, true); assert.equal(body.linked, false); assert.equal(body.dependencies_installed, false);
+    assert.equal(body.local, true); assert.equal(body.linked, false); assert.equal(body.dependencies_installed, true);
     assert.equal(body.project_id, undefined); assert.ok(body.next.includes('somewhere deploy'));
     assert.deepEqual(requests, []); assert.deepEqual(readdirSync(result.config).filter(name => name !== 'last-run.json'), []);
-    for (const path of ['.somewhere.json', '.mcp.json', 'node_modules', 'install-called', 'dist', 'build']) assert.equal(existsSync(join(result.cwd, path)), false, path);
+    for (const path of ['.somewhere.json', '.mcp.json', 'node_modules', 'dist', 'build']) assert.equal(existsSync(join(result.cwd, path)), false, path);
+    assert.equal(existsSync(join(result.cwd, 'install-called')), true);
     assert.equal(existsSync(join(result.base, '.claude.json')), false);
     assertInitGuidance(result, body.hooks);
     const collected = collectFiles(result.cwd);

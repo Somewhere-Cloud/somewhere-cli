@@ -9,7 +9,7 @@ import {
   saveProjectDeployState,
   type ProjectConfigEntry,
 } from '../lib/config.js';
-import { dim, error, info, platformErrorEnvelope, printJson, printJsonError, success, teal, warn } from '../lib/output.js';
+import { dim, error, formatUserSuppliedNote, info, platformErrorEnvelope, printJson, printJsonError, success, teal, warn } from '../lib/output.js';
 import { getProjectServingUrl } from '../lib/project-urls.js';
 import { callPlatformTool } from '../lib/platform-tools.js';
 import { isRecord, unwrapPlatformData } from '../lib/platform-command.js';
@@ -293,7 +293,7 @@ export function registerPromote(program: Command) {
         } catch {
           // ignore — the promote already succeeded
         }
-        if (opts.message) info(dim(`Notes: ${opts.message}`));
+        if (opts.message) info(dim(formatUserSuppliedNote(opts.message)));
         if (baseOutcome === 'moved') {
           info(`This folder now starts from v${r.version}: the next \`somewhere preview\` or \`somewhere deploy\` here needs no pull.`);
         } else if (baseOutcome === 'kept-functions') {

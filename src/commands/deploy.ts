@@ -711,6 +711,7 @@ export function registerDeploy(program: Command) {
     // Kept working for scripts that already call it; no longer documented. The exit-safe form is
     // `somewhere deploy && somewhere test`.
     .addOption(new Option('--test', 'After a successful deploy, run somewhere test once against the new release').hideHelp())
+    .option('-m, --message <text>', 'User-supplied note for this version (max 200 characters)')
     .option('--json', 'Print the raw deploy response as JSON on stdout; files left out locally are listed on stderr by path and reason')
     .option('--list-unpublished', 'List the local files this deploy keeps on your machine, and how to publish one on purpose')
     .option('--allow-type-errors', 'Upload even when the local TypeScript check fails')
@@ -1266,6 +1267,7 @@ export function registerDeploy(program: Command) {
       try {
         const body: Record<string, unknown> = {
           project_id: projectId,
+          ...(opts.message !== undefined ? { message: opts.message } : {}),
           // --scope functions deploys ONLY the backend: send no static at all
           // (an empty object, NOT omitted — the worker requires a files map).
           // Sending the on-disk static under scope:functions is what bricked

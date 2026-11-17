@@ -1,3 +1,7 @@
+# 0.38.106
+
+- Add deploy -m for user-supplied version notes; promotion quotes its submitted note as data. History shows notes stored on each release.
+
 # 0.38.105
 
 - Deploy and promote print the previous activation hint, naming somewhere rollback; JSON preserves its version and build availability.

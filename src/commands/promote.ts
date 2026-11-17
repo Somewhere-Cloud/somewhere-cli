@@ -110,6 +110,7 @@ async function readProductionSurface(
 }
 
 interface PromoteResult {
+  previous?: { version: number; rollback_available: boolean; message: string };
   version: number;
   files_promoted: number;
   /** Sent by newer platform versions; absent ones only carry has_functions. */
@@ -233,6 +234,7 @@ export function registerPromote(program: Command) {
         const r = await client.call<PromoteResult>('POST', '/promote', {
           project_id: projectId,
           message: opts.message,
+          source: 'cli',
           preview_session_id: draftId,
           preview_id: candidateReleaseId,
           ...(opts.prune ? { replace_functions: true } : {}),
@@ -267,6 +269,7 @@ export function registerPromote(program: Command) {
         // than an invented number.
         const surface = (await readProductionSurface(projectId)) ?? promoteSurfaceFromResponse(r);
         success(`Promoted v${r.version} (${formatPublishSurface(surface)})`);
+        if (r.previous) info(r.previous.message);
         // Name the preview session this version was promoted from, when known.
         const fromDraft = draftId ?? r.promoted_draft_id;
         if (fromDraft) info(dim(`Promoted from preview session ${teal(fromDraft)}`));

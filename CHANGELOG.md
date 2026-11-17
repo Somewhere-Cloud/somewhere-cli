@@ -1,3 +1,8 @@
+## 0.38.109
+
+- Refresh platform declarations for user deletion results and durable search acceptance.
+- Match the platform consumer identity using the same comment-free linter bundle. Contract warnings remain enabled.
+
 ## 0.38.108
 
 - Mount session checks only behind public-route decisions, and email verification only when enabled.

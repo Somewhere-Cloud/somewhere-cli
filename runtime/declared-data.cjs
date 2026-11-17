@@ -1535,12 +1535,18 @@ interface SomewhereRuntimeAuthServer {
   setRoles(userId: string, changes: { add?: readonly string[]; remove?: readonly string[] }): Promise<SomewhereServerRoleChanges>;
   listUsers(options?: { ids: readonly string[]; emails?: never; limit?: never; cursor?: never } | { emails: readonly string[]; ids?: never; limit?: never; cursor?: never } | { ids?: never; emails?: never; limit?: number; cursor?: string }): Promise<{ users: SomewhereAuthDirectoryUser[]; next_cursor: string | null }>;
 }
+interface SomewhereAuthUserDeletion {
+  deleted: true;
+  removed: readonly string[];
+  kept: readonly { readonly category: string; readonly reason: string }[];
+  not_covered: readonly string[];
+}
 interface SomewhereRuntimeAuthModeration {
   ban(req: Request, userId: string, options?: { reason?: string | null } | null): Promise<SomewhereAuthModerationRevoked & {
     user: { id: string; email: string; banned: true; banned_reason: string | null };
   }>;
   unban(req: Request, userId: string): Promise<{ user: { id: string; email: string; banned: false } }>;
-  deleteUser(req: Request, userId: string): Promise<{ deleted: true; user_id: string }>;
+  deleteUser(req: Request, userId: string): Promise<SomewhereAuthUserDeletion & { user_id: string }>;
   revokeSessions(req: Request, userId: string): Promise<SomewhereAuthModerationRevoked>;
   setRole(req: Request, userId: string, role: SomewhereAuthRole): Promise<SomewhereAuthModerationRevoked & {
     user: { id: string; email: string; role: SomewhereAuthRole };
@@ -1602,10 +1608,10 @@ interface SomewhereRuntimeAuth {
   // Email verification for the request's own session (cookie or Bearer); no token in app code.
   requestEmailVerificationWithCookie(req: Request): Promise<SomewhereAuthVerificationSent>;
   verifyEmailWithCookie(req: Request, options: { code: string }): Promise<{ verified: true }>;
-  deleteUser(token: string): Promise<{ deleted: true }>;
+  deleteUser(token: string): Promise<SomewhereAuthUserDeletion>;
   // Password change and account deletion end every session of the account; these clear the cookies.
   updatePasswordWithCookie(req: Request, options: { new_password: string; current_password?: string }): Promise<{ updated: true }>;
-  deleteUserWithCookie(req: Request): Promise<{ deleted: true }>;
+  deleteUserWithCookie(req: Request): Promise<SomewhereAuthUserDeletion>;
   // Start Google/GitHub/Discord sign-in from a server handler: stages this attempt's HttpOnly
   // verifier cookie on the response and resolves the provider start URL (only its challenge travels).
   oauthStart(provider: 'google' | 'github' | 'discord', options: { redirect_uri: string }): Promise<string>;
@@ -2331,13 +2337,13 @@ interface SomewhereFsView {
 interface SomewhereRuntimeFs extends SomewhereFsView { readonly server: SomewhereFsView }
 
 // ---- sw.search
-interface SomewhereSearchManagedAddResult { path: string; version: number; chunks: number; searchable: true }
+interface SomewhereSearchManagedAddResult { path: string; version: number; chunks: number; searchable: "shortly" }
 interface SomewhereSearchManagedHit {
   content: string;
   score: number;
   source: { path: string; page: number | null; locator: string; url: string };
 }
-interface SomewhereSearchManagedQueryResult { query: string; results: SomewhereSearchManagedHit[] }
+interface SomewhereSearchManagedQueryResult { query: string; results: SomewhereSearchManagedHit[]; status?: "preparing"; message?: string }
 interface SomewhereSearchIndexInfo { name: string; item_count: number; created_at: string }
 interface SomewhereSearchItem { id: string; content: string; metadata?: Readonly<Record<string, unknown>> | null }
 interface SomewhereSearchUpsertOptions { index: string; items: readonly SomewhereSearchItem[] }
@@ -2360,6 +2366,8 @@ interface SomewhereSearchHit {
   signals?: { semantic?: number; lexical?: number };
 }
 interface SomewhereSearchQueryResult {
+  status?: "preparing";
+  message?: string;
   results: SomewhereSearchHit[];
   page: { offset: number; limit: number; total: number; has_more: boolean };
   mode: SomewhereSearchMode;
@@ -4494,8 +4502,8 @@ var require_consumer_contract = __commonJS({
   "worker/containers/compile/consumer-contract.cjs"(exports2, module2) {
     "use strict";
     var CONSUMER_CONTRACT2 = Object.freeze({
-      version: 18,
-      digest: "45b503300f9407ee0ea0efcbc61f5459334c758ba446129f6decc8bdec5d5b79"
+      version: 22,
+      digest: "da61ee52a81d1b7cb5324c8b88bc0b7f1883d213f8ef7280eddbf8449207c22f"
     });
     var MEMBERSHIPS = "memberships: table({ id: id(), team_id: text(), member_id: text() }, { scope: owner(), client: { read: true } }),";
     var SHARES = "shares: table({ id: id(), grantee_id: text() }, { scope: owner(), client: { read: true, create: ['grantee_id'], delete: true }, unique: [['user_id', 'grantee_id']] }),";

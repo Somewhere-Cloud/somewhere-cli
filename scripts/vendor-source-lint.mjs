@@ -16,7 +16,7 @@ const result = await esbuild.build({
   absWorkingDir: root, entryPoints: ['worker/src/services/source-lint.ts'],
   bundle: true, platform: 'neutral', target: 'es2022', format: 'cjs', write: false,
   // Paths in the bundle stay under the platform root wherever node_modules is linked from.
-  metafile: true, legalComments: 'none', preserveSymlinks: true,
+  metafile: true, legalComments: 'none', minifyWhitespace: true, preserveSymlinks: true,
 });
 assertBehaviorParity(result.outputFiles[0].text, publicProjection(result.outputFiles[0].text, 'vendor.js'), 'vendor.js');
 if (mode === '--check') assertBehaviorParity(result.outputFiles[0].text, readFileSync(join(import.meta.dirname, '../runtime/source-lint.cjs'), 'utf8'), 'vendor.js');

@@ -200,6 +200,8 @@ collectNotices(process.argv)
   .catch(() => {});
 try {
   const command = process.argv[2] || '';
+  // file --version selects the deployed version.
+  if (command === 'file') program.enablePositionalOptions();
   // Help, version and update never wait on, or fail because of, an API call.
   const skipRecovery = ['lint', 'upgrade', 'update', 'login', 'signup', 'logout', 'docs', 'help', '--help', '-h', '--version', '-V'].includes(command);
   const recovery = skipRecovery ? { kind: 'none' as const } : await recoverClaimHandoff();

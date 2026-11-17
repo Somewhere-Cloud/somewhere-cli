@@ -198,7 +198,7 @@ export function randomSuffix(): string {
   return Math.random().toString(36).slice(2, 6).padEnd(4, '0');
 }
 
-export function deriveTempProjectName(dirPath: string): string {
+export function deriveNewProjectName(dirPath: string): string {
   const base = slugify(basename(dirPath)) || 'project';
   return `${base}-${randomSuffix()}`;
 }
@@ -430,47 +430,27 @@ export function formatSignedInUnlinkedExplanation(): string {
   ].join('\n');
 }
 
-/** The folder's link names a project this sign-in cannot open (
- *  item 14: typically a temporary project that expired unclaimed, after the
- *  developer signed in). The platform answers not-found and no-access alike,
- *  so this names possibilities only, never which one. Reached only when the
- *  platform refused the deploy before applying anything. */
-export function linkedProjectNotFoundSteps(signedIn: boolean): string[] {
-  return signedIn
-    ? [
-        `See your projects: \`${cliInvocation()} projects\`.`,
-        `Deploy this folder to one of them: \`${cliInvocation()} init --link --project <name-or-id>\`, then \`${cliInvocation()} deploy\`.`,
-        // init refuses a linked folder without a terminal, so the stale link goes first.
-        `Or create a new project for it: delete this folder\'s .somewhere.json (your other files are kept), run \`${cliInvocation()} init --bare --name <name>\`, then \`${cliInvocation()} deploy\`.`,
-      ]
-    : [
-        `If the project is in your account, sign in with \`${cliInvocation()} login\` and deploy again.`,
-        `Start a new temporary project: delete this folder\'s .somewhere.json, then run \`${cliInvocation()} deploy\` again.`,
-      ];
+/** An adopter can choose a new project without editing the link by hand. */
+function newProjectCommand(dir?: string): string {
+  return `${cliInvocation()} deploy --new${dir ? ` ${shellQuote(dir)}` : ''}`;
 }
 
-export function formatLinkedProjectNotFoundExplanation(linkedProjectId: string, signedIn: boolean): string {
-  return [
-    `This folder is linked to project ${linkedProjectId} (in .somewhere.json), which this ${signedIn ? 'sign-in' : 'temporary workspace'} cannot open. It may belong to another account or have been deleted; a temporary project that expired unclaimed cannot be recovered. Nothing was deployed.`,
-    '',
-    'Next steps:',
-    ...linkedProjectNotFoundSteps(signedIn).map((step) => `  ${step}`),
-  ].join('\n');
+export function formatLinkedProjectAccessRefusal(signedIn: boolean, dir?: string): string {
+  const command = newProjectCommand(dir);
+  return signedIn
+    ? `This folder is linked to a project this account cannot deploy to. Run \`${command}\` to publish a new project in your account and update .somewhere.json.`
+    : `This folder is linked to an existing project and this terminal is signed out. Run \`${command}\` to publish a new temporary project and update .somewhere.json.`;
 }
 
 /** Signed out, no stored credential, and the deploy names an existing project. */
-export function formatSignedOutExistingTargetExplanation(projectId: string, fromLink: boolean): string {
+export function formatSignedOutExistingTargetExplanation(projectId: string, fromLink: boolean, dir?: string): string {
+  if (fromLink) return formatLinkedProjectAccessRefusal(false, dir);
   return [
-    `${fromLink ? `This folder is linked to project ${projectId} (in .somewhere.json)` : `--project names project ${projectId}`}, but this machine is not signed in, and a new temporary workspace cannot deploy to an existing project. Nothing was created or sent.`,
+    `--project names project ${projectId}, but this machine is not signed in, and a new temporary workspace cannot deploy to an existing project. Nothing was created or sent.`,
     '',
     'Next steps:',
-    ...(fromLink
-      ? [`  If you deployed this folder signed out earlier, its temporary credential is in ~/.somewhere/config.json of the terminal you used then: run \`${cliInvocation()} deploy\` there. An agent\'s sandboxed shell or another user account does not see it.`]
-      : []),
     `  If the project is in your account, run \`${cliInvocation()} login\` (it prints a code; approve it in any browser), then deploy again. Without a person to approve: \`printf %s "$SOMEWHERE_TOKEN" | ${cliInvocation()} auth set\` saves an smt_ key; the SOMEWHERE_TOKEN variable on its own does not sign commands in.`,
-    fromLink
-      ? `  Start a new temporary project instead: delete this folder\'s .somewhere.json, then run \`${cliInvocation()} deploy\` again.`
-      : `  Start a new temporary project instead: run \`${cliInvocation()} deploy\` without --project in a folder that is not linked.`,
+    `  Start a new temporary project instead: run \`${cliInvocation()} deploy\` without --project in a folder that is not linked.`,
   ].join('\n');
 }
 
@@ -590,21 +570,6 @@ export async function readExplicitProjectLiveBase(client: ApiClient, projectId: 
   }
 }
 
-/** The folder's link was written when a project was created for it, and no
- *  deploy from this folder has gone live since (a first deploy that failed
- *  writes exactly this: source_base.release_id null). Nothing of the folder's
- *  is on that project, so a credential that cannot open it loses nothing by
- *  starting a new temporary project and replacing the link. */
-export function linkNeverDeployed(config: ProjectConfig | null | undefined): boolean {
-  const base = config?.source_base;
-  return Boolean(config?.project_id && base && base.project_id === config.project_id && base.release_id === null
-    && !config.last_deploy);
-}
-
-export function formatReplacedNeverDeployedLink(oldProjectId: string): string {
-  return `This folder was linked to project ${oldProjectId}, which never went live from here and which this machine's sign-in cannot open. Starting a new temporary project for this folder; the link in .somewhere.json is replaced (the old project is not changed).`;
-}
-
 function findProjectConfigEntry(targetDir: string): ProjectConfigEntry | null {
   const targetEntry = loadProjectConfigEntry(targetDir);
   if (targetEntry) return targetEntry;
@@ -687,6 +652,7 @@ export function registerDeploy(program: Command) {
       '--allow-bundled',
       'Alias for --prebuilt.',
     )
+    .option('--new', 'Publish to a new project and replace this folder’s .somewhere.json link')
     .option(
       '--temporary',
       'Explicitly deploy to a temporary 3-hour workspace (automatic when logged out)',
@@ -720,6 +686,12 @@ export function registerDeploy(program: Command) {
       // start-up cost (runtime boot + module load) before the command ran.
       const startupMs = performance.now();
       const targetDir = resolveTargetDir(dir);
+      if (opts.new && (opts.project || opts.dryRun || opts.temporary)) {
+        const message = 'Use --new without --project, --dry-run, or --temporary.';
+        if (opts.json) printJsonError('INVALID_OPTIONS', message);
+        else error(message);
+        process.exit(1);
+      }
       markProcessStart('cli');
       timelineMark('cli:action');
       const runTestsAfter = Boolean(opts.test && !opts.dryRun);
@@ -782,18 +754,7 @@ export function registerDeploy(program: Command) {
       }
 
       const storedConfig = loadConfig();
-      // A link left by a first deploy that never went live, with no credential
-      // here that can open its project, would refuse every signed-out deploy:
-      // set it aside and start a new temporary project. A live
-      // temporary credential is checked against the project below.
-      let replacedLink: ProjectConfigEntry | null = null;
-      {
-        const entry = opts.project ? null : findProjectConfigEntry(targetDir);
-        const noUsableCredential = !storedConfig?.token
-          || Boolean(storedConfig.temporary && storedConfig.temp_expires_at && temporarySessionExpired(storedConfig));
-        if (entry && noUsableCredential && !opts.dryRun && linkNeverDeployed(entry.config)) replacedLink = entry;
-      }
-      const findLink = (dir: string): ProjectConfigEntry | null => (replacedLink ? null : findProjectConfigEntry(dir));
+      const foundProjectEntry = opts.new ? null : findProjectConfigEntry(targetDir);
       // The stored temporary session expired unclaimed and this deploy targets
       // an existing project (a folder link or --project). A freshly minted
       // temporary account owns no project, so minting one only to get a
@@ -801,9 +762,11 @@ export function registerDeploy(program: Command) {
       // machine's own record, before any request ( item 14).
       if (
         storedConfig?.temporary && storedConfig.temp_expires_at && temporarySessionExpired(storedConfig)
-        && (opts.project || findLink(targetDir))
+        && (opts.project || foundProjectEntry)
       ) {
-        const message = formatExpiredTemporaryProjectExplanation(storedConfig.temp_expires_at);
+        const message = opts.project
+          ? formatExpiredTemporaryProjectExplanation(storedConfig.temp_expires_at)
+          : formatLinkedProjectAccessRefusal(false, dir);
         if (opts.json) {
           printJson({ ok: false, error: 'TEMPORARY_SESSION_EXPIRED', message, temp_expires_at: storedConfig.temp_expires_at });
         } else {
@@ -817,10 +780,10 @@ export function registerDeploy(program: Command) {
       // no project, so minting one would only end in PROJECT_NOT_FOUND: say so
       // before anything is created or sent.
       const namedTarget = opts.project ? { projectId: String(opts.project), fromLink: false }
-        : (() => { const entry = findLink(targetDir); return entry ? { projectId: entry.config.project_id, fromLink: true } : null; })();
+        : foundProjectEntry ? { projectId: foundProjectEntry.config.project_id, fromLink: true } : null;
       // A dry run keeps its own pre-request refusal (formatDryRunNeedsProjectExplanation).
       if (!storedConfig?.token && namedTarget && !opts.dryRun) {
-        const message = formatSignedOutExistingTargetExplanation(namedTarget.projectId, namedTarget.fromLink);
+        const message = formatSignedOutExistingTargetExplanation(namedTarget.projectId, namedTarget.fromLink, dir);
         if (opts.json) printJsonError('SIGN_IN_REQUIRED', message, { project_id: namedTarget.projectId });
         else console.error(message);
         process.exit(1);
@@ -979,25 +942,6 @@ export function registerDeploy(program: Command) {
         scope = opts.scope;
       }
 
-      let foundProjectEntry = findLink(targetDir);
-      // A reused temporary credential and a never-deployed link from somewhere
-      // else (another shell's temporary workspace): when this credential cannot
-      // open the project, the link is replaced rather than refused after upload.
-      if (foundProjectEntry && tempSession && !besideRealLogin && !opts.project && !opts.dryRun
-        && linkNeverDeployed(foundProjectEntry.config)) {
-        try {
-          await client.call('GET', `/projects/${encodeURIComponent(foundProjectEntry.config.project_id)}`);
-        } catch (err) {
-          if (!(err instanceof CliApiError) || (err.statusCode !== 404 && err.statusCode !== 403)) throw err;
-          replacedLink = foundProjectEntry;
-          foundProjectEntry = null;
-        }
-      }
-      if (replacedLink) {
-        const note = formatReplacedNeverDeployedLink(replacedLink.config.project_id);
-        if (opts.json) console.error(note);
-        else info(note);
-      }
       // A temporary workspace minted beside a real login never targets the
       // directory's linked project: that link names a project the ACCOUNT
       // owns, and this credential is not the account. An explicit --project
@@ -1017,12 +961,12 @@ export function registerDeploy(program: Command) {
           // never picked up here.
           targetProjectConfig = tempProjectFor(sideCar, projectRoot)!;
           projectId = targetProjectConfig.project_id;
-        } else if (tempSession) {
+        } else if (tempSession || opts.new) {
           // Nothing linked that this credential can write — auto-create the
           // project so a temporary deploy stays a single command.
-          const createSpinner = opts.json ? null : ora('Creating a temporary project...').start();
+          const createSpinner = opts.json ? null : ora(tempSession ? 'Creating a temporary project...' : 'Creating a new project...').start();
           try {
-            const name = deriveTempProjectName(targetDir);
+            const name = deriveNewProjectName(targetDir);
             const created = await client.call<{ id: string; name: string; subdomain: string }>(
               'POST',
               '/projects',
@@ -1053,10 +997,12 @@ export function registerDeploy(program: Command) {
               }
             } else {
               saveProjectConfig(targetDir, targetProjectConfig);
+              if (!tempSession) deployStateEntry = { dir: targetDir, config: targetProjectConfig };
+              if (opts.new && !opts.json) info(`Created ${teal(created.name)} and updated .somewhere.json.`);
             }
             projectId = created.id;
           } catch (err) {
-            createSpinner?.fail('Could not create a temporary project');
+            createSpinner?.fail(tempSession ? 'Could not create a temporary project' : 'Could not create a new project');
             error(err instanceof Error ? err.message : String(err), err);
             process.exit(1);
           }
@@ -1733,6 +1679,21 @@ export function registerDeploy(program: Command) {
           }
           process.exit(1);
         }
+        if (err instanceof CliApiError && targetFromLink && !deployAnswered
+          && (err.code === 'PROJECT_NOT_FOUND' || (err.code === 'FORBIDDEN' && err.statusCode === 403))) {
+          const message = formatLinkedProjectAccessRefusal(!tempSession, dir);
+          if (opts.json) {
+            printJsonError(err.code, message, {
+              ...(platformErrorEnvelope(err)?.extra ?? {}),
+              linked_project_id: projectId,
+              deployed: false,
+              next_steps: [newProjectCommand(dir)],
+            });
+          } else {
+            error(message, undefined, err);
+          }
+          process.exit(1);
+        }
         spinner?.fail(opts.dryRun ? 'Dry run failed' : 'Deploy failed');
         // Structured build failures get the full treatment: file:line
         // heading + a code frame rebuilt from the local source (we have the
@@ -1744,23 +1705,17 @@ export function registerDeploy(program: Command) {
         // Always show the error code + HTTP status — "Project not found"
         // with no code/status left a customer unable to tell auth from
         // routing from payload failures.
-        const staleLink = err instanceof CliApiError && err.code === 'PROJECT_NOT_FOUND'
-          && targetFromLink && !deployAnswered && projectId;
         if (err instanceof CliApiError) {
-          // The correlation ids, ALWAYS — a deploy failure the developer cannot
-          // name is one we cannot find either.
+          // The correlation ids let support find other deploy failures.
           const reference = formatErrorReference(err.meta);
-          const signedIn = !tempSession;
           if (opts.json) {
             printJsonError(err.code, err.message, {
               ...(platformErrorEnvelope(err)?.extra ?? {}),
-              ...(staleLink ? { linked_project_id: projectId, deployed: false, next_steps: linkedProjectNotFoundSteps(signedIn) } : {}),
             });
           } else {
             error(
               `${err.message} ${dim(err.statusCode ? `[${err.code}, HTTP ${err.statusCode}]` : `[${err.code}]`)}`,
             );
-            if (staleLink) console.error(`\n${formatLinkedProjectNotFoundExplanation(projectId as string, signedIn)}`);
             if (reference) info(dim(reference));
           }
         } else {

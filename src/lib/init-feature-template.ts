@@ -2,7 +2,7 @@ import { starterTests } from './init-test-template.js';
 import { buildScaffoldGitignore } from './scaffold.js';
 import { CLI_VERSION } from './version.js';
 import { ASSET_TYPES_FILE } from './init-asset-types.js';
-import type { InitScaffoldFile } from './init-scaffold.js';
+import { PROJECT_LINK_README, type InitScaffoldFile } from './init-scaffold.js';
 import type { InitSelection } from './init-features.js';
 import { INIT_AGENTS_MD, INIT_CLAUDE_MD } from './init-agent-guide.js';
 import { APP_CSS, PLAIN_AUTH_CARD, PLAIN_UI_KIT, STYLED_AUTH_CARD, STYLED_UI_KIT, STYLED_VERIFY_EMAIL, TOKENS_CSS } from './init-ui-kit.js';
@@ -3230,6 +3230,8 @@ function readme(selection: InitSelection): string {
   const magicLink = selection.modules.includes('magic-link');
   const lines = [
     '# somewhere.cloud app',
+    '',
+    PROJECT_LINK_README,
     '',
     '## Where things go',
     '',

@@ -1,6 +1,6 @@
 import { CLI_VERSION } from './version.js';
 import { buildScaffoldGitignore } from './scaffold.js';
-import type { InitScaffoldFile } from './init-scaffold.js';
+import { PROJECT_LINK_README, type InitScaffoldFile } from './init-scaffold.js';
 import { INIT_AGENTS_MD, INIT_CLAUDE_MD } from './init-agent-guide.js';
 import { ASSET_TYPES_FILE } from './init-asset-types.js';
 
@@ -147,6 +147,8 @@ code { color: #0e6542; }
 `;
 
 const README = `# somewhere.cloud starter
+
+${PROJECT_LINK_README}
 
 This project starts green: a typed React page calls a typed public greeting
 function. It reads the server-only table declared in \`db/schema.ts\` and

@@ -1,4 +1,4 @@
-// : a failed first anonymous deploy must not strand the folder, an
+// A failed first anonymous deploy needs an explicit new-project choice, an
 // unreadable sign-in file is said out loud, and a network failure names its host.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -6,41 +6,30 @@ import { mkdtempSync, mkdirSync, writeFileSync, chmodSync } from 'node:fs';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { linkNeverDeployed, formatSignedOutExistingTargetExplanation } from '../dist/commands/deploy.js';
+import { formatSignedOutExistingTargetExplanation } from '../dist/commands/deploy.js';
 import { describeNetworkFailure } from '../dist/lib/http.js';
 
 const BIN = fileURLToPath(new URL('../bin/somewhere.js', import.meta.url));
 const scratch = () => mkdtempSync(join(process.env.TMPDIR || '.', 'b9900-'));
 
-test('a link whose first deploy never went live is recognised; a deployed one is not', () => {
-  const id = 'abcc713f-d5f8-4f93-a085-239a54cd418b';
-  assert.equal(linkNeverDeployed({ project_id: id, source_base: { project_id: id, release_id: null, at: 'x' } }), true);
-  assert.equal(linkNeverDeployed({ project_id: id, source_base: { project_id: id, release_id: 'rel_1', at: 'x' } }), false);
-  assert.equal(linkNeverDeployed({ project_id: id }), false, 'an old link without a recorded base is kept');
-  assert.equal(linkNeverDeployed({ project_id: id, source_base: { project_id: id, release_id: null, at: 'x' },
-    last_deploy: { project_id: id, last_deployed_version: 1, at: 'x' } }), false);
-});
-
-test('signed out with a deployed link: the refusal says where the temporary credential lives', () => {
+test('signed out with a deployed link: the refusal gives one adoption command', () => {
   const text = formatSignedOutExistingTargetExplanation('p1', true);
-  assert.match(text, /run `somewhere deploy` there/);
-  assert.match(text, /sandboxed shell/);
-  assert.match(text, /somewhere auth set/);
+  assert.match(text, /Run `somewhere deploy --new`/);
 });
 
-test('signed out, never-deployed link, no credential: deploy does not refuse on the link', () => {
+test('signed out, never-deployed link, no credential: deploy preserves the link', () => {
   const home = scratch();
   const app = scratch();
   writeFileSync(join(app, '.somewhere.json'), JSON.stringify({ project_id: 'abcc713f-d5f8-4f93-a085-239a54cd418b',
     source_base: { project_id: 'abcc713f-d5f8-4f93-a085-239a54cd418b', release_id: null, at: 'x' } }));
   writeFileSync(join(app, 'index.html'), '<h1>x</h1>');
-  // A dead API host: the deploy gets past the link check and fails on the network, naming the host.
+  // A dead API host: the refusal must occur without any network request.
   const r = spawnSync(process.execPath, [BIN, 'deploy'], { cwd: app, encoding: 'utf8', timeout: 60_000,
     env: { ...process.env, HOME: home, SOMEWHERE_CONFIG_DIR: '', SOMEWHERE_API_URL: 'http://127.0.0.1:9/v1' } });
   const out = r.stdout + r.stderr;
-  assert.doesNotMatch(out, /cannot deploy to an existing project/);
-  assert.match(out, /Could not reach .*127\.0\.0\.1:9/);
-  assert.match(out, /add 127\.0\.0\.1:9, or run the command in your own terminal/);
+  assert.equal(r.status, 1);
+  assert.match(out, /Run `somewhere deploy --new`/);
+  assert.doesNotMatch(out, /127\.0\.0\.1|proof-of-work/);
 });
 
 test('an unreadable sign-in file stops the command and names the file', { skip: process.getuid?.() === 0 }, () => {

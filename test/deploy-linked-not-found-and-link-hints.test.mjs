@@ -57,23 +57,15 @@ function fixture({ config, withLink }) {
 
 const notFound = { status: 404, body: { ok: false, error: 'PROJECT_NOT_FOUND', message: 'Project not found.' } };
 
-test('signed in, linked project not found: keeps the error, names the relink steps, keeps the link file', async () => {
+test('signed in, linked project not found: gives one adoption command and keeps the link file', async () => {
   answer = notFound;
   requests.length = 0;
   const { app, configDir } = fixture({ config: account, withLink: true });
   const before = readFileSync(join(app, '.somewhere.json'), 'utf8');
   const r = await run(['deploy'], app, configDir);
   assert.equal(r.status, 1, r.stdout + r.stderr);
-  assert.match(r.stderr, /\[PROJECT_NOT_FOUND, HTTP 404\]/);
-  assert.match(r.stderr, /linked to project proj_old_temp \(in \.somewhere\.json\), which this sign-in cannot open/);
-  assert.match(r.stderr, /Nothing was deployed/);
-  assert.match(r.stderr, /`somewhere projects`/);
-  assert.match(r.stderr, /`somewhere init --link --project <name-or-id>`/);
-  // init refuses an already-linked folder non-interactively, so the stale link is removed first.
-  assert.match(r.stderr, /delete this folder's \.somewhere\.json \(your other files are kept\), run `somewhere init --bare --name <name>`/);
-  // Possibilities only: it never claims to know the project expired or exists.
-  assert.doesNotMatch(r.stderr, /expired at|your temporary project expired|exists but/i);
-  assert.doesNotMatch(r.stderr, /somewhere link --project/);
+  assert.match(r.stderr, /This folder is linked to a project this account cannot deploy to\. Run `somewhere deploy --new` to publish a new project in your account and update \.somewhere\.json\./);
+  assert.doesNotMatch(r.stderr, /Deploy failed|Project not found|init --link/);
   assert.equal(readFileSync(join(app, '.somewhere.json'), 'utf8'), before, 'the link file is never rewritten');
   assert.ok(!requests.some((x) => x.startsWith('POST /projects')), requests.join(', '));
 });
@@ -88,7 +80,7 @@ test('signed in, linked project not found, --json: same code plus linked_project
   assert.equal(out.error, 'PROJECT_NOT_FOUND');
   assert.equal(out.linked_project_id, 'proj_old_temp');
   assert.equal(out.deployed, false);
-  assert.ok(Array.isArray(out.next_steps) && out.next_steps.some((s) => s.includes('somewhere init --link --project')), r.stdout);
+  assert.deepEqual(out.next_steps, ['somewhere deploy --new']);
 });
 
 test('--project named by the caller: plain not-found, no link advice', async () => {
@@ -112,13 +104,12 @@ test('--project naming the linked id itself: the caller chose it, so still no li
   assert.equal(out.next_steps, undefined);
 });
 
-test('a different refusal (403) on a linked folder gets no relink advice', async () => {
+test('view-only access on a linked folder gives the adoption command', async () => {
   answer = { status: 403, body: { ok: false, error: 'FORBIDDEN', message: 'Deploying requires editor access.' } };
   const { app, configDir } = fixture({ config: account, withLink: true });
   const r = await run(['deploy'], app, configDir);
   assert.equal(r.status, 1, r.stdout + r.stderr);
-  assert.match(r.stderr, /\[FORBIDDEN, HTTP 403\]/);
-  assert.doesNotMatch(r.stderr, /init --link|Nothing was deployed|cannot open/);
+  assert.match(r.stderr, /This folder is linked to a project this account cannot deploy to\. Run `somewhere deploy --new`/);
 });
 
 const projectCommands = [

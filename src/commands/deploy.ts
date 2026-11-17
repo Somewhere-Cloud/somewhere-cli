@@ -1530,6 +1530,7 @@ export function registerDeploy(program: Command) {
             if (!buildWarnings.has(normalizeWarning(w))) warn(w);
           }
         }
+        if (result.previous) console.log(result.previous.message);
         if (Array.isArray(result.privacy_lines)) console.log(result.privacy_lines.filter((line): line is string => typeof line === 'string').join('\n'));
         if (result.runtime_fixes && result.runtime_fixes.length > 0) {
           for (const fix of result.runtime_fixes) success(fix.message);
@@ -1766,6 +1767,7 @@ export function registerDeploy(program: Command) {
 }
 
 export interface DeployResult {
+  previous?: { version: number; rollback_available: boolean; message: string };
   privacy_lines?: string[];
   project_id?: string;
   version?: number;

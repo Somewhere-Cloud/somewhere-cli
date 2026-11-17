@@ -148,8 +148,14 @@ deploys but does not undeploy the current site.
 | `--dry-run` | Upload source and show what would change without publishing |
 | `--replace-functions` | Drop deployed functions not present locally. A full deploy already does this and names each removed function; use it with `--scope functions`, which otherwise keeps them |
 | `--project <id>` | Deploy to a specific project instead of the linked one |
+| `-m, --message <text>` | Optional user-supplied version note (max 200 characters after controls are stripped) |
 | `--force` | Overwrite remote changes even when this machine has an older deployed version |
 | `--yes` | Skip the `--force` confirmation prompt |
+
+`somewhere deploy -m "Adjust the heading"` gives the version a note.
+`somewhere promote <session> <preview> -m "Ready to share"` does the same for promotion.
+Patches use the declared `message` field through `somewhere call project_patch`.
+`somewhere call project_deploys` shows stored notes as JSON data labeled `user_supplied_note`.
 
 After a successful deploy the CLI prints a **build log** — the entry chunk, each compiled chunk with its size, each function with its size, and any compiler warnings.
 

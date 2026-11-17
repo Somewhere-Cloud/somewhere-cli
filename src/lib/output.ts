@@ -227,3 +227,10 @@ export function statusDot(status: string): string {
       return status;
   }
 }
+
+/** Quote user text as data; terminal and direction controls cannot take effect. */
+export function formatUserSuppliedNote(value: string): string {
+  const quoted = JSON.stringify(value).replace(/[\p{Cc}\p{Bidi_Control}\u2028\u2029]/gu, char =>
+    `\\u${char.codePointAt(0)!.toString(16).padStart(4, '0')}`);
+  return `User-supplied note (submitted): ${quoted}`;
+}

@@ -211,24 +211,22 @@ export function formatTtlHours(ttlSeconds?: number): number {
   return Math.round(ttlSeconds / 3600) || 3;
 }
 
-export function formatRemainingTempTime(expiresAt: string, nowMs = Date.now()): string | null {
-  const expiresMs = new Date(expiresAt).getTime();
-  if (!Number.isFinite(expiresMs)) return null;
-
-  const totalMinutes = Math.max(0, Math.ceil((expiresMs - nowMs) / 60_000));
-  const hours = Math.floor(totalMinutes / 60);
-  const minutes = totalMinutes % 60;
-  return hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
-}
-
-export function formatTempExpiry(expiresAt: string, ttlSeconds?: number, nowMs = Date.now()): string {
-  const delta = Date.parse(expiresAt) - nowMs;
-  // The server expiry is authoritative. An implausible local clock must not
-  // turn a freshly issued lifetime into a longer promise.
-  const clockDisagrees = ttlSeconds !== undefined && Number.isFinite(ttlSeconds)
-    && (delta > ttlSeconds * 1000 + 60_000 || delta < -60_000);
-  const remaining = !clockDisagrees && Number.isFinite(nowMs) ? formatRemainingTempTime(expiresAt, nowMs) : null;
-  return `Expires at: ${expiresAt} (UTC${remaining ? `; about ${remaining} remaining` : ''})`;
+export function formatTempExpiry(expiresAt?: string, ttlSeconds?: number, nowMs = Date.now()): string {
+  const remainingMs = expiresAt ? Date.parse(expiresAt) - nowMs : NaN;
+  // If this terminal's clock disagrees with the server, describe the lifetime
+  // from creation rather than making a promise about how much is left.
+  if (!Number.isFinite(remainingMs) || (
+    ttlSeconds !== undefined && Number.isFinite(ttlSeconds)
+    && (remainingMs > ttlSeconds * 1000 + 60_000 || remainingMs < -60_000)
+  )) {
+    return `Temporary app. Expires about ${plural(formatTtlHours(ttlSeconds), 'hour')} after it was created.`;
+  }
+  if (remainingMs <= 0) return 'Temporary app. It has expired.';
+  const minutes = Math.ceil(remainingMs / 60_000);
+  const remaining = minutes >= 60
+    ? plural(Math.round(minutes / 60), 'hour')
+    : plural(minutes < 5 ? minutes : Math.min(55, Math.round(minutes / 5) * 5), 'minute');
+  return `Temporary app. Expires in about ${remaining}.`;
 }
 
 function plural(count: number, singular: string, pluralWord = `${singular}s`): string {
@@ -1643,10 +1641,7 @@ export function registerDeploy(program: Command) {
           if (renderLine) warn(renderLine);
           if (formatted.liveUrl) success(`Live URL: ${teal(formatted.liveUrl)}`);
           else info(`Live URL not reported by the platform; \`${cliInvocation()} project view ${formatted.projectRef ?? '<project>'}\` shows it.`);
-          const hours = formatTtlHours(tempSession.ttlSeconds);
-          info(`Temporary app. ${tempSession.expiresAt
-            ? formatTempExpiry(tempSession.expiresAt, tempSession.ttlSeconds)
-            : `Expires: about ${hours} hour${hours === 1 ? '' : 's'} after creation`}`);
+          info(formatTempExpiry(tempSession.expiresAt, tempSession.ttlSeconds));
           const link = teal(tempSession.claimUrl);
           if (tempSession.handoffReady) {
             info(`Open ${link} and select "Save project and connect agent" to save the project to your account and connect this terminal automatically.`);

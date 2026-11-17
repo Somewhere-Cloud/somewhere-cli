@@ -154,7 +154,7 @@ test('deploy while logged out — mint, auto-create project, claim relay, then s
   assert.equal(first.status, 0, `expected exit 0, got ${first.status}\nstdout:\n${first.stdout}\nstderr:\n${first.stderr}`);
   assert.match(first.stdout, /Live URL:/);
   assert.match(first.stdout, /Open https:\/\/somewhere\.cloud\/claim/);
-  assert.match(first.stdout, /Expires at:/);
+  assert.match(first.stdout, /Expires in about 3 hours/);
   assert.match(first.stdout, /"Save project and connect agent".*connect this terminal automatically/);
   assert.ok(first.stdout.includes('https://somewhere.cloud/claim?token=swtc_e2e'), 'claim URL present in stdout');
 
@@ -183,7 +183,7 @@ test('deploy while logged out — mint, auto-create project, claim relay, then s
   const second = await run(['deploy'], { cwd: fixtureDir, env });
   assert.equal(second.status, 0, `expected exit 0, got ${second.status}\nstdout:\n${second.stdout}\nstderr:\n${second.stderr}`);
   assert.match(second.stdout, /Live URL:/);
-  assert.match(second.stdout, /Expires at: .* \(UTC; about \d+h \d+m remaining\)/);
+  assert.match(second.stdout, /Expires in about 3 hours\./);
   assert.match(second.stdout, /Open https:\/\/somewhere\.cloud\/claim/);
   assert.match(second.stdout, /"Save project and connect agent".*connect this terminal automatically/);
 
@@ -218,7 +218,7 @@ test('deploy --temporary reuses old temp configs without temp_expires_at and kee
 
   assert.equal(result.status, 0, `expected exit 0, got ${result.status}\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`);
   assert.match(result.stdout, /Live URL:/);
-  assert.match(result.stdout, /Expires: about 3 hours after creation/);
+  assert.match(result.stdout, /Expires about 3 hours after it was created/);
   assert.match(result.stdout, /https:\/\/somewhere\.cloud\/claim\?token=swtc_old/);
   assert.equal(tempCreateCalls, beforeTempCreateCalls, 'missing temp_expires_at falls back without minting a new temp session');
 });
@@ -282,7 +282,7 @@ test('--temporary while logged in and unlinked takes the temporary path, no link
   // Where it went and how long it lives.
   assert.match(first.stdout, /Live URL:/);
   assert.match(first.stdout, /Open https:\/\/somewhere\.cloud\/claim/);
-  assert.match(first.stdout, /Expires at:/);
+  assert.match(first.stdout, /Expires in about 3 hours/);
   assert.match(first.stdout, /somewhere init --link --project proj_e2e_1/);
   assert.equal(tempCreateCalls, beforeTempCreate + 1, 'one temporary session minted');
   assert.equal(projectsCalls, beforeProjects + 1, 'the throwaway project was auto-created');

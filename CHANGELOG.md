@@ -1,3 +1,10 @@
+## 0.38.108
+
+- Mount session checks only behind public-route decisions, and email verification only when enabled.
+- Default starter includes owned notes and a detail page reading a real note by id.
+- Emit a project_created JSON receipt before init installs dependencies.
+- Document the existing one-step email-code sign-in policy.
+
 # 0.38.107
 
 - Bundle the TypeScript runtime dependency so a fresh production-only CLI install starts correctly, including deploy -m for version notes.

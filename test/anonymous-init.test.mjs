@@ -49,7 +49,9 @@ async function run(args, { token, config: storedConfig, prepare, explicitLink = 
   for (const [host, file] of [['.claude', 'settings.json'], ['.codex', 'hooks.json'], ['.cursor', 'hooks.json']]) {
     assert.equal(readFileSync(join(base, host, file), 'utf8'), '{"fixture":"user-wide-kept"}');
   }
-  return { ...output, cwd, config, base };
+  const lines = output.stdout.split('\n');
+  const events = lines.filter(line => line.startsWith('{"event":"project_created"')).map(line => JSON.parse(line));
+  return { ...output, stdout: lines.filter(line => !line.startsWith('{"event":"project_created"')).join('\n'), events, cwd, config, base };
 }
 for (const selection of [[], ['--template', 'minimal'], ['--features', 'private-data', '--ui', 'headless']]) {
   test(`anonymous init writes valid raw starter without account, requests or install: ${selection.join(' ') || 'default'}`, async () => {
@@ -95,6 +97,8 @@ test('anonymous init preserves occupied, linked and malformed-link directories',
 test('authenticated create retains remote creation, linking and install behavior', async () => {
   const result = await run(['--name', 'fixture', '--json'], { token: 'smt_fixture' });
   assert.equal(result.status, 0, result.stdout + result.stderr); assert.equal(JSON.parse(result.stdout).id, project.id);
+  assert.deepEqual(result.events.map(event => event.project_id), [project.id]);
+  if (result.events.length) assert.equal(result.events[0]?.project_id, project.id);
   assert.deepEqual(requests, ['POST /projects', 'GET /projects/fixture-project/urls']);
   assert.equal(JSON.parse(readFileSync(join(result.cwd, '.somewhere.json'))).project_id, project.id);
   assert.ok(existsSync(join(result.cwd, 'install-called'))); assert.ok(existsSync(join(result.cwd, 'index.html')));
@@ -134,6 +138,7 @@ test('authenticated text setup reports project-local hook activation', async () 
   const result = await run(['--name', 'fixture'], { token: 'smt_fixture' });
   assert.equal(result.status, 0, result.stdout + result.stderr);
   assert.match(result.stdout, /Project created/);
+  if (result.events.length) assert.equal(result.events[0]?.project_id, project.id);
   assert.deepEqual(requests, ['POST /projects', 'GET /projects/fixture-project/urls']);
   assertInitGuidance(result);
 });
@@ -142,7 +147,8 @@ for (const json of [false, true]) {
   test(`authenticated bare setup writes no hooks (${json ? 'JSON' : 'text'})`, async () => {
     const result = await run(['--name', 'fixture', '--bare', ...(json ? ['--json'] : [])], { token: 'smt_fixture' });
     assert.equal(result.status, 0, result.stdout + result.stderr);
-    assert.deepEqual(requests, ['POST /projects', 'GET /projects/fixture-project/urls']);
+    if (result.events.length) assert.equal(result.events[0]?.project_id, project.id);
+  assert.deepEqual(requests, ['POST /projects', 'GET /projects/fixture-project/urls']);
     assert.equal(existsSync(join(result.cwd, 'index.html')), false);
     assert.equal(existsSync(join(result.cwd, 'install-called')), false);
     assert.ok(existsSync(join(result.cwd, 'AGENTS.md')));
@@ -271,5 +277,6 @@ test('a live temporary session still creates its project through init', async ()
   const result = await run(['--name', 'fixture', '--json'], { config: live });
   assert.equal(result.status, 0, result.stdout + result.stderr);
   assert.equal(JSON.parse(result.stdout).id, project.id);
+  if (result.events.length) assert.equal(result.events[0]?.project_id, project.id);
   assert.deepEqual(requests, ['POST /projects', 'GET /projects/fixture-project/urls']);
 });

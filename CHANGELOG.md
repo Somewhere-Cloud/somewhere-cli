@@ -1,3 +1,7 @@
+# 0.38.105
+
+- Deploy and promote print the previous activation hint, naming somewhere rollback; JSON preserves its version and build availability.
+
 # 0.38.104
 
 - Remove the app login, tools, call and logout commands. Existing app tokens are left untouched at <SOMEWHERE_CONFIG_DIR or ~/.somewhere>/app-mcp/tokens.json; use the app MCP server as a custom connector in your AI client.

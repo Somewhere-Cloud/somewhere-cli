@@ -1546,7 +1546,7 @@ export function registerDeploy(program: Command) {
           const target = cwdDeploysToProject ? '' : ` --project ${shellQuote(result.project_id ?? projectId ?? '<project>')}`;
           const confirmation = process.stdin.isTTY ? '' : ' --yes';
           console.log(result.previous.rollback_available
-            ? `Version ${result.previous.version} is kept; ${cliInvocation()} rollback${target}${confirmation} returns to it.`
+            ? `Version ${result.previous.version} is kept; ${cliInvocation()} rollback${target}${confirmation} returns to it.${result.previous.note ? ` Note ${JSON.stringify(result.previous.note)}.` : ''}`
             : result.previous.message);
         }
         if (Array.isArray(result.privacy_lines) && (!firstTemporaryRelease || opts.timing)) {
@@ -1772,7 +1772,7 @@ export function registerDeploy(program: Command) {
 }
 
 export interface DeployResult {
-  previous?: { version: number; rollback_available: boolean; message: string };
+  previous?: { version: number; rollback_available: boolean; note?: string; message: string };
   privacy_lines?: string[];
   project_id?: string;
   version?: number;

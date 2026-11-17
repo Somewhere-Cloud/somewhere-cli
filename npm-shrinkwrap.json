@@ -15,7 +15,8 @@
         "semver",
         "sigstore",
         "tar",
-        "undici"
+        "undici",
+        "typescript"
       ],
       "license": "MIT",
       "dependencies": {
@@ -26,6 +27,7 @@
         "semver": "^7.6.3",
         "sigstore": "4.1.1",
         "tar": "7.5.20",
+        "typescript": "^5.4.0",
         "undici": "^8.4.1"
       },
       "bin": {
@@ -37,8 +39,7 @@
         "@playwright/test": "^1.65.0",
         "@types/node": "^22.19.21",
         "@types/prompts": "^2.4.0",
-        "@types/semver": "^7.5.8",
-        "typescript": "^5.4.0"
+        "@types/semver": "^7.5.8"
       },
       "engines": {
         "node": ">=22.19.0"
@@ -1982,7 +1983,7 @@
       "version": "5.9.3",
       "resolved": "https://registry.npmjs.org/typescript/-/typescript-5.9.3.tgz",
       "integrity": "sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw==",
-      "dev": true,
+      "inBundle": true,
       "license": "Apache-2.0",
       "bin": {
         "tsc": "bin/tsc",

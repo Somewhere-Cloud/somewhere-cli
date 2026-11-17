@@ -42,7 +42,7 @@ import {
   type InitSelection,
 } from '../lib/init-features.js';
 import { formatNextActions, nextActions, type NextActionContext } from '../lib/next-actions.js';
-import { bold, dim, error, info, printJson, success, teal, warn } from '../lib/output.js';
+import { bold, dim, error, info, printJson, printJsonLine, success, teal, warn } from '../lib/output.js';
 
 interface InitOptions {
   name?: string;
@@ -61,8 +61,8 @@ interface InitOptions {
 const INIT_TEMPLATES = ['auth', 'minimal'] as const;
 type InitTemplateName = (typeof INIT_TEMPLATES)[number];
 
-/** The default (auth) starter is the same generator as `--features auth`. */
-const DEFAULT_AUTH_SELECTION: InitSelection = { requested: ['auth'], added: [], modules: ['auth'], ui: 'styled' };
+/** The default (auth) starter is the same generator as `--features auth,private-data`. */
+const DEFAULT_AUTH_SELECTION: InitSelection = { requested: ['auth', 'private-data'], added: [], modules: ['auth', 'private-data'], ui: 'styled' };
 
 interface LinkProject {
   id: string;
@@ -303,6 +303,7 @@ export async function runInit(opts: InitOptions, command: Command): Promise<void
       subdomain: string;
       slug: string;
     }>('POST', '/projects', { name, subdomain, cli_version: CLI_VERSION });
+    if (opts.json) printJsonLine({ event: 'project_created', project_id: project.id, ...project });
     // The platform's answer, never a host built from the name or slug.
     const appUrl = await getAuthoritativeAppUrl(client, project.id).catch(() => null);
 

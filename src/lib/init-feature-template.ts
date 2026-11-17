@@ -538,22 +538,11 @@ function mainTsx(styled: boolean, agent: boolean): string {
   if (agent) return mainTsxWithFixtures(styles);
   return `import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { SomewhereAuthProvider } from '@somewhere-cloud/sdk/react';
 import { App } from './App';
-import { useAuthState, useUnconfirmedSignOut } from './auth/hooks';
-import { auth } from './services/auth';
 ${styles}
-function ReadyApp() {
-  const session = useAuthState();
-  const unconfirmed = useUnconfirmedSignOut();
-  return <div data-app-state={unconfirmed ? 'sign-out-unconfirmed' : session.status}><App /></div>;
-}
-
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <SomewhereAuthProvider client={auth}>
-      <ReadyApp />
-    </SomewhereAuthProvider>
+    <App />
   </StrictMode>,
 );
 `;
@@ -564,30 +553,19 @@ createRoot(document.getElementById('root')!).render(
 function mainTsxWithFixtures(styles: string): string {
   return `import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { SomewhereAuthProvider } from '@somewhere-cloud/sdk/react';
 import { App } from './App';
-import { useAuthState, useUnconfirmedSignOut } from './auth/hooks';
 import { FIXTURES_PATH } from './fixtures/assistant';
 import { AssistantFixturesPage } from './pages/AssistantFixturesPage';
-import { auth } from './services/auth';
 ${styles}
 // /fixtures renders declared preview states from static data, outside the
 // sign-in provider, so it sends no request. Everything else is the app.
 const preview = window.location.pathname === FIXTURES_PATH;
-function ReadyApp() {
-  const session = useAuthState();
-  const unconfirmed = useUnconfirmedSignOut();
-  return <div data-app-state={unconfirmed ? 'sign-out-unconfirmed' : session.status}><App /></div>;
-}
-
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     {preview ? (
       <AssistantFixturesPage />
     ) : (
-      <SomewhereAuthProvider client={auth}>
-        <ReadyApp />
-      </SomewhereAuthProvider>
+      <App />
     )}
   </StrictMode>,
 );
@@ -1985,6 +1963,40 @@ export function HomePage({ user }: { user: User }) {
 `;
 }
 
+const NOTE_DETAIL_PAGE = `import { useEffect, useState } from 'react';
+import type { User } from '../../types/auth';
+import type { Note } from '../../types/notes';
+import { data } from 'somewhere:data';
+import { notesErrorMessage } from '../services/notes';
+import { linkTo } from '../routes';
+import { PageHeader } from '../ui/layout';
+import { SignedInLayout } from './SignedInLayout';
+
+export function DetailPage({ user, id }: { user: User; id: string }) {
+  const [note, setNote] = useState<Note | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    setError(null);
+    data.notes.list({ where: { id: Number(id) }, limit: 1 }).then((page) => {
+      if (active) { setNote(page.data[0] ?? null); setLoading(false); }
+    }).catch((reason: unknown) => {
+      if (active) { setError(notesErrorMessage(reason)); setLoading(false); }
+    });
+    return () => { active = false; };
+  }, [id]);
+  return <SignedInLayout user={user}>
+    {loading ? <p role="status">Loading note…</p> : error ? <p role="alert">{error}</p> : note ? <>
+      <PageHeader title={note.title} />
+      <p>{note.body}</p>
+    </> : <p>Note not found.</p>}
+    <a {...linkTo('/')}>Back to home</a>
+  </SignedInLayout>;
+}
+`;
+
 const DETAIL_PAGE = `import type { User } from '../../types/auth';
 import { linkTo } from '../routes';
 import { PageHeader } from '../ui/layout';
@@ -2133,7 +2145,8 @@ export function AppShell({ appName, homeLink, account, busy, children }: AppShel
 }
 `;
 
-const STYLED_NOTES_BOARD = `import type { FormEvent } from 'react';
+const STYLED_NOTES_BOARD = `import { linkTo } from '../routes';
+import type { FormEvent } from 'react';
 import type { NotesController } from '../../types/notes';
 import { Alert, EmptyState } from './feedback';
 
@@ -2191,7 +2204,7 @@ export function NotesBoard({ notes }: { notes: NotesController }) {
             {notes.notes.map((note) => (
               <li key={note.id} className="note" aria-current={note.id === notes.editingId ? 'true' : undefined}>
                 <div className="note__text">
-                  <h3 className="note__title">{note.title}</h3>
+                  <h3 className="note__title"><a {...linkTo('/things/' + note.id)}>{note.title}</a></h3>
                   {note.body ? <p className="note__body">{note.body}</p> : null}
                 </div>
                 <div className="note__actions">
@@ -2309,7 +2322,8 @@ export function AppShell({ appName, homeLink, account, busy, children }: AppShel
 }
 `;
 
-const PLAIN_NOTES_BOARD = `import type { FormEvent } from 'react';
+const PLAIN_NOTES_BOARD = `import { linkTo } from '../routes';
+import type { FormEvent } from 'react';
 import type { NotesController } from '../../types/notes';
 import { Alert, EmptyState } from './feedback';
 
@@ -2351,7 +2365,7 @@ export function NotesBoard({ notes }: { notes: NotesController }) {
       <ul>
         {notes.notes.map((note) => (
           <li key={note.id}>
-            <strong>{note.title}</strong> {note.body}{' '}
+            <strong><a {...linkTo('/things/' + note.id)}>{note.title}</a></strong> {note.body}{' '}
             <button type="button" onClick={() => notes.startEdit(note)} aria-label={'Edit ' + note.title}>Edit</button>{' '}
             <button type="button" onClick={() => void notes.remove(note)} disabled={notes.removingId === note.id} aria-label={'Delete ' + note.title}>Delete</button>
           </li>
@@ -3052,7 +3066,12 @@ function appTsx(): string {
   let out = replaceOnce(APP, "import { HomePage } from './pages/HomePage';\nimport { DetailPage } from './pages/DetailPage';\n",
     "import { AuthCallbackPage } from './pages/AuthCallbackPage';\nimport { HomePage } from './pages/HomePage';\nimport { DetailPage } from './pages/DetailPage';\nimport { MagicLinkPage } from './pages/MagicLinkPage';\nimport { ForgotPasswordPage, ResetPasswordPage } from './pages/PasswordResetPage';\n");
   out = replaceOnce(out, '  const session = useAuthState();\n\n',
-    "  const pathname = usePathname();\n  const session = useAuthState();\n\n  // An emailed sign-in or invitation link lands here before a session exists.\n  if (pathname === '/auth/magic') return <MagicLinkPage />;\n  // Password reset works signed out; the reset email links to /reset-password.\n  if (pathname === '/forgot-password') return <ForgotPasswordPage />;\n  if (pathname === '/reset-password') return <ResetPasswordPage />;\n  // A social sign-in (src/config.ts SIGN_IN_PROVIDERS) returns here with ?code=.\n  if (pathname === '/auth/callback') return <AuthCallbackPage />;\n");
+    "  const pathname = usePathname();\n\n  // An emailed sign-in or invitation link lands here before a session exists.\n  if (pathname === '/auth/magic') return <MagicLinkPage />;\n  // Password reset works signed out; the reset email links to /reset-password.\n  if (pathname === '/forgot-password') return <ForgotPasswordPage />;\n  if (pathname === '/reset-password') return <ResetPasswordPage />;\n  // A social sign-in (src/config.ts SIGN_IN_PROVIDERS) returns here with ?code=.\n  if (pathname === '/auth/callback') return <AuthCallbackPage />;\n");
+  out = replaceOnce(out, '\n  // Connecting an MCP client', '\n  return <SomewhereAuthProvider client={auth}><SessionReady /></SomewhereAuthProvider>;\n}\n\nfunction SessionReady() {\n  const session = useAuthState();\n  const unconfirmed = useUnconfirmedSignOut();\n  return <div data-app-state={unconfirmed ? \'sign-out-unconfirmed\' : session.status}><SessionRoutes /></div>;\n}\n\n// Public pages can opt into session state by mounting this boundary.\nfunction SessionRoutes() {\n  const session = useAuthState();\n\n  // Connecting an MCP client');
+  out = "import { SomewhereAuthProvider } from '@somewhere-cloud/sdk/react';\nimport { auth } from './services/auth';\n" + out;
+  out = out.replace("import { useAuthState } from './auth/hooks';", "import { useAuthState, useUnconfirmedSignOut } from './auth/hooks';");
+  out = out.replace('return <MagicLinkPage />;', 'return <SomewhereAuthProvider client={auth}><MagicLinkPage /></SomewhereAuthProvider>;');
+  out = out.replace('return <AuthCallbackPage />;', 'return <SomewhereAuthProvider client={auth}><AuthCallbackPage /></SomewhereAuthProvider>;');
   return out;
 }
 
@@ -3198,9 +3217,8 @@ function signedInLayout(): string {
   let out = replaceOnce(SIGNED_IN_LAYOUT, "import { useSignOut } from '../auth/hooks';\n",
     "import { useSignOut } from '../auth/hooks';\nimport { useEmailVerification } from '../auth/useEmailVerification';\n");
   out = replaceOnce(out, "import { AppShell } from '../ui/AppShell';\n", "import { AppShell } from '../ui/AppShell';\nimport { VerifyEmailPanel } from '../ui/VerifyEmail';\nimport { SHOW_EMAIL_VERIFICATION } from '../config';\n");
-  out = replaceOnce(out, '  const signOut = useSignOut();\n', '  const signOut = useSignOut();\n  const verification = useEmailVerification();\n');
-  out = replaceOnce(out, '      {children}\n', '      {SHOW_EMAIL_VERIFICATION ? <VerifyEmailPanel verification={verification} /> : null}\n      {children}\n');
-  return out;
+  out = replaceOnce(out, '      {children}\n', '      {SHOW_EMAIL_VERIFICATION ? <EmailVerification /> : null}\n      {children}\n');
+  return out + `\nfunction EmailVerification() {\n  const verification = useEmailVerification();\n  return <VerifyEmailPanel verification={verification} />;\n}\n`;
 }
 
 // --------------------------------------------------------------------- readme
@@ -3276,13 +3294,21 @@ function readme(selection: InitSelection): string {
     'if it cannot confirm, the sign-in page says so and offers "Sign out again". The gate is',
     'only UX: functions and `db/schema.ts` decide what a request may read or write.',
     'Set SHOW_EMAIL_VERIFICATION in src/config.ts to show the verify-email panel.',
-    'code the platform emails it (`auth.requestEmailVerification` / `auth.verifyEmail`',
+    '',
+    'Email-code sign-in is wired: password, then a six-digit email code.',
+    'Enable it in one step (project_id is in .somewhere.json):',
+    `somewhere api PUT /auth/mfa/policy --data '{"project_id":"<project_id>","mode":"required"}'`,
+    'For fixture proof, use name@<subdomain>.test.somewhere.site and read its code with',
+    '`somewhere email test-inbox name@<subdomain>.test.somewhere.site` (no real inbox).',
+    'Public pages go in App before the SomewhereAuthProvider boundary; mount it when a page needs session state.',
+
+    'The verification panel accepts the code the platform emails (`auth.requestEmailVerification` / `auth.verifyEmail`',
     'through the same SDK route; the session cookie decides the account).',
     'Google, GitHub and Discord sign-in are platform-hosted: `SIGN_IN_PROVIDERS`',
     '(`src/config.ts`) starts empty for email-only sign-in; enable Google or',
     'add the others. The buttons, `auth.<provider>SignInUrl` and the `/auth/callback`',
     'page (the SDK\'s `AuthCallback`) are already wired.',
-    'Password reset and MFA enrolment are not generated.',
+    'Optional per-user MFA enrolment UI is not generated; required policy enrols at the next sign-in.',
     '',
     '## Sign-in and invitation links',
     '',
@@ -3448,7 +3474,7 @@ After edits:`) },
     { path: 'src/auth/useEmailVerification.ts', content: VERIFY_EMAIL_HOOK },
     { path: 'src/ui/VerifyEmail.tsx', content: styled ? STYLED_VERIFY_EMAIL : PLAIN_VERIFY_EMAIL },
     { path: 'src/pages/HomePage.tsx', content: homePage(privateData, agent) },
-    { path: 'src/pages/DetailPage.tsx', content: DETAIL_PAGE },
+    { path: 'src/pages/DetailPage.tsx', content: privateData ? NOTE_DETAIL_PAGE : DETAIL_PAGE },
     { path: 'src/pages/NotFoundPage.tsx', content: NOT_FOUND_PAGE },
     { path: 'src/ui/feedback.tsx', content: styled ? STYLED_FEEDBACK : PLAIN_FEEDBACK },
     { path: 'src/ui/AuthCard.tsx', content: authCard(styled) },

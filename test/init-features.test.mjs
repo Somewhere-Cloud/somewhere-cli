@@ -228,10 +228,10 @@ test('every auth starter routes /auth/magic before the gate; magic-link adds onl
     assert.deepEqual(magic.selection.modules, ['auth', 'magic-link']);
     for (const starter of [plain, magic]) {
       const app = starter.read('src/App.tsx');
-      const route = app.indexOf("if (pathname === '/auth/magic') return <MagicLinkPage />;");
+      const route = app.indexOf("if (pathname === '/auth/magic') return <SomewhereAuthProvider client={auth}><MagicLinkPage /></SomewhereAuthProvider>;");
       assert.ok(route > 0, 'the landing page is routed');
       assert.ok(route < app.indexOf("session.status === 'loading'"), 'it is decided before the session gate');
-      assert.ok(app.indexOf('const session = useAuthState();') < route, 'hooks run before the early return');
+      assert.ok(app.indexOf('const session = useAuthState();') > route, 'public routes precede the session boundary');
       const hooks = starter.read('src/auth/magic-link.ts');
       assert.equal(hooks.match(/auth\.verifyMagicLink\(/g)?.length, 1, 'one verify call site');
       assert.match(hooks, /sent\.current/, 'the one-time token is sent once, even on a double press');

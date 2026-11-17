@@ -300,3 +300,23 @@ state for either ready state. Add `data-app-state` to your own app's confirmed a
 boundary (the starter already does). Do not mark loading or unconfirmed logout ready.
 Each test owns its fixture. Rerun only a failing test with `--test-name-pattern`;
 a pass means the checks you wrote passed; say which requirements they do not cover.
+
+### Init progress for agents
+
+Authenticated `init --json` prints a compact `project_created` JSON event with
+`project_id` immediately after creation, before URL lookup or dependency installation.
+The final project JSON follows at completion. Read the first line as a progress
+receipt, then the remaining JSON as the completed result.
+
+The default starter includes user-owned notes and a detail page that reads one
+note by its path id. Explicit `--features auth` keeps an auth-only starter.
+
+To try password plus email-code sign-in, no UI change is needed. Enable the
+existing policy in one step (take project_id from `.somewhere.json`):
+
+```sh
+somewhere api PUT /auth/mfa/policy --data '{"project_id":"<project_id>","mode":"required"}'
+```
+
+For tests, sign up with `name@<subdomain>.test.somewhere.site`, then read its
+code with `somewhere email test-inbox name@<subdomain>.test.somewhere.site`.

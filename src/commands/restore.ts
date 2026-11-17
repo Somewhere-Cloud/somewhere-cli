@@ -11,7 +11,7 @@ import { formatRollbackNotes, rememberActivation, rollbackErrorMessage, type Rol
 
 /** `somewhere restore <version>`: make an earlier version live again through the
  *  platform's restore route (the one MCP project_restore_version calls). The
- *  version list is `somewhere status` / MCP project_deploys. */
+ *  version list is `somewhere deploys` / MCP project_deploys. */
 export function registerRestore(program: Command) {
   program
     .command('restore <version>')

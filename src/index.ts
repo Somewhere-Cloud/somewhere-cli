@@ -10,6 +10,7 @@ import { registerLink } from './commands/link.js';
 import { registerProject } from './commands/project.js';
 import { registerPrivacy } from './commands/privacy.js';
 import { registerDeploy } from './commands/deploy.js';
+import { registerDeploys } from './commands/deploys.js';
 import { registerPull } from './commands/pull.js';
 import { registerLint } from './commands/lint.js';
 import { registerTypecheck } from './commands/typecheck.js';
@@ -126,6 +127,7 @@ registerInit(program);
 registerLink(program);
 registerProject(program);
 registerDeploy(program);
+registerDeploys(program);
 registerPrivacy(program);
 registerPull(program);
 registerTypecheck(program);
@@ -201,9 +203,9 @@ try {
   // Help, version and update never wait on, or fail because of, an API call.
   const skipRecovery = ['lint', 'upgrade', 'update', 'login', 'signup', 'logout', 'docs', 'help', '--help', '-h', '--version', '-V'].includes(command);
   const recovery = skipRecovery ? { kind: 'none' as const } : await recoverClaimHandoff();
-  if (recovery.kind === 'recovered' && recovery.message && !jsonOutputRequested) info(recovery.message);
+  if (recovery.kind === 'recovered' && recovery.message && !jsonOutputRequested && command !== 'file') info(recovery.message);
   if (recovery.kind === 'stale' && recovery.message) {
-    if (jsonOutputRequested) console.error(recovery.message);
+    if (jsonOutputRequested || command === 'file') console.error(recovery.message);
     else info(recovery.message);
   }
   if (recovery.kind === 'manual' && recovery.message && !['login', 'signup', 'logout', 'docs'].includes(command)) {

@@ -8,7 +8,7 @@ import { DEPLOY_CHECK_TYPESCRIPT_VERSION, announceDeployCheckFetch, deployCheckT
 import { IGNORE } from '../lib/files.js';
 import { AGENT_HOSTS, isAgentHost, runAgentHook } from '../lib/agent-hooks.js';
 import { bold, dim, error, info, printJson, red, success, teal, warn } from '../lib/output.js';
-import { announceNpxTypeScriptFetch, missingTypePackagesMessage, planDeclaredTypePackages, runTypecheck, typecheckCompilerSource, type TypecheckResult } from '../lib/typecheck.js';
+import { announceNpxTypeScriptFetch, missingProjectDependencies, missingTypecheckDependenciesMessage, runTypecheck, typecheckCompilerSource, type TypecheckResult } from '../lib/typecheck.js';
 import { TYPECHECK_TYPESCRIPT_VERSION } from '../lib/typecheck-version.js';
 
 export const MISSING_TSCONFIG_GUIDANCE =
@@ -21,7 +21,7 @@ export function registerTypecheck(program: Command) {
       'Check a source project with `tsc --noEmit`. ' +
         'Reports TypeScript errors with file:line before deploy and exits 1 when there are any; `somewhere deploy` stops on type errors. ' +
         'Requires a local tsconfig.json; add one for a new app, or run `somewhere pull` for an existing deployed app. ' +
-        'It never installs the project\'s dependencies: if the project declares type packages that are not installed, it says so and stops; run npm install first. ' +
+        'It never installs the project\'s dependencies: if the project has missing dependencies, it says so and stops; run npm install first. ' +
         'Without TypeScript in the project it fetches TypeScript with npx (network; npm caches it) and says so on stderr. Every run stops after SOMEWHERE_TYPECHECK_TIMEOUT_MS (default 300000). ' +
         'With --deploy, runs the deploy\'s advisory reference check instead (the files a deploy uploads, its generated types, ' +
         `options and TypeScript ${DEPLOY_CHECK_TYPESCRIPT_VERSION}) against the packages installed here; no tsconfig.json needed. ` +
@@ -81,13 +81,13 @@ export function registerTypecheck(program: Command) {
         process.exit(1);
       }
 
-      // Read-only: a project whose declared type packages are not installed is
+      // Read-only: a project whose dependencies are missing is
       // not checked (tsc would report the missing tree as code errors), and the
       // command never installs them itself.
       const notInstalled = (): TypecheckResult | null => {
-        const missing = planDeclaredTypePackages(dir).missing;
+        const missing = missingProjectDependencies(dir);
         return missing.length
-          ? { ok: false, errors: [], via: typecheckCompilerSource(dir), raw: '', spawnError: missingTypePackagesMessage(missing, dir) }
+          ? { ok: false, errors: [], via: typecheckCompilerSource(dir), raw: '', spawnError: missingTypecheckDependenciesMessage() }
           : null;
       };
       // Fetching TypeScript with npx is a network step: say so (on stderr)

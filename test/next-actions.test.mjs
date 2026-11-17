@@ -78,7 +78,7 @@ test('a temporary deploy is addressed BY URL even though a link may exist', () =
   // developer's own app. One step on this path, never two.
   assert.deepEqual(
     commandsOf(nextActions({ stage: 'deploy', projectLinked: true, liveUrl: 'https://temp-fresh.somewhere.site', temporary: true })),
-    ['somewhere browser https://temp-fresh.somewhere.site --screenshot --store', 'somewhere test'],
+    ['somewhere browser https://temp-fresh.somewhere.site --screenshot --store'],
   );
   assert.deepEqual(
     nextActions({ stage: 'deploy', projectLinked: true, liveUrl: null, temporary: true }),

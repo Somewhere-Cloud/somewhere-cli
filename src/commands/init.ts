@@ -58,6 +58,8 @@ interface InitOptions {
   json?: boolean;
 }
 
+const INSTALL_STARTER_MESSAGE = 'Installing the starter\'s pinned dependencies with `npm install` (downloads from npm and runs package install scripts)…';
+
 const INIT_TEMPLATES = ['auth', 'minimal'] as const;
 type InitTemplateName = (typeof INIT_TEMPLATES)[number];
 
@@ -96,7 +98,7 @@ export function registerInit(program: Command) {
         + '(deploy, then test). Sign-in and invitation links (sw.auth.invite) open\n'
         + '/auth/magic, which the starter routes before the sign-in gate.\n'
         + '`--template minimal` includes the SDK and auth route without sign-in screens.\n'
-        + 'Signed in, a new starter\'s pinned dependencies are installed with npm install (network; package install scripts run). Signed out, nothing is installed.\n'
+        + 'Init installs the starter\'s pinned dependencies with npm install (downloads from npm and runs package install scripts).\n'
         + `New starters and --bare also install ${skillNames(BUNDLED_SKILLS_PACK).length} agent skills in .agents/skills, pinned by skills-lock.json.\n`
         + '\nA directory that already holds an app (package.json, index.html, src/, …) is\n'
         + 'linked and left untouched. A directory holding only other files (notes, a stray\n'
@@ -212,8 +214,10 @@ export async function runInit(opts: InitOptions, command: Command): Promise<void
       const scaffold = writeInitScaffold(dir, scaffoldFiles(localName));
       const skills = writeInitSkills(dir);
       const next = ['somewhere deploy', 'somewhere docs start'];
+      if (!opts.json) info(INSTALL_STARTER_MESSAGE);
+      await installInitDependencies({ cwd: dir, quiet: Boolean(opts.json) });
       if (opts.json) {
-        printJson({ local: true, linked: false, name: localName, dir, files: scaffold.created, dependencies_installed: false, skills,
+        printJson({ local: true, linked: false, name: localName, dir, files: scaffold.created, dependencies_installed: true, skills,
           ...(expiredTemporaryAt ? { expired_temporary_session_ignored: expiredTemporaryAt } : {}),
           ...(plan ? { selection: plan.selection, extension_points: extensionPoints(plan.selection) } : {}), next });
       } else {
@@ -221,7 +225,6 @@ export async function runInit(opts: InitOptions, command: Command): Promise<void
         if (expiredTemporaryAt) info(`Ignored the temporary session on this machine that expired at ${expiredTemporaryAt}; somewhere deploy starts a new one.`);
         reportSkills(skills);
         reportPin(dir);
-        info('Dependencies are not installed. Run npm install if you want to run it locally.');
         info('Next: somewhere deploy — publish with a temporary workspace, no login needed.');
         info('Quickstart: somewhere docs start');
       }
@@ -350,7 +353,7 @@ export async function runInit(opts: InitOptions, command: Command): Promise<void
         info(`Modules: ${describeSelection(selection)}`);
         for (const [area, where] of Object.entries(extensionPoints(selection))) console.log(`  ${area}: ${where}`);
       }
-      info('Installing the starter\'s pinned dependencies with `npm install` (downloads from the npm registry and runs package install scripts)…');
+      info(INSTALL_STARTER_MESSAGE);
       await installInitDependencies({ cwd: dir, quiet: false });
       success('Dependencies installed');
     } else if (opts.bare) {

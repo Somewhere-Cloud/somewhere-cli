@@ -49,14 +49,13 @@ test('declared type packages that are not installed: refused, nothing installed,
   const p = project({ 'package.json': manifest, 'index.ts': 'export const x = 1;\n' });
   const text = await start(['typecheck'], p).done;
   assert.equal(text.status, 1, text.out);
-  assert.match(text.out, /Not checked: this project's declared type packages are not installed \(@types\/react\)/);
-  assert.match(text.out, /does not install the project's dependencies/);
+  assert.match(text.out, /Types were not checked because project dependencies are not installed\. Run `npm install`/);
   assert.doesNotMatch(text.out, /Could not run the typechecker|npm i -D typescript/);
   const json = await start(['typecheck', '--json'], p).done;
   assert.equal(json.status, 1);
   const body = JSON.parse(json.stdout);
   assert.equal(body.ok, false);
-  assert.match(body.spawnError, /npm install in /);
+  assert.match(body.spawnError, /npm install/);
   assert.equal(existsSync(join(p.dir, 'node_modules')), false);
   assert.equal(existsSync(join(p.base, 'npm-called')), false);
   assert.equal(readFileSync(join(p.dir, 'package.json'), 'utf8'), manifest);

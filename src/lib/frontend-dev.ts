@@ -1,3 +1,4 @@
+import { INSTALL_PROJECT_DEPENDENCIES, missingProjectDependencies } from './typecheck.js';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { createRequire } from 'node:module';
 import { realpathSync } from 'node:fs';
@@ -112,6 +113,7 @@ export async function startFrontendDev(cwd: string, target: string, port = 8787,
   // Otherwise its file-loading check can skip transforms and serve raw source.
   cwd = realpathSync(cwd);
   const origin = deployedOrigin(target);
+  if (missingProjectDependencies(cwd).length) throw new Error(INSTALL_PROJECT_DEPENDENCIES);
   let vitePath: string;
   try { vitePath = createRequire(join(cwd, 'package.json')).resolve('vite'); }
   catch { throw new Error('Install this frontend’s Vite dependencies before running somewhere dev. Backend changes run through somewhere deploy or somewhere preview.'); }

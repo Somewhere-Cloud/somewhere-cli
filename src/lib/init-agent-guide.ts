@@ -152,6 +152,7 @@ need Origin equal to the app URL.
 After every deploy, somewhere verify checks the page loads and looks right at desktop and phone size, with no
 test to write. Journeys, several users and access rules go in tests/*.mjs with somewhere test.
 Run somewhere test after a successful deploy: npx @somewhere-cloud/cli deploy && npx @somewhere-cloud/cli test
+Tests that need the email inbox work after you claim the app.
 It runs every tests/*.mjs and tests/*.cjs Playwright script and prints failures first. Start from
 tests/app-check.mjs: change its checks to the journeys you changed and your access boundaries.
 Keep each run short:

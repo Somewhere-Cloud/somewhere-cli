@@ -1,3 +1,7 @@
+# 0.38.107
+
+- Bundle the TypeScript runtime dependency so a fresh production-only CLI install starts correctly, including deploy -m for version notes.
+
 # 0.38.106
 
 - Add deploy -m for user-supplied version notes; promotion quotes its submitted note as data. History shows notes stored on each release.

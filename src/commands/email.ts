@@ -1,3 +1,4 @@
+import { cliInvocation } from '../lib/cli-invocation.js';
 import { Command } from 'commander';
 import { shellQuote } from '../lib/next-actions.js';
 import { callPlatformTool } from '../lib/platform-tools.js';
@@ -114,7 +115,7 @@ export function testInboxNextCommand(message: string, project: string | undefine
   const match = /@([a-z0-9][a-z0-9-]*)\.test\.somewhere\.site\b/i.exec(message);
   if (!match) return null;
   const subdomain = match[1].toLowerCase();
-  return `somewhere email test-inbox person@${subdomain}.test.somewhere.site --project ${shellQuote(project ?? subdomain)}`;
+  return `${cliInvocation()} email test-inbox person@${subdomain}.test.somewhere.site --project ${shellQuote(project ?? subdomain)}`;
 }
 
 export function registerEmail(program: Command): void {
@@ -123,7 +124,7 @@ export function registerEmail(program: Command): void {
     .description('Send transactional email and inspect project test messages')
     .addHelpText(
       'after',
-      '\nExamples:\n  somewhere email send alice@example.com --subject "Welcome" --text "You are in."\n  somewhere email send alice@example.com --from hello@myapp.com --subject "Welcome" --text "You are in." --project my-app\n  somewhere email test-inbox robot@my-app.test.somewhere.site --project my-app\n',
+      `\nExamples:\n  ${cliInvocation()} email send alice@example.com --subject "Welcome" --text "You are in."\n  ${cliInvocation()} email send alice@example.com --from hello@myapp.com --subject "Welcome" --text "You are in." --project my-app\n  ${cliInvocation()} email test-inbox robot@my-app.test.somewhere.site --project my-app\n`,
     );
 
   email

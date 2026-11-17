@@ -1,3 +1,5 @@
+import { cliInvocation } from '../lib/cli-invocation.js';
+import { shellQuote } from '../lib/next-actions.js';
 import { Command } from 'commander';
 import ora from '../lib/spinner.js';
 import prompts from 'prompts';
@@ -59,7 +61,7 @@ export function registerRollback(program: Command) {
   program
     .command('rollback [project]')
     .description(
-      'Revert production to the previous deployed version (for any earlier version: `somewhere restore <version>`). Use this when a ' +
+      `Revert production to the previous deployed version (for any earlier version: \`${cliInvocation()} restore <version>\`). Use this when a ` +
         'promote shipped a bad build — it restores the version that was live ' +
         'before, including its functions. (Requires a previous production ' +
         'version to return to.)',
@@ -97,8 +99,9 @@ export function registerRollback(program: Command) {
         // keystroke, so `prompts` hangs. Match deploy's --force guard — exit
         // with actionable -y/--yes guidance rather than a mute wedge.
         if (!process.stdin.isTTY) {
-          const message =
-            'Refusing to roll back without confirmation in a non-interactive shell. Pass -y/--yes to roll back intentionally (e.g. `somewhere rollback --yes`).';
+          const target = chosen.kind === 'ref' ? ` --project ${shellQuote(chosen.ref)}` : '';
+          const json = opts.json ? ' --json' : '';
+          const message = `Refusing to roll back without confirmation in a non-interactive shell. Run \`${cliInvocation()} rollback${target} --yes${json}\` to roll back.`;
           if (opts.json) {
             printJsonError('CONFIRMATION_REQUIRED', message);
           } else {
@@ -137,7 +140,7 @@ export function registerRollback(program: Command) {
           return;
         }
         success(formatRollbackSuccess(r));
-        info(dim('This folder still holds the newer source. `somewhere pull` brings it to the version now live; deploying it unchanged is refused until then.'));
+        info(dim(`This folder still holds the newer source. \`${cliInvocation()} pull\` brings it to the version now live; deploying it unchanged is refused until then.`));
         for (const line of formatRollbackNotes(r)) info(dim(line));
       } catch (err) {
         spinner?.fail('Rollback failed');

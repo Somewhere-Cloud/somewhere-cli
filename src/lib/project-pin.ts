@@ -1,3 +1,4 @@
+import { cliInvocation } from './cli-invocation.js';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -91,7 +92,7 @@ export function installedPinnedCli(dir: string, pin: ProjectPin, running: string
 export function pinNotice(pin: ProjectPin, running: string, delegatedTo: string | null): string {
   const head = `This project is pinned to somewhere CLI ${pin.spec} (${pin.source})`;
   const newer = semver.valid(running) !== null && semver.gtr(running, pin.spec, { includePrerelease: true });
-  const move = `Run \`somewhere upgrade\` to move the project to ${running}.`;
+  const move = `Run \`${cliInvocation()} upgrade\` to move the project to ${running}.`;
   if (delegatedTo) {
     return `${head}; running its installed ${delegatedTo} instead of ${running}.${newer ? ` ${move}` : ''}`;
   }

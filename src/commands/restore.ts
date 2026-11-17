@@ -1,3 +1,4 @@
+import { cliInvocation } from '../lib/cli-invocation.js';
 import { Command } from 'commander';
 import ora from '../lib/spinner.js';
 import prompts from 'prompts';
@@ -15,9 +16,9 @@ export function registerRestore(program: Command) {
   program
     .command('restore <version>')
     .description(
-      'Make an earlier deployed version live again, by number (e.g. `somewhere restore 3`). ' +
+      `Make an earlier deployed version live again, by number (e.g. \`${cliInvocation()} restore 3\`). ` +
         'The platform puts that version\'s build back in production, with its functions; nothing is re-uploaded and this folder is not changed. ' +
-        '`somewhere rollback` is the shortcut for the previous version. Afterwards `somewhere pull` brings this folder to the restored version.',
+        `\`${cliInvocation()} rollback\` is the shortcut for the previous version. Afterwards \`${cliInvocation()} pull\` brings this folder to the restored version.`,
     )
     .option('--project <ref>', 'Project ID, name, slug, or subdomain (defaults to the linked project)')
     .option('-y, --yes', 'Skip the confirmation prompt')
@@ -42,7 +43,7 @@ export function registerRestore(program: Command) {
 
       if (!opts.yes) {
         if (!process.stdin.isTTY) {
-          fail('CONFIRMATION_REQUIRED', `Refusing to restore without confirmation in a non-interactive shell. Pass -y/--yes to restore intentionally (e.g. \`somewhere restore ${version} --yes\`).`);
+          fail('CONFIRMATION_REQUIRED', `Refusing to restore without confirmation in a non-interactive shell. Pass -y/--yes to restore intentionally (e.g. \`${cliInvocation()} restore ${version} --yes\`).`);
         }
         const { ok } = await prompts({
           type: 'confirm', name: 'ok', initial: true,
@@ -67,7 +68,7 @@ export function registerRestore(program: Command) {
         }
         success(`Restored v${r.version ?? version} to production.`);
         for (const line of formatRollbackNotes(r)) info(dim(line));
-        info(dim('This folder is unchanged. `somewhere pull` brings it to the restored version.'));
+        info(dim(`This folder is unchanged. \`${cliInvocation()} pull\` brings it to the restored version.`));
       } catch (err) {
         spinner?.fail('Restore failed');
         const message = rollbackErrorMessage(err);

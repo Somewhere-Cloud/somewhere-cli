@@ -1,3 +1,4 @@
+import { cliInvocation } from '../lib/cli-invocation.js';
 import { fetchWithProxy as fetch } from '../lib/http.js';
 import { once } from 'node:events';
 import { Command } from 'commander';
@@ -162,7 +163,7 @@ export function renderPublicDocsView(page: PublicDocsPage, view: DocsView): Rend
     return fail({
       error: 'DOCS_SECTION_INDEX_UNAVAILABLE',
       message: `No usable section index for "${page.id}".`,
-      hint: `Run: somewhere docs ${commandArg(page.id)} --full`,
+      hint: `Run: ${cliInvocation()} docs ${commandArg(page.id)} --full`,
     });
   }
   const wanted = view.id.trim().toLowerCase();
@@ -178,7 +179,7 @@ export function renderPublicDocsView(page: PublicDocsPage, view: DocsView): Rend
       error: 'DOCS_SECTION_NOT_FOUND',
       message: `No section "${view.id}" in ${page.id}. Valid sections: ${matches.join(', ')}. Use an exact ID; normalized headings must identify one section.`,
       matches,
-      hint: `Run: somewhere docs ${commandArg(page.id)} --section <id>. Search this topic: somewhere docs ${commandArg(page.id)} ${commandArg(view.id)}`,
+      hint: `Run: ${cliInvocation()} docs ${commandArg(page.id)} --section <id>. Search this topic: ${cliInvocation()} docs ${commandArg(page.id)} ${commandArg(view.id)}`,
     });
   }
   const text = page.body.slice(match.start, match.end);
@@ -190,7 +191,7 @@ export function renderPublicDocsView(page: PublicDocsPage, view: DocsView): Rend
     const index = children.map((section) => `- ${section.id} · ${kilo(section.end - section.start)}`).join('\n');
     return {
       content: `${lead}\n\nThis section is ${kilo(text.trimEnd().length)} chars; its subsections (id · size):\n`
-        + `${index}\n\nOne subsection: somewhere docs ${commandArg(page.id)} --section <id>\n`,
+        + `${index}\n\nOne subsection: ${cliInvocation()} docs ${commandArg(page.id)} --section <id>\n`,
       view: 'section', complete: false,
     };
   }
@@ -350,15 +351,15 @@ export function renderDocsIndex(pages: PublicDocsPage[], groups: PublicDocsGroup
   if (rest.length) blocks.push({ title: groups.length ? 'Other topics' : 'Topics', pages: rest });
   const width = Math.max(0, ...pages.map(({ id }) => id.length));
   const lines = ['Platform docs — no login needed.',
-    'Run somewhere init first, then read generated AGENTS.md: call shapes and access patterns for a typical app; docs are for exceptions.',
+    `Run ${cliInvocation()} init first, then read generated AGENTS.md: call shapes and access patterns for a typical app; docs are for exceptions.`,
     '',
     'Requirement | Declaration (complete examples in generated AGENTS.md)',
     'Own rows | owner()',
     'Team: owner invites members; members read/write; creator or team owner deletes | built-in groups: group() + sw.groups endpoints',
     'Owner/staff record, staff-only child notes | owner() or appRole(); staff hand staff on with grantableBy; parent() thread; appRole() notes',
-    'Team example: somewhere docs sw.groups --section team-example',
-    'Staff example: somewhere docs sw.groups --section staff-example',
-    'Record/thread example: somewhere docs sw.db --section membership-and-parent-examples',
+    `Team example: ${cliInvocation()} docs sw.groups --section team-example`,
+    `Staff example: ${cliInvocation()} docs sw.groups --section staff-example`,
+    `Record/thread example: ${cliInvocation()} docs sw.db --section membership-and-parent-examples`,
     '', 'Public topics:'];
   for (const block of blocks) {
     lines.push('', `${block.title}`);
@@ -368,11 +369,11 @@ export function renderDocsIndex(pages: PublicDocsPage[], groups: PublicDocsGroup
   for (const [name, entry] of Object.entries(TOPICS)) lines.push(`  ${name.padEnd(10)} ${entry.blurb}`);
   lines.push(
     '',
-    'Open a topic:     somewhere docs <topic>                 (summary with its section ids)',
-    'Open a section:   somewhere docs <topic> --section <id>',
-    'Whole topic:      somewhere docs <topic> --full',
-    'Search all docs:  somewhere docs search <term>',
-    'Full manual:      somewhere docs --full                  (very large)',
+    `Open a topic:     ${cliInvocation()} docs <topic>                 (summary with its section ids)`,
+    `Open a section:   ${cliInvocation()} docs <topic> --section <id>`,
+    `Whole topic:      ${cliInvocation()} docs <topic> --full`,
+    `Search all docs:  ${cliInvocation()} docs search <term>`,
+    `Full manual:      ${cliInvocation()} docs --full                  (very large)`,
   );
   return lines.join('\n') + '\n';
 }
@@ -429,8 +430,8 @@ export function searchPublicDocs(pages: PublicDocsPage[], query: string): DocsSe
         heading,
         snippet,
         open: innermost
-          ? `somewhere docs ${commandArg(page.id)} --section ${commandArg(innermost.id)}`
-          : `somewhere docs ${commandArg(page.id)} --full`,
+          ? `${cliInvocation()} docs ${commandArg(page.id)} --section ${commandArg(innermost.id)}`
+          : `${cliInvocation()} docs ${commandArg(page.id)} --full`,
         score: (titleHit ? 1000 : 0) + occurrences,
       });
     }
@@ -452,7 +453,7 @@ function warnIfDocsNewerThanCli(): void {
     if (latest && isMinorBehind(CLI_VERSION, latest)) {
       console.error(
         `! These docs describe somewhere CLI ${latest}; this CLI is ${CLI_VERSION}, so some commands or flags `
-        + `shown here may not exist in it yet. Update with: somewhere update (or ${NPM_UPDATE_COMMAND})`,
+        + `shown here may not exist in it yet. Update with: ${cliInvocation()} update (or ${NPM_UPDATE_COMMAND})`,
       );
     }
   } catch {
@@ -486,22 +487,22 @@ export function registerDocs(program: Command) {
     .command('docs [topic] [terms...]')
     .description(
       'Read platform docs. No login needed — every topic is public. With no topic, prints the topic index. '
-        + 'Search with `somewhere docs <topic> <term>` or `somewhere docs search <term>`. Quick topics: '
+        + `Search with \`${cliInvocation()} docs <topic> <term>\` or \`${cliInvocation()} docs search <term>\`. Quick topics: `
         + Object.keys(TOPICS).join(', ')
-        + '. Example manual topic: `somewhere docs sw.db`.',
+        + `. Example manual topic: \`${cliInvocation()} docs sw.db\`.`,
     )
-    .option('--list', 'List available topics (the same index bare `somewhere docs` prints)')
+    .option('--list', `List available topics (the same index bare \`${cliInvocation()} docs\` prints)`)
     .option('--full', 'Print the complete topic instead of its summary; with no topic, the full manual')
     .option('--section <id>', 'Print one section of a topic (ids are listed in the summary)')
     .option('--json', 'Print the selected document in a JSON envelope')
     .addHelpText('after', '\nExamples:\n'
-      + '  somewhere docs                         # topic index\n'
-      + '  somewhere docs search magic link       # matching sections across every topic\n'
-      + '  somewhere docs sw.auth                 # topic summary with section ids\n'
-      + '  somewhere docs sw.auth setRoles        # search within this topic\n'
-      + '  somewhere docs sw.auth --section <id>  # one section\n'
-      + '  somewhere docs --full                  # the whole manual (very large)\n'
-      + '\n`somewhere docs search` with no term opens the search primitive topic.\n')
+      + `  ${cliInvocation()} docs                         # topic index\n`
+      + `  ${cliInvocation()} docs search magic link       # matching sections across every topic\n`
+      + `  ${cliInvocation()} docs sw.auth                 # topic summary with section ids\n`
+      + `  ${cliInvocation()} docs sw.auth setRoles        # search within this topic\n`
+      + `  ${cliInvocation()} docs sw.auth --section <id>  # one section\n`
+      + `  ${cliInvocation()} docs --full                  # the whole manual (very large)\n`
+      + `\n\`${cliInvocation()} docs search\` with no term opens the search primitive topic.\n`)
     .action(async (
       topic: string | undefined,
       terms: string[],
@@ -525,7 +526,7 @@ export function registerDocs(program: Command) {
         try {
           const pages = await fetchPublicManifest();
           if (within && !pages.some(page => page.id === within)) {
-            error(`Unknown docs topic "${within}". Run: somewhere docs`);
+            error(`Unknown docs topic "${within}". Run: ${cliInvocation()} docs`);
             process.exitCode = 1;
             return;
           }
@@ -535,7 +536,7 @@ export function registerDocs(program: Command) {
             return;
           }
           if (!results.length) {
-            console.log(`No docs sections${within ? ` in ${within}` : ''} mention "${query}". Search all topics: somewhere docs search ${query}`);
+            console.log(`No docs sections${within ? ` in ${within}` : ''} mention "${query}". Search all topics: ${cliInvocation()} docs search ${query}`);
             return;
           }
           for (const result of results) {
@@ -576,7 +577,7 @@ export function registerDocs(program: Command) {
             return;
           }
           process.stdout.write(renderDocsIndex(pages, groups));
-          console.log(`\n${dim('No account yet? Start with: somewhere docs start')}`);
+          console.log(`\n${dim(`No account yet? Start with: ${cliInvocation()} docs start`)}`);
         } catch (e) {
           error(e instanceof Error ? e.message : String(e), e);
           process.exitCode = 1;
@@ -597,7 +598,7 @@ export function registerDocs(program: Command) {
         reportDocsFailure({
           error: 'DOCS_SECTION_INDEX_UNAVAILABLE',
           message: `"${requestedTopic}" is a whole-file quick link without sections.`,
-          hint: `Run: somewhere docs ${commandArg(key ?? requestedTopic)} --full`,
+          hint: `Run: ${cliInvocation()} docs ${commandArg(key ?? requestedTopic)} --full`,
         }, opts.json === true, requestedTopic);
         return;
       }
@@ -660,8 +661,8 @@ export function registerDocs(program: Command) {
               + (matches.length ? ` Closest topics: ${matches.join(', ')}.` : ''),
             matches,
             hint: question
-              ? `For a construction question, run: somewhere advisor "${advisorQuestion}"`
-              : matches.length ? `Run: somewhere docs ${commandArg(matches[0])}` : 'Run: somewhere docs --list',
+              ? `For a construction question, run: ${cliInvocation()} advisor "${advisorQuestion}"`
+              : matches.length ? `Run: ${cliInvocation()} docs ${commandArg(matches[0])}` : `Run: ${cliInvocation()} docs --list`,
           }, opts.json === true, requestedTopic);
         } catch (e) {
           const publicFailure = e instanceof Error ? e.message : String(e);

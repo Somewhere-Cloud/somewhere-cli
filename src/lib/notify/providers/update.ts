@@ -1,3 +1,4 @@
+import { cliInvocation } from '../../cli-invocation.js';
 import { fetchWithProxy as fetch } from '../../http.js';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -81,7 +82,7 @@ export async function getUpdateNotice(
     cache = { checkedAt, latest: known };
   }
   if (!cache.latest || !isNewer(cache.latest, currentVersion)) return null;
-  return `${teal('▲ somewhere CLI update available')}  ${dim(currentVersion)} → ${teal(cache.latest)}  Run ${teal('somewhere update')} to upgrade.`;
+  return `${teal('▲ somewhere CLI update available')}  ${dim(currentVersion)} → ${teal(cache.latest)}  Run ${teal(`${cliInvocation()} update`)} to upgrade.`;
 }
 
 /** True when `latest` is at least one minor (or major) release ahead of
@@ -102,12 +103,12 @@ export const NPM_UPDATE_COMMAND = `npm i -g ${PACKAGE}@latest`;
 
 /** A project that records a CLI version keeps running that version (lib/project-pin.ts):
  *  updating the global CLI alone does not move it. */
-export const PROJECT_PIN_NOTE = 'A project that records an older CLI version keeps using it: run somewhere upgrade in that project to move it.';
+export const PROJECT_PIN_NOTE = `A project that records an older CLI version keeps using it: run ${cliInvocation()} upgrade in that project to move it.`;
 
 export function outdatedMessage(currentVersion: string, latest: string): string {
   return `! somewhere CLI ${currentVersion} is behind the latest release ${latest}; `
     + 'commands and flags in the current docs may be missing. '
-    + `Update with: somewhere update (or ${NPM_UPDATE_COMMAND}). ${PROJECT_PIN_NOTE}`;
+    + `Update with: ${cliInvocation()} update (or ${NPM_UPDATE_COMMAND}). ${PROJECT_PIN_NOTE}`;
 }
 
 /** The latest published version as last cached, without any network read.

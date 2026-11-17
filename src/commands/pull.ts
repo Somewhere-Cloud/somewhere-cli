@@ -1,3 +1,4 @@
+import { cliInvocation } from '../lib/cli-invocation.js';
 import { Command } from 'commander';
 import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join, relative, resolve } from 'node:path';
@@ -43,7 +44,7 @@ export function registerPull(program: Command) {
     .command('pull [project]')
     .description(
       'Download a project\'s deployed source files to the current directory. ' +
-        'Scaffolds a tsconfig.json + package.json (only if absent) so `somewhere typecheck` ' +
+        `Scaffolds a tsconfig.json + package.json (only if absent) so \`${cliInvocation()} typecheck\` ` +
         'can catch undefined symbols locally before you deploy. ' +
         'In a linked folder, plain pull is the safe update when live is newer: files you have not edited move to the live version, ' +
         'your local edits and local-only files (AGENTS.md, notes, tests) are kept, and it stops without writing anything if a file changed both here and live.',
@@ -157,8 +158,8 @@ export function registerPull(program: Command) {
         if (conflicts.length > 0) {
           const list = conflicts.slice(0, 10).join(', ') + (conflicts.length > 10 ? `, and ${conflicts.length - 10} more` : '');
           throw new Error(base
-            ? `Pull stopped: changed both in this folder and on live: ${list}. Nothing was written. Move your edits aside and pull again, or run \`somewhere pull --force\` to replace them with live.`
-            : `Pull stopped: these local files differ from live and this folder has no record of the version it came from, so local edits cannot be told apart: ${list}. Nothing was written. Pull into a fresh folder, or run \`somewhere pull --force\` to replace them with live.`);
+            ? `Pull stopped: changed both in this folder and on live: ${list}. Nothing was written. Move your edits aside and pull again, or run \`${cliInvocation()} pull --force\` to replace them with live.`
+            : `Pull stopped: these local files differ from live and this folder has no record of the version it came from, so local edits cannot be told apart: ${list}. Nothing was written. Pull into a fresh folder, or run \`${cliInvocation()} pull --force\` to replace them with live.`);
         }
       } catch (err) {
         error(err instanceof Error ? err.message : String(err));
@@ -252,7 +253,7 @@ export function registerPull(program: Command) {
       }
       if (scaffolded.length) {
         info(dim(`Added ${scaffolded.join(' + ')} for local typechecking.`));
-        info(`Run ${teal('somewhere typecheck')} before deploy to catch undefined symbols.`);
+        info(`Run ${teal(`${cliInvocation()} typecheck`)} before deploy to catch undefined symbols.`);
       }
     });
 }

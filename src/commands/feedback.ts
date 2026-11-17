@@ -1,3 +1,4 @@
+import { cliInvocation } from '../lib/cli-invocation.js';
 import { Command } from 'commander';
 import { callPlatformTool } from '../lib/platform-tools.js';
 import {
@@ -89,7 +90,7 @@ export function registerFeedback(program: Command): void {
       }, opts.json, (value) => {
         const data = unwrapPlatformData(value);
         printJson(data);
-        console.log(dim('Destination: project owner inbox. For a platform bug, use `somewhere call support_ticket`.'));
+        console.log(dim(`Destination: project owner inbox. For a platform bug, use \`${cliInvocation()} call support_ticket\`.`));
       });
     });
 }

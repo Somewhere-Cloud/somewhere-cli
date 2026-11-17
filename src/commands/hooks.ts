@@ -1,3 +1,4 @@
+import { cliInvocation } from '../lib/cli-invocation.js';
 import { Command } from 'commander';
 import { resolve } from 'node:path';
 import { AGENT_HOSTS, formatAgentHookInstall, installAgentHooks, isAgentHost, type AgentHost } from '../lib/agent-hooks.js';
@@ -12,7 +13,7 @@ export function registerHooks(program: Command) {
     .description(
       "Add the after-edit check to this project's own agent settings (never user-wide settings). " +
         'Merges into existing settings without replacing other hooks. Edits made through shell commands are not checked; ' +
-        'use `somewhere typecheck --deploy --watch` for those.',
+        `use \`${cliInvocation()} typecheck --deploy --watch\` for those.`,
     )
     .option('--host <host...>', `Agent hosts: ${AGENT_HOSTS.join(', ')}`, ['claude-code'])
     .option('--json', 'Print the installation result as JSON')

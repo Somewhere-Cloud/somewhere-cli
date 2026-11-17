@@ -9,6 +9,17 @@ import { getOutdatedWarning, updateProvider } from './providers/update.js';
  *  or agent/piped output. */
 const PROVIDERS: NoticeProvider[] = [updateProvider];
 
+let exitNoticesSuppressed = false;
+
+/** Keep the temporary deploy handoff as the last output of the command. */
+export function suppressExitNotices(): void {
+  exitNoticesSuppressed = true;
+}
+
+export function printExitNotices(notices: string[]): void {
+  if (!exitNoticesSuppressed && notices.length) process.stderr.write('\n' + notices.join('\n') + '\n');
+}
+
 /** Updates own their output; offline lint must never trigger an update fetch. */
 const SKIP_SUBCOMMANDS = new Set(['update', 'lint']);
 

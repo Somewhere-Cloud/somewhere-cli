@@ -1,3 +1,4 @@
+import { cliInvocation } from '../lib/cli-invocation.js';
 import { CLI_VERSION } from '../lib/version.js';
 import { Command } from 'commander';
 import prompts from 'prompts';
@@ -56,7 +57,7 @@ export function registerProject(program: Command) {
         if (p.url) info(`URL: ${p.url}`);
         info(`Status: ${statusDot(p.status)}`);
         // `project create` does not link this folder; say how to deploy to it.
-        info(`Deploy to it: ${teal(`somewhere init --link --project ${p.id}`)} then ${teal('somewhere deploy')}, or ${teal(`somewhere deploy --project ${p.id}`)}`);
+        info(`Deploy to it: ${teal(`${cliInvocation()} init --link --project ${p.id}`)} then ${teal(`${cliInvocation()} deploy`)}, or ${teal(`${cliInvocation()} deploy --project ${p.id}`)}`);
       } catch (err) {
         spinner?.fail('Failed');
         error(err instanceof Error ? err.message : String(err), err);
@@ -74,7 +75,7 @@ export function registerProject(program: Command) {
   // Also register top-level `somewhere projects` alias
   program
     .command('projects')
-    .description('List all projects (create one with `somewhere init --bare --name <name>`)')
+    .description(`List all projects (create one with \`${cliInvocation()} init --bare --name <name>\`)`)
     .option('--json', 'Print the raw projects response as JSON')
     .action(listProjects);
 
@@ -239,7 +240,7 @@ export function registerProject(program: Command) {
         }
 
         const code = await requestDeleteConfirmationCode(client, project.id);
-        const confirmCommand = `somewhere project delete ${project.id} --confirm-code ${code}`;
+        const confirmCommand = `${cliInvocation()} project delete ${project.id} --confirm-code ${code}`;
         spinner?.stop();
 
         if (!process.stdin.isTTY) {
@@ -426,7 +427,7 @@ async function listProjects(opts: { json?: boolean } = {}) {
     }
 
     if (!result.projects.length) {
-      info('No projects yet. Create one and link this folder: somewhere init --bare --name <name>');
+      info(`No projects yet. Create one and link this folder: ${cliInvocation()} init --bare --name <name>`);
       return;
     }
 

@@ -1,3 +1,4 @@
+import { cliInvocation } from '../lib/cli-invocation.js';
 import { readFileSync } from 'node:fs';
 import { Command } from 'commander';
 import prompts from 'prompts';
@@ -64,8 +65,8 @@ const REDEPLOY_NOTICE =
  */
 const CREATE_RECONCILE_GUIDANCE = [
   'Do NOT run create again — Neon does not de-duplicate project creation, so a second attempt can bill you twice and leave a database you never asked for.',
-  'Run `somewhere postgres status` to see what the platform recorded.',
-  'Check your Neon account for a project matching this request; if one exists, bind it with `somewhere postgres attach <neon-project-id>`.',
+  `Run \`${cliInvocation()} postgres status\` to see what the platform recorded.`,
+  `Check your Neon account for a project matching this request; if one exists, bind it with \`${cliInvocation()} postgres attach <neon-project-id>\`.`,
 ];
 
 const CREATE_UNCERTAIN = 'POSTGRES_CREATE_UNCERTAIN';
@@ -278,9 +279,9 @@ export function registerPostgres(program: Command): void {
         "with the driver's own behavior and errors.\n" +
         `\nConnect using a Neon API key: ${NEON_KEY_DOCS}\n` +
         '\nExamples:\n' +
-        '  printf %s "$NEON_API_KEY" | somewhere postgres connect --project my-app\n' +
-        '  somewhere postgres attach <neon-project-id> --project my-app\n' +
-        '  somewhere postgres status --project my-app\n',
+        `  printf %s "$NEON_API_KEY" | ${cliInvocation()} postgres connect --project my-app\n` +
+        `  ${cliInvocation()} postgres attach <neon-project-id> --project my-app\n` +
+        `  ${cliInvocation()} postgres status --project my-app\n`,
     );
 
   postgres
@@ -303,7 +304,7 @@ export function registerPostgres(program: Command): void {
     )
     .showHelpAfterError(
       'Do not pass the Neon API key as an argument — it is visible in the process table. ' +
-        `Use \`printf %s "$NEON_API_KEY" | somewhere postgres connect\` or set ${NEON_KEY_ENV}.`,
+        `Use \`printf %s "$NEON_API_KEY" | ${cliInvocation()} postgres connect\` or set ${NEON_KEY_ENV}.`,
     )
     .action(async (opts: ProjectOptions & { neonProject?: string }) => {
       try {
@@ -325,8 +326,8 @@ export function registerPostgres(program: Command): void {
         printNote(result);
         info(
           dim(
-            'Next: `somewhere postgres attach <neon-project-id>` for a database you already have, ' +
-              'or `somewhere postgres create` to make one in your Neon account.',
+            `Next: \`${cliInvocation()} postgres attach <neon-project-id>\` for a database you already have, ` +
+              `or \`${cliInvocation()} postgres create\` to make one in your Neon account.`,
           ),
         );
       } catch (err) {
@@ -402,7 +403,7 @@ export function registerPostgres(program: Command): void {
       '\nThis creates a real database in your own Neon account and Neon bills you for it.\n' +
         'Creation is never automatic: a failed `attach` does not fall back to this command.\n' +
         'If the outcome is reported as unknown, do NOT run it again — Neon does not de-duplicate\n' +
-        'project creation. Run `somewhere postgres status` and check your Neon account instead.\n',
+        `project creation. Run \`${cliInvocation()} postgres status\` and check your Neon account instead.\n`,
     )
     .action(async (opts: ProjectOptions & { name?: string; region?: string; yes?: boolean }) => {
       try {
@@ -482,9 +483,9 @@ export function registerPostgres(program: Command): void {
           if (text) field(label, text);
         }
         if (!connected) {
-          info(dim(`Run \`somewhere postgres connect\` to store your Neon API key: ${NEON_KEY_DOCS}`));
+          info(dim(`Run \`${cliInvocation()} postgres connect\` to store your Neon API key: ${NEON_KEY_DOCS}`));
         } else if (!attached) {
-          info(dim('Run `somewhere postgres attach <neon-project-id>` or `somewhere postgres create`.'));
+          info(dim(`Run \`${cliInvocation()} postgres attach <neon-project-id>\` or \`${cliInvocation()} postgres create\`.`));
         }
       } catch (err) {
         reportError(err, opts.json);
@@ -505,7 +506,7 @@ export function registerPostgres(program: Command): void {
         'It is also not an immediate cut-off — a release that is already deployed keeps the\n' +
         'connection details it was built with. Rotate the credential in Neon to cut those off.\n' +
         '\nThe stored Neon API key is kept by default, so you can attach again without supplying it.\n' +
-        'Pass --forget-key to delete it too; a later attach then needs `somewhere postgres connect` first.\n' +
+        `Pass --forget-key to delete it too; a later attach then needs \`${cliInvocation()} postgres connect\` first.\n` +
         '\nDisconnecting also clears a create that never resolved. If that create had already reached\n' +
         'your provider, the id of the database it left behind is printed once here — after this the\n' +
         'platform no longer stores it, and that database keeps billing until you attach or delete it.\n',

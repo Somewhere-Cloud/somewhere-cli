@@ -1,3 +1,4 @@
+import { cliInvocation } from './cli-invocation.js';
 import {
   chmodSync,
   closeSync,
@@ -70,7 +71,7 @@ export function loadConfig(): CliConfig | null {
   } catch {
     error(
       `${CONFIG_PATH} is not valid JSON, so this computer's Somewhere sign-in cannot be read. Nothing was sent. ` +
-        'Run `somewhere login` to replace it (a temporary project it held stays reachable through its claim URL).',
+        `Run \`${cliInvocation()} login\` to replace it (a temporary project it held stays reachable through its claim URL).`,
     );
     process.exit(1);
   }
@@ -339,12 +340,12 @@ export function getToken(): string {
   // when they never signed up in the first place.
   if (temporaryConfigExpired(config)) {
     error(
-      'Temporary session expired. Run somewhere deploy --temporary for a new one, or somewhere login to keep your work.',
+      `Temporary session expired. Run ${cliInvocation()} deploy --temporary for a new one, or ${cliInvocation()} login to keep your work.`,
     );
     process.exit(1);
   }
   if (!config?.token) {
-    error('Not logged in. Run: somewhere login (it prints a code to approve in any browser). If you deployed signed out from another terminal on this computer, run this command there: its temporary credential is in that terminal\'s ~/.somewhere.');
+    error(`Not logged in. Run: ${cliInvocation()} login (it prints a code to approve in any browser). If you deployed signed out from another terminal on this computer, run this command there: its temporary credential is in that terminal\'s ~/.somewhere.`);
     process.exit(1);
   }
   return config.token;

@@ -1,3 +1,4 @@
+import { cliInvocation } from './cli-invocation.js';
 import {randomBytes,randomUUID} from 'node:crypto';
 import {chmodSync,existsSync,mkdirSync,readFileSync,renameSync,writeFileSync} from 'node:fs';
 import {join} from 'node:path';
@@ -49,10 +50,10 @@ export async function callAdvisorRun(args:{question?:string;context?:AdvisorCont
     if(args.operation==='cancel'&&!record.run_id)throw Error('Start acknowledgment is unavailable; no cancellation or replacement dispatch was attempted. Recover only this original request.');
     let result=await request(record,record.run_id?(args.operation??'resume'):'start');
     if(result.payload_expired||args.wait===false||args.operation==='status'||args.operation==='cancel')return result;
-    if(result.status!=='settled'&&!result.answer)args.progress?.('Advisor is working. To reconnect: somewhere advisor --resume '+record.request_id);
+    if(result.status!=='settled'&&!result.answer)args.progress?.(`Advisor is working. To reconnect: ${cliInvocation()} advisor --resume `+record.request_id);
     while(result.status!=='settled'&&!result.answer&&!result.payload_expired){await new Promise(resolve=>setTimeout(resolve,Math.min(10000,Math.max(1000,(result.retry_after_seconds??2)*1000))));result=await request(record,result.next_step==='resume'?'resume':'status');}
     return result;
-  }catch(error){throw Error((error instanceof Error?error.message:String(error))+(payloadExpired(record)&&!record.run_id?'':' Resume only this request: somewhere advisor --resume '+record.request_id));}
+  }catch(error){throw Error((error instanceof Error?error.message:String(error))+(payloadExpired(record)&&!record.run_id?'':` Resume only this request: ${cliInvocation()} advisor --resume `+record.request_id));}
 }
 
 /** Adopt an unpaid legacy/native prepared handle before its first billable resume. */

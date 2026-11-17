@@ -1,3 +1,4 @@
+import { cliInvocation } from '../lib/cli-invocation.js';
 import { createReadStream, createWriteStream } from 'node:fs';
 import { stat, rename, unlink } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
@@ -202,7 +203,7 @@ function resolveProject(explicit?: string): string {
   if (!linked) {
     throw new CliApiError(
       'NO_PROJECT',
-      'No project linked. Run `somewhere init` or pass --project <slug>.',
+      `No project linked. Run \`${cliInvocation()} init\` or pass --project <slug>.`,
       0,
     );
   }

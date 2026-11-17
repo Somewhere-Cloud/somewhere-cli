@@ -1,3 +1,4 @@
+import { cliInvocation } from '../lib/cli-invocation.js';
 import { Command } from 'commander';
 import { join } from 'node:path';
 import { ApiClient } from '../lib/client.js';
@@ -111,7 +112,7 @@ function emitPacket(packet: ReproPacket, opts: PacketOptions): void {
   for (const step of packet.recipe.steps) info(`  - ${step}`);
   info(`Not collected: ${packet.omitted.join(', ')}.`);
   if (opts.out) success(`Packet written to ${opts.out} (private). Review it before you submit it as a platform bug.`);
-  else if (c.request_id && !opts.trace) info(`Nothing was sent. Review this request's packet with somewhere support packet --request ${c.request_id} --json (or --out <file>); it refuses if the local record has changed.`);
+  else if (c.request_id && !opts.trace) info(`Nothing was sent. Review this request's packet with ${cliInvocation()} support packet --request ${c.request_id} --json (or --out <file>); it refuses if the local record has changed.`);
   else if (opts.trace) info('Nothing was sent. Review this trace packet before you submit it as a platform bug.');
   else info('Nothing was sent. Review the packet before submitting it. Without --request, the local record is the most recent failure in this config, not pinned to an invocation.');
 }

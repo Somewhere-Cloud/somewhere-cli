@@ -1,3 +1,4 @@
+import { cliInvocation } from '../lib/cli-invocation.js';
 import { dirname, resolve } from 'node:path';
 import { readFileSync } from 'node:fs';
 import { Command, InvalidArgumentError } from 'commander';
@@ -691,7 +692,7 @@ export function registerBrowser(program: Command) {
         'errors, failed requests, JS page errors, and the interactive-element (DOM) map — as ' +
         'grep-able text, not a dumped image. Two modes: EYES (no --project, any public URL — look ' +
         'at / screenshot ANY page) and VERIFY (--project — drive + assert YOUR deployed app). ' +
-        'A localhost / 127.0.0.1 target — the app `somewhere dev` is serving — is driven by the ' +
+        `A localhost / 127.0.0.1 target — the app \`${cliInvocation()} dev\` is serving — is driven by the ` +
         'browser installed on THIS machine, so you can check a page before you deploy it. ' +
         '`target` is a URL (https://…) or a project ref; defaults to the linked project. ' +
         'Add steps with --path / --wait / --eval / --screenshot. ' +
@@ -743,7 +744,7 @@ export function registerBrowser(program: Command) {
       opts.expectedRequests = [...expectedRequests];
       if (opts.close !== undefined) {
         if (target || opts.session || opts.actionSequence.length || opts.path || opts.wait || opts.eval || opts.url) {
-          error('--close takes only the session handle (and optionally --project), e.g. somewhere browser --close bob');
+          error(`--close takes only the session handle (and optionally --project), e.g. ${cliInvocation()} browser --close bob`);
           process.exit(1);
         }
         try {
@@ -808,7 +809,7 @@ export function registerBrowser(program: Command) {
         }
       }
       if (opts.screenshot && !opts.store && !body.project_id && !(typeof body.url === 'string' && isLoopbackUrl(body.url))) {
-        error('--screenshot on a public URL needs --store for a short-lived link. Run `somewhere browser <url> --screenshot --store`, or omit --screenshot for the ordinary inline inspection capture.');
+        error(`--screenshot on a public URL needs --store for a short-lived link. Run \`${cliInvocation()} browser <url> --screenshot --store\`, or omit --screenshot for the ordinary inline inspection capture.`);
         process.exit(1);
       }
 

@@ -1,3 +1,4 @@
+import { cliInvocation } from '../lib/cli-invocation.js';
 import { Command } from 'commander';
 import { callPlatformTool } from '../lib/platform-tools.js';
 import {
@@ -96,7 +97,7 @@ function printTaskMutation(value: unknown): void {
   const title = typeof data.title === 'string' ? data.title : null;
   const status = typeof data.status === 'string' ? data.status : null;
   console.log(`${teal(id ?? 'Task updated')}${title ? `  ${title}` : ''}${status ? `  ${dim(status)}` : ''}`);
-  if (id) console.log(dim(`Next: somewhere tasks get ${id}`));
+  if (id) console.log(dim(`Next: ${cliInvocation()} tasks get ${id}`));
 }
 
 async function runTaskTool(
@@ -292,7 +293,7 @@ export function registerTasks(program: Command): void {
         if (!isRecord(data) || typeof data.id !== 'string') { printJson(value); return; }
         const purgeAt = typeof data.purge_at === 'number' ? new Date(data.purge_at).toISOString() : 'in 30 days';
         console.log(`${teal(data.id)}  ${data.already_deleted ? 'was already deleted' : 'deleted'}`);
-        console.log(dim(`Restorable until ${purgeAt}: somewhere tasks restore ${data.id}`));
+        console.log(dim(`Restorable until ${purgeAt}: ${cliInvocation()} tasks restore ${data.id}`));
       });
     });
 
@@ -311,7 +312,7 @@ export function registerTasks(program: Command): void {
         console.log(`${teal(data.id)}  restored`);
         const missing = Array.isArray(data.not_restored) ? data.not_restored.filter(isRecord) : [];
         for (const item of missing) console.log(dim(`Not restored: ${String(item.kind)} ${String(item.task_id)} — ${String(item.reason)}`));
-        console.log(dim(`Next: somewhere tasks get ${data.id}`));
+        console.log(dim(`Next: ${cliInvocation()} tasks get ${data.id}`));
       });
     });
 

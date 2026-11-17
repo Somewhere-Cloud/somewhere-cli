@@ -1,3 +1,4 @@
+import { cliInvocation } from '../lib/cli-invocation.js';
 import { safeCode, safeInvalid, safeStatus } from '../lib/repro-packet.js';
 import { preflightBrowserActions } from '../lib/browser-flow-preflight.js';
 import { randomBytes } from 'node:crypto';
@@ -248,7 +249,7 @@ function undeclaredStatusVerdict(first: VerifyUndeclaredStatus, all: VerifyUndec
       + 'Each viewport runs the whole flow as its own browser session against the same live app, at the same time. '
       + 'One possible cause is a step that creates something unique (an account, a slug) in each viewport, so it conflicts in all but one; '
       + `verify records failed requests only, so this is not established. If that is the cause, declaring ${first.status} would not fit, because ${others} would not see it: `
-      + 'run the creating flow in one viewport ("viewports": ["desktop"]), then continue as the same actor with "viewport": "mobile" in a multi-user journey (somewhere verify --schema). '
+      + `run the creating flow in one viewport ("viewports": ["desktop"]), then continue as the same actor with "viewport": "mobile" in a multi-user journey (${cliInvocation()} verify --schema). `
       + `Otherwise the ${first.status} is an app failure to fix.`;
   }
   const who = first.initiator === 'eval'
@@ -400,7 +401,7 @@ export function normalizeVerifyFlow(raw: unknown, baseDir = process.cwd()): Veri
   }
   if (!isRecord(raw)) throw new Error('flow must be a JSON object.');
   if (raw.actors !== undefined || raw.journey !== undefined) {
-    throw new Error('This is a multi-user flow (actors + journey). Run it with `somewhere verify --project <project> --flow <file>`.');
+    throw new Error(`This is a multi-user flow (actors + journey). Run it with \`${cliInvocation()} verify --project <project> --flow <file>\`.`);
   }
   const supported = new Set(['actions', 'auth', 'local_storage', 'cookies', 'headers', 'expect_requests', 'visible_only', 'viewports']);
   const unknown = Object.keys(raw).filter((key) => !supported.has(key));
@@ -434,14 +435,14 @@ function readVerifyFlowFile(absolute: string, flag: '--flow' | '--verify'): unkn
     source = readFileSync(absolute, 'utf8');
   } catch (cause) {
     if (cause instanceof Error && 'code' in cause && cause.code === 'ENOENT') {
-      throw new Error(`Flow file not found. Pass ${flag} <path> with an existing JSON file. Run \`somewhere verify --schema\` for the flow format.`);
+      throw new Error(`Flow file not found. Pass ${flag} <path> with an existing JSON file. Run \`${cliInvocation()} verify --schema\` for the flow format.`);
     }
-    throw new Error(`Flow file could not be read. Pass ${flag} <path> with a readable JSON file; check its file permissions. Run \`somewhere verify --schema\` for the flow format.`);
+    throw new Error(`Flow file could not be read. Pass ${flag} <path> with a readable JSON file; check its file permissions. Run \`${cliInvocation()} verify --schema\` for the flow format.`);
   }
   try {
     return JSON.parse(source) as unknown;
   } catch {
-    throw new Error(`Flow file is not valid JSON. Fix the JSON in the file passed to ${flag}, then rerun. Run \`somewhere verify --schema\` for the flow format.`);
+    throw new Error(`Flow file is not valid JSON. Fix the JSON in the file passed to ${flag}, then rerun. Run \`${cliInvocation()} verify --schema\` for the flow format.`);
   }
 }
 
@@ -1362,7 +1363,7 @@ export function createVerifyJourneyRun(
       throw new Error('Multi-user verification needs --project <project>: every actor signs in to that project, and its browsers stay on its addresses.');
     }
     if (target.url && isLoopbackUrl(target.url)) {
-      throw new Error('Multi-user journeys run on the deployed app. Deploy first, then run somewhere verify --project <project> --flow <file>.');
+      throw new Error(`Multi-user journeys run on the deployed app. Deploy first, then run ${cliInvocation()} verify --project <project> --flow <file>.`);
     }
     const createStartedAt = now();
     await createTestUsers();
@@ -1552,7 +1553,7 @@ export function createVerifyJourneyRun(
                 ...(report.session_expires_at ? { session_expires_at: report.session_expires_at } : {}),
                 ...(report.idle_expires_at ? { idle_expires_at: report.idle_expires_at } : {}),
                 ...(report.absolute_expires_at ? { absolute_expires_at: report.absolute_expires_at } : {}),
-                close: `somewhere call browser '${JSON.stringify({ project_id: target.project_id, session_id: sessionId, close: true })}'`,
+                close: `${cliInvocation()} call browser '${JSON.stringify({ project_id: target.project_id, session_id: sessionId, close: true })}'`,
               });
             }
             segments.push({ ...base, ...timing, ran: true, passed: false, incomplete: capped, ...(report.session_closed === true ? { session_closed: true as const } : {}), ...(report.final_url ? { final_url: reportUrl(report.final_url) } : {}) });
@@ -1587,7 +1588,7 @@ export function createVerifyJourneyRun(
             ...(report.session_expires_at ? { session_expires_at: report.session_expires_at } : {}),
             ...(report.idle_expires_at ? { idle_expires_at: report.idle_expires_at } : {}),
             ...(report.absolute_expires_at ? { absolute_expires_at: report.absolute_expires_at } : {}),
-            close: 'somewhere verify --flow <this flow> --close-actors',
+            close: `${cliInvocation()} verify --flow <this flow> --close-actors`,
           });
         }
       }
@@ -1710,7 +1711,7 @@ export function verifyFlowSchema(): Record<string, unknown> {
   };
   return {
     $schema: 'https://json-schema.org/draft/2020-12/schema',
-    title: 'somewhere verify --flow',
+    title: `${cliInvocation()} verify --flow`,
     oneOf: [
       {
         title: 'One user',
@@ -1967,7 +1968,7 @@ Save that object as flow.json, then pass --flow flow.json.
 Each viewport runs every action as its own browser session, at the same time,
 against the same live app, so a step that signs up or creates a unique record
 runs once per viewport. Create it in one viewport, or use the journey below.
-For the complete flow and action schema, run: somewhere docs browser
+For the complete flow and action schema, run: ${cliInvocation()} docs browser
 
 Several users in one run (--project required; each actor is its own browser):
   {
@@ -1990,7 +1991,7 @@ every actor browser is closed within ${VERIFY_JOURNEY_LIMITS.cleanup_budget_ms /
 confirmed is reported, and the platform closes idle browsers within 5 minutes.
 Several users need a claimed account and a CLI login approved for all your
 projects: a login approved for "Only these projects" cannot open named browsers
-(SESSION_SCOPE_FORBIDDEN). Print the full flow schema with: somewhere verify --schema
+(SESSION_SCOPE_FORBIDDEN). Print the full flow schema with: ${cliInvocation()} verify --schema
 `)
     .action(async (target: string | undefined, opts: { project?: string; url?: string; path?: string; flow?: string; session?: string; cookie?: string; json?: boolean; out?: string; schema?: boolean; keepTestUsers?: boolean; keepActors?: boolean; closeActors?: boolean; resumePage?: boolean }) => {
       if (opts.schema) {
@@ -2174,7 +2175,7 @@ projects: a login approved for "Only these projects" cannot open named browsers
         }
         if (cause instanceof CliApiError) {
           if (cause.code === 'BROWSER_ORIGIN_NOT_AUTHORIZED') {
-            error(`${cause.message} ${dim(`[${cause.code}${cause.statusCode ? `, HTTP ${cause.statusCode}` : ''}]`)} To drive an app you own, rerun with --project <your-project-id> (for example: somewhere verify --project <your-project-id> --url <your-app-url> --flow flow.json).`, cause);
+            error(`${cause.message} ${dim(`[${cause.code}${cause.statusCode ? `, HTTP ${cause.statusCode}` : ''}]`)} To drive an app you own, rerun with --project <your-project-id> (for example: ${cliInvocation()} verify --project <your-project-id> --url <your-app-url> --flow flow.json).`, cause);
           } else {
             error(`${cause.message} ${dim(`[${cause.code}${cause.statusCode ? `, HTTP ${cause.statusCode}` : ''}]`)}`, cause);
           }

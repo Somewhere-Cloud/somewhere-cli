@@ -1,3 +1,4 @@
+import { cliInvocation } from './cli-invocation.js';
 /**
  * The "is this safe to deploy?" gate: run `tsc --noEmit` over a pulled tree
  * and surface file:line errors — especially TS2304 ("X is not defined"), the
@@ -417,8 +418,8 @@ export function explainPageLimit(message: string, detailLine: string): string {
 }
 
 const DIAGNOSTIC_HINTS: readonly { matches: RegExp; hint: string }[] = [
-  { matches: /SomewhereDb(?:Caller)?WriteIntent|__SomewhereDbIntentFor|readonly.*WriteIntent/, hint: 'sw.db.server.tx([{ op: "insert", table: "notes", values: { ... } }]) takes an array, never a callback. somewhere docs sw.db --section swdbservertxintents-authorized-cross-user-writes' },
-  { matches: /Expected 2 arguments, but got 3/, hint: 'Database update shape: sw.db.update(table, { where: { id }, set: { title } }). somewhere docs sw.db --section builder-verbs-and-where-shapes' },
+  { matches: /SomewhereDb(?:Caller)?WriteIntent|__SomewhereDbIntentFor|readonly.*WriteIntent/, hint: `sw.db.server.tx([{ op: "insert", table: "notes", values: { ... } }]) takes an array, never a callback. ${cliInvocation()} docs sw.db --section swdbservertxintents-authorized-cross-user-writes` },
+  { matches: /Expected 2 arguments, but got 3/, hint: `Database update shape: sw.db.update(table, { where: { id }, set: { title } }). ${cliInvocation()} docs sw.db --section builder-verbs-and-where-shapes` },
   { matches: /\border\b.*does not exist|limit\?: undefined|A data list call reads at most 100/, hint: 'Browser list: limit 1–100; paginate with after. Sort in the client or use a server endpoint.' },
   { matches: /`\$\{number\}\/second`/, hint: "rateLimit is text: rateLimit: '30/minute' (per second, minute, hour or day), not an object." },
   { matches: /SCHEMA_DECLARATION_INVALID/, hint: 'db/schema.ts is declaration only: imports and export default schema({ tableName: table({...}, {...}) }); no helpers or arbitrary expressions.' },

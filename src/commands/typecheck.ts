@@ -1,3 +1,4 @@
+import { cliInvocation } from '../lib/cli-invocation.js';
 import { roleMethodHints } from '../lib/role-method-hints.js';
 import { Command } from 'commander';
 import chokidar from 'chokidar';
@@ -12,15 +13,15 @@ import { announceNpxTypeScriptFetch, missingProjectDependencies, missingTypechec
 import { TYPECHECK_TYPESCRIPT_VERSION } from '../lib/typecheck-version.js';
 
 export const MISSING_TSCONFIG_GUIDANCE =
-  'No tsconfig.json here to typecheck against. Add a local tsconfig.json for a new app, or run `somewhere pull` for an existing deployed app.';
+  `No tsconfig.json here to typecheck against. Add a local tsconfig.json for a new app, or run \`${cliInvocation()} pull\` for an existing deployed app.`;
 
 export function registerTypecheck(program: Command) {
   program
     .command('typecheck [dir]')
     .description(
       'Check a source project with `tsc --noEmit`. ' +
-        'Reports TypeScript errors with file:line before deploy and exits 1 when there are any; `somewhere deploy` stops on type errors. ' +
-        'Requires a local tsconfig.json; add one for a new app, or run `somewhere pull` for an existing deployed app. ' +
+        `Reports TypeScript errors with file:line before deploy and exits 1 when there are any; \`${cliInvocation()} deploy\` stops on type errors. ` +
+        `Requires a local tsconfig.json; add one for a new app, or run \`${cliInvocation()} pull\` for an existing deployed app. ` +
         'It never installs the project\'s dependencies: if the project has missing dependencies, it says so and stops; run npm install first. ' +
         'Without TypeScript in the project it fetches TypeScript with npx (network; npm caches it) and says so on stderr. Every run stops after SOMEWHERE_TYPECHECK_TIMEOUT_MS (default 300000). ' +
         'With --deploy, runs the deploy\'s advisory reference check instead (the files a deploy uploads, its generated types, ' +
@@ -29,7 +30,7 @@ export function registerTypecheck(program: Command) {
     )
     .option('--json', 'Print the raw typecheck result as JSON')
     .option('--deploy', "Run the deploy's reference check: the undefined-name and type findings a deploy reports. Fetches TypeScript " + DEPLOY_CHECK_TYPESCRIPT_VERSION + " through npx unless the project has exactly that version")
-    .option('--hook <host>', `With --deploy: run as an agent after-edit hook (${AGENT_HOSTS.join(', ')}), reading the host's event on stdin. Installed by \`somewhere hooks install\``)
+    .option('--hook <host>', `With --deploy: run as an agent after-edit hook (${AGENT_HOSTS.join(', ')}), reading the host's event on stdin. Installed by \`${cliInvocation()} hooks install\``)
     .option('--watch', 'Keep running and re-check after each save while this command is open. It is not installed into your editor or agent; start it yourself. Never deploys or touches live data')
     .action(async (dirArg: string | undefined, opts) => {
       const dir = resolve(process.cwd(), dirArg ?? '.');
@@ -153,7 +154,7 @@ export function reportTypecheck(result: TypecheckResult): void {
   const undefinedSymbols = result.errors.filter((e) => e.code === 'TS2304');
   const n = result.errors.length;
   error(
-    `${bold(String(n))} type error${n === 1 ? '' : 's'} ${dim(`(via ${result.via} tsc)`)} — exit 1. \`somewhere deploy\` stops before upload.`,
+    `${bold(String(n))} type error${n === 1 ? '' : 's'} ${dim(`(via ${result.via} tsc)`)} — exit 1. \`${cliInvocation()} deploy\` stops before upload.`,
   );
   if (undefinedSymbols.length) {
     warn(

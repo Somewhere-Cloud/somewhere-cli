@@ -1,3 +1,4 @@
+import { cliInvocation } from '../lib/cli-invocation.js';
 import { Command } from 'commander';
 import { bold, dim, error, printJson } from '../lib/output.js';
 import { callPlatformHelpTool } from './advisor.js';
@@ -111,7 +112,7 @@ function printCatalogCategories(categories: Array<[string, CatalogCategory]>): v
     console.log(`${bold(name)}  ${category.summary}`);
     console.log(`  ${dim(category.tools.join(', '))}\n`);
   }
-  console.log(dim('Input schema for one tool: somewhere catalog <tool>'));
+  console.log(dim(`Input schema for one tool: ${cliInvocation()} catalog <tool>`));
 }
 
 function printCatalogTool(tool: CatalogToolDefinition): void {

@@ -1,3 +1,4 @@
+import { cliInvocation } from '../lib/cli-invocation.js';
 import { Command } from 'commander';
 import { existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -164,7 +165,7 @@ export function formatCompileOnlySuccess(totalFiles: number, totalBytes: number,
     `Platform compile passed. ${dim(`(${totalFiles} files, ${formatBytes(totalBytes)})`)}`,
     dim('Runtime behavior, auth, data access, and user flows were not exercised.'),
     'Next: deploy, then run your app\'s tests with `somewhere test`.',
-    dim('Unsure about a platform contract? Run `somewhere advisor "<question>"`.'),
+    dim(`Unsure about a platform contract? Run \`${cliInvocation()} advisor "<question>"\`.`),
   ];
 }
 
@@ -192,14 +193,14 @@ export interface LocalPreflightResult {
 }
 
 export const PLATFORM_COMPILE_SKIPPED_REASON =
-  'No project yet, so the platform compile did not run. Your first `somewhere deploy` ' +
-  '(or `somewhere deploy --temporary` without an account) runs it and fails with file:line ' +
-  'errors on a compile problem. After that deploy, `somewhere deploy-check` runs the full check.';
+  `No project yet, so the platform compile did not run. Your first \`${cliInvocation()} deploy\` ` +
+  `(or \`${cliInvocation()} deploy --temporary\` without an account) runs it and fails with file:line ` +
+  `errors on a compile problem. After that deploy, \`${cliInvocation()} deploy-check\` runs the full check.`;
 
 export const RUN_NEEDS_PROJECT_MESSAGE =
   '--run invokes a handler on the platform, which needs a project. Deploy first with ' +
-  '`somewhere deploy` (or `somewhere deploy --temporary` without an account), then rerun ' +
-  '`somewhere deploy-check --run <path>`. Without --run, deploy-check runs local checks before the first deploy.';
+  `\`${cliInvocation()} deploy\` (or \`${cliInvocation()} deploy --temporary\` without an account), then rerun ` +
+  `\`${cliInvocation()} deploy-check --run <path>\`. Without --run, deploy-check runs local checks before the first deploy.`;
 
 /** Combine projectless steps into one verdict. A skipped step makes the
  *  result partial, never passed. */
@@ -214,8 +215,8 @@ export function localPreflightVerdict(checks: LocalCheckStep[]): LocalPreflightR
     mode: 'local',
     checks,
     next: failed
-      ? 'Fix the failed checks, then rerun `somewhere deploy-check`.'
-      : 'Run `somewhere deploy` (or `somewhere deploy --temporary` without an account); it runs the platform compile.',
+      ? `Fix the failed checks, then rerun \`${cliInvocation()} deploy-check\`.`
+      : `Run \`${cliInvocation()} deploy\` (or \`${cliInvocation()} deploy --temporary\` without an account); it runs the platform compile.`,
   };
 }
 
@@ -301,7 +302,7 @@ export function registerCheck(program: Command) {
         'This checks platform compilation and source intake; it does not exercise functions, ' +
         'auth, data access, or browser flows. With --run <path>, it instead invokes one ' +
         'handler from the collected function source; static/client files are not checked in that mode. ' +
-        'Distinct from the local `somewhere typecheck`: ' +
+        `Distinct from the local \`${cliInvocation()} typecheck\`: ` +
         '`deploy-check` catches platform-only compile issues such as cross-import resolution, ' +
         'bundling, and bundled-deploy rejects. ' +
         'Before the first deploy (no linked project and no --project), it runs local checks only — ' +

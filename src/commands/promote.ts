@@ -1,3 +1,4 @@
+import { cliInvocation } from '../lib/cli-invocation.js';
 import { Command } from 'commander';
 import ora from '../lib/spinner.js';
 import prompts from 'prompts';
@@ -166,7 +167,7 @@ export function registerPromote(program: Command) {
     )
     .option('--json', 'Print the raw promote response as JSON')
     .addHelpText('after', '\nFunctions missing from the preview: promote KEEPS production functions the preview does not\n'
-      + 'include, unless --prune. A full `somewhere deploy` is the opposite: it removes functions that are not in\n'
+      + `include, unless --prune. A full \`${cliInvocation()} deploy\` is the opposite: it removes functions that are not in\n`
       + 'the directory.\n')
     .action(async (draftId: string, candidateReleaseId: string, opts) => {
       const client = new ApiClient(getToken());
@@ -177,10 +178,10 @@ export function registerPromote(program: Command) {
       if (!projectId) {
         if (!linkedProjectEntry) {
           if (opts.json) {
-            printJsonError('NO_PROJECT', 'No project linked and no --project given. Run `somewhere init` or pass --project <id>.');
+            printJsonError('NO_PROJECT', `No project linked and no --project given. Run \`${cliInvocation()} init\` or pass --project <id>.`);
             process.exit(1);
           }
-          error('No project linked and no --project given. Run `somewhere init` or pass --project <id>.');
+          error(`No project linked and no --project given. Run \`${cliInvocation()} init\` or pass --project <id>.`);
           process.exit(1);
         }
         projectId = linkedProjectEntry.config.project_id;
@@ -196,7 +197,7 @@ export function registerPromote(program: Command) {
         // with actionable -y/--yes guidance rather than a mute wedge.
         if (!process.stdin.isTTY) {
           const message =
-            'Refusing to promote without confirmation in a non-interactive shell. Pass -y/--yes to promote intentionally (e.g. `somewhere promote <preview_session_id> <preview_id> --yes`).';
+            `Refusing to promote without confirmation in a non-interactive shell. Pass -y/--yes to promote intentionally (e.g. \`${cliInvocation()} promote <preview_session_id> <preview_id> --yes\`).`;
           if (opts.json) {
             printJsonError('CONFIRMATION_REQUIRED', message);
           } else {
@@ -275,7 +276,7 @@ export function registerPromote(program: Command) {
         if (fromDraft) info(dim(`Promoted from preview session ${teal(fromDraft)}`));
         const kept = r.preserved_functions ?? [];
         if (kept.length > 0) {
-          info(`Kept ${kept.length} production function(s) the preview did not include: ${kept.join(', ')} (pass --prune to remove them). A plain \`somewhere deploy\` from a directory without them would remove them.`);
+          info(`Kept ${kept.length} production function(s) the preview did not include: ${kept.join(', ')} (pass --prune to remove them). A plain \`${cliInvocation()} deploy\` from a directory without them would remove them.`);
         }
         const removed = r.removed_functions ?? [];
         if (removed.length > 0) {
@@ -295,11 +296,11 @@ export function registerPromote(program: Command) {
         }
         if (opts.message) info(dim(formatUserSuppliedNote(opts.message)));
         if (baseOutcome === 'moved') {
-          info(`This folder now starts from v${r.version}: the next \`somewhere preview\` or \`somewhere deploy\` here needs no pull.`);
+          info(`This folder now starts from v${r.version}: the next \`${cliInvocation()} preview\` or \`${cliInvocation()} deploy\` here needs no pull.`);
         } else if (baseOutcome === 'kept-functions') {
-          info('Production kept functions this folder does not have, so run `somewhere pull` before the next preview or deploy here (it adds them and keeps your edits).');
+          info(`Production kept functions this folder does not have, so run \`${cliInvocation()} pull\` before the next preview or deploy here (it adds them and keeps your edits).`);
         } else if (deployStateEntry) {
-          info('This folder did not send this exact preview, so run `somewhere pull` before the next preview or deploy here (it keeps your edits).');
+          info(`This folder did not send this exact preview, so run \`${cliInvocation()} pull\` before the next preview or deploy here (it keeps your edits).`);
         }
       } catch (err) {
         const reference = err instanceof CliApiError ? formatErrorReference(err.meta) : null;
@@ -380,7 +381,7 @@ export function registerPromote(program: Command) {
           }
           spinner?.fail('Live, but this version failed its check');
           error(`${liveMessage} ${dim(`[${err.code}, HTTP ${err.statusCode}]`)}`);
-          if (deployStateEntry) info('Production now serves this version: run `somewhere pull` before the next preview or deploy here (it keeps your edits).');
+          if (deployStateEntry) info(`Production now serves this version: run \`${cliInvocation()} pull\` before the next preview or deploy here (it keeps your edits).`);
           if (reference) info(dim(`Reference: ${reference}`));
           process.exit(1);
         }

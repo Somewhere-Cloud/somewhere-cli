@@ -1,3 +1,4 @@
+import { cliInvocation } from '../lib/cli-invocation.js';
 import { existsSync, readFileSync } from 'node:fs';
 import { isAbsolute, resolve } from 'node:path';
 import { Command } from 'commander';
@@ -58,7 +59,7 @@ export function registerRun(program: Command) {
         '(sw.db / sw.fs / sw.ai / sw.search …) without deploying, and print its ' +
         'return value + console logs. The script is an ES module: ' +
         'export default async function (sw) { ...; return value }. ' +
-        "Example: somewhere run seed.js",
+        `Example: ${cliInvocation()} run seed.js`,
     )
     .option('--project <id>', 'Project ID (defaults to the linked project)')
     .option('--timeout <ms>', 'Abort the script after N ms (default 10000, max 30000)')
@@ -105,7 +106,7 @@ export function registerRun(program: Command) {
         }
         if (timeoutMs > MAX_TIMEOUT_MS) {
           // Say so: a silent cap made a 60 s script look like it died at random.
-          const notice = `--timeout ${timeoutMs} is above the ${MAX_TIMEOUT_MS} ms limit for \`somewhere run\`; the script runs with ${MAX_TIMEOUT_MS} ms.`;
+          const notice = `--timeout ${timeoutMs} is above the ${MAX_TIMEOUT_MS} ms limit for \`${cliInvocation()} run\`; the script runs with ${MAX_TIMEOUT_MS} ms.`;
           if (opts.json) process.stderr.write(`${notice}\n`);
           else warn(notice);
           timeoutMs = MAX_TIMEOUT_MS;

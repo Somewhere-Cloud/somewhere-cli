@@ -1,3 +1,4 @@
+import { cliInvocation } from '../lib/cli-invocation.js';
 import { Command } from 'commander';
 import { cliConfigPathForDisplay, loadConfig, temporaryConfigExpired } from '../lib/config.js';
 import { error, info, printJson, teal } from '../lib/output.js';
@@ -14,8 +15,8 @@ export function registerClaim(program: Command) {
       const config = loadConfig();
       if (!config?.temporary || !config.claim_url) {
         const message = config?.token
-          ? 'This computer is signed in to an account, so there is nothing to claim: its projects are already yours (`somewhere projects`).'
-          : `This computer has no temporary workspace (nothing in ${cliConfigPathForDisplay()}). If you deployed signed out from another terminal, run \`somewhere claim\` there; or run \`somewhere deploy\` here to start one.`;
+          ? `This computer is signed in to an account, so there is nothing to claim: its projects are already yours (\`${cliInvocation()} projects\`).`
+          : `This computer has no temporary workspace (nothing in ${cliConfigPathForDisplay()}). If you deployed signed out from another terminal, run \`${cliInvocation()} claim\` there; or run \`${cliInvocation()} deploy\` here to start one.`;
         if (opts.json) printJson({ ok: false, error: config?.token ? 'NOT_TEMPORARY' : 'NO_TEMPORARY_WORKSPACE', message });
         else error(message);
         process.exit(1);
@@ -27,11 +28,11 @@ export function registerClaim(program: Command) {
         return;
       }
       if (expired) {
-        error(`This computer's temporary workspace expired at ${config.temp_expires_at}; unclaimed projects are gone. Run \`somewhere deploy\` to start a new one.`);
+        error(`This computer's temporary workspace expired at ${config.temp_expires_at}; unclaimed projects are gone. Run \`${cliInvocation()} deploy\` to start a new one.`);
         process.exit(1);
       }
       info(`Claim URL: ${teal(config.claim_url)}`);
       if (config.temp_expires_at) info(`Expires at: ${config.temp_expires_at} (UTC)`);
-      info('Open it in a browser and sign in (or create an account) to keep these projects. Choose "Save project and connect agent" to sign this CLI in as well; otherwise run `somewhere login` here afterwards.');
+      info(`Open it in a browser and sign in (or create an account) to keep these projects. Choose "Save project and connect agent" to sign this CLI in as well; otherwise run \`${cliInvocation()} login\` here afterwards.`);
     });
 }

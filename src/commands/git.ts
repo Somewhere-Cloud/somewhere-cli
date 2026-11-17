@@ -1,3 +1,4 @@
+import { cliInvocation } from '../lib/cli-invocation.js';
 import { execFileSync } from 'node:child_process';
 import { Command } from 'commander';
 import prompts from 'prompts';
@@ -132,7 +133,7 @@ async function waitForChoices(
     }
     await sleep(2000);
   }
-  throw new Error('GitHub authorization was not completed within 5 minutes. Run `somewhere git connect` again.');
+  throw new Error(`GitHub authorization was not completed within 5 minutes. Run \`${cliInvocation()} git connect\` again.`);
 }
 
 async function chooseRepo(
@@ -288,7 +289,7 @@ export function registerGit(program: Command) {
         if (opts.json) {
           printJson(result);
         } else if (!connection.connected) {
-          info('No GitHub repository is connected. Run `somewhere git connect`.');
+          info(`No GitHub repository is connected. Run \`${cliInvocation()} git connect\`.`);
         } else {
           console.log(`\n  Repository: ${teal(connection.repo || '')}`);
           info(`Branch: ${connection.branch}`);

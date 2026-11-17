@@ -1,3 +1,4 @@
+import { cliInvocation } from '../lib/cli-invocation.js';
 import { runtimeRefusalMessage } from '../lib/runtime-refusals.js';
 import { Command } from 'commander';
 import { ApiClient, CliApiError } from '../lib/client.js';
@@ -143,7 +144,7 @@ export function registerErrors(program: Command) {
         : `${exceptions} exception${exceptions === 1 ? '' : 's'}, ${rows.filter(isRefusal).length} refused on purpose`;
       const diagnosticCount = platformDiagnostics
         ? `, ${platformDiagnostics} platform diagnostic${platformDiagnostics === 1 ? '' : 's'}` : '';
-      console.log(dim(`\n  Returned rows: ${counts}${diagnosticCount} — ${teal('somewhere logs --level error')} for full detail.`));
+      console.log(dim(`\n  Returned rows: ${counts}${diagnosticCount} — ${teal(`${cliInvocation()} logs --level error`)} for full detail.`));
       if (disconnected) console.log(dim(`  ${disconnectedNotice}`));
     });
 }

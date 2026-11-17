@@ -1,3 +1,4 @@
+import { cliInvocation } from './cli-invocation.js';
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { mkdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
@@ -169,7 +170,7 @@ export function assertUpdateVerificationRuntime(nodeVersion = process.versions.n
   if (!semver.satisfies(nodeVersion, SIGSTORE_NODE_RANGE)) {
     throw new Error(
       `Update verification needs Node 22.19+; current runtime is Node ${nodeVersion}. ` +
-      'Please upgrade Node, then re-run `somewhere update`',
+      `Please upgrade Node, then re-run \`${cliInvocation()} update\``,
     );
   }
 }

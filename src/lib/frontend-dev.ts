@@ -1,3 +1,4 @@
+import { cliInvocation } from './cli-invocation.js';
 import { INSTALL_PROJECT_DEPENDENCIES, missingProjectDependencies } from './typecheck.js';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { createRequire } from 'node:module';
@@ -116,7 +117,7 @@ export async function startFrontendDev(cwd: string, target: string, port = 8787,
   if (missingProjectDependencies(cwd).length) throw new Error(INSTALL_PROJECT_DEPENDENCIES);
   let vitePath: string;
   try { vitePath = createRequire(join(cwd, 'package.json')).resolve('vite'); }
-  catch { throw new Error('Install this frontend’s Vite dependencies before running somewhere dev. Backend changes run through somewhere deploy or somewhere preview.'); }
+  catch { throw new Error(`Install this frontend’s Vite dependencies before running ${cliInvocation()} dev. Backend changes run through ${cliInvocation()} deploy or ${cliInvocation()} preview.`); }
   const vite = await import(pathToFileURL(vitePath).href) as ViteModule;
   const localOrigin = `http://localhost:${port}`;
   const proxy = frontendProxy(origin, localOrigin);
@@ -140,7 +141,7 @@ export async function startFrontendDev(cwd: string, target: string, port = 8787,
   try { relay = await relayIpv6Loopback(port); } catch (error) { await server.close(); throw error; }
   console.log(`Frontend hot reload: ${localOrigin}`);
   console.log(`API requests use the deployed backend: ${origin}`);
-  console.log('Backend changes require somewhere deploy or somewhere preview.');
+  console.log(`Backend changes require ${cliInvocation()} deploy or ${cliInvocation()} preview.`);
   const closeServer = server.close.bind(server);
   server.close = async () => {
     process.removeListener('SIGINT', close);

@@ -1,3 +1,9 @@
+## 0.38.112
+
+- List versions and set deploy notes with `somewhere deploys`.
+- Read one file from a retained production version with `somewhere file`.
+- Show the previous version’s note after deploy.
+
 ## 0.38.111
 
 - Show one claim instruction and how long a temporary app has left.

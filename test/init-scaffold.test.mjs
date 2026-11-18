@@ -24,7 +24,7 @@ const { createGreenTemplate } =
   await import(`${moduleRoot}/lib/init-green-template.${process.env.SOMEWHERE_TEST_SOURCE ? 'ts' : 'js'}`);
 const { createFeatureTemplate } =
   await import(`${moduleRoot}/lib/init-feature-template.${process.env.SOMEWHERE_TEST_SOURCE ? 'ts' : 'js'}`);
-const { AGENT_WORKFLOW, MCP_POINTER, PORTABILITY_POINTER, PREVIEW_POINTER, SKILLS_POINTER } =
+const { INIT_AGENTS_MD } =
   await import(`${moduleRoot}/lib/init-agent-guide.${process.env.SOMEWHERE_TEST_SOURCE ? 'ts' : 'js'}`);
 const { createHappyPathTemplate } =
   await import(`${moduleRoot}/lib/init-template.${process.env.SOMEWHERE_TEST_SOURCE ? 'ts' : 'js'}`);
@@ -158,8 +158,8 @@ test('minimal starter is a small typed frontend, function, and schema', () => {
 
   const agents = readFileSync(join(dir, 'AGENTS.md'), 'utf8');
   const claude = readFileSync(join(dir, 'CLAUDE.md'), 'utf8');
-  assert.equal(agents, `# somewhere.cloud project contract\n${AGENT_WORKFLOW}\n${SKILLS_POINTER}\n${PORTABILITY_POINTER}\n${MCP_POINTER}\n${PREVIEW_POINTER}\n`);
-  assert.match(agents.slice(0, 250), /Enough to start a typical app/);
+  assert.equal(agents, INIT_AGENTS_MD);
+  assert.match(agents, /## Build, deploy, test\n\nEnough to start a typical app/);
   assert.match(agents, /Teams are built-in groups/);
   // The test helper's calls, options and result kinds are in AGENTS.md (bench-1115c: every builder read the .d.ts files).
   for (const call of ['await openAppTest()', 'await app.signUp(page)', "{ email: 'Ana@Staff.Example' } is used exactly as typed", 'const benPage = await browser.newPage(); const ben = await app.signUp(benPage)',

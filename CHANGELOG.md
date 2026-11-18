@@ -1,3 +1,7 @@
+## 0.38.119
+
+- Put the installed skills and the build, deploy, and test steps at the top of generated AGENTS.md.
+
 ## 0.38.118
 
 - Explain that deploy JSON includes the uploaded file list.

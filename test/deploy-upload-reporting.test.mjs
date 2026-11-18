@@ -121,6 +121,15 @@ for (const [label, warnings] of [['a server that names private files', [SERVER_W
       }
       assert.doesNotMatch(first.all, /Published \(/);
 
+      const repeated = await run(['deploy'], { cwd: dir, env });
+      assert.equal(repeated.status, 0, repeated.all);
+      assert.deepEqual(uploaded(requests.filter((r) => r.url === '/v1/deploy').at(-1)), EXPECTED_UPLOAD);
+      const summary = 'Not published: 3 local files (notes, tests, tooling) stay on your machine.';
+      for (const output of [first.all, repeated.all]) {
+        assert.equal(output.split(summary).length - 1, 1, 'each deploy prints one short omission summary');
+        assert.doesNotMatch(output, /Every other file in this folder|Unreferenced operational folders/);
+      }
+
       const before = requests.length;
       const omitted = await run(['deploy', '--list-unpublished', '--json'], { cwd: dir, env });
       assert.equal(omitted.status, 0, omitted.all);

@@ -70,14 +70,22 @@ async function withHost(body, fn) {
   }
 }
 
-test('the bundled pack is the eight generated skills with valid integrity and matching frontmatter', () => {
+test('the eight generated skills have valid integrity and matching frontmatter, with editorial size notices', (t) => {
   verifyPack(BUNDLED_SKILLS_PACK);
+  // Platform scripts/skills/claims.mjs reports these targets as notes.
+  const maxLines = 150;
+  const maxBytes = 16 * 1024;
+  let bytes = 0;
   assert.deepEqual(BUNDLED_SKILLS_PACK.files.map((f) => f.path), NAMES.map((n) => `${n}/SKILL.md`));
   for (const file of BUNDLED_SKILLS_PACK.files) {
     const frontmatter = file.content.match(/^---\nname: ([a-z0-9-]+)\ndescription: [^\n]+\n---\n/);
     assert.ok(frontmatter, `${file.path} has a name and description`);
     assert.equal(file.path, `${frontmatter[1]}/SKILL.md`);
+    const lines = file.content.split('\n').length;
+    bytes += Buffer.byteLength(file.content);
+    if (lines > maxLines) t.diagnostic(`${file.path} has ${lines} lines (editorial target ${maxLines})`);
   }
+  if (bytes > maxBytes) t.diagnostic(`Skills pack has ${bytes} content bytes (editorial target ${maxBytes})`);
 });
 
 test('init on an empty directory writes the pack, links it for Claude, and pins it to this CLI', () => {
@@ -101,7 +109,12 @@ test('init on an empty directory writes the pack, links it for Claude, and pins 
   // AGENTS.md directs the agent to the installed skills and the canonical workflow.
   const agents = readFileSync(join(dir, 'AGENTS.md'), 'utf8');
   assert.equal(agents, INIT_AGENTS_MD);
-  assert.match(agents, /Task-specific skills: `\.agents\/skills\/`/);
+  const opening = agents.split('\n').slice(0, 12).join('\n');
+  assert.match(opening, /Task-specific skills: `\.agents\/skills\/`/);
+  assert.match(opening, /Build your app\. Deploy the raw source and run its tests/);
+  const command = 'npx @somewhere-cloud/cli deploy && npx @somewhere-cloud/cli test';
+  const permission = opening.indexOf('Before your first Somewhere command');
+  assert.ok(permission >= 0 && opening.indexOf(command) > permission, 'the first screen gives permission guidance before the runnable loop');
   assert.ok(agents.includes(AGENT_WORKFLOW));
 });
 

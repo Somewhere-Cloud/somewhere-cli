@@ -1,3 +1,4 @@
+import { FIRST_CLI_PERMISSION } from './first-cli-permission.js';
 import { starterTests } from './init-test-template.js';
 import { buildScaffoldGitignore } from './scaffold.js';
 import { CLI_VERSION } from './version.js';
@@ -3440,6 +3441,7 @@ export function createFeatureTemplate(
     ...starterTests({ privateData }),
     { path: '.gitignore', content: buildScaffoldGitignore() },
     { path: 'AGENTS.md', content: INIT_AGENTS_MD.replace(/## Getting started[^]*?After edits:/, `## Testing
+${FIRST_CLI_PERMISSION}
 Run somewhere test after a successful deploy: npx @somewhere-cloud/cli deploy && npx @somewhere-cloud/cli test
 Tests that need the email inbox work after you claim the app.
 It runs every tests/*.mjs and tests/*.cjs Playwright script and prints failures first.

@@ -1,3 +1,7 @@
+## 0.38.117
+
+- Explain first-command permission and where the CLI runs in README, help, and generated starter instructions.
+
 ## 0.38.115
 
 - Find the public-repo adoption checklist from init and the installed skills.

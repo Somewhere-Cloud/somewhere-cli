@@ -1,3 +1,4 @@
+import { FIRST_CLI_PERMISSION } from '../lib/first-cli-permission.js';
 import { newProjectCommand } from '../lib/link-hint.js';
 import { roleMethodHints } from '../lib/role-method-hints.js';
 import { cliInvocation } from '../lib/cli-invocation.js';
@@ -614,7 +615,7 @@ export function registerDeploy(program: Command) {
   program
     .command('deploy [dir]')
     .description('Deploy the current directory (anonymous automatically when logged out)')
-    .addHelpText('after', `\nFunctions missing from the directory: a full \`${cliInvocation()} deploy\` REMOVES deployed functions that\n`
+    .addHelpText('after', `\n${FIRST_CLI_PERMISSION}\n\nFunctions missing from the directory: a full \`${cliInvocation()} deploy\` REMOVES deployed functions that\n`
       + 'are not in this directory (each one is named in the output). `--scope functions` keeps them unless\n'
       + `--replace-functions. \`${cliInvocation()} promote\` is the opposite: it keeps them unless --prune.\n`
       + '\nNo project yet? Signed in, deploy never creates one on its own:\n'

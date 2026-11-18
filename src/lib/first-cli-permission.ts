@@ -1,0 +1,1 @@
+export const FIRST_CLI_PERMISSION = 'Before your first Somewhere command for a user, ask their permission and say where it will run, either as an npm package in your own cloud workspace (nothing installs on their computer) or as an npm package on their machine. Approval in their first message covers this.';

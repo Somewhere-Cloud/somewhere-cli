@@ -63,7 +63,7 @@ export function registerRollback(program: Command) {
     .description(
       `Revert production to the previous deployed version (for any earlier version: \`${cliInvocation()} restore <version>\`). Use this when a ` +
         'promote shipped a bad build — it restores the version that was live ' +
-        'before, including its functions. (Requires a previous production ' +
+        'before, including its functions. By default this changes code without restoring data. (Requires a previous production ' +
         'version to return to.)',
     )
     .option('--project <ref>', 'Project ID, name, slug, or subdomain — the same flag every other command takes. The positional form still works.')

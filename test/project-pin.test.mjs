@@ -68,6 +68,12 @@ test('the pinned version installed in node_modules runs the command', () => {
   assert.equal(result.status, 7, 'the pinned CLI\'s exit code is kept');
   assert.deepEqual(JSON.parse(result.stdout), { argv: ['status', '--json'], child: '1' });
   assert.match(result.stderr, new RegExp(`pinned to somewhere CLI 0\\.0\\.1 \\(package\\.json\\); running its installed 0\\.0\\.1 instead of ${VERSION.replace(/\./g, '\\.')}\\. Run \`somewhere upgrade\``));
+  for (const args of [['deploy'], ['deploy', '--new']]) {
+    const decision = decidePin(dir, VERSION, ['node', 'somewhere', ...args], {});
+    assert.equal(decision.delegate, null);
+    assert.match(decision.notice, /deploy is using the running CLI/);
+  }
+  assert.equal(decidePin(dir, VERSION, ['node', 'somewhere', 'init'], {}).delegate, null);
   // upgrade, update, init and --version never hand off.
   const version = run(dir, ['--version']);
   assert.equal(version.stdout.trim(), VERSION);

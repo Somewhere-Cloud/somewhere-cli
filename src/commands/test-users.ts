@@ -65,14 +65,14 @@ export function registerTestUsers(program: Command): void {
     .option('--json', 'Print the manifest (no tokens) as JSON')
     .addHelpText('after', [
       '',
-      'Writes .somewhere/test/<actor>.state.json (a standard Playwright storageState) and manifest.json.',
+      'From the linked project folder, run somewhere test-users prepare alice. It writes .somewhere/test/<actor>.state.json (a standard Playwright storageState) and manifest.json.',
       'Playwright:     browser.newContext({ storageState: ".somewhere/test/alice.state.json" })',
       'Save the context back after each run:  await context.storageState({ path: ".somewhere/test/alice.state.json" })',
       'The app refreshes the short-lived access token and rotates the session on its first refresh, so an unsaved',
       'file stops working after a run that refreshed it. The prepared session starts with the expiry prepare',
       'prints ("session until …", session_expires_at in manifest.json). A refresh during a run can renew it, and',
       'the saved-back state carries the renewal, so do not rely on expiry to end access: remove the identities',
-      'with `somewhere test-users cleanup` when you are done. If a state stops signing in, run prepare again.',
+      'with `somewhere test-users cleanup` when you are done. If a state stops signing in, clean up before preparing again.',
     ].join('\n'))
     .action(async (actorValues: string[], opts: { project?: string; origin?: string; json?: boolean }) => {
       let specs;
@@ -83,7 +83,7 @@ export function registerTestUsers(program: Command): void {
       let existing: TestManifest | null = null;
       try { existing = readManifest(target.root); } catch (cause) { fail(opts, cause); return; }
       if (existing && existing.actors.length) {
-        fail(opts, Object.assign(new Error(`${TEST_STATE_DIR}/${MANIFEST_FILE} still records ${existing.actors.length} test user(s) from run ${existing.run_id}. Run \`somewhere test-users cleanup\` first.`), { code: 'TEST_USERS_NOT_CLEANED' }));
+        fail(opts, Object.assign(new Error(`${TEST_STATE_DIR}/${MANIFEST_FILE} still records ${existing.actors.length} test user(s) from run ${existing.run_id}. Reuse those actors, or run \`somewhere test-users cleanup\` before preparing new ones.`), { code: 'TEST_USERS_NOT_CLEANED' }));
         return;
       }
       ensurePrivateDir(dir);

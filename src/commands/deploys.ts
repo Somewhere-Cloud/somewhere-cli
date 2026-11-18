@@ -81,7 +81,7 @@ export function registerDeploys(program: Command): void {
 
   program.command('file <path>')
     .description('Print one deployed source file. Redirect stdout to save it.')
-    .requiredOption('--version <number>', 'Retained production version to read')
+    .requiredOption('--version <number>', 'Retained production version to read (required)')
     .option('--project <ref>', 'Project ID or subdomain (defaults to the linked project)')
     .action(async (path: string, options) => {
       const project = projectRef(options.project);

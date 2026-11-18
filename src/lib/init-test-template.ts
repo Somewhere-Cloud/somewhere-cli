@@ -1,3 +1,4 @@
+import { FIRST_CLI_PERMISSION } from './first-cli-permission.js';
 import type { InitScaffoldFile } from './init-scaffold.js';
 
 // One short, ordinary Playwright script an agent copies and changes: `somewhere test` runs every
@@ -6,6 +7,7 @@ import type { InitScaffoldFile } from './init-scaffold.js';
 
 const SCRIPT = (privateData: boolean) => `// tests/app-check.mjs — an ordinary Playwright script for this app: change the checks to match
 // what you built. Run it after a successful deploy, never after a refused one:
+// ${FIRST_CLI_PERMISSION}
 //   npx @somewhere-cloud/cli deploy && npx @somewhere-cloud/cli test
 // Tests that need the email inbox work after you claim the app.
 // It writes its result once to .somewhere/app-check.json; the exit code is the verdict.

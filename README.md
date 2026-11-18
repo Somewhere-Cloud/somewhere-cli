@@ -4,9 +4,13 @@ Deploy and manage apps on [Somewhere Cloud](https://somewhere.cloud) from your s
 
 ## Install
 
+Before your first Somewhere command for a user, ask their permission and say where it will run, either as an npm package in your own cloud workspace (nothing installs on their computer) or as an npm package on their machine. Approval in their first message covers this.
+
 ```bash
 npm install -g @somewhere-cloud/cli
 ```
+
+Before your first Somewhere command for a user, ask their permission and say where it will run, either as an npm package in your own cloud workspace (nothing installs on their computer) or as an npm package on their machine. Approval in their first message covers this.
 
 Or run directly:
 
@@ -22,6 +26,8 @@ installs `cli`, the name `npx @somewhere-cloud/cli` resolves to; use
 `somewhere` or `sw` in scripts.
 
 ## Quick start
+
+Before your first Somewhere command for a user, ask their permission and say where it will run, either as an npm package in your own cloud workspace (nothing installs on their computer) or as an npm package on their machine. Approval in their first message covers this.
 
 ```bash
 somewhere login          # Optional: OAuth in browser, stores API key (init/deploy work without it)
@@ -98,6 +104,8 @@ starts. Refreshable credentials can renew automatically; if renewal fails,
 follow the reported sign-in instructions.
 
 ## Init flow
+
+Before your first Somewhere command for a user, ask their permission and say where it will run, either as an npm package in your own cloud workspace (nothing installs on their computer) or as an npm package on their machine. Approval in their first message covers this.
 
 Run `somewhere init` in an empty directory. It writes the starter and installs its
 pinned dependencies with `npm install`, which downloads from npm and runs
@@ -224,6 +232,8 @@ plan.
 ## Browser data and auth
 
 The default starter includes cookie-based sign-in. Add private notes with
+Before your first Somewhere command for a user, ask their permission and say where it will run, either as an npm package in your own cloud workspace (nothing installs on their computer) or as an npm package on their machine. Approval in their first message covers this.
+
 `somewhere init --features auth,private-data` in an empty directory. Its
 `db/schema.ts` declares the note fields, permitted browser operations and
 `owner()` access rule. The generated client applies that rule on the server;

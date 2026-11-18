@@ -1,3 +1,4 @@
+import { FIRST_CLI_PERMISSION } from '../lib/first-cli-permission.js';
 import { cliInvocation } from '../lib/cli-invocation.js';
 import { newProjectCommand } from '../lib/link-hint.js';
 import { Command } from 'commander';
@@ -78,7 +79,7 @@ interface LinkProject {
 export function registerInit(program: Command) {
   program
     .command('init')
-    .description(`Run ${cliInvocation()} init first, then read generated AGENTS.md: call shapes and access patterns for a typical app; docs are for exceptions.`)
+    .description('Write a starter app with a generated AGENTS.md guide')
     .option('--name <name>', 'Project name (skip prompt); sign-in and invitation emails show it')
     .option('--subdomain <slug>', 'Subdomain for the new project; default: derived from --name')
     .option('--link', 'Scaffold an empty directory and link an existing project; non-empty directories are link-only')
@@ -92,7 +93,7 @@ export function registerInit(program: Command) {
     .option('--json', 'Print the created or linked project as JSON')
     .addHelpText(
       'after',
-      `\nRecommended for a new app: run \`${cliInvocation()} init\` in an empty directory.\n`
+      `\n${FIRST_CLI_PERMISSION}\n\nRecommended for a new app: run \`${cliInvocation()} init\` in an empty directory.\n`
         + 'The starter is a deployable React + TypeScript app with cookie sign-in (the\n'
         + '`auth` module): the SDK\'s packaged handler as a one-line api/auth/[...path].ts,\n'
         + 'the SDK client in src/services/auth.ts, hooks in src/auth/, pages in src/pages/,\n'

@@ -72,7 +72,7 @@ export function registerTestUsers(program: Command): void {
       'file stops working after a run that refreshed it. The prepared session starts with the expiry prepare',
       'prints ("session until …", session_expires_at in manifest.json). A refresh during a run can renew it, and',
       'the saved-back state carries the renewal, so do not rely on expiry to end access: remove the identities',
-      'with `somewhere test-users cleanup` when you are done. If a state stops signing in, clean up before preparing again.',
+      'with `somewhere test-users cleanup` when you are done. To use the same user in a fresh hosted browser, pass its recorded user ID to browser --auth-user.',
     ].join('\n'))
     .action(async (actorValues: string[], opts: { project?: string; origin?: string; json?: boolean }) => {
       let specs;
@@ -83,7 +83,7 @@ export function registerTestUsers(program: Command): void {
       let existing: TestManifest | null = null;
       try { existing = readManifest(target.root); } catch (cause) { fail(opts, cause); return; }
       if (existing && existing.actors.length) {
-        fail(opts, Object.assign(new Error(`${TEST_STATE_DIR}/${MANIFEST_FILE} still records ${existing.actors.length} test user(s) from run ${existing.run_id}. Reuse those actors, or run \`somewhere test-users cleanup\` before preparing new ones.`), { code: 'TEST_USERS_NOT_CLEANED' }));
+        fail(opts, Object.assign(new Error(`${TEST_STATE_DIR}/${MANIFEST_FILE} still records ${existing.actors.length} test user(s) from run ${existing.run_id}. Reuse the saved state if it still signs in, or run \`somewhere browser --auth-user <user-id>\` with the ID in the manifest to start a fresh hosted session. To replace the identities, run \`somewhere test-users cleanup\` and then prepare again.`), { code: 'TEST_USERS_NOT_CLEANED' }));
         return;
       }
       ensurePrivateDir(dir);

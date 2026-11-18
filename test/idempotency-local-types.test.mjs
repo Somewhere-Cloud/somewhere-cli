@@ -1,14 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createHash } from 'node:crypto';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { prepareDeclaredData } from '../dist/lib/declared-data.js';
 import { runTypecheck } from '../dist/lib/typecheck.js';
-const sha256 = value => createHash('sha256').update(value).digest('hex');
-// Fixed-schema receipt-free output with canonical list bounds; no Git history is needed in CI.
-const legacy = { runtime: '28c9adad61e7e605b886d3416ecf1c22cc80bc319da963c1b1b1aa9fcfe56d93', manifest: '321e416643cc714c5370f4145d53f479ddfa1dc74a46da9ad677213299e421e6', digest: 'f94004dfa2945b48b99475ea839686f362682d04251cfcf24d7436a4310c6dc7' };
+import { assertOrdinaryNotesContract } from './ordinary-notes-contract.mjs';
 const schema = `export default schema({notes:table({id:id({ uuid: false }),title:text()},{scope:owner(),client:{read:['id','title'],create:['title']}})});`;
 test('local optional receipt handles do not advertise capable runtime or manifest', async t => {
  const root=mkdtempSync(join(tmpdir(),'cli-idem-types-'));t.after(()=>rmSync(root,{recursive:true,force:true}));
@@ -27,9 +24,7 @@ data.notes.create({title:'Hi'},{idempotencyKey:'consumer-key-123456789'});
 const required:boolean=row.idempotency.replayed;
 `);
  const prepared=prepareDeclaredData(root);
- assert.equal(sha256(prepared.client.runtime),legacy.runtime);
- assert.equal(sha256(JSON.stringify(prepared.client.manifest)),legacy.manifest);
- assert.equal(prepared.client.contract_digest,legacy.digest);
+ await assertOrdinaryNotesContract(prepared.client);
  assert.equal(prepared.client.manifest.insert_receipt,undefined);
  assert.match(readFileSync(prepared.declarationPath,'utf8'),/readonly request\?:/);
  const checked=await runTypecheck(root,{installTypePackages:false});assert.equal(checked.ok,true,checked.raw);

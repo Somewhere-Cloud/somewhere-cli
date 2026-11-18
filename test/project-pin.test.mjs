@@ -8,6 +8,8 @@ import test from 'node:test';
 import { changelogBetween, decidePin, readProjectPin, recordPinIfMissing } from '../dist/lib/project-pin.js';
 import { upgradeProject } from '../dist/commands/upgrade.js';
 
+import { starterInstallPath } from './starter-init-fixture.mjs';
+
 const here = dirname(fileURLToPath(import.meta.url));
 const cli = join(here, '../dist/index.js');
 const VERSION = JSON.parse(readFileSync(join(here, '../package.json'), 'utf8')).version;
@@ -38,7 +40,7 @@ const pkg = (spec) => ({ name: 'app', private: true, devDependencies: { '@somewh
 
 test('init writes the running CLI version as an exact devDependency pin', () => {
   const dir = folder();
-  const result = run(dir, ['init', '--name', 'pinned', '--json']);
+  const result = run(dir, ['init', '--name', 'pinned', '--json'], { PATH: starterInstallPath() });
   assert.equal(result.status, 0, result.stderr);
   const written = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'));
   assert.equal(written.devDependencies['@somewhere-cloud/cli'], VERSION);

@@ -56,7 +56,7 @@ test('customer-facing CLI copy uses exactly two words: dev and preview', () => {
 
   // The refusal names the command, not the flag, and is customer voice.
   const refusal = dev.slice(dev.indexOf('CLOUD_DEV_UNAVAILABLE_MESSAGE ='), dev.indexOf('CLOUD_DEV_UNAVAILABLE_MESSAGE =') + 300);
-  assert.match(refusal, /`somewhere preview` is not included in this account\\'s plan/);
+  assert.match(refusal, /\\`\$\{cliInvocation\(\)\} preview\\` is not included in this account\\'s plan/);
   assert.doesNotMatch(refusal, /Pro|Scale|Builder/, 'plan names come from the platform, never typed here');
   assert.doesNotMatch(refusal, /--cloud/);
 });
@@ -76,7 +76,7 @@ test('after a promote the preview loop ends cleanly, in product language', () =>
 
   // The two lines a person reads.
   assert.match(dev, /Promoted — this preview is now your live app, and the preview has finished\./);
-  assert.match(dev, /Run \$\{teal\('somewhere preview'\)\} to keep previewing\./);
+  assert.match(dev, /Run \$\{teal\(`\$\{cliInvocation\(\)\} preview`\)\} to keep previewing\./);
 });
 
 test('no internal field name is printable from the preview loop', () => {

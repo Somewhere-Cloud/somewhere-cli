@@ -15,6 +15,7 @@ import { createFeatureTemplate } from '../dist/lib/init-feature-template.js';
 import { resolveInitSelection } from '../dist/lib/init-features.js';
 import { createHappyPathTemplate } from '../dist/lib/init-template.js';
 import { createGreenTemplate } from '../dist/lib/init-green-template.js';
+import { assertInitCreated, starterInstallPath } from './starter-init-fixture.mjs';
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 const distIndex = join(repoRoot, 'dist', 'index.js');
@@ -110,7 +111,7 @@ test('init records the platform-reported app URL, not one built from the name or
   }, async (apiUrl) => {
     const result = await run(['init', '--name', 'Shared', '--bare', '--json'], { cwd: dir, env: { HOME, USERPROFILE: HOME, SOMEWHERE_API_URL: apiUrl } });
     assert.equal(result.status, 0, result.stderr);
-    assert.equal(JSON.parse(result.stdout).app_url, 'https://shared-x7q2.somewhere.site');
+    assert.equal(assertInitCreated(result.stdout, OWNER_A).app_url, 'https://shared-x7q2.somewhere.site');
     assert.equal(linkFile(dir).app_url, 'https://shared-x7q2.somewhere.site');
     assert.doesNotMatch(readFileSync(join(dir, '.somewhere.json'), 'utf8'), /\/\/shared\.somewhere/);
   });
@@ -125,7 +126,7 @@ test('init with no reported URL records none and says so in JSON', async () => {
   }, async (apiUrl) => {
     const result = await run(['init', '--name', 'Shared', '--bare', '--json'], { cwd: dir, env: { HOME, USERPROFILE: HOME, SOMEWHERE_API_URL: apiUrl } });
     assert.equal(result.status, 0, result.stderr);
-    assert.equal(JSON.parse(result.stdout).app_url, null);
+    assert.equal(assertInitCreated(result.stdout, OWNER_A).app_url, null);
     assert.equal('app_url' in linkFile(dir), false);
   });
 });
@@ -137,7 +138,7 @@ test('link: a duplicate user-scoped slug is ambiguous; the exact id links that p
     'GET /v1/projects': () => [200, { ok: true, data: { projects: [OWNER_A, OWNER_B] } }],
     'GET /v1/projects/proj_shared_b/urls': urlsFor(OWNER_B),
   }, async (apiUrl, seen) => {
-    const env = { HOME, USERPROFILE: HOME, SOMEWHERE_API_URL: apiUrl };
+    const env = { HOME, USERPROFILE: HOME, SOMEWHERE_API_URL: apiUrl, PATH: starterInstallPath() };
     const ambiguous = await run(['init', '--link', '--project', 'shared', '--json'], { cwd: dir, env });
     assert.notEqual(ambiguous.status, 0);
     assert.match(JSON.parse(ambiguous.stdout).message, /Multiple projects match "shared"\. Pass the project ID instead\./);

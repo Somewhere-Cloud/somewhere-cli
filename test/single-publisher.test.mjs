@@ -22,7 +22,7 @@ async function trigger(ctx, master = source) {
   return outputs;
 }
 
-test('canonical publisher alone publishes, serializes manual bootstrap and pins immutable checkout', () => {
+test('canonical publisher alone publishes, checks the registry, and pins immutable checkout', () => {
   assert.doesNotMatch(guard, /npm publish|id-token:|contents: write|git push/);
   assert.match(guard, /contents: read/);
   for (const workflow of [guard, publisher]) {
@@ -38,11 +38,13 @@ test('canonical publisher alone publishes, serializes manual bootstrap and pins 
   assert.match(publisher, /id-token: write/);
   assert.match(publisher, /an npm token is set; this publisher authenticates only through OIDC/);
   assert.ok(publisher.indexOf('already exists on npm') < publishAt, 'refuse an existing version before publishing');
-  assert.match(publisher, /npm view "@somewhere-cloud\/cli@\$EXPECTED_VERSION" dist\.integrity/);
-  assert.ok(publisher.indexOf('dist.integrity') > publisher.indexOf('run: node scripts/publish-release.mjs verify'), 'npm view resolves after registry verification');
-  const verifyAt = publisher.indexOf('run: node scripts/publish-release.mjs verify');
-  assert.ok(publishAt >= 0 && verifyAt > publishAt, 'publish then verify registry source/SRI/Sigstore');
-  assert.match(publisher, /name: Verify published registry source, SRI and Sigstore\n        id: verification/);
+  const verifyAt = publisher.indexOf('name: Confirm npm serves the published version');
+  assert.ok(publishAt >= 0 && verifyAt > publishAt, 'verify registry visibility after publishing');
+  const registryCheck = publisher.slice(verifyAt);
+  assert.match(registryCheck, /npm view "@somewhere-cloud\/cli@\$EXPECTED_VERSION" version/);
+  assert.match(registryCheck, /if \[ "\$actual" != "\$EXPECTED_VERSION" \]; then\n\s+echo .*\n\s+exit 1/);
+  assert.match(registryCheck, /npm view @somewhere-cloud\/cli dist-tags\.latest/);
+  assert.match(registryCheck, /if \[ "\$latest" != "\$EXPECTED_VERSION" \]; then\n\s+echo .*\n\s+exit 1/);
   assert.doesNotMatch(publisher, /run: npm test|Test verified published artifact source/);
   assert.equal((publisher.match(/npm publish --provenance --access public/g) ?? []).length, 1);
   assert.doesNotMatch(publisher, /tags:|cancel-in-progress: true|download-artifact|git push/);
@@ -51,7 +53,8 @@ test('canonical publisher alone publishes, serializes manual bootstrap and pins 
   assert.ok(publisher.indexOf('Authenticate trigger') < publisher.indexOf('actions/checkout'));
   assert.equal((publisher.match(/run: node scripts\/publish-release.mjs check/g) ?? []).length, 2);
   assert.match(publisher, /if: steps.final.outputs.mode == 'release'/);
-  assert.match(publisher, /SOURCE_SHA: \$\{\{ steps.final.outputs.published_head \}\}/);
+  assert.match(publisher, /SOURCE_SHA: \$\{\{ steps.trigger.outputs.source \}\}/);
+  assert.match(publisher, /if: steps.final.outputs.mode == 'in-sync'/);
 });
 
 test('automatic guard events cannot publish; no secret reaches the publisher', async () => {

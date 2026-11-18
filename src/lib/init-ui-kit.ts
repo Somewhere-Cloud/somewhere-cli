@@ -381,7 +381,7 @@ code, kbd { font-family: var(--font-mono); font-size: 0.9em; }
   border-bottom: 1px solid var(--color-border);
 }
 .topbar__error { width: min(var(--content-width), calc(100% - 2 * var(--space-6))); margin: var(--space-2) auto 0; }
-.brand { display: inline-flex; align-items: center; gap: var(--space-2); min-height: 44px; font: 600 var(--text-lg)/1 var(--font-display); letter-spacing: var(--tracking-display); color: inherit; text-decoration: none; }
+.brand { display: inline-flex; align-items: center; gap: var(--space-2); min-width: 44px; min-height: 44px; font: 600 var(--text-lg)/1 var(--font-display); letter-spacing: var(--tracking-display); color: inherit; text-decoration: none; }
 .account { display: flex; align-items: center; gap: var(--space-3); min-width: 0; }
 .account__label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--color-muted); font-size: var(--text-sm); }
 .content { width: min(var(--content-width), calc(100% - 2 * var(--space-6))); margin: 0 auto; padding: var(--space-8) 0 var(--space-16); outline: none; }

@@ -675,7 +675,7 @@ export function registerDeploy(program: Command) {
     // `somewhere deploy && somewhere test`.
     .addOption(new Option('--test', 'After a successful deploy, run somewhere test once against the new release').hideHelp())
     .option('-m, --message <text>', 'User-supplied note for this version (max 200 characters)')
-    .option('--json', 'Print the raw deploy response as JSON on stdout; files left out locally are listed on stderr by path and reason')
+    .option('--json', 'Print the deploy result and its uploaded file list as JSON on stdout. Stderr lists files left out locally by path and reason.')
     .option('--list-unpublished', 'List the local files deploy would keep on your machine, then exit')
     .option('--allow-type-errors', 'Upload even when the local TypeScript check fails')
     .option('--timing', 'Print deploy details and timings')

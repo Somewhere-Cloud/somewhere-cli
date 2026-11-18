@@ -78,7 +78,7 @@ test('bare docs prints the grouped topic index and how to open, never the manual
     assert.deepEqual(requests, ['/docs-manifest.json'], 'the full manual (/docs.txt) is not fetched');
     assert.match(result.stdout.slice(0, 1100), /Run somewhere init first.*AGENTS\.md/);
     assert.match(result.stdout.slice(0, 1100), /Own rows \| owner\(\)/);
-    assert.match(result.stdout.slice(0, 1100), /Team: owner adds members.*member\(\)/);
+    assert.match(result.stdout.slice(0, 1100), /Team: owner invites members.*group\(\).*sw\.groups/);
     assert.match(result.stdout.slice(0, 1100), /Owner\/staff record.*parent\(\)/);
     assert.match(result.stdout, /Primitives\n {2}sw\.auth\s+Auth — sign-in for your users/);
     assert.match(result.stdout, /Open a section: {3}somewhere docs <topic> --section <id>/);
@@ -155,11 +155,16 @@ test('index and search helpers: ungrouped manifests still list every topic', () 
 });
 
 test('root and init help lead new apps to the generated contract', async () => {
-  for (const args of [['--help'], ['init', '--help']]) {
-    const result = await run(args);
-    assert.equal(result.status, 0, result.stderr);
-    const firstScreen = result.stdout.slice(0, 550).replace(/\s+/g, ' ');
-    assert.match(firstScreen, /Run somewhere init first/);
-    assert.match(firstScreen, /AGENTS\.md.*call shapes and access patterns.*docs are for exceptions/);
-  }
+  const root = await run(['--help']);
+  assert.equal(root.status, 0, root.stderr);
+  assert.match(root.stdout, /Run somewhere init first/);
+  assert.match(root.stdout.replace(/\s+/g, ' '), /AGENTS\.md.*call shapes and access patterns.*docs are for exceptions/);
+
+  const init = await run(['init', '--help']);
+  assert.equal(init.status, 0, init.stderr);
+  assert.match(init.stdout, /Write a starter app with a generated AGENTS\.md guide/);
+  assert.match(init.stdout, /Before your first Somewhere command for a user, ask their permission/);
+  assert.match(init.stdout, /run `somewhere init` in an empty directory/);
+  assert.match(init.stdout, /Init installs .* dependencies with npm install/);
+  assert.match(init.stdout, /existing AGENTS\.md\/CLAUDE\.md are never replaced/);
 });

@@ -93,25 +93,25 @@ async function withPlatform(warnings, fn) {
 }
 
 const uploaded = (request) => Object.keys(request.body.files ?? {}).sort();
-const EXPECTED_UPLOAD = ['e2e/run.mjs', 'index.html', 'src/main.js'];
+const EXPECTED_UPLOAD = ['index.html', 'src/main.js'];
+const EXPECTED_OMISSIONS = ['NOTES.md', 'e2e/run.mjs', 'tests/note.txt'];
 
 for (const [label, warnings] of [['a server that names private files', [SERVER_WARNING]], ['a server that sends no warning', []]]) {
-  test(`deploy with ${label}: uploads subfolders, says "uploaded", and adds no claim of its own`, async () => {
+  test(`deploy with ${label}: uploads referenced subfolders, holds back local files, and reports server warnings`, async () => {
     const { HOME, dir } = project();
     await withPlatform(warnings, async (apiUrl, requests) => {
       const env = { HOME, USERPROFILE: HOME, SOMEWHERE_API_URL: apiUrl };
       const first = await run(['deploy'], { cwd: dir, env });
       assert.equal(first.status, 0, first.all);
       const deploy = requests.find((r) => r.url === '/v1/deploy');
-      assert.deepEqual(uploaded(deploy), EXPECTED_UPLOAD, 'e2e/ still uploads; tests/ is held back');
+      assert.deepEqual(uploaded(deploy), EXPECTED_UPLOAD, 'referenced source uploads and unreferenced test files stay local');
       assert.ok(!('NOTES.md' in deploy.body.files), 'an unreferenced root note is still held back');
 
-      assert.match(first.all, /Not published: 2 local files \(notes, tests, tooling\) stay on your machine\. See them: somewhere deploy --list-unpublished/);
-      assert.match(first.all, /Every other file in this folder, subfolders included, is uploaded with your app\./);
+      assert.match(first.all, /Not published: 3 local files \(notes, tests, tooling\) stay on your machine\. See them: somewhere deploy --list-unpublished/);
       assert.doesNotMatch(first.all, /A deploy publishes your app/);
-      assert.match(first.all, /3 static files uploaded \(/);
+      assert.match(first.all, /2 static files uploaded \(/);
       // : the headline's files are named, from the same selection the request carried.
-      assert.match(first.all, /Uploaded: e2e\/run\.mjs, index\.html, src\/main\.js/);
+      assert.match(first.all, /Uploaded: index\.html, src\/main\.js/);
       assert.doesNotMatch(first.all, /static files? deployed/);
 
       if (warnings.length) {
@@ -121,11 +121,15 @@ for (const [label, warnings] of [['a server that names private files', [SERVER_W
       }
       assert.doesNotMatch(first.all, /Published \(/);
 
-      // The once-per-project explanation is remembered; the named list is not.
-      const second = await run(['deploy'], { cwd: dir, env });
-      assert.equal(second.status, 0, second.all);
-      assert.match(second.all, /Not published: 2 local files \(notes, tests, tooling\) stay on your machine\. See them: somewhere deploy --list-unpublished/);
-      assert.doesNotMatch(second.all, /Every other file in this folder/);
+      const before = requests.length;
+      const omitted = await run(['deploy', '--list-unpublished', '--json'], { cwd: dir, env });
+      assert.equal(omitted.status, 0, omitted.all);
+      assert.deepEqual(JSON.parse(omitted.stdout).excluded.map(({ path }) => path).sort(), EXPECTED_OMISSIONS);
+      assert.equal(requests.length, before, 'listing omissions is local');
+
+      const included = await run(['deploy', '--include', 'e2e/run.mjs'], { cwd: dir, env });
+      assert.equal(included.status, 0, included.all);
+      assert.deepEqual(uploaded(requests.filter((r) => r.url === '/v1/deploy').at(-1)), ['e2e/run.mjs', ...EXPECTED_UPLOAD]);
     });
   });
 }
@@ -150,7 +154,7 @@ test('deploy --dry-run sends the same upload and prints the server warning as se
     assert.deepEqual(uploaded(dry), EXPECTED_UPLOAD);
     assert.equal(result.all.split(SERVER_WARNING).length - 1, 1);
     assert.doesNotMatch(result.all, /A deploy publishes your app/);
-    assert.match(result.all, /Uploaded: e2e\/run\.mjs, index\.html, src\/main\.js/);
+    assert.match(result.all, /Uploaded: index\.html, src\/main\.js/);
     const json = await run(['deploy', '--dry-run', '--json'], { cwd: dir, env: { HOME, USERPROFILE: HOME, SOMEWHERE_API_URL: apiUrl } });
     assert.equal(json.status, 0, json.all);
     assert.deepEqual(JSON.parse(json.stdout).uploaded, { static_files: EXPECTED_UPLOAD, functions: [] });
@@ -165,8 +169,7 @@ test('deploy-check sends the same upload, names held-back root files truthfully,
     assert.equal(human.status, 0, human.all);
     const check = requests.find((r) => r.url === '/v1/deploy/check');
     assert.deepEqual(uploaded(check), EXPECTED_UPLOAD);
-    assert.match(human.all, /Not published: 2 local files \(notes, tests, tooling\) stay on your machine\. See them: somewhere deploy --list-unpublished/);
-    assert.match(human.all, /subfolders included, is uploaded with your app/);
+    assert.match(human.all, /Not published: 3 local files \(notes, tests, tooling\) stay on your machine\. See them: somewhere deploy --list-unpublished/);
     assert.doesNotMatch(human.all, /A deploy publishes your app/);
     assert.equal(human.all.split(SERVER_WARNING).length - 1, 1);
 
@@ -186,7 +189,7 @@ test('non-TTY deploy prints collection once across all preflight warnings and ke
     const human = await run(['deploy'], { cwd: dir, env });
     assert.equal(human.status, 0, human.all);
     assert.equal(human.stderr.split('Collecting files...').length - 1, 1, human.all);
-    assert.match(human.all, /Not published: 2 local files \(notes, tests, tooling\) stay on your machine\. See them: somewhere deploy --list-unpublished/);
+    assert.match(human.all, /Not published: 3 local files \(notes, tests, tooling\) stay on your machine\. See them: somewhere deploy --list-unpublished/);
     assert.match(human.all, /1 file\(s\) will NOT be uploaded/);
     assert.match(human.all, /linked\.html — symlink \(not followed\)/);
     assert.match(human.all, /This looks like a Node server app/);
@@ -205,6 +208,6 @@ test('non-TTY deploy prints collection once across all preflight warnings and ke
     // No progress or preflight prose; only the local omissions, one line each by
     // path and reason, so a --json caller still learns what stayed local.
     assert.deepEqual(json.stderr.trim().split('\n').map((line) => line.split(' — ')[0]),
-      ['not published: NOTES.md', 'not published: tests/note.txt', 'not uploaded: linked.html'], json.all);
+      [...[...EXPECTED_OMISSIONS].sort((a, b) => a.localeCompare(b)).map((path) => `not published: ${path}`), 'not uploaded: linked.html'], json.all);
   });
 });

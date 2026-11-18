@@ -116,17 +116,19 @@ test('a successful deploy tells you how to look at the app in a browser', async 
     // The whole point: the screenshot/health check is named where it is needed.
     assert.match(result.stdout, /somewhere browser --screenshot/);
     assert.match(result.stdout, /somewhere verify/);
-    // Still short — the next steps are two lines, not a capability dump.
+    // Offer the normal test workflow before the read-only visual checks.
     const suggestionLines = result.stdout
       .split('\n')
       .filter((line) => /^ {2}somewhere \S/.test(line));
-    assert.equal(suggestionLines.length, 2, result.stdout);
+    assert.deepEqual(suggestionLines.map((line) => line.trim().split(/ {2,}/)[0]), [
+      'somewhere test', 'somewhere verify', 'somewhere browser --screenshot',
+    ]);
     // And the existing preview guidance survived.
     assert.match(result.stdout, /use `somewhere preview` before changing what they see/);
   });
 });
 
-test('deploy --json stdout stays the raw platform response with no next steps in it', async () => {
+test('deploy --json emits the result and uploaded paths without human next steps', async () => {
   const { home, dir } = linkedFixture();
   await withStubPlatform(DEPLOY_DATA, async (apiUrl) => {
     const result = await run(['deploy', '--json'], {
@@ -135,7 +137,7 @@ test('deploy --json stdout stays the raw platform response with no next steps in
     });
 
     assert.equal(result.status, 0, `stdout:\n${result.stdout}\nstderr:\n${result.stderr}`);
-    assert.deepEqual(JSON.parse(result.stdout), DEPLOY_DATA);
+    assert.deepEqual(JSON.parse(result.stdout), { ...DEPLOY_DATA, uploaded: { static_files: ['index.html'], functions: [] } });
     assert.doesNotMatch(result.stdout, /somewhere browser/);
     assert.doesNotMatch(result.stdout, /somewhere verify/);
     assert.doesNotMatch(result.stdout, /next_actions/);

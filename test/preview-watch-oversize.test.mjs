@@ -109,8 +109,8 @@ test('preview watch loop: oversize save refused with no patch and the last previ
     assert.equal(patch.expected_preview_id, 'cand_1', 'built on the retained last preview');
     assert.deepEqual(Object.keys(patch.update_files ?? {}), ['index.html'], 'the held edit is sent');
     assert.match(patch.update_files['index.html'], /v2/);
-    assert.deepEqual(Object.keys(patch.update_binary_files ?? {}), ['hero.png']);
-    assert.equal(Buffer.from(patch.update_binary_files['hero.png'], 'base64').length, 2048);
+    assert.deepEqual(Object.keys(patch.update_binary_files ?? {}), ['public/hero.png']);
+    assert.equal(Buffer.from(patch.update_binary_files['public/hero.png'], 'base64').length, 2048);
     assert.ok(!JSON.stringify(Object.keys(patch)).includes('huge') && !JSON.stringify(patch.update_files ?? {}).includes('huge.json'), 'the ignored file stays out');
   } finally {
     child.kill('SIGINT');

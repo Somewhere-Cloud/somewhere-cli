@@ -11,8 +11,6 @@ import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createFeatureTemplate } from '../dist/lib/init-feature-template.js';
-import { resolveInitSelection } from '../dist/lib/init-features.js';
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 const distIndex = join(repoRoot, 'dist', 'index.js');
@@ -214,12 +212,30 @@ test('cron creation leaves JSON unchanged and never queues a run', async () => {
   assert.deepEqual(calls, ['cron_create']);
 });
 
-test('both starter UI modes point from creating a schedule to running it now', () => {
-  for (const ui of ['styled', 'headless']) {
-    const files = createFeatureTemplate(resolveInitSelection('auth', ui), { appName: 'Cron notes' });
-    const guide = files.find(file => file.path === 'AGENTS.md').content;
-    assert.match(guide, /Test schedules now: `somewhere cron run <id> --wait`\. Do not wait for it to fire\./);
-  }
+test('cron create points to a runnable immediate check only when it received a trigger ID', async () => {
+  const home = credentialHome('sw-cron-immediate-');
+  const calls = [];
+  let receipt = { cron_id: 'cron_new' };
+  await withFixture((params) => {
+    calls.push(params.name);
+    return toolSuccess(receipt);
+  }, async (url) => {
+    const env = { HOME: home, USERPROFILE: home, SOMEWHERE_MCP_URL: url };
+    const args = ['cron', 'create', '0 9 * * *', '/api/tick', '--project', 'platform'];
+    const result = await run(args, env);
+    assert.equal(result.status, 0, result.stderr);
+    const suggestion = result.stdout.match(/^  somewhere (cron run cron_new --project platform --wait)$/m);
+    assert.ok(suggestion, result.stdout);
+    const help = await run([...suggestion[1].split(' '), '--help'], env);
+    assert.equal(help.status, 0, help.stderr);
+    assert.match(help.stdout, /--wait/);
+
+    receipt = {};
+    const missing = await run(args, env);
+    assert.equal(missing.status, 0, missing.stderr);
+    assert.doesNotMatch(missing.stdout, /cron run/);
+  });
+  assert.deepEqual(calls, ['cron_create', 'cron_create'], 'create only suggests a run');
 });
 
 //  item 3: `cron list` labelled every schedule UTC and `cron update

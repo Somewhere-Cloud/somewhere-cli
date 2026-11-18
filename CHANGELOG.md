@@ -1,3 +1,8 @@
+## 0.38.118
+
+- Explain that deploy JSON includes the uploaded file list.
+- Restore a 44 by 44 pixel home link in generated apps with short names.
+
 ## 0.38.117
 
 - Explain first-command permission and where the CLI runs in README, help, and generated starter instructions.

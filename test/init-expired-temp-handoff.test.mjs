@@ -6,6 +6,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { starterInstallPath } from './starter-init-fixture.mjs';
 
 // , through the real entry point: index.ts runs claim recovery
 // before `init`, so a stored claim continuation is exchanged (one request)
@@ -42,7 +43,7 @@ function setup() {
 function run(apiUrl, { base, cwd, config }) {
   return new Promise((resolve) => {
     const child = spawn(process.execPath, [cli, 'init', '--name', 'starter'], { cwd, stdio: ['ignore', 'pipe', 'pipe'], env: {
-      ...process.env, HOME: base, USERPROFILE: base, SOMEWHERE_CONFIG_DIR: config, SOMEWHERE_API_URL: apiUrl,
+      ...process.env, HOME: base, USERPROFILE: base, SOMEWHERE_CONFIG_DIR: config, SOMEWHERE_API_URL: apiUrl, PATH: starterInstallPath(),
       SOMEWHERE_NO_NOTIFICATIONS: '1', CI: '1', NO_COLOR: '1',
     } });
     let stdout = '', stderr = '';

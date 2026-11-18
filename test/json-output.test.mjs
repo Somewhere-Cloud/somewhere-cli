@@ -6,6 +6,9 @@ import { existsSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { INIT_AGENTS_MD } from '../dist/lib/init-agent-guide.js';
+import { assertInitCreated, starterInstallPath } from './starter-init-fixture.mjs';
+
 const CLI_PACKAGE_VERSION = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -90,7 +93,7 @@ async function closedApiUrl() {
   return `http://127.0.0.1:${port}/v1`;
 }
 
-test('deploy --json emits only the raw deploy response object', async () => {
+test('deploy --json emits the deploy result and exact uploaded paths', async () => {
   const HOME = mkdtempSync(join(tmpdir(), 'sw-json-deploy-home-'));
   const fixtureDir = mkdtempSync(join(tmpdir(), 'sw-json-deploy-fixture-'));
   writeConfig(HOME);
@@ -108,6 +111,10 @@ test('deploy --json emits only the raw deploy response object', async () => {
     build_log: ['compiled'],
   };
   let deployBody = null;
+
+  const help = await run(['deploy', '--help'], { cwd: fixtureDir, env: { HOME, USERPROFILE: HOME } });
+  assert.equal(help.status, 0, help.stderr);
+  assert.match(help.stdout.replace(/\s+/g, ' '), /Print the deploy result and its uploaded file list as JSON on stdout/);
 
   await withServer((req, res) => {
     let body = '';
@@ -127,7 +134,8 @@ test('deploy --json emits only the raw deploy response object', async () => {
     });
 
     assert.equal(result.status, 0, `stdout:\n${result.stdout}\nstderr:\n${result.stderr}`);
-    assert.deepEqual(JSON.parse(result.stdout), deployData);
+    assert.deepEqual(JSON.parse(result.stdout), { ...deployData, uploaded: { static_files: ['index.html'], functions: [] } });
+    assert.deepEqual(Object.keys(deployBody.files), ['index.html']);
     assert.equal(deployBody.project_id, 'proj_json_deploy');
     assert.doesNotMatch(result.stdout, /Live at/);
     assert.doesNotMatch(result.stdout, /Build/);
@@ -632,16 +640,16 @@ test('init --link --project links an exact existing project non-interactively', 
   }, async (apiUrl) => {
     const result = await run(['init', '--link', '--project', 'existing-app', '--json'], {
       cwd,
-      env: { HOME, USERPROFILE: HOME, SOMEWHERE_API_URL: apiUrl },
+      env: { HOME, USERPROFILE: HOME, SOMEWHERE_API_URL: apiUrl, PATH: starterInstallPath() },
     });
 
     assert.equal(result.status, 0, `stdout:\n${result.stdout}\nstderr:\n${result.stderr}`);
     assert.deepEqual(JSON.parse(result.stdout), { ...project, app_url: null });
     assert.deepEqual(
       JSON.parse(readFileSync(join(cwd, '.somewhere.json'), 'utf8')),
-      // A linked folder with no package.json pin records the CLI in .somewhere.json.
-      { project_id: project.id, name: project.name, subdomain: project.subdomain, cli_version: CLI_PACKAGE_VERSION },
+      { project_id: project.id, name: project.name, subdomain: project.subdomain },
     );
+    assert.equal(JSON.parse(readFileSync(join(cwd, 'package.json'), 'utf8')).devDependencies['@somewhere-cloud/cli'], CLI_PACKAGE_VERSION);
   });
 });
 
@@ -676,7 +684,7 @@ test('init creates the green starter, --bare keeps only the workflow guide, and 
       HOME,
       USERPROFILE: HOME,
       SOMEWHERE_API_URL: apiUrl,
-      SWPX_DRY_RUN: '1',
+      PATH: starterInstallPath(),
     };
     const empty = mkdtempSync(join(tmpdir(), 'sw-json-init-scaffold-empty-'));
     const created = await run(['init', '--name', project.name, '--json'], {
@@ -684,14 +692,16 @@ test('init creates the green starter, --bare keeps only the workflow guide, and 
       env,
     });
     assert.equal(created.status, 0, `stdout:\n${created.stdout}\nstderr:\n${created.stderr}`);
-    const { hooks: createdHooks, ...createdProject } = JSON.parse(created.stdout);
+    const { hooks: createdHooks, ...createdProject } = assertInitCreated(created.stdout, project);
     assert.deepEqual(createdProject, { ...project, app_url: null });
     assert.equal(createdHooks, undefined);
     for (const file of ['.claude/settings.json', '.codex/hooks.json', '.mcp.json']) assert.equal(existsSync(join(empty, file)), false);
     assert.match(readFileSync(join(empty, 'src/auth/hooks.ts'), 'utf8'), /useAuthState as useSdkAuthState/);
     assert.match(readFileSync(join(empty, 'src/config.ts'), 'utf8'), /APP_NAME = "Scaffold App"/);
-    assert.throws(() => readFileSync(join(empty, 'db/schema.ts')), /ENOENT/, 'private data is opt-in');
-    assert.match(readFileSync(join(empty, 'AGENTS.md'), 'utf8'), /Run `somewhere verify` on the final journey/);
+    assert.match(readFileSync(join(empty, 'db/schema.ts'), 'utf8'), /notes: table\([\s\S]*scope: owner\(\)/);
+    const guide = readFileSync(join(empty, 'AGENTS.md'), 'utf8');
+    assert.match(guide, /somewhere verify checks the page loads and looks right/);
+    assert.match(guide, /npx @somewhere-cloud\/cli deploy && npx @somewhere-cloud\/cli test/);
     assert.equal(
       readFileSync(join(empty, 'CLAUDE.md'), 'utf8'),
       'Read AGENTS.md for project instructions.\n',
@@ -714,8 +724,11 @@ test('init creates the green starter, --bare keeps only the workflow guide, and 
     const minimal = mkdtempSync(join(tmpdir(), 'sw-json-init-scaffold-minimal-'));
     const minimalResult = await run(['init', '--name', project.name, '--template', 'minimal', '--json'], { cwd: minimal, env });
     assert.equal(minimalResult.status, 0, `stdout:\n${minimalResult.stdout}\nstderr:\n${minimalResult.stderr}`);
+    assert.deepEqual(assertInitCreated(minimalResult.stdout, project), { ...project, app_url: null });
     assert.match(readFileSync(join(minimal, 'api/greeting.ts'), 'utf8'), /auth: 'none'/);
-    assert.throws(() => readFileSync(join(minimal, 'api/auth/[...path].ts')), /ENOENT/);
+    assert.equal(readFileSync(join(minimal, 'api/auth/[...path].ts'), 'utf8'),
+      "export { somewhereAuth as default } from '@somewhere-cloud/sdk/server';\n");
+    assert.equal(existsSync(join(minimal, 'src/ui/AuthCard.tsx')), false);
 
     const unknown = await run(['init', '--name', project.name, '--template', 'nope', '--json'], { cwd: mkdtempSync(join(tmpdir(), 'sw-json-init-unknown-')), env });
     assert.equal(unknown.status, 2);
@@ -727,13 +740,13 @@ test('init creates the green starter, --bare keeps only the workflow guide, and 
       env,
     });
     assert.equal(bareResult.status, 0, `stdout:\n${bareResult.stdout}\nstderr:\n${bareResult.stderr}`);
-    const { hooks: bareHooks, ...bareProject } = JSON.parse(bareResult.stdout);
+    const { hooks: bareHooks, ...bareProject } = assertInitCreated(bareResult.stdout, project);
     assert.deepEqual(bareProject, { ...project, app_url: null });
     assert.equal(bareHooks, undefined);
     for (const file of ['.claude/settings.json', '.codex/hooks.json', '.mcp.json']) assert.equal(existsSync(join(bare, file)), false);
     assert.throws(() => readFileSync(join(bare, 'package.json')), /ENOENT/);
     assert.throws(() => readFileSync(join(bare, 'src/App.tsx')), /ENOENT/);
-    assert.match(readFileSync(join(bare, 'AGENTS.md'), 'utf8'), /Run `somewhere verify` on the final journey/);
+    assert.equal(readFileSync(join(bare, 'AGENTS.md'), 'utf8'), INIT_AGENTS_MD);
     assert.equal(readFileSync(join(bare, 'CLAUDE.md'), 'utf8'), 'Read AGENTS.md for project instructions.\n');
 
     // An existing guide is the developer's: --bare adds only what is absent.
@@ -759,6 +772,7 @@ test('init creates the green starter, --bare keeps only the workflow guide, and 
       env,
     });
     assert.equal(preserved.status, 0, `stdout:\n${preserved.stdout}\nstderr:\n${preserved.stderr}`);
+    assert.deepEqual(assertInitCreated(preserved.stdout, project), { ...project, app_url: null });
     assert.equal(readFileSync(join(existing, 'app.ts'), 'utf8'), 'export const mine = true;\n');
     assert.throws(() => readFileSync(join(existing, 'package.json')), /ENOENT/);
     assert.throws(() => readFileSync(join(existing, 'AGENTS.md')), /ENOENT/);

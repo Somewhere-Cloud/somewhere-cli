@@ -48,7 +48,9 @@ test('fixture previews mount before the sign-in provider and import no network o
     const all = files('agent', ui);
     const main = all['src/main.tsx'];
     assert.match(main, /const preview = window\.location\.pathname === FIXTURES_PATH;/);
-    assert.ok(main.indexOf('<AssistantFixturesPage />') < main.indexOf('<SomewhereAuthProvider'), 'fixture branch is outside the provider');
+    assert.match(main, /\{preview \? \(\s*<AssistantFixturesPage \/>\s*\) : \(\s*<App \/>\s*\)\}/);
+    assert.doesNotMatch(main, /<SomewhereAuthProvider/);
+    assert.match(all['src/App.tsx'], /<SomewhereAuthProvider/);
     // Walk the fixture page's local imports: nothing reaches the SDK, auth, the hook or a fetch call site that runs.
     const seen = new Set();
     const walk = (path) => {
@@ -57,7 +59,7 @@ test('fixture previews mount before the sign-in provider and import no network o
       const text = all[path];
       assert.ok(text, `${ui}: ${path} exists`);
       for (const [, spec] of text.matchAll(/^import (?!type)[^;]*from '([^']+)';/gm)) {
-        assert.doesNotMatch(spec, /@somewhere-tech|services\/auth|useAssistant|\/auth\//, `${path} imports ${spec}`);
+        assert.doesNotMatch(spec, /@somewhere-(?:tech|cloud)|services\/auth|useAssistant|\/auth\//, `${path} imports ${spec}`);
         if (spec.startsWith('.')) {
           const base = join(path, '..', spec).replace(/^\//, '');
           walk([`${base}.ts`, `${base}.tsx`].find((candidate) => all[candidate]) ?? `${base}.ts`);

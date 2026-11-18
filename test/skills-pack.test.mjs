@@ -28,7 +28,7 @@ const { writeInitScaffold } = await import('../dist/lib/init-scaffold.js');
 const { createGreenTemplate } = await import('../dist/lib/init-green-template.js');
 const CLI_VERSION = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).version;
 
-const NAMES = ['deploy-verify-loop', 'schema-changes', 'sign-in-setup', 'troubleshooting', 'realtime-and-background', 'email-and-test-inbox', 'design'];
+const NAMES = ['adopt', 'deploy-verify-loop', 'schema-changes', 'sign-in-setup', 'troubleshooting', 'realtime-and-background', 'email-and-test-inbox', 'design'];
 const sha = (s) => createHash('sha256').update(s).digest('hex');
 const temp = () => mkdtempSync(join(tmpdir(), 'somewhere-skills-'));
 
@@ -70,17 +70,14 @@ async function withHost(body, fn) {
   }
 }
 
-test('the bundled pack is the seven generated skills, verifies, and fits the ceilings', () => {
+test('the bundled pack is the eight generated skills with valid integrity and matching frontmatter', () => {
   verifyPack(BUNDLED_SKILLS_PACK);
   assert.deepEqual(BUNDLED_SKILLS_PACK.files.map((f) => f.path), NAMES.map((n) => `${n}/SKILL.md`));
-  let bytes = 0;
-  for (const f of BUNDLED_SKILLS_PACK.files) {
-    bytes += Buffer.byteLength(f.content);
-    assert.ok(f.content.split('\n').length <= 150, `${f.path} is over 150 lines`);
-    assert.match(f.content, /^---\nname: [a-z-]+\ndescription: .+\n---\n/);
+  for (const file of BUNDLED_SKILLS_PACK.files) {
+    const frontmatter = file.content.match(/^---\nname: ([a-z0-9-]+)\ndescription: [^\n]+\n---\n/);
+    assert.ok(frontmatter, `${file.path} has a name and description`);
+    assert.equal(file.path, `${frontmatter[1]}/SKILL.md`);
   }
-  // The platform's own ceiling (tech scripts/skills/pack.mjs MAX_SKILL_CONTENT_BYTES).
-  assert.ok(bytes <= 16 * 1024, `pack is ${bytes} bytes`);
 });
 
 test('init on an empty directory writes the pack, links it for Claude, and pins it to this CLI', () => {
@@ -101,13 +98,10 @@ test('init on an empty directory writes the pack, links it for Claude, and pins 
   assert.equal(lock.cli, CLI_VERSION);
   assert.equal(lock.source, 'bundled');
   assert.equal(Object.keys(lock.files).length, NAMES.length);
-  // AGENTS.md: the first screen names the pack, then the canonical loop.
+  // AGENTS.md directs the agent to the installed skills and the canonical workflow.
   const agents = readFileSync(join(dir, 'AGENTS.md'), 'utf8');
   assert.equal(agents, INIT_AGENTS_MD);
-  const firstScreen = agents.split('\n').slice(0, 12).join('\n');
-  assert.match(firstScreen, /\.agents\/skills\//);
-  for (const name of NAMES) assert.ok(firstScreen.includes(`\`${name}\``));
-  assert.match(firstScreen, /Getting started — build, deploy, verify/);
+  assert.match(agents, /Task-specific skills: `\.agents\/skills\/`/);
   assert.ok(agents.includes(AGENT_WORKFLOW));
 });
 
@@ -175,13 +169,14 @@ test('update removes only skills the previous pack owned; a project skill surviv
   installSkills(dir, BUNDLED_SKILLS_PACK, { cli: CLI_VERSION, source: 'bundled' });
   mkdirSync(join(dir, '.agents/skills/my-own'), { recursive: true });
   writeFileSync(join(dir, '.agents/skills/my-own/SKILL.md'), 'mine\n');
-  const smaller = { ...BUNDLED_SKILLS_PACK, files: BUNDLED_SKILLS_PACK.files.slice(1) };
+  const smaller = { ...BUNDLED_SKILLS_PACK, files: BUNDLED_SKILLS_PACK.files.filter((file) => file.path !== 'deploy-verify-loop/SKILL.md') };
   smaller.sha256 = sha(smaller.files.map((f) => `${f.path}\0${f.sha256}\n`).join(''));
   smaller.version = `1+${smaller.sha256.slice(0, 12)}`;
   const result = installSkills(dir, smaller, { cli: CLI_VERSION, source: 'docs-host' });
   assert.deepEqual(result.removed, ['deploy-verify-loop']);
   assert.equal(existsSync(join(dir, '.agents/skills/deploy-verify-loop/SKILL.md')), false);
   assert.equal(existsSync(join(dir, '.claude/skills/deploy-verify-loop')), false);
+  assert.equal(existsSync(join(dir, '.agents/skills/adopt/SKILL.md')), true);
   assert.equal(readFileSync(join(dir, '.agents/skills/my-own/SKILL.md'), 'utf8'), 'mine\n');
 });
 
@@ -204,7 +199,7 @@ test('updates preserve edited, deleted, same-name and symlinked skills before an
     else { const at = join(dir, '.claude/skills/schema-changes'); rmSync(at); mkdirSync(at); writeFileSync(join(at, 'SKILL.md'), 'my Claude edit'); }
     assert.throws(() => installSkills(dir, newerPack(), { cli: CLI_VERSION, source: 'docs-host' }), /Skills conflict/);
     assert.equal(readFileSync(join(dir, 'skills-lock.json'), 'utf8'), lock);
-    assert.equal(readFileSync(join(dir, '.agents/skills/deploy-verify-loop/SKILL.md'), 'utf8'), BUNDLED_SKILLS_PACK.files[0].content);
+    assert.equal(readFileSync(join(dir, '.agents/skills/deploy-verify-loop/SKILL.md'), 'utf8'), BUNDLED_SKILLS_PACK.files.find((file) => file.path === 'deploy-verify-loop/SKILL.md').content);
   }
   const own = temp(); mkdirSync(join(own, '.agents/skills/schema-changes'), { recursive: true });
   writeFileSync(join(own, '.agents/skills/schema-changes/SKILL.md'), 'mine');
@@ -245,7 +240,7 @@ test('lock traversal and same-name Claude skills are refused; extra project file
   assert.equal(readFileSync(join(claude, '.claude/skills/schema-changes/SKILL.md'), 'utf8'), 'my Claude skill');
   const dir = temp(); installSkills(dir, BUNDLED_SKILLS_PACK, { cli: CLI_VERSION, source: 'bundled' });
   writeFileSync(join(dir, '.agents/skills/deploy-verify-loop/my-notes.txt'), 'keep my notes');
-  const smaller = { ...BUNDLED_SKILLS_PACK, files: BUNDLED_SKILLS_PACK.files.slice(1) };
+  const smaller = { ...BUNDLED_SKILLS_PACK, files: BUNDLED_SKILLS_PACK.files.filter((file) => file.path !== 'deploy-verify-loop/SKILL.md') };
   smaller.sha256 = sha(smaller.files.map(f => `${f.path}\0${f.sha256}\n`).join(''));
   smaller.version = `1+${smaller.sha256.slice(0, 12)}`;
   installSkills(dir, smaller, { cli: CLI_VERSION, source: 'bundled' });

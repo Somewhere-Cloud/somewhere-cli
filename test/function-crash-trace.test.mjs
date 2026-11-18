@@ -84,6 +84,7 @@ test('logs --trace refuses anything but a 32-hex id before any request', async (
 test('support packet --trace builds the packet from typed fields only; no caller input or crash text', async () => {
   rows = crashRows();
   const fx = fixture();
+  const before = seen.length;
   const json = await run(['support', 'packet', '--trace', TRACE, '--json'], fx);
   assert.equal(json.status, 0, json.out);
   assert.deepEqual(leaks(json.out), [], `packet leaked: ${json.out}`);
@@ -95,8 +96,12 @@ test('support packet --trace builds the packet from typed fields only; no caller
   assert.equal(packet.surface, 'function_crash');
   assert.deepEqual(packet.recipe.investigate, [['somewhere', 'logs', '--project', 'proj_7c1b2a9d4e', '--trace', TRACE]]);
   assert.equal(packet.recipe.rerun_original, false);
-  assert.ok(packet.recipe.steps.some((s) => /Do NOT resend the failed request/.test(s)));
-  assert.deepEqual(packet.submit, { destination: 'support_ticket', automatic: false, how: 'Review this packet, then submit it deliberately as a platform bug.' });
+  assert.equal(packet.recipe.kind, 'synthetic');
+  assert.ok(packet.recipe.steps.some((s) => /Resending the failed request can repeat writes: the handler may have written data/.test(s)));
+  assert.equal(packet.submit.destination, 'support_ticket');
+  assert.equal(packet.submit.automatic, false);
+  assert.equal(seen.length, before + 1, 'building a packet only reads its trace');
+  assert.equal(new URL(seen.at(-1), apiUrl).pathname, '/logs');
   const text = await run(['support', 'packet', '--trace', TRACE, '--project', 'proj_other0001'], fx);
   assert.equal(text.status, 0, text.out);
   assert.equal(lastQuery().get('project_id'), 'proj_other0001', '--project names the project read');

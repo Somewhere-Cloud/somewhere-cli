@@ -43,7 +43,7 @@ function run(args, files = {}) {
     } });
     let stdout = '', stderr = '';
     child.stdout.on('data', (v) => stdout += v); child.stderr.on('data', (v) => stderr += v);
-    child.on('close', (status) => resolve({ status, stdout, stderr, out: stdout + stderr }));
+    child.on('close', (status) => resolve({ status, stdout, stderr, out: stdout + stderr, base }));
   });
 }
 
@@ -74,7 +74,7 @@ test('--include entries and "!" lines that cannot publish what they name say so;
   assert.equal(result.status, 0, result.out);
   const notes = result.stderr.split('\n').filter((line) => line.startsWith('no effect: '));
   assert.deepEqual(notes.map((line) => line.split(' — ')[0]).sort(), [
-    'no effect: --include ../outside.txt', 'no effect: --include .env', `no effect: --include ${result.stderr.match(/--include (\/\S+outside\.txt)/)[1]}`,
+    'no effect: --include ../outside.txt', 'no effect: --include .env', `no effect: --include ${join(result.base, 'outside.txt')}`,
     'no effect: --include missing.txt', 'no effect: --include secret-notes.md', 'no effect: .somewhereignore line "!.env"',
   ].sort());
   assert.match(result.stderr, /--include missing\.txt — there is no such file or folder in this project/);

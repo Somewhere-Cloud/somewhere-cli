@@ -74,7 +74,7 @@ test('a failure carrying secrets everywhere leaves only typed fields in last-err
   assert.equal(text.status, 0, text.out);
   assert.deepEqual(leaks(text.out), [], `packet text leaked: ${text.out}`);
   assert.match(text.out, /outcome: unknown/);
-  assert.match(text.out, /never retry it blindly/);
+  assert.match(text.out, /a blind retry can repeat it/);
   const json = await run(['support', 'packet', '--json'], fx);
   assert.deepEqual(leaks(json.out), [], `packet json leaked: ${json.out}`);
   const packet = JSON.parse(json.out);
@@ -144,7 +144,7 @@ test('review 67 #1: a mutation with no status or SERVER_SLOW is unknown, never f
   const slow = buildRecord({ name: 'CliApiError', code: 'SERVER_SLOW', statusCode: 0, operation: 'POST /deploy' }, { cliVersion: '1.0.0' });
   assert.equal(slow.outcome, 'unknown');
   assert.equal(buildPacket(slow).recipe.rerun_original, false);
-  assert.match(buildPacket(slow).recipe.steps[0], /never retry it blindly/);
+  assert.match(buildPacket(slow).recipe.steps[0], /a blind retry can repeat it/);
   const tool = buildRecord({ name: 'PlatformToolError', code: 'INTERNAL_ERROR', tool: 'project_deploy' }, { cliVersion: '1.0.0' });
   assert.deepEqual([tool.operation, tool.outcome], ['tool:project_deploy', 'unknown']);
   // Controls: a failed read stays failed, a mutation refused with a 4xx stays refused.
@@ -180,7 +180,12 @@ test('review 67 non-blocking: a deploy command that failed on a read still gets 
   const record = buildRecord({ name: 'CliApiError', code: 'INTERNAL_ERROR', statusCode: 500, operation: 'GET /projects/:id' }, { cliVersion: '1.0.0', command: 'deploy' });
   const packet = buildPacket(record);
   assert.equal(packet.surface, 'deploy');
-  assert.ok(packet.recipe.steps.some((step) => /Do NOT re-run the original deploy/.test(step)));
+  assert.equal(packet.recipe.rerun_original, false);
+  assert.deepEqual(packet.recipe.investigate, [
+    ['somewhere', 'status', '--project', '<PROJECT>'],
+    ['somewhere', 'logs', '--project', '<PROJECT>'],
+  ]);
+  assert.ok(packet.recipe.steps.some((step) => /can publish it twice/.test(step)));
 });
 
 test('f74 contract: client replaces cli_version, DEPLOY_OUTCOME_UNKNOWN is unknown, a bare actions path is accepted', () => {

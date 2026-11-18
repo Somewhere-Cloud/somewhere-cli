@@ -1,12 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createHash } from 'node:crypto';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { prepareDeclaredData } from '../dist/lib/declared-data.js';
 import { runTypecheck } from '../dist/lib/typecheck.js';
-const sha256 = value => createHash('sha256').update(value).digest('hex');
+import { assertOrdinaryNotesContract } from './ordinary-notes-contract.mjs';
 const ordinary = `export default schema({notes:table({id:id({ uuid: false }),title:text()},{scope:owner(),client:{read:['id','title'],create:['title']}})});`;
 const schema = `export default schema({
  notes: table({id:id({ uuid: false }),title:text()},{scope:owner(),client:{read:['id','title'],create:['title'],links:{read:true,anonymousCreate:true}}}),
@@ -20,9 +19,7 @@ test('canonical creator and intake local types retain the ordinary contract with
  mkdirSync(join(root,'db'));mkdirSync(join(root,'src'));
  writeFileSync(join(root,'db/schema.ts'),ordinary);
  const baseline=prepareDeclaredData(root).client;
- assert.equal(sha256(baseline.runtime),'28c9adad61e7e605b886d3416ecf1c22cc80bc319da963c1b1b1aa9fcfe56d93');
- assert.equal(sha256(JSON.stringify(baseline.manifest)),'321e416643cc714c5370f4145d53f479ddfa1dc74a46da9ad677213299e421e6');
- assert.equal(baseline.contract_digest,'f94004dfa2945b48b99475ea839686f362682d04251cfcf24d7436a4310c6dc7');
+ await assertOrdinaryNotesContract(baseline);
  writeFileSync(join(root,'db/schema.ts'),schema);
  writeFileSync(join(root,'tsconfig.json'),JSON.stringify({compilerOptions:{strict:true,skipLibCheck:false,target:'ES2022',module:'ESNext',moduleResolution:'Bundler'},include:['src']}));
  writeFileSync(join(root,'src/main.ts'),`import {data,type CreatorCapability} from 'somewhere:data';

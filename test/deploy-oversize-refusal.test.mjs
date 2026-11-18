@@ -96,6 +96,6 @@ test('a large file kept out on purpose (.somewhereignore) and a large local note
   const body = JSON.parse(deploy.body);
   assert.equal(body.dry_run, true);
   const sent = [...Object.keys(body.files ?? {}), ...Object.keys(body.binary_files ?? {})];
-  assert.ok(sent.includes('.well-known/security.txt'), sent.join(','));
+  assert.ok(sent.includes('public/.well-known/security.txt'), sent.join(','));
   assert.ok(!sent.some((p) => p.includes('big.bin') || p.includes('transcript.log')), sent.join(','));
 });

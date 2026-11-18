@@ -54,17 +54,17 @@ test('classifyKey strips a win32 functions\\ prefix to the route', () => {
 test('classifyKey detects a win32 binary key', () => {
   const r = classifyKey('public\\photos\\cat.jpg');
   assert.equal(r.kind, 'binary');
-  assert.equal(r.key, 'photos/cat.jpg');
+  assert.equal(r.key, 'public/photos/cat.jpg');
 });
 
-test('classifyKey hoists public/ static files to the site root', () => {
+test('classifyKey preserves public/ source paths for platform serving aliases', () => {
   assert.deepEqual(classifyKey('public\\assets\\app.css'), {
     kind: 'static',
-    key: 'assets/app.css',
+    key: 'public/assets/app.css',
   });
   assert.deepEqual(classifyKey('public/images/logo.png'), {
     kind: 'binary',
-    key: 'images/logo.png',
+    key: 'public/images/logo.png',
   });
 });
 
@@ -98,7 +98,7 @@ test('collectFiles respects root .gitignore and .somewhereignore rules', () => {
   assert.equal(Object.keys(collected.functions).length, 0);
 });
 
-test('collectFiles hoists public/ assets in text and binary buckets', () => {
+test('collectFiles preserves public/ assets in text and binary upload buckets', () => {
   const dir = mkdtempSync(join(tmpdir(), 'sw-deploy-public-'));
   mkdirSync(join(dir, 'public', 'assets'), { recursive: true });
   mkdirSync(join(dir, 'public', 'images'), { recursive: true });
@@ -109,9 +109,9 @@ test('collectFiles hoists public/ assets in text and binary buckets', () => {
 
   const collected = collectFiles(dir);
 
-  assert.equal(collected.files['assets/app.css'], 'body { color: red; }\n');
+  assert.equal(collected.files['public/assets/app.css'], 'body { color: red; }\n');
   assert.equal(collected.files['index.html'], '<html></html>\n');
-  assert.equal(collected.binaryFiles['images/logo.png'], Buffer.from('png bytes\n').toString('base64'));
-  assert.equal('public/assets/app.css' in collected.files, false);
-  assert.equal('public/images/logo.png' in collected.binaryFiles, false);
+  assert.equal(collected.binaryFiles['public/images/logo.png'], Buffer.from('png bytes\n').toString('base64'));
+  assert.equal('assets/app.css' in collected.files, false);
+  assert.equal('images/logo.png' in collected.binaryFiles, false);
 });

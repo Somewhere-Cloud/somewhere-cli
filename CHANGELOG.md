@@ -1,3 +1,9 @@
+## 0.38.115
+
+- Find the public-repo adoption checklist from init and the installed skills.
+- Keep the running CLI in control of deploy when the installed project pin is older, and print unassigned app-role setup from the deploy result.
+- List unpublished files without deploying. Clarify required file versions, test users, browser action order and saved reports.
+
 ## 0.38.114
 
 - Publish a copy of a linked app with `deploy --new`. Init and deploy explain when to use it.

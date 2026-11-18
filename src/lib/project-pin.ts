@@ -121,6 +121,12 @@ export function decidePin(dir: string, running: string, argv: string[], env: Nod
   const pin = readProjectPin(dir);
   if (!pin || pinSatisfied(pin, running)) return none;
   const installed = installedPinnedCli(dir, pin, running);
+  if (argv[2] === 'deploy' && installed && semver.valid(running) && semver.lt(installed.version, running)) {
+    return {
+      notice: `This project is pinned to somewhere CLI ${pin.spec} (${pin.source}); deploy is using the running CLI ${running}.`,
+      delegate: null,
+    };
+  }
   return { notice: pinNotice(pin, running, installed?.version ?? null), delegate: installed?.bin ?? null };
 }
 

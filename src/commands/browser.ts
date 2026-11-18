@@ -695,7 +695,7 @@ export function registerBrowser(program: Command) {
         `A localhost / 127.0.0.1 target — the app \`${cliInvocation()} dev\` is serving — is driven by the ` +
         'browser installed on THIS machine, so you can check a page before you deploy it. ' +
         '`target` is a URL (https://…) or a project ref; defaults to the linked project. ' +
-        'Add steps with --path / --wait / --eval / --screenshot. ' +
+        'Steps run in this order: --path, action flags in the order given, --wait, then --eval. Use --actions for an exact sequence. ' +
         'Exits non-zero when the page is unhealthy (a step failed, a request failed, or JS threw).',
     )
     .option(
@@ -737,7 +737,7 @@ export function registerBrowser(program: Command) {
       'Hosted/deployed pages only: keep one live browser page (cookies, storage, sign-in) across calls under this handle, including after a failed step. Localhost is excluded because the local browser is intentionally bounded to one CLI process; omit --session and pass the local URL again for a fresh local call. Hosted sessions end after 5 min idle or 10 min in total; a call that finds its session ended says it started a fresh signed-out browser. --url only sets where a NEW session starts; a live session stays on its page, so move it with --path or a goto action.',
     )
     .option('--close <session>', 'Close a hosted session by its handle and free its slot (live sessions count against your plan\'s limit). Sessions belong to the project they were opened for: this closes the one in --project, else the linked project; with neither, the one opened without a project.')
-    .option('--auth-user <email|user_id>', "Start signed in as one of your app's users. An email is looked up in the project (--project or the linked one) and must match exactly one user.")
+    .option('--auth-user <email|user_id>', "Start signed in as one of your app's users. An email is looked up in the project (--project or the linked one) and must match exactly one user. For a prepared test user, pass the user ID from the test-users manifest.")
     .option('--json', 'Print the raw browser response envelope as JSON.')
     .action(async (target: string | undefined, opts: BrowserOptions) => {
       opts.actionSequence = [...actionSequence];

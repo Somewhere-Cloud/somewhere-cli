@@ -162,3 +162,13 @@ test('deploy --dry-run, live temporary session and linked folder: dry run only, 
   assert.deepEqual(snapshot(fx.configDir), before.config);
   assert.ok(existsSync(join(fx.app, '.somewhere.json')));
 });
+
+test('--list-unpublished reports local omissions without a request or project link', async () => {
+  const { app, configDir } = fixture();
+  const before = requests.length;
+  const result = await run(['deploy', '--list-unpublished', '--json'], app, configDir);
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(JSON.parse(result.stdout).excluded.map(file => file.path), ['NOTES.md']);
+  assert.equal(requests.length, before);
+  assert.equal(existsSync(join(app, '.somewhere.json')), false);
+});

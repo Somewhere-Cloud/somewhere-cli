@@ -141,7 +141,7 @@ test('init in a copied folder gives the adoption command before asking for a nam
     writeFileSync(join(dir, 'index.html'), '<title>Author</title>');
     const run = await cli([], dir, { signedIn, npmCommand: 'exec' });
     assert.equal(run.status, 1, run.out);
-    assert.equal(run.out.trim(), '✗ This folder is already linked to a Somewhere project. Run `npx -y @somewhere-cloud/cli@latest deploy --new` to publish a new project and update .somewhere.json.');
+    assert.equal(run.out.trim(), '✗ This folder is already linked to a Somewhere project. Run `npx -y @somewhere-cloud/cli@latest deploy --new` to publish a new project and update .somewhere.json. Run npx -y @somewhere-cloud/cli@latest docs adopt for the setup checklist.');
     assert.equal(readFileSync(join(dir, '.somewhere.json'), 'utf8'), link);
     assert.deepEqual(requests, []);
   }

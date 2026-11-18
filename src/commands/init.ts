@@ -159,7 +159,7 @@ export async function runInit(opts: InitOptions, command: Command): Promise<void
   }
   const existing = loadProjectConfig(dir);
   if (existing && !opts.link) {
-    error(`This folder is already linked to a Somewhere project. Run \`${newProjectCommand()}\` to publish a new project and update .somewhere.json.`);
+    error(`This folder is already linked to a Somewhere project. Run \`${newProjectCommand()}\` to publish a new project and update .somewhere.json. Run ${cliInvocation()} docs adopt for the setup checklist.`);
     process.exit(1);
   }
   if (opts.json && opts.link && !opts.project) {
@@ -233,6 +233,7 @@ export async function runInit(opts: InitOptions, command: Command): Promise<void
         reportPin(dir);
         info(`Next: ${cliInvocation()} deploy — publish with a temporary workspace, no login needed.`);
         info(`Quickstart: ${cliInvocation()} docs start`);
+        info(`Running a public repo? See ${cliInvocation()} docs adopt.`);
       }
     } catch (err) {
       error(err instanceof Error ? err.message : String(err), err);
@@ -368,6 +369,7 @@ export async function runInit(opts: InitOptions, command: Command): Promise<void
 
     console.log('');
     printNext({ stage: 'init', scaffolded: shouldScaffold });
+    info(`Running a public repo? See ${cliInvocation()} docs adopt.`);
   } catch (err) {
     spinner?.fail('Failed to create project');
     error(err instanceof Error ? err.message : String(err), err);

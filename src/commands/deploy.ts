@@ -675,7 +675,7 @@ export function registerDeploy(program: Command) {
     .addOption(new Option('--test', 'After a successful deploy, run somewhere test once against the new release').hideHelp())
     .option('-m, --message <text>', 'User-supplied note for this version (max 200 characters)')
     .option('--json', 'Print the raw deploy response as JSON on stdout; files left out locally are listed on stderr by path and reason')
-    .option('--list-unpublished', 'List the local files this deploy keeps on your machine, and how to publish one on purpose')
+    .option('--list-unpublished', 'List the local files deploy would keep on your machine, then exit')
     .option('--allow-type-errors', 'Upload even when the local TypeScript check fails')
     .option('--timing', 'Print deploy details and timings')
     .action(async (dir: string | undefined, opts) => {
@@ -688,6 +688,17 @@ export function registerDeploy(program: Command) {
         if (opts.json) printJsonError('INVALID_OPTIONS', message);
         else error(message);
         process.exit(1);
+      }
+      if (opts.listUnpublished) {
+        const { excluded, sensitive, skipped } = collectFiles(targetDir, { include: opts.include ?? [] });
+        if (opts.json) printJson({ excluded, sensitive, skipped });
+        else {
+          if (excluded.length) printExcludedFiles(excluded, targetDir, { list: true });
+          else info('No local files excluded by the publish rules.');
+          if (sensitive.length) printSensitiveFiles(sensitive);
+          for (const file of skipped) warn(`Not uploaded: ${file.path} — ${file.reason}`);
+        }
+        return;
       }
       markProcessStart('cli');
       timelineMark('cli:action');
@@ -1102,10 +1113,10 @@ export function registerDeploy(program: Command) {
       // folder it was built in. Name every held-back file — a silent exclusion
       // is how a private note gets published, and how a needed file goes
       // missing without anyone noticing.
-      if (excluded.length && !opts.json && (!tempSession || tempSession.reused || opts.listUnpublished || opts.timing)) {
+      if (excluded.length && !opts.json && (!tempSession || tempSession.reused || opts.timing)) {
         spinner?.stop();
         // A dry run leaves .somewhere.json as it found it.
-        printExcludedFiles(excluded, targetDir, { list: Boolean(opts.listUnpublished) });
+        printExcludedFiles(excluded, targetDir);
         if (process.stderr.isTTY) spinner?.start();
       }
       if (sensitive.length && !opts.json) {
@@ -1553,6 +1564,11 @@ export function registerDeploy(program: Command) {
           }
         }
 
+        for (const role of result.unassigned_app_roles ?? []) {
+          const command = role.command.replace(/^somewhere /, `${cliInvocation()} `);
+          info(`App role ${role.role} has no holder yet. After the person signs in${role.sign_in_url ? ` at ${role.sign_in_url}` : ' to the app'}, run: ${command}`);
+        }
+
         // Remind the dev of the round-trip trade-off they opted into. Raw
         // source stays editable end-to-end; bundled files do not — pull/export
         // round-trips, find/replace patches, and visual editing are disabled
@@ -1726,6 +1742,7 @@ export function registerDeploy(program: Command) {
 export interface DeployResult {
   previous?: { version: number; rollback_available: boolean; note?: string; message: string };
   privacy_lines?: string[];
+  unassigned_app_roles?: Array<{ role: string; sign_in_url?: string; command: string }>;
   project_id?: string;
   version?: number;
   release_id?: string;

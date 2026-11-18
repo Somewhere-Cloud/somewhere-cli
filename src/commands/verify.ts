@@ -1810,7 +1810,7 @@ export function formatVerifyOutput(
     ? formatVerifyJourneyReport(report, path) : formatVerifyReport(report, path);
   try {
     const path = save(report);
-    return [...format(path), `Full report and screenshot links: ${path}`];
+    return [...format(path), 'Set SOMEWHERE_CONFIG_DIR to change the default report location.', `Full report and screenshot links: ${path}`];
   } catch {
     return ['Could not save the verification report; full screenshot links are shown below.', ...format()];
   }

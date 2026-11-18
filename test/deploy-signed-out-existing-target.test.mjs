@@ -69,9 +69,13 @@ for (const [label, args, link] of [
     const result = await run(args, { link });
     assert.equal(result.status, 1, result.out);
     assert.deepEqual(requests, [], 'no proof-of-work, no temporary account, no deploy');
-    assert.match(result.out, /not signed in, and a new temporary workspace cannot deploy to an existing project\. Nothing was created or sent\./);
-    assert.match(result.out, /somewhere login/);
-    assert.match(result.out, /somewhere auth set/);
+    if (link) {
+      assert.match(result.out, /This folder is linked to an existing project and this terminal is signed out\. Run `somewhere deploy --new`/);
+    } else {
+      assert.match(result.out, /not signed in, and a new temporary workspace cannot deploy to an existing project\. Nothing was created or sent\./);
+      assert.match(result.out, /somewhere login/);
+      assert.match(result.out, /somewhere auth set/);
+    }
   });
 }
 

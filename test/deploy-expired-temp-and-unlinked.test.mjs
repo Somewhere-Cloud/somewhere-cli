@@ -59,19 +59,12 @@ const expiredTemp = {
 };
 const link = { project_id: 'proj_old_temp', name: 'old-temp', subdomain: 'old-temp' };
 
-test('expired temporary session + linked folder: explains expiry, mints nothing, sends nothing', async () => {
+test('expired temporary session + linked folder: offers adoption, mints nothing, sends nothing', async () => {
   requests.length = 0;
   const { app, configDir } = fixture({ config: expiredTemp, link });
   const r = await run(['deploy'], app, configDir);
   assert.equal(r.status, 1, r.stdout + r.stderr);
-  assert.ok(r.stderr.includes(`expired at ${expiredAt}, and this machine has no record of a claim`), r.stderr);
-  assert.doesNotMatch(r.stderr, /without being claimed/);
-  assert.match(r.stderr, /Nothing was deployed/);
-  assert.match(r.stderr, /delete this folder's \.somewhere\.json, then run `somewhere deploy`/);
-  // Someone who claimed the workspace is told to sign in BEFORE being told to delete the link.
-  const claimAt = r.stderr.indexOf('If you claimed this workspace in the browser, sign in with `somewhere login`');
-  assert.ok(claimAt >= 0 && claimAt < r.stderr.indexOf('.somewhere.json'), r.stderr);
-  assert.match(r.stderr, /somewhere init --bare --name <name>/);
+  assert.match(r.stderr, /This folder is linked to an existing project and this terminal is signed out\. Run `somewhere deploy --new`/);
   assert.doesNotMatch(r.stdout + r.stderr, /Project not found|proof-of-work|proj_old_temp/i);
   assert.deepEqual(requests, []);
 });

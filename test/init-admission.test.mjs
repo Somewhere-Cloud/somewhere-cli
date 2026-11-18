@@ -31,13 +31,13 @@ await new Promise((resolve) => api.listen(0, '127.0.0.1', resolve));
 const apiUrl = `http://127.0.0.1:${api.address().port}`;
 test.after(() => api.close());
 
-function cli(args, cwd, { signedIn = true } = {}) {
+function cli(args, cwd, { signedIn = true, npmCommand = '' } = {}) {
   const configDir = tempDir('somewhere-init-admission-config-');
   if (signedIn) writeFileSync(join(configDir, 'config.json'), JSON.stringify({ token: 'smt_fixture_not_real' }));
   return new Promise((resolve) => {
     const child = spawn(process.execPath, [cliBin, 'init', ...args], {
       cwd,
-      env: { ...process.env, SOMEWHERE_CONFIG_DIR: configDir, SOMEWHERE_API_URL: apiUrl, NO_COLOR: '1' },
+      env: { ...process.env, npm_command: npmCommand, SOMEWHERE_CONFIG_DIR: configDir, SOMEWHERE_API_URL: apiUrl, NO_COLOR: '1' },
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     let stdout = '';
@@ -130,4 +130,19 @@ test('an empty folder still reaches project creation; --features in a non-empty 
   assert.match(features.out, /nothing was created/);
   assert.deepEqual(requests, []);
   assert.deepEqual(readdirSync(stray), ['start']);
+});
+
+test('init in a copied folder gives the adoption command before asking for a name or using the network', async () => {
+  for (const signedIn of [true, false]) {
+    requests = [];
+    const dir = tempDir();
+    const link = JSON.stringify({ project_id: 'copied-project', name: 'author' });
+    writeFileSync(join(dir, '.somewhere.json'), link);
+    writeFileSync(join(dir, 'index.html'), '<title>Author</title>');
+    const run = await cli([], dir, { signedIn, npmCommand: 'exec' });
+    assert.equal(run.status, 1, run.out);
+    assert.equal(run.out.trim(), '✗ This folder is already linked to a Somewhere project. Run `npx -y @somewhere-cloud/cli@latest deploy --new` to publish a new project and update .somewhere.json.');
+    assert.equal(readFileSync(join(dir, '.somewhere.json'), 'utf8'), link);
+    assert.deepEqual(requests, []);
+  }
 });

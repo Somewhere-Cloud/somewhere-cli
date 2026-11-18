@@ -8,6 +8,8 @@ import {
 import { dirname, relative, resolve } from 'node:path';
 import { isAppSurfaceRootFile } from './publish-surface.js';
 
+export const PROJECT_LINK_README = '`.somewhere.json` records which Somewhere project this folder deploys to and is safe to commit.';
+
 export interface InitScaffoldFile {
   path: string;
   content: string;

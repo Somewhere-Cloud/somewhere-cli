@@ -37,7 +37,7 @@ test('--auth-user: an id passes through; an email must match exactly one user', 
   assert.equal(await resolveAuthUser(client([]), 'p1', 'usr_123'), 'usr_123');
   assert.equal(calls.length, 0, 'no lookup for an id');
   assert.equal(await resolveAuthUser(client([{ id: 'usr_bob', email: 'Bob@Example.com' }, { id: 'usr_bobby', email: 'bobby@example.com' }]), 'p1', 'bob@example.com'), 'usr_bob');
-  assert.deepEqual(calls.at(-1), { method: 'GET', path: '/auth/users', query: { project_id: 'p1', search: 'bob@example.com', limit: '200' } });
+  assert.deepEqual(calls.at(-1), { method: 'GET', path: '/auth/users', query: { project_id: 'p1', search: 'bob@example.com', include_test: '1', limit: '200' } });
   await assert.rejects(resolveAuthUser(client([]), 'p1', 'carol@example.com'), /No user with email carol@example\.com/);
   await assert.rejects(resolveAuthUser(client([{ id: 'a', email: 'x@y.z' }, { id: 'b', email: 'X@y.z' }]), 'p1', 'x@y.z'), /More than one user/);
   await assert.rejects(resolveAuthUser(client([]), undefined, 'bob@example.com'), /needs a project/);

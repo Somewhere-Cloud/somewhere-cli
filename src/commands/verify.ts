@@ -1965,6 +1965,18 @@ Minimal --flow JSON:
   }
 
 Save that object as flow.json, then pass --flow flow.json.
+
+Signed-in check (from a linked folder):
+  Run: ${cliInvocation()} test-users prepare owner
+  Copy the printed user ID into owner-flow.json:
+  { "auth": { "user_id": "<app-user-id>" }, "actions": [], "viewports": ["desktop"] }
+  Grant the actor any app role that page requires.
+  Run: ${cliInvocation()} verify --path /admin --flow owner-flow.json
+  When done, run: ${cliInvocation()} test-users cleanup
+
+Reports default to verify-reports/ inside the CLI config directory.
+Set SOMEWHERE_CONFIG_DIR before signing in to relocate both the CLI config
+and default reports. Use --out to choose just the report file for one run.
 Each viewport runs every action as its own browser session, at the same time,
 against the same live app, so a step that signs up or creates a unique record
 runs once per viewport. Create it in one viewport, or use the journey below.

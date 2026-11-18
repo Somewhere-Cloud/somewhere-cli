@@ -304,7 +304,7 @@ export async function resolveAuthUser(
   for (let page = 0; page < AUTH_USER_LOOKUP_PAGES; page++) {
     const result = await client.call<{ users?: Array<{ id?: unknown; email?: unknown }>; next_cursor?: unknown }>(
       'GET', '/auth/users', undefined,
-      { project_id: projectId, search: wanted, limit: '200', ...(cursor ? { cursor } : {}) },
+      { project_id: projectId, search: wanted, include_test: '1', limit: '200', ...(cursor ? { cursor } : {}) },
     );
     matches.push(...(result?.users ?? []).filter((user) =>
       typeof user.email === 'string' && user.email.toLowerCase() === wanted.toLowerCase() && typeof user.id === 'string'));
@@ -707,8 +707,8 @@ export function registerBrowser(program: Command) {
       "Explicit URL to open — any public page, or a path on --project's origin.",
     )
     .option('--path <path>', 'Navigate to this path first (e.g. /login) before the other steps.')
-    .option('--wait <selector>', 'Wait for a CSS selector to become visible before capturing (single-step flag).')
-    .option('--eval <js>', 'Evaluate JavaScript in the page and print its result (single-step flag).')
+    .option('--wait <selector>', 'Wait for a CSS selector to become visible after the ordered action flags and before --eval. For an earlier wait, put it at the right position in --actions.')
+    .option('--eval <js>', 'Evaluate JavaScript in the page and print its result after the ordered action flags and --wait. For an earlier evaluation, use --actions.')
     .option('--click <selector>', 'Click a visible CSS selector. Repeat to build an ordered action sequence.', collectClick)
     .option('--fill <selector=value>', "Fill an input, e.g. --fill '#email=a@b.co'. Repeatable.", collectFill)
     .option('--upload <selector=file>', "Attach a local file, e.g. --upload '#avatar=./photo.png'. The path is taken from the last '=', so attribute selectors work: --upload '[data-testid=file]=./shot.png'. Use <selector>::<file> when the path itself contains '='. Repeatable.", collectUpload)
@@ -737,7 +737,7 @@ export function registerBrowser(program: Command) {
       'Hosted/deployed pages only: keep one live browser page (cookies, storage, sign-in) across calls under this handle, including after a failed step. Localhost is excluded because the local browser is intentionally bounded to one CLI process; omit --session and pass the local URL again for a fresh local call. Hosted sessions end after 5 min idle or 10 min in total; a call that finds its session ended says it started a fresh signed-out browser. --url only sets where a NEW session starts; a live session stays on its page, so move it with --path or a goto action.',
     )
     .option('--close <session>', 'Close a hosted session by its handle and free its slot (live sessions count against your plan\'s limit). Sessions belong to the project they were opened for: this closes the one in --project, else the linked project; with neither, the one opened without a project.')
-    .option('--auth-user <email|user_id>', "Start signed in as one of your app's users. An email is looked up in the project (--project or the linked one) and must match exactly one user. For a prepared test user, pass the user ID from the test-users manifest.")
+    .option('--auth-user <email|user_id>', "Start signed in as an app user, including a prepared test user. An email must match exactly one user in the selected or linked project.")
     .option('--json', 'Print the raw browser response envelope as JSON.')
     .action(async (target: string | undefined, opts: BrowserOptions) => {
       opts.actionSequence = [...actionSequence];

@@ -116,10 +116,15 @@ async function runTaskTool(
   }
 }
 
+function resolveTaskProject(project: string | undefined): string {
+  return resolveProjectRef(project, ' Use -p default for the shared organization board if you have access.');
+}
+
 export function registerTasks(program: Command): void {
   const tasks = program
     .command('tasks')
-    .description('List, read, create, update, delete, and restore platform tasks');
+    .description('List, read, create, update, delete, and restore platform tasks')
+    .addHelpText('after', `\nShared organization board (requires access): ${cliInvocation()} tasks list -p default`);
 
   tasks
     .command('list')
@@ -142,7 +147,7 @@ export function registerTasks(program: Command): void {
     .option('--json', 'Print the complete response as JSON')
     .action(async (opts: TaskListOptions) => {
       const args = compactRecord([
-        ['project_id', resolveProjectRef(opts.project)],
+        ['project_id', resolveTaskProject(opts.project)],
         ['status', opts.status],
         ['type', opts.type],
         ['assignee', opts.assignee],
@@ -189,7 +194,7 @@ export function registerTasks(program: Command): void {
     .option('--json', 'Print the complete response as JSON')
     .action(async (taskId: string, opts: TaskReadOptions) => {
       await runTaskTool('tasks_get', compactRecord([
-        ['project_id', resolveProjectRef(opts.project)], ['task_id', taskId],
+        ['project_id', resolveTaskProject(opts.project)], ['task_id', taskId],
         ['view', opts.view], ['kind', opts.kind], ['field', opts.field], ['event_id', opts.eventId],
         ['cursor', opts.cursor], ['offset', numberOption(opts.offset)], ['limit', numberOption(opts.limit)],
       ]), opts.json, (value) => printJson(unwrapPlatformData(value)));
@@ -211,7 +216,7 @@ export function registerTasks(program: Command): void {
     .option('--json', 'Print the complete response as JSON')
     .action(async (title: string, opts: TaskWriteOptions) => {
       const args = compactRecord([
-        ['project_id', resolveProjectRef(opts.project)],
+        ['project_id', resolveTaskProject(opts.project)],
         ['title', title],
         ['description', opts.description],
         ['status', opts.status],
@@ -250,7 +255,7 @@ export function registerTasks(program: Command): void {
     .option('--json', 'Print the complete response as JSON')
     .action(async (taskId: string, opts: TaskWriteOptions & { title?: string }) => {
       const args = compactRecord([
-        ['project_id', resolveProjectRef(opts.project)],
+        ['project_id', resolveTaskProject(opts.project)],
         ['task_id', taskId],
         ['title', opts.title],
         ['description', opts.description],
@@ -287,7 +292,7 @@ export function registerTasks(program: Command): void {
     .action(async (taskIds: string[], opts: ProjectOptions & { reason: string }) => {
       if (taskIds.length > 200) throw new Error('At most 200 task IDs may be deleted per call.');
       await runTaskTool('tasks_delete', compactRecord([
-        ['project_id', resolveProjectRef(opts.project)], [taskIds.length === 1 ? 'task_id' : 'task_ids', taskIds.length === 1 ? taskIds[0] : taskIds], ['reason', opts.reason],
+        ['project_id', resolveTaskProject(opts.project)], [taskIds.length === 1 ? 'task_id' : 'task_ids', taskIds.length === 1 ? taskIds[0] : taskIds], ['reason', opts.reason],
       ]), opts.json, (value) => {
         const data = unwrapPlatformData(value);
         if (!isRecord(data) || typeof data.id !== 'string') { printJson(value); return; }
@@ -305,7 +310,7 @@ export function registerTasks(program: Command): void {
     .option('--json', 'Print the complete response as JSON')
     .action(async (taskId: string, opts: ProjectOptions & { reason?: string }) => {
       await runTaskTool('tasks_restore', compactRecord([
-        ['project_id', resolveProjectRef(opts.project)], ['task_id', taskId], ['reason', opts.reason],
+        ['project_id', resolveTaskProject(opts.project)], ['task_id', taskId], ['reason', opts.reason],
       ]), opts.json, (value) => {
         const data = unwrapPlatformData(value);
         if (!isRecord(data) || typeof data.id !== 'string') { printJson(value); return; }
@@ -322,7 +327,7 @@ export function registerTasks(program: Command): void {
     .option('-p, --project <project>', 'Project slug or ID; defaults to the linked project')
     .option('--json', 'Print the complete response as JSON')
     .action(async (opts: ProjectOptions) => {
-      await runTaskTool('tasks_restore', compactRecord([['project_id', resolveProjectRef(opts.project)]]), opts.json, (value) => {
+      await runTaskTool('tasks_restore', compactRecord([['project_id', resolveTaskProject(opts.project)]]), opts.json, (value) => {
         const data = unwrapPlatformData(value);
         if (!Array.isArray(data)) throw new Error('tasks_restore returned an unexpected response.');
         if (data.length === 0) { console.log(dim('No deleted tasks to restore.')); return; }

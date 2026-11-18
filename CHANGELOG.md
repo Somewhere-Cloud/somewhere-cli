@@ -1,3 +1,8 @@
+## 0.38.114
+
+- Publish a copy of a linked app with `deploy --new`. Init and deploy explain when to use it.
+- Explain the project link file in the starter README.
+
 ## 0.38.113
 
 - Explain how rollback and numbered restore affect the database.

@@ -1,5 +1,6 @@
 import { cliInvocation } from './cli-invocation.js';
 import { loadConfig } from './config.js';
+import { shellQuote } from './next-actions.js';
 
 /** Appended wherever a command needs a project and this folder has no link
  *  ( item 15): name the exact commands that link one, instead of
@@ -11,4 +12,8 @@ export function unlinkedFolderHint(): string {
   return signedIn
     ? ` Link this folder to a project: \`${cliInvocation()} init --link --project <name-or-id>\` (list yours with \`${cliInvocation()} projects\`), or create one: \`${cliInvocation()} init --bare --name <name>\`.`
     : ` Sign in first (\`${cliInvocation()} login\`), then link this folder: \`${cliInvocation()} init --link --project <name-or-id>\`.`;
+}
+
+export function newProjectCommand(dir?: string): string {
+  return `${cliInvocation()} deploy --new${dir ? ` ${shellQuote(dir)}` : ''}`;
 }

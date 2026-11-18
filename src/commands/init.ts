@@ -1,4 +1,5 @@
 import { cliInvocation } from '../lib/cli-invocation.js';
+import { newProjectCommand } from '../lib/link-hint.js';
 import { Command } from 'commander';
 import prompts from 'prompts';
 import ora from '../lib/spinner.js';
@@ -156,6 +157,11 @@ export async function runInit(opts: InitOptions, command: Command): Promise<void
     error('--subdomain names a new project; it cannot be combined with --link.');
     process.exit(1);
   }
+  const existing = loadProjectConfig(dir);
+  if (existing && !opts.link) {
+    error(`This folder is already linked to a Somewhere project. Run \`${newProjectCommand()}\` to publish a new project and update .somewhere.json.`);
+    process.exit(1);
+  }
   if (opts.json && opts.link && !opts.project) {
     error('--project <ref> is required with --link --json.');
     process.exit(1);
@@ -191,7 +197,6 @@ export async function runInit(opts: InitOptions, command: Command): Promise<void
       ? createGreenTemplate()
       : createFeatureTemplate(plan?.selection ?? DEFAULT_AUTH_SELECTION, { appName: projectName });
 
-  const existing = loadProjectConfig(dir);
   // Missing credentials never block local source generation. Linking and
   // bare project creation remain account operations; deploy owns anonymous
   // provisioning and its proof-of-work / temporary-session isolation.
@@ -238,13 +243,6 @@ export async function runInit(opts: InitOptions, command: Command): Promise<void
   const token = getToken();
   const client = new ApiClient(token);
   if (existing && !opts.project) {
-    if (opts.json) {
-      error(`This directory is already linked to ${existing.name}.`);
-      process.exit(1);
-    }
-    if (!process.stdin.isTTY) {
-      failNonInteractive(`This directory is already linked to ${existing.name}. Run init in an empty directory, or relink with \`${cliInvocation()} init --link --project <ref>\`.`);
-    }
     warn(`This directory is already linked to ${teal(existing.name)}`);
     const { overwrite } = await prompts({
       type: 'confirm',

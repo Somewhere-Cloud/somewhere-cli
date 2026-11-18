@@ -1,3 +1,4 @@
+import { newProjectCommand } from '../lib/link-hint.js';
 import { roleMethodHints } from '../lib/role-method-hints.js';
 import { cliInvocation } from '../lib/cli-invocation.js';
 import { suppressExitNotices } from '../lib/notify/index.js';
@@ -431,10 +432,6 @@ export function formatSignedInUnlinkedExplanation(): string {
 }
 
 /** An adopter can choose a new project without editing the link by hand. */
-function newProjectCommand(dir?: string): string {
-  return `${cliInvocation()} deploy --new${dir ? ` ${shellQuote(dir)}` : ''}`;
-}
-
 export function formatLinkedProjectAccessRefusal(signedIn: boolean, dir?: string): string {
   const command = newProjectCommand(dir);
   return signedIn

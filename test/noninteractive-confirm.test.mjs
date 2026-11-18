@@ -162,8 +162,9 @@ test('init in an already-linked directory fails fast instead of asking to overwr
   const { env, cwd } = initSetup('sw-noninteractive-init-linked', { linked: true });
   const result = await run(['init', '--name', 'another-app'], { cwd, env });
 
-  assert.equal(result.status, 2, `stdout:\n${result.stdout}\nstderr:\n${result.stderr}`);
-  assert.match(result.stderr, /already linked to noninteractive/);
+  assert.equal(result.status, 1, `stdout:\n${result.stdout}\nstderr:\n${result.stderr}`);
+  assert.match(result.stderr, /already linked to a Somewhere project/);
+  assert.match(result.stderr, /`somewhere deploy --new`/);
   assert.doesNotMatch(result.stdout, /Overwrite\?/);
 });
 

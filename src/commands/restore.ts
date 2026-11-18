@@ -18,6 +18,7 @@ export function registerRestore(program: Command) {
     .description(
       `Make an earlier deployed version live again, by number (e.g. \`${cliInvocation()} restore 3\`). ` +
         'The platform puts that version\'s build back in production, with its functions; nothing is re-uploaded and this folder is not changed. ' +
+        'Restoring by number leaves the database schema and data unchanged. ' +
         `\`${cliInvocation()} rollback\` is the shortcut for the previous version. Afterwards \`${cliInvocation()} pull\` brings this folder to the restored version.`,
     )
     .option('--project <ref>', 'Project ID, name, slug, or subdomain (defaults to the linked project)')

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
@@ -40,6 +40,20 @@ test('file --version reaches the file command and prints the original bytes', as
     assert.deepEqual(Buffer.concat(stdout), bytes);
   } finally {
     await new Promise(resolve => server.close(resolve));
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('rollback and restore help explain what happens to the database', () => {
+  const root = mkdtempSync(join(tmpdir(), 'sw-rollback-help-'));
+  try {
+    const help = command => execFileSync(process.execPath, [cli, command, '--help'], {
+      encoding: 'utf8', cwd: root,
+      env: { ...process.env, SOMEWHERE_CONFIG_DIR: root, CI: '1', NO_COLOR: '1' },
+    }).replace(/\s+/g, ' ');
+    assert.ok(help('rollback').includes('By default this changes code without restoring data.'));
+    assert.ok(help('restore').includes('Restoring by number leaves the database schema and data unchanged.'));
+  } finally {
     rmSync(root, { recursive: true, force: true });
   }
 });

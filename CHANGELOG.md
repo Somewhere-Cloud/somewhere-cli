@@ -1,3 +1,7 @@
+## 0.38.113
+
+- Explain how rollback and numbered restore affect the database.
+
 ## 0.38.112
 
 - List versions and set deploy notes with `somewhere deploys`.

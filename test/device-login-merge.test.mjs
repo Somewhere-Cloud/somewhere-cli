@@ -129,11 +129,13 @@ test('device login saves two temporary projects and both folders deploy with the
   assert.deepEqual(state.writes, folders.map(({ projectId }) => ({ projectId, member: true, temporary: false })));
 });
 
-test('one transferred project uses the singular receipt', async t => {
-  const { folders, run } = await withFixture(t, { count: 1 });
+test('temporary login from an older pinned project transfers it with the running CLI', async t => {
+  const { folders, run, state } = await withFixture(t, { count: 1 });
+  writeFileSync(join(folders[0].cwd, 'package.json'), JSON.stringify({ somewhere: { cli_version: '0.38.123' } }));
   const result = await run(folders[0].cwd, ['login']);
   assert.equal(result.code, 0);
   assert.match(result.output, /Added 1 temporary project to member@example\.invalid\./);
+  assert.equal(state.registered[0].merge, true);
 });
 
 test('a refused, denied, abandoned or failed redemption leaves the temporary project usable', async t => {

@@ -1,5 +1,6 @@
 import { CLI_PACKAGE_ROOT } from './package-root.js';
 import { cliInvocation } from './cli-invocation.js';
+import { loadConfig } from './config.js';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import semver from 'semver';
@@ -130,6 +131,9 @@ export function decidePin(dir: string, running: string, argv: string[], env: Nod
   if (env[PINNED_CHILD_ENV] === '1' || PIN_EXEMPT.has(argv[2] ?? '')) return none;
   const pin = readProjectPin(dir);
   if (!pin || pinSatisfied(pin, running)) return none;
+  // Temporary credentials are shared across folders. Use the running CLI's
+  // merge-aware login so an older starter pin cannot strand those projects.
+  if (argv[2] === 'login' && loadConfig()?.temporary) return none;
   const installed = installedPinnedCli(dir, pin, running);
   if (pin.versionOnly) {
     if (installed) return { notice: pinNotice(pin, running, installed.version), delegate: installed.bin };

@@ -1,7 +1,7 @@
+import { CLI_PACKAGE_ROOT } from './package-root.js';
 import { cliInvocation } from './cli-invocation.js';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
 import semver from 'semver';
 
 /**
@@ -171,7 +171,7 @@ export interface ChangelogEntry {
 
 /** This CLI's own CHANGELOG.md, shipped in the package. */
 export function readBundledChangelog(): string {
-  return readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'CHANGELOG.md'), 'utf8');
+  return readFileSync(join(CLI_PACKAGE_ROOT, 'CHANGELOG.md'), 'utf8');
 }
 
 /** The `## x.y.z` sections above `from` up to and including `to`, newest first. */

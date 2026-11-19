@@ -1,3 +1,4 @@
+import { CLI_PACKAGE_ROOT } from './package-root.js';
 import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join, resolve } from 'node:path';
@@ -32,7 +33,7 @@ export interface DeclaredDataClient {
   manifest: { version: number; contract_digest: string; tables: unknown[]; declaration: string };
 }
 // This file is bundled from the platform's parser and compiler; no second DSL.
-const require = createRequire(import.meta.url);
+const require = createRequire(CLI_PACKAGE_ROOT);
 
 interface DeclaredDataGenerator {
   generateFromFiles(files: Record<string, string>): DeclaredDataClient | undefined;
@@ -55,7 +56,7 @@ export interface LocalDeclaredData {
 }
 
 /** The generated somewhere:files declaration; the compiler's own file name. */
-export const FILES_DECLARATION_FILE = (require('../../runtime/declared-data.cjs') as DeclaredDataGenerator).FILES_DECLARATION_FILE;
+export const FILES_DECLARATION_FILE = (require('./runtime/declared-data.cjs') as DeclaredDataGenerator).FILES_DECLARATION_FILE;
 
 function generatedContents(path: string): string | undefined {
   const previous = existsSync(path) ? readFileSync(path, 'utf8') : undefined;
@@ -82,7 +83,7 @@ export function prepareDeclaredData(projectDir: string): LocalDeclaredData | und
     if (previousFiles?.startsWith(GENERATED_DATA_HEADER)) rmSync(filesPath);
     // A file of the user's own at the reserved path is left alone, as before.
     if (previous !== undefined && !previous.startsWith(GENERATED_DATA_HEADER)) return undefined;
-    const generator = require('../../runtime/declared-data.cjs') as DeclaredDataGenerator;
+    const generator = require('./runtime/declared-data.cjs') as DeclaredDataGenerator;
     const declaration = GENERATED_DATA_HEADER + NO_SCHEMA_NOTE + generator.RUNTIME_CONTEXT_DECLARATION
       + generator.ENDPOINT_DECLARATION + SW_ENDPOINT_GLOBAL;
     if (declaration !== previous) writeFileSync(declarationPath, declaration);
@@ -96,7 +97,7 @@ export function prepareDeclaredData(projectDir: string): LocalDeclaredData | und
   let tables: string;
   let runtimeDeclaration: string;
   let filesDeclaration: string | undefined;
-  const generator = require('../../runtime/declared-data.cjs') as DeclaredDataGenerator;
+  const generator = require('./runtime/declared-data.cjs') as DeclaredDataGenerator;
   try {
     const files = { 'db/schema.ts': readFileSync(schemaPath, 'utf8') };
     client = generator.generateFromFiles(files);

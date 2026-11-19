@@ -1,6 +1,6 @@
+import { CLI_PACKAGE_ROOT } from './package-root.js';
 import { createRequire } from 'node:module';
 import { join, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { spawn, spawnSync } from 'node:child_process';
 import { appendFileSync, existsSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { createHash, randomUUID } from 'node:crypto';
@@ -109,7 +109,7 @@ export async function runTests(input: { root: string; client?: ApiClient; projec
   // DNS client: on a resolver whose first nameserver times out, Chrome's own client waited ~2 s in
   // every fresh browser before the first page could load.
   const use = { baseURL: origin, channel: prepared.channel, trace: 'off', video: 'off', screenshot: 'off', launchOptions: { args: ['--disable-features=AsyncDns'] } };
-  writePrivateFile(config, `module.exports = ${JSON.stringify({ testDir: join(root, 'tests'), testMatch: '**/*.spec.ts', fullyParallel: true, forbidOnly: !subset, retries: 0, workers: Number(options.workers), outputDir: artifacts, reporter: [[join(dirname(fileURLToPath(import.meta.url)), 'test-reporter.js')]], use, ...(options.phone ? { projects: [{ name: 'desktop' }, { name: 'phone', use: { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true } }] } : {}) })};\n`);
+  writePrivateFile(config, `module.exports = ${JSON.stringify({ testDir: join(root, 'tests'), testMatch: '**/*.spec.ts', fullyParallel: true, forbidOnly: !subset, retries: 0, workers: Number(options.workers), outputDir: artifacts, reporter: [[join(CLI_PACKAGE_ROOT, 'dist', 'lib', 'test-reporter.js')]], use, ...(options.phone ? { projects: [{ name: 'desktop' }, { name: 'phone', use: { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true } }] } : {}) })};\n`);
   const args = [prepared.cli, 'test', '--config', config, ...files];
   if (options.grep) args.push('--grep', options.grep);
   if (failed) args.push('--last-failed');

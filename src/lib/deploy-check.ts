@@ -1,3 +1,4 @@
+import { CLI_PACKAGE_ROOT } from './package-root.js';
 /**
  * The deploy's reference check, run locally: the files a deploy uploads, the
  * declarations the compiler generates for them, its compiler options and
@@ -57,8 +58,8 @@ interface ReferenceCheckVendor {
   ): boolean;
 }
 
-const require = createRequire(import.meta.url);
-const vendor = require('../../runtime/declared-data.cjs') as ReferenceCheckVendor;
+const require = createRequire(CLI_PACKAGE_ROOT);
+const vendor = require('./runtime/declared-data.cjs') as ReferenceCheckVendor;
 const contract = vendor.checkerContract;
 
 /** The deploy's TypeScript version. */

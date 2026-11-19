@@ -421,6 +421,11 @@ export function validateLockedClosure(
     throw new Error('the authenticated dependency lock does not match package.json');
   }
 
+  if (Object.keys({ ...stringMap(manifestValue.peerDependencies, 'package peer dependency map'),
+    ...stringMap(root.peerDependencies, 'root peer dependency lock') }).length > 0) {
+    throw new Error('the verified artifact asks npm to resolve peer dependencies');
+  }
+
   const directDependencies = Object.keys({ ...manifestDependencies, ...manifestOptional });
   const manifestBundles = stringArray(manifestValue.bundledDependencies, 'bundled dependency list');
   const lockedBundles = stringArray(root.bundleDependencies, 'root bundled dependency lock');
@@ -541,6 +546,9 @@ export async function verifyLockedArtifact(
     artifact,
     extractionDir,
     (tarPath, entry) => {
+      if (expectedBundles.size === 0 && tarPath.startsWith('package/node_modules/')) {
+        throw new Error('the verified standalone artifact contains a node_modules entry');
+      }
       const lockPath = bundledManifestLockPath(tarPath);
       if (!lockPath) return false;
       const expected = expectedBundles.get(lockPath);

@@ -11,6 +11,9 @@ export const RELEASE_INPUTS = [
   // Independent browser probe shipped in the package.
   'runtime',
   'scripts/extract-runtime.mjs',
+  'scripts/build-bundle.mjs',
+  'scripts/licenses',
+  'tsconfig.json',
 ];
 
 function gitResult(args, cwd = process.cwd()) {

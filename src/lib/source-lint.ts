@@ -1,3 +1,4 @@
+import { CLI_PACKAGE_ROOT } from './package-root.js';
 import { createRequire } from 'node:module';
 import { performance } from 'node:perf_hooks';
 import { genericLint, type GenericLintResult } from './generic-lint.js';
@@ -48,8 +49,8 @@ export async function lintProject(directory: string, options: { generic?: boolea
   const contract = platformContractVerdict(options.apiBase ?? API_BASE_URL);
   // Lint reads text only; skipping binary reads keeps asset-heavy projects fast.
   const collected = collectFiles(directory, { readBinary: false });
-  const require = createRequire(import.meta.url);
-  const vendor = require('../../runtime/source-lint.cjs') as SourceLintVendor;
+  const require = createRequire(CLI_PACKAGE_ROOT);
+  const vendor = require('./runtime/source-lint.cjs') as SourceLintVendor;
   const report = await vendor.lintSourceSnapshot(collected.files, collected.functions);
   const generic: GenericLintResult = options.generic ? genericLint(directory) : { status: 'not-requested', findings: [] };
   return {

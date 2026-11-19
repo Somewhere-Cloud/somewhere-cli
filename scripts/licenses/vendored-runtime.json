@@ -1,0 +1,14 @@
+{
+  "acorn": {
+    "version": "8.15.0",
+    "license": "MIT",
+    "source_sha256": "39f6a3a2b36ff77001f72bd8c4a377106b8488586a2bc30cb0c863817ec3a4d7",
+    "file": "acorn-8.15.0.txt"
+  },
+  "entities": {
+    "version": "8.0.0",
+    "license": "BSD-2-Clause",
+    "source_sha256": "97e5c11d9696a035f7458c326e8046536f0dcbc6dfc78ee4a860a5090be5422f",
+    "file": "entities-8.0.0.txt"
+  }
+}

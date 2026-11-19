@@ -1,7 +1,6 @@
 import { cliInvocation } from './cli-invocation.js';
 import { operationLabel } from './repro-packet.js';
 import type { ApiResponse } from '../types.js';
-import type { BodyInit, Response as UndiciResponse } from 'undici';
 import { fetchWithProxy as undiciFetch } from './http.js';
 import { loadConfig, updateTokens } from './config.js';
 
@@ -29,6 +28,13 @@ const DEFAULT_TIMEOUT_MS = 60_000;
 /** Budget for calls that run a real build server-side (npm install alone
  *  can take minutes): /deploy, /deploy/patch, pull/export. */
 export const LONG_CALL_TIMEOUT_MS = 10 * 60_000;
+
+// The public test-helper declarations use standard fetch types. The stream
+// client only needs this subset of the bundled Undici response.
+type StreamResponse = Pick<Response, 'status' | 'ok' | 'headers' | 'body' | 'json' | 'text'> & {
+  clone(): Pick<Response, 'json'>;
+};
+type StreamBody = string | AsyncIterable<Uint8Array>;
 
 export class ApiClient {
   /** Mutable: the refresh-on-401 path swaps in a fresh access key in place so
@@ -113,13 +119,13 @@ export class ApiClient {
   async callStream(
     method: string,
     path: string,
-    bodyFactory?: () => BodyInit,
+    bodyFactory?: () => StreamBody,
     opts?: {
       headers?: Record<string, string>;
       timeoutMs?: number;
       replayableBody?: boolean;
     },
-  ): Promise<UndiciResponse> {
+  ): Promise<StreamResponse> {
     let response = await this.requestStream(method, path, bodyFactory, opts);
     if (response.status !== 401 || this.token === null) return response;
 
@@ -156,13 +162,13 @@ export class ApiClient {
   private async requestStream(
     method: string,
     path: string,
-    bodyFactory?: () => BodyInit,
+    bodyFactory?: () => StreamBody,
     opts?: {
       headers?: Record<string, string>;
       timeoutMs?: number;
       replayableBody?: boolean;
     },
-  ): Promise<UndiciResponse> {
+  ): Promise<StreamResponse> {
     const url = `${API_BASE_URL}${path}`;
     const timeoutMs = opts?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
     try {

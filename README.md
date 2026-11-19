@@ -25,6 +25,28 @@ The package installs the `somewhere` command and the short alias `sw`. It also
 installs `cli`, the name `npx @somewhere-cloud/cli` resolves to; use
 `somewhere` or `sw` in scripts.
 
+## Inspect the npm package
+
+The package ships an unminified `dist/lib/bundle.js`. Its module labels identify
+the source files and npm packages. The adjacent source map maps back to the
+published source commit and the dependencies in `npm-shrinkwrap.json`.
+`NOTICE.third-party.txt` includes their licenses and notices. npm provenance
+links the exact tarball to the build.
+
+The installer checks Node.js 22.19.0 before loading the bundle. The small bin,
+script, and test entry points and their TypeScript declarations are separate
+files. The platform’s docs and starter tools also keep their existing paths
+into the bundle. The two platform lint and data helpers stay in `runtime/`
+as independently vendored files. The browser probe stays there because the CLI
+loads it by filename. The package metadata and changelog are read at runtime.
+
+The CLI installs without production npm dependencies. The project still
+provides Playwright and browser binaries for browser tests, Vite for frontend
+development, and TypeScript for local checks when installed. Without a project
+compiler, typecheck fetches the pinned compiler through npm and caches it.
+The updater verifies the signed tarball and its empty production dependency
+lock before installing those exact bytes with package scripts disabled.
+
 ## Quick start
 
 Before your first Somewhere command for a user, ask their permission and say where it will run, either as an npm package in your own cloud workspace (nothing installs on their computer) or as an npm package on their machine. Approval in their first message covers this.

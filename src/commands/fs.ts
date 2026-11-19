@@ -5,7 +5,6 @@ import { randomUUID } from 'node:crypto';
 import { basename, dirname, extname, join, resolve } from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { Command } from 'commander';
-import type { Response as UndiciResponse } from 'undici';
 import { ApiClient, CliApiError, LONG_CALL_TIMEOUT_MS } from '../lib/client.js';
 import { getToken, loadProjectConfig } from '../lib/config.js';
 import { error, platformErrorEnvelope, printJson, success, table } from '../lib/output.js';
@@ -247,7 +246,7 @@ function contentTypeFor(path: string): string {
   }
 }
 
-async function readEnvelope<T>(response: UndiciResponse): Promise<T> {
+async function readEnvelope<T>(response: Awaited<ReturnType<ApiClient['callStream']>>): Promise<T> {
   let payload: ApiEnvelope<T>;
   try {
     payload = await response.json() as ApiEnvelope<T>;

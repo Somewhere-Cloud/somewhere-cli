@@ -6,7 +6,6 @@ import { openPreviewControl, previewCredentialFor, PreviewRunError } from './tes
 import type { Reporter, FullResult, Suite, TestCase, TestResult, TestError } from '@playwright/test/reporter';
 import { writePrivateFile } from './test-identities.js';
 import { scrub, describeError, titled, type Diagnostics } from './test-diagnostics.js';
-import { TEST_INBOX_CLAIM_NEXT, TEST_INBOX_CLAIM_REASON } from './test-report.js';
 import { mark, markProcessStart, span } from './test-timeline.js';
 markProcessStart('playwright');
 interface Entry extends Diagnostics { skipReason?: string; title: string; status: string; outcome: string; errors: string[]; step: string; file: string; line: number }
@@ -45,12 +44,13 @@ export default class TestReporter implements Reporter {
       ? details.errors.map((message, i) => { const location = result.errors[i]?.location; return location ? describeError({ message: '', location }).replace(/: $/, '') + ': ' + message : message; })
       : result.errors.map(error => describeError(error));
     const file = relative(process.cwd(), test.location.file);
-    const claimSkip = result.status === 'skipped' && result.annotations.some(({ type, description }) =>
-      type === 'skip' && description === TEST_INBOX_CLAIM_REASON);
-    const entry: Entry = { ...details, ...(claimSkip ? { skipReason: TEST_INBOX_CLAIM_REASON } : {}), status: result.status, outcome: test.outcome(), title: scrub(details.title).slice(0, 200), errors, step: result.steps.find(step => step.error)?.category ?? 'test body', file, line: test.location.line };
+    // A skipped test says why: the reason given to test.skip(), or that none was given.
+    const skipReason = result.status === 'skipped'
+      ? scrub(result.annotations.find(({ type, description }) => type === 'skip' && description)?.description ?? 'no reason given').slice(0, 200) : undefined;
+    const entry: Entry = { ...details, ...(skipReason ? { skipReason } : {}), status: result.status, outcome: test.outcome(), title: scrub(details.title).slice(0, 200), errors, step: result.steps.find(step => step.error)?.category ?? 'test body', file, line: test.location.line };
     this.entries.push(entry);
     if (process.env.SW_TEST_JSON !== 'true') {
-      console.log(claimSkip ? `SKIPPED ${entry.title}: ${TEST_INBOX_CLAIM_REASON}` : `${result.status}: ${entry.title}`);
+      console.log(skipReason ? `SKIPPED ${entry.title}: ${skipReason}` : `${result.status}: ${entry.title}`);
       for (const note of entry.notes ?? []) console.log(`  note: ${scrub(note)}`);
       if (result.status !== 'passed' && result.status !== 'skipped') console.log(`  step: ${entry.step}\n${entry.errors.map(error => '  ' + error.replaceAll('\n', '\n  ')).join('\n')}\n  last request: ${entry.request ? `${entry.request.method} ${entry.request.path} · HTTP ${entry.request.status} · ${entry.request.code}` : 'none'}\n  screenshot: ${entry.screenshot ?? 'not captured (setup/auth page)'}`);
     }
@@ -59,7 +59,6 @@ export default class TestReporter implements Reporter {
   async onEnd(result: FullResult): Promise<{ status: 'failed' | 'passed' }> {
     const passed = this.entries.filter(entry => entry.status === 'passed' && entry.outcome === 'expected').length;
     const skipped = this.entries.filter(entry => entry.status === 'skipped').length;
-    const needsClaim = this.entries.some(entry => entry.skipReason === TEST_INBOX_CLAIM_REASON);
     const expectedFailures = this.entries.filter(entry => entry.status === 'failed' && entry.outcome === 'expected').length;
     const failed = this.entries.filter(entry => entry.outcome === 'unexpected').length;
     const startRelease = process.env.SW_TEST_RELEASE;
@@ -125,10 +124,10 @@ export default class TestReporter implements Reporter {
           ? 'The preview changed or closed during this run. Save it again with `somewhere preview` (or open a new one if it closed), then run all the tests again: somewhere test --preview'
           : 'The live release changed during this run. Run all the tests again: somewhere test');
       }
-      if (needsClaim) console.log(TEST_INBOX_CLAIM_NEXT);
-      if (skipped) console.log(`${skipped} skipped: a skipped test proves nothing until it runs.`);
+      // A skipped test is never a pass (tsk_6157909a): the run says so and does not pass.
+      if (skipped) console.log(`NOT ALL RAN: ${skipped} skipped (each SKIPPED line above says why). A skipped test proves nothing until it runs.`);
     }
-    const status = result.status === 'passed' && failed === 0 && this.errors === 0 && (passed > 0 || needsClaim) ? 'passed' : 'failed';
+    const status = result.status === 'passed' && failed === 0 && this.errors === 0 && skipped === 0 && passed > 0 ? 'passed' : 'failed';
     if (status === 'passed' && passed > 0 && process.env.SW_TEST_JSON !== 'true') console.log('The checks you wrote passed; say which requirements they do not cover.');
     return { status };
   }

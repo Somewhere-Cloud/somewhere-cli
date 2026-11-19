@@ -1,3 +1,9 @@
+## 0.38.129
+
+- `somewhere test` runs the starter's full check on an unclaimed app: sign-up, sign-in and the privacy check.
+- A skipped check no longer reads as a pass. The summary names each skipped check and why, and the run exits non-zero.
+- Installing test tools such as Playwright no longer requires a redeploy before `somewhere test`. A changed package.json or lockfile prints a note instead.
+
 ## 0.38.128
 
 - A claim connection can work on saved apps and create new ones. It can work on other existing apps when the owner selects that option.

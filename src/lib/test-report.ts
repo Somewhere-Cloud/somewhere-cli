@@ -7,14 +7,12 @@
  *  with no global install (the starter pins @somewhere-cloud/cli). */
 export const DEPLOY_COMMAND = 'npx @somewhere-cloud/cli deploy';
 export const TEST_COMMAND = 'npx @somewhere-cloud/cli test';
-export const TEST_INBOX_CLAIM_REASON = 'needs a claimed app: run somewhere claim';
-export const TEST_INBOX_CLAIM_NEXT = 'Next: run somewhere claim, open its link, then run somewhere test again.';
 
 export interface CheckFailure { expected: string; happened: string; step: string; evidence?: string }
 export interface ReportCheck {
   name: string;
   ok: boolean;
-  skipped?: 'after-failure' | 'needs-claim' | 'prerequisite';
+  skipped?: 'after-failure' | 'prerequisite';
   error?: string;
   failure?: CheckFailure;
 }
@@ -50,11 +48,11 @@ export function describeReport(groups: ReportGroup[], options: { verbose?: boole
     const omitted = [skipped.length && `${skipped.length} skipped`, notRun.length && `${notRun.length} not run`].filter(Boolean);
     lines.push(`FAILED: ${failed.length} of ${plural(checks.length, 'check')} in ${scripts}${omitted.length ? ` (${omitted.join(', ')})` : ''}`);
   }
-  else if (skipped.length) lines.push(`${checks.length - skipped.length} passed, ${skipped.length} skipped in ${scripts}`);
+  // A skipped check is never a pass (tsk_6157909a): the summary names each one and why, and the run does not pass.
+  else if (skipped.length) lines.push(`NOT ALL CHECKED: ${checks.length - skipped.length} passed, ${skipped.length} skipped in ${scripts}. A skipped check proves nothing: ${skipped.map((check) => `“${check.name}” (${firstLine(check.error).replace(/\.$/, '') || 'skipped'})`).join('; ')}.`);
   else lines.push(`PASSED: ${plural(checks.length, 'check')} in ${scripts}`);
   if (!checks.length) lines.push(`Next: fix the error in the script's output, then run ${TEST_COMMAND} again.`);
   else if (failed.length) lines.push(`Next: fix what each FAIL line names, run ${DEPLOY_COMMAND}, then ${TEST_COMMAND} --failed to rerun each script that failed.`);
-  if (skipped.some((check) => check.skipped === 'needs-claim')) lines.push(TEST_INBOX_CLAIM_NEXT);
   const files = [...new Set(groups.map((group) => group.resultFile).filter((file): file is string => Boolean(file)))];
   if (files.length && (failed.length || !checks.length || options.verbose)) lines.push(`Full result: ${files.join(', ')}`);
   return lines;

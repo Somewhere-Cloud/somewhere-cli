@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 
+const { splitManifests } = await import('../dist/lib/app-test.js');
 const { hasSpecFiles, listScripts, runScripts, describeScriptResults, recordScriptResults, lastFailedScripts } = await import('../dist/lib/test-scripts.js');
 
 function project(files) {
@@ -110,18 +111,23 @@ test('a platform hint cannot hide the error that caused a script to fail', async
   assert.equal(describeScriptResults(results)[0], 'FAIL tests/app-check.cjs: CliApiError: The platform refused the inbox request.');
 });
 
-test('an inbox check that needs a claim is skipped and names the claim step', () => {
+test('a skipped check never reads as a pass: the summary names it and why', () => {
   const lines = describeScriptResults([{
-    script: 'tests/app-check.mjs', ok: true, exitCode: 0, ms: 1, reason: null,
+    script: 'tests/app-check.mjs', ok: false, exitCode: 1, ms: 1, reason: null,
     checks: [
       { name: 'the sign-in page loads', ok: true },
-      { name: 'sign up through the app', ok: false, skipped: 'needs-claim', error: 'needs a claimed app: run somewhere claim' },
+      { name: 'a note stays private to its owner', ok: false, skipped: 'prerequisite', error: 'Requires “sign up through the app”, which did not pass.' },
     ],
   }]);
   assert.deepEqual(lines, [
     'PASS the sign-in page loads',
-    'SKIPPED sign up through the app: needs a claimed app: run somewhere claim',
-    '1 passed, 1 skipped in 1 script',
-    'Next: run somewhere claim, open its link, then run somewhere test again.',
+    'SKIPPED a note stays private to its owner: Requires “sign up through the app”, which did not pass.',
+    'NOT ALL CHECKED: 1 passed, 1 skipped in 1 script. A skipped check proves nothing: “a note stays private to its owner” (Requires “sign up through the app”, which did not pass).',
   ]);
+  assert.ok(!lines.some((line) => /^PASSED/.test(line)));
+});
+
+test('installing test tools changes only package manifests, which never force a redeploy', () => {
+  assert.deepEqual(splitManifests(['package-lock.json', 'package.json', 'src/App.tsx']), { app: ['src/App.tsx'], manifests: ['package-lock.json', 'package.json'] });
+  assert.deepEqual(splitManifests(['package-lock.json', 'package.json']).app, []);
 });

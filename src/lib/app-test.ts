@@ -11,7 +11,7 @@ import type { TestTarget } from './test-target.js';
 import { collectFiles } from './files.js';
 import { hashFiles } from './base-files.js';
 import { describeSweep, forgetRecord, sweepAccounts } from './form-accounts.js';
-import { openPreviewControl, openProductionControl, TestInboxNeedsClaim, type TestControl } from './test-control.js';
+import { openPreviewControl, openProductionControl, type TestControl } from './test-control.js';
 import { loadPreviewRecord } from './preview-record.js';
 import { browserStoppedMessage, ready, signIn, signOut, signUp, verify, type Attempt, type FormAdapter, type FormControl, type FormHost, type Person, type SignInOptions, type SignUpOptions } from './form-auth.js';
 import { rememberSecrets, scrub } from './test-diagnostics.js';
@@ -96,6 +96,13 @@ function clientOf(who: Who): APIRequestContext {
   if (typeof (who as Page).goto === 'function') return (who as Page).context().request;
   if (typeof (who as BrowserContext).newPage === 'function') return (who as BrowserContext).request;
   return who as APIRequestContext;
+}
+
+/** Package manifests and lockfiles: installing a test or dev tool rewrites them and nothing else. */
+const PACKAGE_MANIFESTS = new Set(['package.json', 'package-lock.json', 'npm-shrinkwrap.json', 'yarn.lock', 'pnpm-lock.yaml', 'bun.lock', 'bun.lockb']);
+/** Changed files split into the app's own and the package manifests (a note, not a refusal). */
+export function splitManifests(changed: string[]): { app: string[]; manifests: string[] } {
+  return { app: changed.filter(file => !PACKAGE_MANIFESTS.has(file)), manifests: changed.filter(file => PACKAGE_MANIFESTS.has(file)) };
 }
 
 /** Published files of this folder that differ from what it last deployed (or, for `preview`, last
@@ -186,6 +193,13 @@ export class AppTest {
     const target = control.target;
     if ((options.undeployed ?? 'refuse') === 'refuse') {
       const local = undeployedChanges(root, projectId, preview);
+      // Installing test or dev tools rewrites only the package manifests: a note, never a refusal that
+      // forces a redeploy (tsk_128252f1). Any other changed file still refuses.
+      const { app: changedApp, manifests } = splitManifests(local?.changed ?? []);
+      if (local && manifests.length) {
+        local.changed = changedApp;
+        process.stderr.write(`Note: ${manifests.join(', ')} changed since the last ${preview ? 'preview save' : 'deploy'}. Installing test tools changes only these, so the tests run; if you changed the app's dependencies, ${preview ? 'save the preview' : 'deploy'} first.\n`);
+      }
       if (local?.changed.length) {
         throw new Error(preview
           ? `This folder has changes its preview does not have (${local.changed.slice(0, 8).join(', ')}${local.changed.length > 8 ? ', …' : ''}). Save them with \`somewhere preview\`, then run this script.`
@@ -290,10 +304,6 @@ export class AppTest {
       return true;
     }
     catch (error) {
-      if (error instanceof TestInboxNeedsClaim) {
-        this.checks.push({ name, ok: false, ms: 0, skipped: 'needs-claim', error: error.message });
-        return false;
-      }
       // Nothing about the failure is printed before every secret it could carry is registered and the whole
       // diagnostic is scrubbed: emailed links, remembered passwords or tokens, session cookies.
       await this.rememberPageSecrets();
@@ -310,7 +320,7 @@ export class AppTest {
   }
 
   /** Confirm the release did not change, delete this script's sign-up accounts by exact id, write
-   *  the result once, print one summary, and set a non-zero exit code if anything failed. */
+   *  the result once, print one summary, and set a non-zero exit code if anything failed or was skipped. */
   async finish(): Promise<{ passed: number; failed: number; file: string }> {
     if (this.finished) throw new Error('finish() already ran');
     this.finished = true;
@@ -372,7 +382,8 @@ export class AppTest {
         ? 'The preview changed or closed during this script. Save it again with `somewhere preview` (or open a new one if it closed), then run the whole script again.\n'
         : 'The live release changed during this script. Run the whole script again.\n');
     }
-    if (failed || !this.checks.length) process.exitCode = 1;
+    // A skipped check is not a pass either: the script exits non-zero (tsk_6157909a).
+    if (failed || !this.checks.length || this.checks.some((check) => check.skipped)) process.exitCode = 1;
     return { passed, failed, file: this.resultsPath };
   }
 }

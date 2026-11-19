@@ -14,13 +14,12 @@
 import { join } from 'node:path';
 import type { BrowserContext } from '@playwright/test';
 import { ApiClient, CliApiError } from './client.js';
-import { getToken, loadConfig } from './config.js';
+import { getToken } from './config.js';
 import { loadPreviewCredential, previewToolClient, isDeadPreviewCredential } from './preview-credential.js';
 import { loadPreviewRecord } from './preview-record.js';
 import { liveReleaseId, loadTestTarget, type TestTarget } from './test-target.js';
 import { messagesAfter, type InboxMessage } from './test-identities.js';
 import { deleteAccounts, accountsDir, describeCallError, failedDeletion, inBatches, readDeletionAnswer, type SignupDeletion } from './form-accounts.js';
-import { TEST_INBOX_CLAIM_REASON } from './test-report.js';
 import { rememberSecrets } from './test-diagnostics.js';
 
 export interface ManagedUser { id: string; email: string; password: string }
@@ -48,16 +47,11 @@ export interface TestControl {
 
 // ── production ─────────────────────────────────────────────────────────────────────────────────
 
-export class TestInboxNeedsClaim extends Error {
-  constructor() { super(TEST_INBOX_CLAIM_REASON); }
-}
-
 export function productionControl(client: ApiClient, target: TestTarget): TestControl {
   const projectId = target.projectId;
   return {
     environment: 'production', projectId, target,
     async inbox(address, wait) {
-      if (loadConfig()?.temporary) throw new TestInboxNeedsClaim();
       const body = await client.call<{ messages?: unknown }>('GET', '/email/test-inbox', undefined,
         { project_id: projectId, address, limit: 20, ...(wait ? { wait_ms: wait.ms ?? 10_000, since: wait.since } : {}) });
       return messagesAfter(body.messages, address, 0);

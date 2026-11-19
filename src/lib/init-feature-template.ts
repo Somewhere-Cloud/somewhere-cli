@@ -3440,7 +3440,6 @@ export function createFeatureTemplate(
     { path: 'AGENTS.md', content: INIT_AGENTS_MD.replace(/## Getting started[^]*?After edits:/, `## Testing
 ${FIRST_CLI_PERMISSION}
 Run somewhere test after a successful deploy: npx @somewhere-cloud/cli deploy && npx @somewhere-cloud/cli test
-Tests that need the email inbox work after you claim the app.
 It runs every tests/*.mjs and tests/*.cjs Playwright script and prints failures first.
 Start from tests/app-check.mjs: change its checks to the journeys you changed and your access boundaries.
 Helpers from @somewhere-cloud/cli/script (import or require): signUp/signIn/signOut through your form,

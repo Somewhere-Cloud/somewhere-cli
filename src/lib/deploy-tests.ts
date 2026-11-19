@@ -22,12 +22,11 @@ export function prepareDeployTests(start: () => Promise<PreparedRunner>): Promis
 }
 
 export async function runDeployTests(input: {
-  client: ApiClient; root: string; projectId: string | undefined; temporary: boolean; json: boolean;
+  client: ApiClient; root: string; projectId: string | undefined; json: boolean;
   release: string | undefined; renderPending: boolean; prepared: Promise<PreparedOrError>;
 }): Promise<DeployTests> {
   const release = input.release ?? null;
   const notRun = (reason: string): DeployTests => ({ status: 'not_run', release, reason });
-  if (input.temporary) return notRun('a temporary project cannot run tests; claim it, link this folder and run somewhere test');
   if (!input.projectId || !input.release) return notRun('the deploy did not name its project and release');
   // A release whose blank-page check is still running may yet be rolled back: wait for it to settle.
   if (input.renderPending) {
@@ -62,6 +61,7 @@ export function formatDeployTestsLine(tests: DeployTests): string {
   const r = tests.results as { passed?: number; failed?: number; skipped?: number; setupErrors?: number; notRun?: number } | null | undefined;
   const skipped = r?.skipped ? `, ${r.skipped} skipped (a skipped test proves nothing)` : '';
   if (tests.status === 'passed') return `The deploy is live and its tests passed: ${r?.passed ?? 0} passed${skipped} on ${tests.release}.`;
+  if (tests.status === 'failed' && !r?.failed && r?.skipped && !r?.setupErrors && !tests.reason) return `The deploy is live. Its tests did NOT all run: ${r.skipped} skipped (a skipped test proves nothing), ${r.passed ?? 0} passed on ${tests.release}. Each SKIPPED line above says why.`;
   if (tests.status === 'failed') return `The deploy is live. Its tests FAILED: ${r?.failed ?? 0} failed, ${r?.passed ?? 0} passed${skipped}${r?.setupErrors ? `, ${r.setupErrors} setup errors` : ''}${tests.reason ? ` (${tests.reason})` : ''} on ${tests.release}. After fixing a test: somewhere test --failed. After fixing the app: somewhere deploy --test.`;
   return `The deploy is live. Its tests did NOT run: ${tests.reason}.`;
 }

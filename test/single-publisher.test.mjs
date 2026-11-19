@@ -38,16 +38,19 @@ test('canonical publisher alone publishes, checks the registry, and pins immutab
   assert.match(publisher, /id-token: write/);
   assert.match(publisher, /an npm token is set; this publisher authenticates only through OIDC/);
   assert.ok(publisher.indexOf('already exists on npm') < publishAt, 'refuse an existing version before publishing');
-  // Registry visibility is the workflow's post-publish check. The standalone
-  // verifier still tests source, integrity, and provenance separately.
-  const verifyAt = publisher.indexOf('name: Confirm npm serves the published version');
-  assert.ok(publishAt >= 0 && verifyAt > publishAt, 'verify registry visibility after publishing');
+  const verifyAt = publisher.indexOf('  verify:\n');
+  assert.ok(publishAt >= 0 && verifyAt > publishAt, 'verify the registry artifact in a separate job after publish');
   const registryCheck = publisher.slice(verifyAt);
-  assert.match(registryCheck, /npm view "@somewhere-cloud\/cli@\$EXPECTED_VERSION" version/);
-  assert.match(registryCheck, /if \[ "\$actual" != "\$EXPECTED_VERSION" \]; then\n\s+echo .*\n\s+exit 1/);
+  assert.match(registryCheck, /needs: publish/);
+  assert.match(registryCheck, /permissions:\n      contents: read/);
+  assert.doesNotMatch(registryCheck, /id-token: write|continue-on-error/);
+  assert.match(publisher, /published_source: \$\{\{ steps.final.outputs.published_head \}\}/);
+  assert.match(registryCheck, /PUBLISHED_SOURCE: \$\{\{ needs.publish.outputs.published_source \}\}/);
+  assert.match(registryCheck, /EXPECTED_VERSION: \$\{\{ needs.publish.outputs.version \}\}/);
+  assert.match(registryCheck, /run: node scripts\/publish-release\.mjs verify "\$PUBLISHED_SOURCE" "\$EXPECTED_VERSION"/);
   assert.match(registryCheck, /npm view @somewhere-cloud\/cli dist-tags\.latest/);
-  assert.match(registryCheck, /if \[ "\$latest" != "\$EXPECTED_VERSION" \]; then\n\s+echo .*\n\s+exit 1/);
-  assert.doesNotMatch(publisher, /run: npm test|Test verified published artifact source/);
+  assert.match(registryCheck, /if: failure\(\)[\s\S]*::error::Registry verification failed[\s\S]*GITHUB_STEP_SUMMARY/);
+  assert.doesNotMatch(publisher, /run: npm test/);
   assert.equal((publisher.match(/npm publish --provenance --access public/g) ?? []).length, 1);
   assert.doesNotMatch(publisher, /tags:|cancel-in-progress: true|download-artifact|git push/);
   assert.match(publisher, /group: somewhere-cli-publish\n  cancel-in-progress: false/);

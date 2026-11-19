@@ -301,7 +301,7 @@ export class AppTest {
       const stopped = [...this.host.pages].map((page) => browserStoppedMessage(page, error)).find(Boolean);
       const message = stopped ?? scrub(error instanceof Error ? error.message : String(error));
       const failure = describeCheckFailure(message, options.expected ?? name, step, evidence,
-        [...this.host.pages].find(page => !page.isClosed())?.url());
+        [...this.host.pages].find(page => !page.isClosed())?.url() ?? this.origin);
       const detail = message.split('\n').slice(0, 12).join('\n') + pages.map((state, i) => `\npage ${i + 1}: ${state}`).join('');
       this.checks.push({ name, ok: false, ms: Math.round(performance.now() - start), error: detail, failure });
       this.stopped = process.env.SW_TEST_FAIL_FAST === '1';

@@ -104,6 +104,12 @@ jobs:
         env:
           SOURCE_SHA: ${{ steps.trigger.outputs.source }}
         run: node scripts/check-public-package.mjs "$RUNNER_TEMP" "$SOURCE_SHA"
+      - name: Deploy default, minimal and bare fixtures from the tarball to production
+        if: steps.before.outputs.mode == 'release'
+        timeout-minutes: 15
+        env:
+          TARBALL: ${{ steps.artifact.outputs.tarball }}
+        run: node scripts/check-live-starters.mjs "$TARBALL"
       - name: Recheck identity immediately before publication
         id: final
         env:

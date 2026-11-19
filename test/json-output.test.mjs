@@ -707,8 +707,8 @@ test('init creates the green starter, --bare keeps only the workflow guide, and 
       'Read AGENTS.md for project instructions.\n',
     );
     const starter = JSON.parse(readFileSync(join(empty, 'package.json'), 'utf8'));
-    assert.equal(starter.dependencies.react, undefined);
-    assert.deepEqual(starter.optionalDependencies, { react: '19.2.7', 'react-dom': '19.2.7' });
+    assert.deepEqual(starter.dependencies, { '@somewhere-cloud/sdk': '0.14.2', react: '19.2.7', 'react-dom': '19.2.7' });
+    assert.equal(starter.optionalDependencies, undefined);
 
     const checked = await run(['deploy-check', '.', '--json'], { cwd: empty, env });
     assert.equal(checked.status, 0, `stdout:\n${checked.stdout}\nstderr:\n${checked.stderr}`);

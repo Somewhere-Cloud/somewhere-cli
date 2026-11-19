@@ -28,9 +28,7 @@ const packageJson = (appName: string) => `{
     "typecheck": "npx -y @somewhere-cloud/cli typecheck"
   },
   "dependencies": {
-    "@somewhere-cloud/sdk": "0.14.2"
-  },
-  "optionalDependencies": {
+    "@somewhere-cloud/sdk": "0.14.2",
     "react": "19.2.7",
     "react-dom": "19.2.7"
   },

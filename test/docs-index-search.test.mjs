@@ -165,6 +165,6 @@ test('root and init help lead new apps to the generated contract', async () => {
   assert.match(init.stdout, /Write a starter app with a generated AGENTS\.md guide/);
   assert.match(init.stdout, /Before your first Somewhere command for a user, ask their permission/);
   assert.match(init.stdout, /run `somewhere init` in an empty directory/);
-  assert.match(init.stdout.replace(/\s+/g, ' '), /Init installs the SDK and editor types\. The platform builds React when you deploy\./);
+  assert.match(init.stdout.replace(/\s+/g, ' '), /Init installs React, the SDK and editor types\. The platform builds your source when you deploy\./);
   assert.match(init.stdout, /existing AGENTS\.md\/CLAUDE\.md are never replaced/);
 });

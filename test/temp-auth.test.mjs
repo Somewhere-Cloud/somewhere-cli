@@ -1,3 +1,4 @@
+import { CliApiError } from '../dist/lib/client.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
@@ -40,27 +41,32 @@ function fakeClient(responses) {
   const calls = [];
   return { calls, call: async (method, path, body, query, opts) => {
     calls.push({ method, path, body, opts });
-    const reply = responses[path];
+    const response = responses[path];
+    const reply = typeof response === "function" ? response(body) : response;
     if (reply instanceof Error) throw reply;
     return reply;
   } };
 }
 const CHALLENGE = { nonce: 'tmpc_abc', difficulty: 1, algorithm: 'sha256', input: 'tmpc_abc:<suffix>', expires_at: '2026-07-02T13:00:00.000Z', ttl_seconds: 600 };
 
-test('mintTempAccount — GET challenge then POST create with {nonce, suffix}, never refreshing a stored login', async () => {
+test('mintTempAccount solves an inline challenge only after the server asks and never refreshes a login', async () => {
   const client = fakeClient({
-    '/auth/pow/challenge': CHALLENGE,
-    '/auth/temp-create': {
-      access_token: 'smt_fallback_should_not_be_used', key: 'smt_temp_123', key_prefix: 'smt_temp', key_id: 'key_1',
-      scopes: ['projects', 'deploy'], expires_at: '2026-07-02T16:00:00.000Z', ttl_seconds: 10800,
-      claim_token: 'swtc_xyz', claim_url: 'https://somewhere.cloud/claim?token=swtc_xyz',
-    },
+    '/auth/temp-create': body => !body.nonce
+      ? new CliApiError('POW_REQUIRED', 'Proof required', 428, { challenge: CHALLENGE })
+      : {
+        access_token: 'smt_fallback_should_not_be_used', key: 'smt_temp_123', key_prefix: 'smt_temp', key_id: 'key_1',
+        scopes: ['projects', 'deploy'], expires_at: '2026-07-02T16:00:00.000Z', ttl_seconds: 10800,
+        claim_token: 'swtc_xyz', claim_url: 'https://somewhere.cloud/claim?token=swtc_xyz',
+      },
   });
-  const account = await mintTempAccount(client);
-  assert.deepEqual(client.calls.map((c) => [c.method, c.path]), [['GET', '/auth/pow/challenge'], ['POST', '/auth/temp-create']]);
-  assert.deepEqual(client.calls[1].body, { nonce: 'tmpc_abc', suffix: expectedSuffix('tmpc_abc', 1) });
+  let asked = 0;
+  const account = await mintTempAccount(client, () => asked++);
+  assert.equal(asked, 1);
+  assert.deepEqual(client.calls.map(({ method, path, body }) => [method, path, body]), [
+    ['POST', '/auth/temp-create', {}],
+    ['POST', '/auth/temp-create', { nonce: 'tmpc_abc', suffix: expectedSuffix('tmpc_abc', 1) }],
+  ]);
   assert.ok(client.calls.every((c) => c.opts?.refresh === false));
-  // `key` is preferred over `access_token` when both are present.
   assert.equal(account.key, 'smt_temp_123');
   assert.equal(account.claim_url, 'https://somewhere.cloud/claim?token=swtc_xyz');
   assert.equal(account.ttl_seconds, 10800);
@@ -68,15 +74,15 @@ test('mintTempAccount — GET challenge then POST create with {nonce, suffix}, n
 
 test('mintTempAccount — falls back to access_token when key is absent', async () => {
   const client = fakeClient({
-    '/auth/pow/challenge': { ...CHALLENGE, nonce: 'n' },
     '/auth/temp-create': { access_token: 'smt_only_access_token', scopes: [], expires_at: 'x', ttl_seconds: 10800, claim_token: 'swtc_1', claim_url: 'https://somewhere.cloud/claim?token=swtc_1' },
   });
-  assert.equal((await mintTempAccount(client)).key, 'smt_only_access_token');
+  assert.equal((await mintTempAccount(client, () => assert.fail('no proof requested'))).key, 'smt_only_access_token');
+  assert.deepEqual(client.calls.map(({method,path,body}) => [method,path,body]), [['POST','/auth/temp-create',{}]]);
 });
 
-test('mintTempAccount — a challenge without nonce/difficulty is a typed INVALID_RESPONSE, not a solve attempt', async () => {
-  const client = fakeClient({ '/auth/pow/challenge': { unexpected: true } });
-  await assert.rejects(() => mintTempAccount(client), (err) => err.code === 'INVALID_RESPONSE');
+test('mintTempAccount — an unusable challenge preserves the typed refusal, not a solve attempt', async () => {
+  const client = fakeClient({ '/auth/temp-create': new CliApiError('POW_REQUIRED', 'Proof required', 428, { challenge: {} }) });
+  await assert.rejects(() => mintTempAccount(client), (err) => err.code === 'POW_REQUIRED');
   assert.equal(client.calls.length, 1);
 });
 

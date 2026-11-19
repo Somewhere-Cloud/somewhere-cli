@@ -101,7 +101,7 @@ export function registerInit(program: Command) {
         + '(deploy, then test). Sign-in and invitation links (sw.auth.invite) open\n'
         + '/auth/magic, which the starter routes before the sign-in gate.\n'
         + '`--template minimal` includes the SDK and auth route without sign-in screens.\n'
-        + 'Init installs the SDK and editor types. The platform builds React when you deploy. Install the runtime for local development.\n'
+        + 'Init installs React, the SDK and editor types. The platform builds your source when you deploy.\n'
         + 'TypeScript is fetched when first needed. Vite and Playwright are installed only if you choose to use them.\n'
         + `New starters and --bare also install ${skillNames(BUNDLED_SKILLS_PACK).length} agent skills in .agents/skills, pinned by skills-lock.json.\n`
         + '\nA directory that already holds an app (package.json, index.html, src/, …) is\n'

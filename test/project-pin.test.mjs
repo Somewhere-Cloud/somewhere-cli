@@ -51,6 +51,25 @@ test('init writes the exact CLI pin without making the CLI a dependency', () => 
   assert.doesNotMatch(lint.stderr, /pinned to somewhere CLI/);
 });
 
+test('upgrade makes React required for both affected starter versions and calls for a lock refresh', () => {
+  for (const version of ['0.38.123', '0.38.124']) {
+    const dir = folder({ 'package.json': {
+      name: 'my-starter', private: true, somewhere: { cli_version: version },
+      dependencies: { '@somewhere-cloud/sdk': '0.14.2' },
+      optionalDependencies: { react: '19.2.7', 'react-dom': '19.2.7', unrelated: '1.2.3' },
+    } });
+    const result = run(dir, ['upgrade', '--json']);
+    assert.equal(result.status, 0, result.stderr);
+    const response = JSON.parse(result.stdout);
+    assert.equal(response.repairedStarter, true);
+    assert.deepEqual(response.next, ['npm install']);
+    const manifest = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'));
+    assert.deepEqual(manifest.dependencies, { '@somewhere-cloud/sdk': '0.14.2', react: '19.2.7', 'react-dom': '19.2.7' });
+    assert.deepEqual(manifest.optionalDependencies, { unrelated: '1.2.3' });
+    assert.equal(manifest.somewhere.cli_version, VERSION);
+  }
+});
+
 test('a newer CLI in an older-pinned folder prints one line and keeps working', () => {
   const dir = folder({ 'package.json': pkg('0.0.1'), 'index.html': '<!doctype html><title>x</title>' });
   const result = run(dir, ['lint']);

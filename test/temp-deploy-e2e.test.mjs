@@ -1,7 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
-import { createHash } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -14,19 +13,8 @@ import { fileURLToPath } from 'node:url';
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 const distIndex = join(repoRoot, 'dist', 'index.js');
 
-function leadingZeroBits(buf) {
-  let bits = 0;
-  for (const byte of buf) {
-    if (byte === 0) { bits += 8; continue; }
-    let mask = 0x80;
-    while (mask > 0 && (byte & mask) === 0) { bits++; mask >>= 1; }
-    break;
-  }
-  return bits;
-}
 
-// --- Stub /v1 API: pow/challenge, temp-create, projects, deploy. -----------
-const DIFFICULTY = 8; // low, so the CLI's real solvePow finishes instantly
+// --- Stub /v1 API: temp-create, projects, deploy. -----------
 let tempCreateCalls = 0;
 let projectsCalls = 0;
 let deployCalls = 0;
@@ -44,29 +32,9 @@ const server = createServer((req, res) => {
       res.end(JSON.stringify(payload));
     };
 
-    if (req.method === 'GET' && req.url === '/v1/auth/pow/challenge') {
-      send(200, {
-        ok: true,
-        data: {
-          nonce: 'tmpc_e2e_nonce',
-          difficulty: DIFFICULTY,
-          algorithm: 'sha256',
-          input: 'tmpc_e2e_nonce:<suffix>',
-          expires_at: new Date(Date.now() + 600_000).toISOString(),
-          ttl_seconds: 600,
-        },
-      });
-      return;
-    }
-
     if (req.method === 'POST' && req.url === '/v1/auth/temp-create') {
       tempCreateCalls++;
-      const parsed = JSON.parse(body);
-      const digest = createHash('sha256').update(`${parsed.nonce}:${parsed.suffix}`, 'utf8').digest();
-      if (leadingZeroBits(digest) < DIFFICULTY) {
-        send(400, { ok: false, error: 'INVALID_SOLUTION', message: 'proof-of-work did not verify' });
-        return;
-      }
+      assert.deepEqual(JSON.parse(body), {});
       send(201, {
         ok: true,
         data: {

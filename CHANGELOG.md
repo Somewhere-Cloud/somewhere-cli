@@ -1,3 +1,9 @@
+## 0.38.125
+
+- Restore React and React DOM as required dependencies in new starters so the platform can deploy their locked source.
+- Upgrade repairs the React declarations in starters created by 0.38.123 and 0.38.124.
+- Solve proof-of-work only when the server asks for it during temporary signup.
+
 ## 0.38.124
 
 - Keep the name from signed-out init when creating the temporary project.

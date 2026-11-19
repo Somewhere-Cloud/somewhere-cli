@@ -1,13 +1,13 @@
 {
   "name": "@somewhere-cloud/cli",
-  "version": "0.38.124",
+  "version": "0.38.125",
   "lockfileVersion": 3,
   "requires": true,
   "packages": {
     "": {
       "bundleDependencies": [],
       "name": "@somewhere-cloud/cli",
-      "version": "0.38.124",
+      "version": "0.38.125",
       "license": "MIT",
       "bin": {
         "cli": "bin/somewhere.js",

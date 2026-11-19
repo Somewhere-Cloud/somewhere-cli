@@ -169,8 +169,10 @@ test('every combination separates types, services, hooks, pages and presentation
     assert.doesNotMatch(all, /user_id|owner_id|\.owner\b|where: \{ *user/, `${label}: no client-side owner filters`);
     assert.doesNotMatch(all, /fonts\.googleapis|@import url|https?:\/\/[^\s'"`]*\.(woff2?|ttf)/, `${label}: no remote fonts`);
     const pkg = JSON.parse(read('package.json'));
-    assert.deepEqual(Object.keys(pkg.dependencies), ['@somewhere-cloud/sdk']);
-    assert.deepEqual(pkg.optionalDependencies, { react: '19.2.7', 'react-dom': '19.2.7' });
+    assert.deepEqual(Object.keys(pkg.dependencies).sort(), ['@somewhere-cloud/sdk', 'react', 'react-dom']);
+    assert.equal(pkg.dependencies.react, '19.2.7');
+    assert.equal(pkg.dependencies['react-dom'], '19.2.7');
+    assert.equal(pkg.optionalDependencies, undefined);
     assert.equal(pkg.dependencies['@somewhere-cloud/sdk'], '0.14.2', 'the SDK release whose sign-in lockout answer keeps retry_after_ms and sends Retry-After');
     assert.equal(pkg.scripts.build, undefined);
   }

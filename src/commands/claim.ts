@@ -9,13 +9,13 @@ import { error, info, printJson, teal } from '../lib/output.js';
 export function registerClaim(program: Command) {
   program
     .command('claim')
-    .description("Print the claim URL that keeps this computer's temporary (signed-out) projects")
+    .description("Print the claim URL for this computer's temporary apps")
     .option('--json', 'Print { claim_url, expires_at } as JSON')
     .action((opts: { json?: boolean }) => {
       const config = loadConfig();
       if (!config?.temporary || !config.claim_url) {
         const message = config?.token
-          ? `This terminal has no temporary workspace to claim. Run \`${cliInvocation()} projects\` to see the projects it can access.`
+          ? `This terminal has no temporary workspace to claim. Run \`${cliInvocation()} projects\` to see the apps it can access.`
           : `This terminal has no temporary workspace. If you deployed signed out from another terminal, run \`${cliInvocation()} claim\` there. Run \`${cliInvocation()} deploy\` here to start one.`;
         if (opts.json) printJson({ ok: false, error: config?.token ? 'NOT_TEMPORARY' : 'NO_TEMPORARY_WORKSPACE', message });
         else error(message);
@@ -28,15 +28,16 @@ export function registerClaim(program: Command) {
         return;
       }
       if (expired) {
-        error(`This computer's temporary workspace expired at ${config.temp_expires_at}; unclaimed projects are gone. Run \`${cliInvocation()} deploy\` to start a new one.`);
+        error(`This computer's temporary workspace expired at ${config.temp_expires_at}. Unclaimed apps are gone. Run \`${cliInvocation()} deploy\` to start a new one.`);
         process.exit(1);
       }
       info(`Claim URL: ${teal(config.claim_url)}`);
       if (config.temp_expires_at) info(`Expires at: ${config.temp_expires_at} (UTC)`);
-      info('Open it in a browser and sign in or create an account to keep these projects.');
+      info('Open it in a browser and sign in or create an account to keep these apps.');
       if (config.claim_handoff?.handoff_id) {
-        info('Choose "Save and connect agent" to connect this terminal to the claimed project only.');
+        info('Choose "Save and connect agent" to work on the saved apps and create new ones. You can choose to include your other apps.');
+      } else {
+        info(`Run \`${cliInvocation()} login\` to connect this terminal after saving.`);
       }
-      info(`Run \`${cliInvocation()} login\` for account access.`);
     });
 }

@@ -228,7 +228,7 @@ test('first anonymous deploy ends with live URL, expiry and one claim instructio
     const last = result.stdout.trimEnd().split('\n').slice(-3);
     assert.match(last[0], /^✓ Live URL: https:\/\//);
     assert.match(last[1], /^  Temporary app\. Expires in about 3 hours\./);
-    assert.equal(last[2], '  Open https://somewhere.cloud/claim?token=swtc_temp_out and select "Save and connect agent" to save the project and connect this terminal to it only. Run `somewhere login` for account access.');
+    assert.equal(last[2], '  Open https://somewhere.cloud/claim?token=swtc_temp_out and select "Save and connect agent" to work on the saved apps and create new ones. You can choose to include your other apps.');
     assert.doesNotMatch(result.stdout + result.stderr, /no privacy page|table "notes" is created|somewhere (claim|browser|preview)/);
     assert.match(result.stderr, /A real warning/);
 

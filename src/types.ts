@@ -28,7 +28,11 @@ export interface CliConfig {
   claim_handoff?: ClaimCliHandoff;
   /** Kept until the server confirms it cleared the encrypted delivery. */
   claim_handoff_ack?: ClaimCliHandoffAck;
+  /** Consent granted to a claim-link agent bearer. The server owns its current app list. */
+  claim_access?: ClaimAppAccess;
 }
+
+export type ClaimAppAccess = 'new_projects' | 'all_projects';
 
 export interface ClaimCliHandoff {
   project_id: string;

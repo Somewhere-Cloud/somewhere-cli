@@ -1048,7 +1048,8 @@ export function registerDeploy(program: Command) {
 
       // The target is known: let a cold compile container boot while the files are packed and uploaded
       //. Not for a dry run (nothing compiles) or a temporary workspace's new project.
-      const stopPrestart = projectId && !tempSession && !opts.dryRun ? startDeployPrestart(client, projectId) : () => undefined;
+      const stopPrestart = projectId && !tempSession && !opts.dryRun && !storedConfig?.claim_access
+        ? startDeployPrestart(client, projectId) : () => undefined;
 
       // An explicit --project is bound to the VERIFIED current project before
       // anything is uploaded (founder 2026-10-23). A folder linked to a different
@@ -1620,11 +1621,11 @@ export function registerDeploy(program: Command) {
           info(formatTempExpiry(tempSession.expiresAt, tempSession.ttlSeconds));
           const link = teal(tempSession.claimUrl);
           if (tempSession.handoffReady) {
-            info(`Open ${link} and select "Save and connect agent" to save the project and connect this terminal to it only. Run \`${cliInvocation()} login\` for account access.`);
+            info(`Open ${link} and select "Save and connect agent" to work on the saved apps and create new ones. You can choose to include your other apps.`);
           } else if (besideRealLogin) {
-            info(`Open ${link} to save the project to your account, then run \`${cliInvocation()} init --link --project ${projectId}\` in an unlinked folder to work on it.`);
+            info(`Open ${link} to save the app to your account, then run \`${cliInvocation()} init --link --project ${projectId}\` in an unlinked folder to work on it.`);
           } else {
-            info(`Open ${link} to save the project to your account, then run \`${cliInvocation()} login\` to connect this terminal.`);
+            info(`Open ${link} to save the app to your account, then run \`${cliInvocation()} login\` to connect this terminal.`);
           }
         }
 

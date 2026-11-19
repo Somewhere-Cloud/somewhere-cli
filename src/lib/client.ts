@@ -210,6 +210,10 @@ export class ApiClient {
    *  API_KEY_EXPIRED. */
   async refreshAccessKey(timeoutMs?: number): Promise<boolean> {
     const config = loadConfig();
+    if (config?.claim_access && config.token === this.token) {
+      throw new CliApiError('SESSION_EXPIRED',
+        `This app connection expired. Run \`${cliInvocation()} login\` and ask the account owner to approve it.`, 401);
+    }
     const refreshToken = config?.refresh_token;
     if (!refreshToken) {
       // We only get here AFTER an API_KEY_EXPIRED — so the access key is dead and
@@ -416,11 +420,17 @@ export class ApiClient {
     if (typeof retry_after_ms === 'number' && Number.isFinite(retry_after_ms)) {
       meta.retryAfterMs = retry_after_ms;
     }
+    const agentSignIn = `Run \`${cliInvocation()} login\` and ask the account owner to approve it.`;
+    const agentMessage = error === 'PROJECT_AGENT_OPERATION_FORBIDDEN'
+      ? `This app connection cannot use that feature. ${agentSignIn}`
+      : error === 'PROJECT_AGENT_PROJECT_FORBIDDEN'
+        ? `This app is outside this connection or no longer available. ${agentSignIn}`
+        : undefined;
     throw new CliApiError(
       error ?? 'UNKNOWN',
-      error === undefined && message === undefined
+      agentMessage ?? (error === undefined && message === undefined
         ? unclassifiedResponseMessage(res.status, text)
-        : message ?? 'Unknown error',
+        : message ?? 'Unknown error'),
       res.status,
       data ?? extraData,
       hint,

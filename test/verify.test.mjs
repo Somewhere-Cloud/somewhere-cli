@@ -242,7 +242,7 @@ test('verification rejects malformed and oversized session seed fields', () => {
   assert.throws(() => normalizeVerifyFlow({ headers: { Authorization: 42 } }), /only string values/);
   assert.throws(
     () => normalizeVerifyFlow({ local_storage: { sw_auth: 'x'.repeat(9 * 1024) } }),
-    /8 KB/,
+    /session data is too large.*Remove unused local storage entries, cookies, or headers/,
   );
 });
 

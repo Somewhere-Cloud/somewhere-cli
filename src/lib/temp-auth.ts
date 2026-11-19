@@ -1,8 +1,5 @@
-/** No-login deploy path: mint a short-lived, unauthenticated
- *  developer credential gated by client-side proof-of-work instead of a
- *  signup. This is the whole "auth" for logged-out `somewhere deploy` — see
- *  src/commands/deploy.ts for how the minted credential is cached/reused and
- *  wired into the normal deploy flow. */
+/** Signed-out deploy mints a temporary developer credential. The server may
+ *  ask the client to solve a challenge before issuing it. */
 
 import { createHash } from 'node:crypto';
 import { ApiClient, CliApiError } from './client.js';
@@ -19,8 +16,7 @@ export interface PowChallenge {
   ttl_seconds: number;
 }
 
-/** POST /v1/auth/temp-create response payload (unauthenticated — the solved
- *  PoW is the auth). `key`/`access_token` are the same bearer credential;
+/** POST /v1/auth/temp-create response payload. `key`/`access_token` are the same bearer credential;
  *  the server contract names both, see mintTempAccount(). */
 export interface TempAccount {
   key: string;

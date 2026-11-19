@@ -398,7 +398,7 @@ export function registerPreview(program: Command) {
           row.promotable ? 'yes' : 'no: production changed',
           row.this_folder ? 'this folder' : '',
         ]));
-        console.log(dim('Each open preview holds a copy of production data until it is promoted, closed, or unused for 24 h (7 days at most).'));
+        console.log(dim('Each open preview holds a copy of production data until it is promoted, closed, or expires.'));
         console.log(dim(`Close one: ${cliInvocation()} preview close <preview_session_id>. Promote one: ${cliInvocation()} promote <preview_session_id> <preview_id>.`));
       } catch (err) {
         if (opts.json) printJsonError(typedErrorCode(err) ?? 'PREVIEW_LIST_FAILED', err instanceof Error ? err.message : String(err));
@@ -489,12 +489,12 @@ export function registerPreview(program: Command) {
     .description('Run one handler path once in this folder\'s open preview, as one signed job delivery, and wait for its result (a scheduled task is a handler path plus a payload)')
     .option('--payload <json>', 'JSON payload the handler receives (default: none)')
     .option('--no-wait', 'Return as soon as the run is queued instead of waiting for its result')
-    .option('--timeout <seconds>', 'How long to wait for the result (default 300; a preview run is capped at 270 s)')
+    .option('--timeout <seconds>', 'How long to wait for the result (default 300)')
     .option('--project <id>', 'Override project ID')
     .option('--preview-session <id>', 'Which preview (its preview_session_id); default: this folder\'s')
     .option('--json', 'Print the run (and its result) as JSON')
     .addHelpText('after', '\nThe run uses the preview\'s own code, data, files, users and mail; it has no signed-in user (like a scheduled\n'
-      + 'run in production), one attempt and at most 270 seconds. Nothing in your live app runs or changes.\n'
+      + 'run in production). It runs once. Nothing in your live app runs or changes.\n'
       + `To run a production schedule\'s handler and payload this way: ${cliInvocation()} cron run <name> --preview\n`)
     .action(async (handlerPath: string, _opts: unknown, cmd: Command) => {
       const opts = cmd.optsWithGlobals() as { payload?: string; wait?: boolean; timeout?: string; project?: string; previewSession?: string; json?: boolean };

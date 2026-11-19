@@ -121,9 +121,16 @@ test('INVALID_POW on temp-create keeps its code and status; no second challenge'
   requestProof = false; createReply = { status: 400, body: { ok: false, error: 'INVALID_POW', message: 'Proof-of-work challenge is invalid or expired.' } };
   const result = await run(['deploy']);
   assert.equal(result.status, 1);
-  assert.match(result.out, /Proof-of-work challenge is invalid or expired\. \[INVALID_POW, HTTP 400\]/);
+  assert.match(result.out, /The temporary session check failed.*somewhere deploy.*\[INVALID_POW, HTTP 400\]/);
+  assert.doesNotMatch(result.out, /proof-of-work/i);
   assert.equal(publicCalls().length, 1);
   assert.equal(result.savedSession, false);
+  const structured = await run(['deploy', '--json']);
+  assert.equal(structured.status, 1);
+  const body = JSON.parse(structured.stdout);
+  assert.equal(body.error, 'INVALID_POW');
+  assert.equal(body.request_id, 'req_fixture_400');
+  assert.match(body.message, /temporary session check failed.*somewhere deploy/);
 });
 
 test('inline proof is solved only when asked and normal signup prints no puzzle', async () => {

@@ -1,3 +1,9 @@
+## 0.38.126
+
+- A claim link connects the CLI only to the claimed project. Use `somewhere login` for account access.
+- Point deploy guidance to `api/` and simplify help and progress messages.
+- Build the packed test suite in a private directory so another build cannot interrupt it.
+
 ## 0.38.125
 
 - Restore React and React DOM as required dependencies in new starters so the platform can deploy their locked source.

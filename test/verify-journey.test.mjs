@@ -214,7 +214,7 @@ test('a transport failure still closes the browsers; a close failure is reported
   assert.match(result.verdict, /socket hang up \[VERIFY_SEGMENT_FAILED\][\s\S]*INCOMPLETE/);
   assert.deepEqual(result.cleanup[0], { actor: 'alice', status: 'closed' });
   assert.equal(result.cleanup[1].status, 'unconfirmed');
-  assert.match(result.cleanup[1].reason, /close failed \(AUTHORITY_UNAVAILABLE\); the platform closes an idle browser within 5 minutes/);
+  assert.match(result.cleanup[1].reason, /close failed \(AUTHORITY_UNAVAILABLE\); the platform closes idle browsers when they expire/);
   assert.equal(result.cleanup_confirmed, false, 'an unconfirmed close is never reported as clean');
   assert.match(formatVerifyJourneyReport(result).join('\n'), /bob unconfirmed[\s\S]*bob: close failed \(AUTHORITY_UNAVAILABLE\)/);
 });
@@ -270,7 +270,7 @@ test('limits and shape are enforced before any browser starts, naming the limit 
   }
   assert.throws(() => normalizeVerifyJourney({ ...bookclub, viewports: ['mobile'] }), /only "actors" and "journey" \(found viewports\)/);
   assert.throws(() => normalizeVerifyJourney({ actors: { a: { password: 'x' } }, journey: [{ as: 'a' }] }), /actors\.a has unsupported field: password/);
-  assert.throws(() => normalizeVerifyJourney({ actors: { a: { local_storage: { k: 'x'.repeat(9000) } } }, journey: [{ as: 'a' }] }), /8 KB/);
+  assert.throws(() => normalizeVerifyJourney({ actors: { a: { local_storage: { k: 'x'.repeat(9000) } } }, journey: [{ as: 'a' }] }), /session data is too large/);
   assert.throws(() => normalizeVerifyFlow(bookclub), /multi-user flow \(actors \+ journey\)\. Run it with `somewhere verify/,
     'deploy --verify and single-user loaders name the right command');
 });
@@ -315,7 +315,8 @@ test('--schema prints the machine-readable flow contract; --help carries a valid
   assert.ok(match, help.stdout);
   const example = JSON.parse(match[1].replace(/^  /gm, ''));
   assert.equal(normalizeVerifyJourney(example).journey.length, 3);
-  assert.match(help.stdout, /3 actors, 12 segments,\s+30 actions per segment, 120 in total, 10 minutes/);
+  assert.match(help.stdout, /somewhere login\s+with account access/);
+  assert.doesNotMatch(help.stdout, /3 actors, 12 segments|plan's browser limits/);
 });
 
 test('Ctrl-C during a journey closes every opened actor browser before exiting', async () => {
@@ -458,7 +459,7 @@ test('a call still running when the cleanup budget runs out is reported unconfir
   assert.ok(cleanup_ms <= 400);
   assert.deepEqual(cleanup[0], { actor: 'alice', status: 'closed' });
   assert.equal(cleanup[1].status, 'unconfirmed');
-  assert.match(cleanup[1].reason, /still running when cleanup ran out of time; the platform closes an idle browser within 5 minutes/);
+  assert.match(cleanup[1].reason, /still running when cleanup ran out of time; the platform closes idle browsers when they expire/);
   assert.equal(client.runs().length, 2);
 });
 
@@ -605,7 +606,7 @@ test('SIGTERM with a failed close reports that browser as unconfirmed and still 
   const { code, stderr } = await run.done();
   assert.equal(code, 143, stderr);
   assert.match(stderr, /alice closed, bob unconfirmed/);
-  assert.match(stderr, /bob: close after its call finished failed \(AUTHORITY_UNAVAILABLE\); the platform closes an idle browser within 5 minutes/);
+  assert.match(stderr, /bob: close after its call finished failed \(AUTHORITY_UNAVAILABLE\); the platform closes idle browsers when they expire/);
 });
 
 // Managed test users (founder 2026-10-20 22:45; backend ): a

@@ -109,7 +109,7 @@ for (const [label, warnings] of [['a server that names private files', [SERVER_W
 
       assert.match(first.all, /Not published: 3 local files \(notes, tests, tooling\) stay on your machine\. See them: somewhere deploy --list-unpublished/);
       assert.doesNotMatch(first.all, /A deploy publishes your app/);
-      assert.match(first.all, /2 static files uploaded \(/);
+      assert.match(first.all, /2 static files uploaded$/m);
       // : the headline's files are named, from the same selection the request carried.
       assert.match(first.all, /Uploaded: index\.html, src\/main\.js/);
       assert.doesNotMatch(first.all, /static files? deployed/);
@@ -203,6 +203,7 @@ test('non-TTY deploy prints collection once across all preflight warnings and ke
     assert.match(human.all, /linked\.html — symlink \(not followed\)/);
     assert.match(human.all, /This looks like a Node server app/);
     assert.match(human.all, /server source will be publicly readable/);
+    assert.match(human.all, /API handlers under api\//);
     assert.equal(human.all.split(SERVER_WARNING).length - 1, 1);
     const deploy = requests.find((r) => r.url === '/v1/deploy');
     assert.ok(!('NOTES.md' in deploy.body.files));

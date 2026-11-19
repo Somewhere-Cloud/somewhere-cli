@@ -133,7 +133,7 @@ async function waitForChoices(
     }
     await sleep(2000);
   }
-  throw new Error(`GitHub authorization was not completed within 5 minutes. Run \`${cliInvocation()} git connect\` again.`);
+  throw new Error(`The wait for GitHub authorization ended. Run \`${cliInvocation()} git connect\` again.`);
 }
 
 async function chooseRepo(
@@ -201,7 +201,7 @@ async function waitForDeploy(
     }
     await sleep(DEPLOY_POLL_MS);
   }
-  throw new Error(`Deploy of ${commitSha.slice(0, 7)} is still running after 10 minutes. Check the project logs.`);
+  throw new Error(`The wait ended before deploy of ${commitSha.slice(0, 7)} finished. Check the project logs.`);
 }
 
 function urls(projectId: string, servingUrl: string | null): { live_url: string | null; logs_url: string } {

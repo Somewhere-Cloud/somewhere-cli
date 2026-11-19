@@ -139,8 +139,8 @@ export function registerEnv(program: Command) {
     .option('--public', 'Explicitly allow browser exposure for a VITE_/REACT_APP_ name')
     .option('--private', 'Keep this value server-only')
     .option('--scope <scope>', 'Environment: all, dev, or prod (default: all)')
-    .option('--provider <name>', 'Optional provider label (max 64 characters)')
-    .option('--purpose <text>', 'Optional purpose description (max 240 characters)')
+    .option('--provider <name>', 'Optional provider label')
+    .option('--purpose <text>', 'Optional purpose description')
     .option('--json', 'Print the raw env response as JSON')
     .action(async (key: string, positionalValue: string | undefined, opts: {
       project?: string; stdin?: boolean; public?: boolean; private?: boolean;

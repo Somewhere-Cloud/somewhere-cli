@@ -233,7 +233,7 @@ async function freshCodes(run: FormHost, address: string, mark: InboxMark, what:
   for (;;) {
     const codes = await takeCodes(run, address, mark, 10_000);
     if (codes.length) return codes;
-    if (Date.now() > deadline) throw new Error(`${what}: no code reached the project's test inbox for ${address} within 25 s. The test inbox holds at most a limited number of messages for 7 days; when it is full, new mail is not stored.`);
+    if (Date.now() > deadline) throw new Error(`${what}: no code reached the project's test inbox for ${address}. Check whether the app sent the message, then try again.`);
   }
 }
 

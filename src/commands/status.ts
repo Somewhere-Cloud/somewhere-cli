@@ -1,6 +1,6 @@
 import { Command } from 'commander';
 import { ApiClient } from '../lib/client.js';
-import { getToken, loadProjectConfig } from '../lib/config.js';
+import { getToken, loadConfig, loadProjectConfig } from '../lib/config.js';
 import { dim, error, info, printJson, statusDot, teal, timeAgo } from '../lib/output.js';
 import { callPlatformTool } from '../lib/platform-tools.js';
 import { isRecord, unwrapPlatformData } from '../lib/platform-command.js';
@@ -169,6 +169,7 @@ export function registerStatus(program: Command) {
     .action(async (projectArg: string | undefined, opts) => {
       const token = getToken();
       const client = new ApiClient(token);
+      const claimConnection = Boolean(loadConfig()?.claim_access);
 
       const chosen = chooseProjectRef(projectArg, opts.project);
       if (chosen.kind === 'conflict') {
@@ -211,9 +212,8 @@ export function registerStatus(program: Command) {
         }>('GET', `/projects/${encodeURIComponent(projectId)}`);
         projectStatus = p;
 
-        const servingUrl = await getProjectServingUrl(client, projectId).catch(() =>
-          fallbackProjectServingUrl(p),
-        );
+        const servingUrl = claimConnection ? fallbackProjectServingUrl(p)
+          : await getProjectServingUrl(client, projectId).catch(() => fallbackProjectServingUrl(p));
 
         if (!opts.json) {
           console.log(`\n  Project: ${teal(p.name)} (${statusDot(p.status)})`);
@@ -230,11 +230,9 @@ export function registerStatus(program: Command) {
       }
 
       try {
-        const deployment = unwrapPlatformData(await callPlatformTool(
-          'deploy_status',
-          { project_id: projectId },
-          { allTools: true },
-        ));
+        const deployment = claimConnection
+          ? await client.call('GET', '/deploy/status', undefined, { project_id: projectId })
+          : unwrapPlatformData(await callPlatformTool('deploy_status', { project_id: projectId }, { allTools: true }));
         if (!isRecord(deployment)) throw new Error('deploy_status returned an unexpected response.');
         deploymentStatus = deployment;
         if (!opts.json) {
@@ -289,7 +287,7 @@ export function registerStatus(program: Command) {
         }
       }
 
-      try {
+      if (!claimConnection) try {
         const ws = await client.call<{
           status: string;
           terminal_url?: string | null;
@@ -316,7 +314,9 @@ export function registerStatus(program: Command) {
         let appUrl: string | null = null;
         let appUrlError: { code: string; message: string } | null = null;
         try {
-          appUrl = await getAuthoritativeAppUrl(client, projectId);
+          appUrl = claimConnection
+            ? projectStatus && fallbackProjectServingUrl(projectStatus)
+            : await getAuthoritativeAppUrl(client, projectId);
           if (!appUrl) appUrlError = { code: 'APP_URL_NOT_REPORTED', message: 'The platform reported no https app URL for this project. Deploy it, then run this again.' };
         } catch (err) {
           appUrlError = { code: 'APP_URL_UNAVAILABLE', message: `Could not read the project's URLs: ${err instanceof Error ? err.message : String(err)}` };

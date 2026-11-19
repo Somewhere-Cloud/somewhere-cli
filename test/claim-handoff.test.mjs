@@ -61,11 +61,12 @@ const { recoverClaimHandoff, ensureClaimHandoff } = await import('../dist/lib/cl
 
 function writeConfig(config) { writeFileSync(configPath, JSON.stringify(config)); }
 function readConfig() { return JSON.parse(readFileSync(configPath, 'utf8')); }
-function encrypted(verifier, handoffId, projectId, { account = false, aadAccount = account } = {}) {
+function encrypted(verifier, handoffId, projectId, { account = false, aadAccount = account, grant = {} } = {}) {
   const payload = {
     token: 'smt_project_bound', refresh_token: 'smtr_project_bound', expires_at: '2026-09-18T00:00:00.000Z',
     email: 'owner@example.com', project_id: projectId, scope: account ? null : { projects: [projectId] },
     ...(account ? { approved_scope: 'account' } : {}), session_id: 'key-1',
+    ...grant,
   };
   const key = createHash('sha256').update(`claim-cli-handoff:v1:${verifier}`).digest();
   const iv = randomBytes(12);
@@ -89,7 +90,7 @@ test('same-project continuation saves permanent credential before acknowledgemen
   writeConfig({ token: 'smt_temp', user: { email: 'temporary', username: '' }, temporary: true, claim_handoff: { project_id: projectId, verifier, handoff_id: handoffId } });
   const result = await recoverClaimHandoff();
   assert.equal(result.kind, 'recovered');
-  assert.match(result.message, /for this project only.*somewhere login.*for account access/);
+  assert.match(result.message, /work on the saved app.*somewhere login.*for account access/);
   const config = readConfig();
   assert.equal(config.token, 'smt_project_bound');
   assert.equal(config.temporary, undefined);
@@ -214,14 +215,15 @@ test('fresh exchange acknowledgement cannot overwrite a login made after install
   ackStarted = undefined;
 });
 
-test('registration requests only the claimed project', async () => {
+test('registration advertises claim agent support and leaves access to browser consent', async () => {
   calls = [];
   writeConfig({ token: 'smt_temp_register', user: { email: 'temporary', username: '' }, temporary: true });
   const state = await ensureClaimHandoff(projectId);
   assert.equal(state.handoff_id, 'cch_registered');
   const register = calls.find((call) => call.url === '/v1/auth/temp-handoff/register');
   assert.equal(register.body.project_id, projectId);
-  assert.equal('capabilities' in register.body, false);
+  assert.deepEqual(register.body.capabilities, ['claim_project_agent_v1']);
+  assert.equal('cli_scope' in register.body, false);
   assert.equal('verifier' in register.body, false, 'only the verifier hash leaves the machine');
   assert.match(register.body.verifier_hash, /^[a-f0-9]{64}$/);
 });
@@ -236,7 +238,7 @@ test('account approval or refusal leaves temporary state intact and directs the 
       calls = [];
       const result = await recoverClaimHandoff();
       assert.equal(result.kind, 'manual');
-      assert.match(result.message, /only to the claimed project.*somewhere login.*for account access/);
+      assert.match(result.message, /somewhere login.*account owner to approve/);
       assert.deepEqual(readConfig(), original);
       assert.deepEqual(calls.map((call) => call.url), ['/v1/auth/temp-handoff/exchange']);
     }
@@ -252,6 +254,32 @@ test('a project envelope cannot install account credentials', async () => {
   await assert.rejects(() => recoverClaimHandoff(), /did not match the approved project/);
   assert.equal(readConfig().token, 'smt_temp_relabel');
   delivered = encrypted(verifier, handoffId, projectId);
+});
+
+test('both browser grants install a claim bearer without refresh or a cached app list', async () => {
+  const otherApp = '22222222-2222-4222-8222-222222222222';
+  try {
+    for (const [access, sentence] of [
+      ['new_projects', 'Connected. You can work on the saved apps and create new apps in this account.'],
+      ['all_projects', 'Connected. You can work on the apps already in this account and create new ones.'],
+    ]) {
+      delivered = encrypted(verifier, handoffId, projectId, { grant: {
+        credential_kind: 'project_agent', refresh_token: null, claim_access: access,
+        approved_scope: 'project', scope: { projects: [projectId, otherApp] },
+      } });
+      writeConfig({ token: 'smt_temp', temporary: true, claim_handoff: { project_id: projectId, verifier, handoff_id: handoffId } });
+      calls = [];
+      assert.deepEqual(await recoverClaimHandoff(), { kind: 'recovered', message: sentence });
+      const installed = readConfig();
+      assert.equal(installed.claim_access, access);
+      assert.equal(installed.token, 'smt_project_bound');
+      assert.equal(installed.refresh_token, undefined);
+      assert.equal(installed.access_expires_at, undefined);
+      assert.equal(installed.scope, undefined);
+      assert.equal(installed.claim_handoff_ack, undefined);
+      assert.deepEqual(calls.map(call => call.url), ['/v1/auth/temp-handoff/exchange', '/v1/auth/temp-handoff/ack']);
+    }
+  } finally { delivered = encrypted(verifier, handoffId, projectId); }
 });
 
 test.after(async () => { await new Promise((resolve) => server.close(resolve)); });

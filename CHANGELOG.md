@@ -1,3 +1,8 @@
+## 0.38.128
+
+- A claim connection can work on saved apps and create new ones. It can work on other existing apps when the owner selects that option.
+- Show the approved access after connecting and list the apps and their deploy availability with `somewhere projects`.
+
 ## 0.38.127
 
 - Starter test checks continue after independent failures and explain skipped prerequisites. Use `somewhere test --fail-fast` to stop each app-check script after its first failure.

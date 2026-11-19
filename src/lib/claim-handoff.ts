@@ -1,10 +1,10 @@
 import { cliInvocation } from './cli-invocation.js';
 import { createDecipheriv, createHash, randomBytes } from 'node:crypto';
-import type { ClaimCliHandoff, ClaimCliHandoffAck, CliConfig } from '../types.js';
+import type { ClaimAppAccess, ClaimCliHandoff, ClaimCliHandoffAck, CliConfig } from '../types.js';
 import { loadConfig, saveConfig, temporaryConfigExpired } from './config.js';
 import { getDeviceKeyName } from './device.js';
 import { describeThisDevice } from './device-login.js';
-import { API_BASE_URL } from './client.js';
+import { API_BASE_URL, type ApiClient } from './client.js';
 import { fetchWithProxy as fetch } from './http.js';
 
 interface Envelope<T> {
@@ -18,13 +18,27 @@ interface RegisterResult { handoff_id: string; expires_at: string }
 interface ExchangeResult { status: 'ready'; project_id: string; approved_scope?: string; ciphertext: string; iv: string }
 interface DeliveredCredentials {
   token: string;
-  refresh_token: string;
+  refresh_token: string | null;
   expires_at: string;
   email: string;
   project_id: string;
   scope: { projects: string[] };
   approved_scope?: string;
   session_id: string;
+  credential_kind?: 'project_agent';
+  claim_access?: ClaimAppAccess;
+}
+
+interface ClaimConnection {
+  state: 'claimed_connected' | 'claimed_disconnected';
+  claim_access?: ClaimAppAccess;
+  can_create_projects?: boolean;
+  projects_remaining?: number;
+  projects?: { project_id: string; name: string; url: string; can_deploy: boolean; reason: string | null }[];
+}
+
+export function readClaimConnection(client: Pick<ApiClient, 'call'>): Promise<ClaimConnection> {
+  return client.call<ClaimConnection>('GET', '/auth/temp-claim/status', undefined, undefined, { refresh: false });
 }
 
 type HttpResponse = Awaited<ReturnType<typeof fetch>>;
@@ -58,15 +72,21 @@ function decodeCredentials(state: ClaimCliHandoff, response: ExchangeResult): De
   decipher.setAuthTag(tag);
   const plaintext = Buffer.concat([decipher.update(encrypted), decipher.final()]).toString('utf8');
   const parsed = JSON.parse(plaintext) as Partial<DeliveredCredentials>;
+  const projects = parsed.scope?.projects;
+  const agent = parsed.credential_kind === 'project_agent';
   if (
     typeof parsed.token !== 'string'
-    || typeof parsed.refresh_token !== 'string'
+    || !parsed.token
     || typeof parsed.expires_at !== 'string'
     || typeof parsed.email !== 'string'
     || parsed.project_id !== state.project_id
     || (parsed.approved_scope !== undefined && parsed.approved_scope !== 'project')
-    || parsed.scope?.projects?.length !== 1
-    || parsed.scope.projects[0] !== state.project_id
+    || !Array.isArray(projects)
+    || !projects.includes(state.project_id)
+    || projects.some(project => typeof project !== 'string' || !project)
+    || (agent
+      ? parsed.refresh_token !== null || (parsed.claim_access !== 'new_projects' && parsed.claim_access !== 'all_projects')
+      : parsed.credential_kind !== undefined || parsed.claim_access !== undefined || typeof parsed.refresh_token !== 'string' || projects.length !== 1)
   ) {
     throw new Error('Claim continuation credential did not match the approved project. Nothing was installed.');
   }
@@ -103,7 +123,8 @@ export async function ensureClaimHandoff(projectId: string): Promise<ClaimCliHan
     project_id: projectId,
     verifier_hash: verifierHash(state.verifier),
     device_name: getDeviceKeyName(),
-    client: describeThisDevice(),
+    client: { hostname: describeThisDevice().hostname },
+    capabilities: ['claim_project_agent_v1'],
   }, config.token);
   if (!response.ok || !envelope.ok || !envelope.data) {
     throw new Error(envelope.message || envelope.error || `CLI continuation registration failed (HTTP ${response.status}).`);
@@ -185,7 +206,7 @@ export async function recoverClaimHandoff(): Promise<ClaimHandoffRecovery> {
   ) {
     return {
       kind: 'manual',
-      message: `A claim link connects this CLI only to the claimed project. Run \`${cliInvocation()} login\` for account access.`,
+      message: `This claim approval cannot be used to sign in. Run \`${cliInvocation()} login\` and ask the account owner to approve it.`,
     };
   }
 
@@ -226,8 +247,9 @@ export async function recoverClaimHandoff(): Promise<ClaimHandoffRecovery> {
   }
   const next: CliConfig = {
     token: delivered.token,
-    refresh_token: delivered.refresh_token,
-    access_expires_at: delivered.expires_at,
+    ...(delivered.credential_kind === 'project_agent'
+      ? { claim_access: delivered.claim_access }
+      : { refresh_token: delivered.refresh_token!, access_expires_at: delivered.expires_at }),
     user: { email: delivered.email, username: '' },
     claim_handoff_ack: { handoff_id: state.handoff_id, verifier: state.verifier },
   };
@@ -239,6 +261,10 @@ export async function recoverClaimHandoff(): Promise<ClaimHandoffRecovery> {
   }
   return {
     kind: 'recovered',
-    message: `Connected to ${delivered.email} for this project only. The existing project link was kept. Run \`${cliInvocation()} login\` for account access.`,
+    message: delivered.claim_access === 'new_projects'
+      ? 'Connected. You can work on the saved apps and create new apps in this account.'
+      : delivered.claim_access === 'all_projects'
+        ? 'Connected. You can work on the apps already in this account and create new ones.'
+        : `Connected. You can work on the saved app. Run \`${cliInvocation()} login\` for account access.`,
   };
 }

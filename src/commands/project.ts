@@ -4,7 +4,8 @@ import { Command } from 'commander';
 import prompts from 'prompts';
 import ora from '../lib/spinner.js';
 import { ApiClient, CliApiError } from '../lib/client.js';
-import { getToken } from '../lib/config.js';
+import { getToken, loadConfig } from '../lib/config.js';
+import { readClaimConnection } from '../lib/claim-handoff.js';
 import {
   dim,
   error,
@@ -409,6 +410,25 @@ async function listProjects(opts: { json?: boolean } = {}) {
   const client = new ApiClient(getToken());
   const spinner = opts.json ? null : ora('Fetching projects...').start();
   try {
+    if (loadConfig()?.claim_access) {
+      const connection = await readClaimConnection(client);
+      spinner?.stop();
+      if (connection.state !== 'claimed_connected') {
+        throw new Error(`This app connection is closed. Run \`${cliInvocation()} login\` and ask the account owner to approve it.`);
+      }
+      if (opts.json) printJson(connection);
+      else {
+        const apps = connection.projects ?? [];
+        if (apps.length) table(['App', 'ID', 'URL', 'Deploy'], apps.map(app => [
+          app.name, app.project_id, app.url, app.can_deploy
+            ? 'Available'
+            : app.reason === 'private_configuration' ? 'Paused for private configuration' : 'Unavailable',
+        ]));
+        else info('This connection has no apps yet.');
+        if (connection.can_create_projects) info(`Create an app with \`${cliInvocation()} init --name <name>\`.`);
+      }
+      return;
+    }
     const result = await client.call<{
       projects: Array<{
         id?: string;

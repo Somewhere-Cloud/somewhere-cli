@@ -5,7 +5,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
-import { createHash } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, unlinkSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -13,27 +12,25 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const distIndex = process.env.SOMEWHERE_TEST_CLI ?? join(dirname(fileURLToPath(import.meta.url)), '..', 'dist', 'index.js');
-const DIFFICULTY = 8;
-
-function leadingZeroBits(buf) {
-  let bits = 0;
-  for (const byte of buf) {
-    if (byte === 0) { bits += 8; continue; }
-    let mask = 0x80;
-    while (mask > 0 && (byte & mask) === 0) { bits++; mask >>= 1; }
-    break;
-  }
-  return bits;
-}
 
 // A gate holds requests for one route until `count` have arrived, then hands
 // them to the test, which answers them in the order it chooses.
 function gate(count) {
   const held = [];
   let arrivedAll;
-  const allArrived = new Promise((r) => { arrivedAll = r; });
+  let timer;
+  const allArrived = new Promise((resolve, reject) => {
+    arrivedAll = resolve;
+    timer = setTimeout(() => reject(new Error(`Only ${held.length} of ${count} fixture requests arrived`)), 5_000);
+  });
   return {
-    hold(entry) { held.push(entry); if (held.length === count) arrivedAll(held); },
+    hold(entry) {
+      held.push(entry);
+      if (held.length === count) {
+        clearTimeout(timer);
+        arrivedAll(held);
+      }
+    },
     allArrived,
   };
 }
@@ -52,14 +49,8 @@ const server = createServer((req, res) => {
       res.setHeader('Content-Type', 'application/json');
       res.end(JSON.stringify(status < 300 ? { ok: true, data } : { ok: false, ...data }));
     };
-    if (req.method === 'GET' && req.url === '/v1/auth/pow/challenge') {
-      return send(200, { nonce: 'n', difficulty: DIFFICULTY, algorithm: 'sha256', input: 'n:<suffix>', expires_at: new Date(Date.now() + 600_000).toISOString(), ttl_seconds: 600 });
-    }
     if (req.method === 'POST' && req.url === '/v1/auth/temp-create') {
-      const parsed = JSON.parse(body);
-      if (leadingZeroBits(createHash('sha256').update(`${parsed.nonce}:${parsed.suffix}`, 'utf8').digest()) < DIFFICULTY) {
-        return send(400, { error: 'INVALID_SOLUTION', message: 'bad pow' });
-      }
+      assert.deepEqual(JSON.parse(body), {});
       const answer = () => {
         mints++;
         send(201, {
@@ -93,7 +84,7 @@ const server = createServer((req, res) => {
 });
 await new Promise((r) => server.listen(0, '127.0.0.1', r));
 const apiUrl = `http://127.0.0.1:${server.address().port}/v1`;
-test.after(() => server.close());
+test.after(() => { server.closeAllConnections(); server.close(); });
 
 function start(args, cwd, HOME) {
   const child = spawn(process.execPath, [distIndex, ...args], { cwd, env: { ...process.env, HOME, USERPROFILE: HOME, SOMEWHERE_API_URL: apiUrl, NO_COLOR: '1' } });

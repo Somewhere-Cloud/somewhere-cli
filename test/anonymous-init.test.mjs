@@ -83,7 +83,7 @@ test('anonymous human result directs to existing temporary deploy and full quick
   assertInitGuidance(result);
 });
 test('anonymous link/bare/project flags never bypass account authority', async () => {
-  for (const args of [['--link', '--project', 'fixture'], ['--bare', '--name', 'fixture'], ['--project', 'fixture', '--name', 'fixture']]) {
+  for (const args of [['--link', '--project', 'fixture'], ['--bare', '--name', 'fixture'], ['--template', 'bare', '--name', 'fixture'], ['--project', 'fixture', '--name', 'fixture']]) {
     const result = await run([...args, '--json']);
     assert.notEqual(result.status, 0); assert.deepEqual(readdirSync(result.cwd), []); assert.deepEqual(requests, []);
   }

@@ -63,7 +63,7 @@ interface InitOptions {
 
 const INSTALL_STARTER_MESSAGE = 'Installing the starter\'s pinned dependencies with `npm install` (downloads from npm and runs package install scripts)…';
 
-const INIT_TEMPLATES = ['auth', 'minimal'] as const;
+const INIT_TEMPLATES = ['auth', 'minimal', 'bare'] as const;
 type InitTemplateName = (typeof INIT_TEMPLATES)[number];
 
 /** The default (auth) starter is the same generator as `--features auth,private-data`. */
@@ -85,7 +85,7 @@ export function registerInit(program: Command) {
     .option('--link', 'Scaffold an empty directory and link an existing project; non-empty directories are link-only')
     .option('--project <ref>', 'Existing project ID, name, slug, or subdomain (requires --link)')
     .option('--bare', 'Create and link only: no starter source or dependencies (AGENTS.md/CLAUDE.md are still added when absent)')
-    .option('--template <name>', 'Starter to write: auth (default, cookie sign-in) or minimal (auth route, no sign-in UI)', 'auth')
+    .option('--template <name>', 'Starter to write: auth (default), minimal (auth route, no sign-in UI), or bare (link only)', 'auth')
     .option('--features <ids>', 'Generate selected modules into an empty directory, comma-separated: auth, magic-link, private-data, agent (see --catalog)')
     .option('--ui <mode>', 'With --features: styled (default; src/ui + design tokens) or headless (hooks and plain markup)')
     .option('--catalog', 'Print the module catalog for --features and exit; no login, project or files')
@@ -101,7 +101,8 @@ export function registerInit(program: Command) {
         + '(deploy, then test). Sign-in and invitation links (sw.auth.invite) open\n'
         + '/auth/magic, which the starter routes before the sign-in gate.\n'
         + '`--template minimal` includes the SDK and auth route without sign-in screens.\n'
-        + 'Init installs the starter\'s pinned dependencies with npm install (downloads from npm and runs package install scripts).\n'
+        + 'Init installs the SDK and editor types. The platform builds React when you deploy. Install the runtime for local development.\n'
+        + 'TypeScript is fetched when first needed. Vite and Playwright are installed only if you choose to use them.\n'
         + `New starters and --bare also install ${skillNames(BUNDLED_SKILLS_PACK).length} agent skills in .agents/skills, pinned by skills-lock.json.\n`
         + '\nA directory that already holds an app (package.json, index.html, src/, …) is\n'
         + 'linked and left untouched. A directory holding only other files (notes, a stray\n'
@@ -121,6 +122,7 @@ export function registerInit(program: Command) {
 /** The init command's handler; `somewhere link` runs it with link set (commands/link.ts). */
 export async function runInit(opts: InitOptions, command: Command): Promise<void> {
   const dir = process.cwd();
+  if (opts.template === 'bare') opts = { ...opts, bare: true };
   let plan: FeaturePlan | undefined;
   try {
     if (opts.catalog) {

@@ -47,7 +47,9 @@ export function upgradeProject(dir: string, running: string, changelog: () => st
   }
   const alreadyExact = pins.every((pin) => pin.spec === running);
   const updated = alreadyExact ? [] : writeProjectPins(dir, pins, running);
-  const next = updated.includes('package.json') ? ['npm install'] : [];
+  const next = pins.some(pin => pin.source === 'package.json' && !pin.versionOnly && pin.spec !== running)
+    ? ['npm install']
+    : [];
   return { from, to: running, updated, changes: changelogBetween(changelog(), from, running), next };
 }
 
@@ -58,10 +60,9 @@ export function registerUpgrade(program: Command) {
     .option('--json', 'Print the result as JSON')
     .addHelpText(
       'after',
-      '\nA project records the CLI version it was built with (package.json devDependency\n'
-        + `"${CLI_PACKAGE_NAME}", or "cli_version" in .somewhere.json). Commands run in a\n`
-        + 'project pinned to another version print one line saying so, and hand off to the\n'
-        + 'pinned version when it is installed in node_modules. To move to the newest release:\n'
+      '\nNew starters record somewhere.cli_version in package.json. The CLI uses the exact\n'
+        + 'version from npm’s cache when needed. Existing package dependencies and .somewhere.json\n'
+        + 'pins still work. To move to the newest release:\n'
         + `  npx -y ${CLI_PACKAGE_NAME}@latest upgrade\n`
         + `Agent skills are not changed; \`${cliInvocation()} skills update\` refreshes them.\n`,
     )

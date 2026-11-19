@@ -1,5 +1,7 @@
 import { CLI_PACKAGE_ROOT } from './package-root.js';
 import { createRequire } from 'node:module';
+import { pathToFileURL } from 'node:url';
+import { readProjectPin } from './project-pin.js';
 import { join, dirname } from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { appendFileSync, existsSync, readFileSync, readdirSync, rmSync } from 'node:fs';
@@ -18,7 +20,16 @@ export interface PreparedRunner { cli: string; channel: 'chrome' | undefined; ve
 export interface RunOptions { workers: string; files?: string[]; grep?: string; failed?: boolean; json?: boolean; phone?: boolean; preview?: boolean }
 export interface RunOutcome { exitCode: number; results: Record<string, unknown> | null; target: TestTarget }
 
+export function testImportEnv(root: string, env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  if (!readProjectPin(root)?.versionOnly) return env;
+  const hook = pathToFileURL(join(CLI_PACKAGE_ROOT, 'bin', 'starter-test-imports.mjs'));
+  return { ...env, NODE_OPTIONS: [env.NODE_OPTIONS, '--import=' + hook.href].filter(Boolean).join(' ') };
+}
+
 export function testDependencyError(root: string): Error {
+  if (readProjectPin(root)?.versionOnly) {
+    return new Error('Install Playwright for this project: npm install -D --save-exact @playwright/test@1.65.0');
+  }
   return new Error(missingProjectDependencies(root).includes('@playwright/test')
     ? INSTALL_PROJECT_DEPENDENCIES
     : 'Install project test dependencies: npm install -D @playwright/test @somewhere-cloud/cli');
@@ -86,7 +97,7 @@ export async function runTests(input: { root: string; client?: ApiClient; projec
   const ignored = existsSync(ignorePath) ? readFileSync(ignorePath, 'utf8') : '';
   for (const line of ['.somewhere/', 'playwright-report/', 'test-results/']) if (!ignored.split(/\r?\n/).includes(line)) appendFileSync(ignorePath, `\n${line}\n`);
   const ipv4First = await span('address-probe', {}, () => addressOrder ?? testAddressOrder(origin));
-  const runnerEnv = { ...process.env, ...(ipv4First ? { NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --dns-result-order=ipv4first` } : {}) };
+  const runnerEnv = testImportEnv(root, { ...process.env, ...(ipv4First ? { NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --dns-result-order=ipv4first` } : {}) });
   const files = options.files ?? [];
   const failed = Boolean(options.failed);
   const browser = `${prepared.channel ?? 'chromium'} ${prepared.version}`;

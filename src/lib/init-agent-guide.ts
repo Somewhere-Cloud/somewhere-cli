@@ -163,6 +163,8 @@ Keep each run short:
 - Stop at the first failure and print what the page showed (page.url(), the visible error
   text). Checks after a failure only wait out their timeouts. app.check() does both.
 - After a fix, rerun the scripts that failed, each one whole: npx @somewhere-cloud/cli test --failed.
+The CLI supplies its test helpers when it runs your tests. For the first browser test, install Playwright with npm install -D --save-exact @playwright/test@1.65.0.
+For a local Vite server, install the frontend tools with npm install --include=optional -D --save-exact vite@7.2.2.
 The test helper, @somewhere-cloud/cli/script (import or require); these are all the calls a test needs:
   const app = await openAppTest();              // the live origin, release and data contract
   const ana = await app.signUp(page);           // through your form: { id, email, password, verified }

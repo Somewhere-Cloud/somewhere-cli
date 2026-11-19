@@ -1,3 +1,8 @@
+## 0.38.123
+
+- Install only app packages and types when creating a starter. Keep the CLI version as a pin and add Vite or Playwright when needed.
+- Accept names on cron update and cron delete.
+
 ## 0.38.122
 
 - Ship a runtime-only npm lock so default installs fetch the bundled CLI without its build dependencies.

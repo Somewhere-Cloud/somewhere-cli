@@ -9,21 +9,21 @@ const PACKAGE_JSON = `{
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "somewhere": { "cli_version": "${CLI_VERSION}" },
   "scripts": {
-    "dev": "somewhere dev",
-    "typecheck": "somewhere typecheck"
+    "dev": "npx -y @somewhere-cloud/cli dev",
+    "typecheck": "npx -y @somewhere-cloud/cli typecheck"
   },
   "dependencies": {
-    "@somewhere-cloud/sdk": "0.14.2",
+    "@somewhere-cloud/sdk": "0.14.2"
+  },
+  "optionalDependencies": {
     "react": "19.2.7",
     "react-dom": "19.2.7"
   },
   "devDependencies": {
-    "@somewhere-cloud/cli": "${CLI_VERSION}",
     "@types/react": "19.2.2",
-    "@types/react-dom": "19.2.2",
-    "typescript": "5.9.3",
-    "vite": "7.2.2"
+    "@types/react-dom": "19.2.2"
   },
   "allowScripts": {
     "esbuild": true

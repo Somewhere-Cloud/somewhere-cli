@@ -649,7 +649,7 @@ test('init --link --project links an exact existing project non-interactively', 
       JSON.parse(readFileSync(join(cwd, '.somewhere.json'), 'utf8')),
       { project_id: project.id, name: project.name, subdomain: project.subdomain },
     );
-    assert.equal(JSON.parse(readFileSync(join(cwd, 'package.json'), 'utf8')).devDependencies['@somewhere-cloud/cli'], CLI_PACKAGE_VERSION);
+    assert.equal(JSON.parse(readFileSync(join(cwd, 'package.json'), 'utf8')).somewhere.cli_version, CLI_PACKAGE_VERSION);
   });
 });
 
@@ -706,8 +706,9 @@ test('init creates the green starter, --bare keeps only the workflow guide, and 
       readFileSync(join(empty, 'CLAUDE.md'), 'utf8'),
       'Read AGENTS.md for project instructions.\n',
     );
-    assert.equal(JSON.parse(readFileSync(join(empty, 'package.json'), 'utf8'))
-      .dependencies.react, '19.2.7');
+    const starter = JSON.parse(readFileSync(join(empty, 'package.json'), 'utf8'));
+    assert.equal(starter.dependencies.react, undefined);
+    assert.deepEqual(starter.optionalDependencies, { react: '19.2.7', 'react-dom': '19.2.7' });
 
     const checked = await run(['deploy-check', '.', '--json'], { cwd: empty, env });
     assert.equal(checked.status, 0, `stdout:\n${checked.stdout}\nstderr:\n${checked.stderr}`);
@@ -732,7 +733,7 @@ test('init creates the green starter, --bare keeps only the workflow guide, and 
 
     const unknown = await run(['init', '--name', project.name, '--template', 'nope', '--json'], { cwd: mkdtempSync(join(tmpdir(), 'sw-json-init-unknown-')), env });
     assert.equal(unknown.status, 2);
-    assert.match(unknown.stdout + unknown.stderr, /Unknown --template nope\. Use one of: auth, minimal\./);
+    assert.match(unknown.stdout + unknown.stderr, /Unknown --template nope\. Use one of: auth, minimal, bare\./);
 
     const bare = mkdtempSync(join(tmpdir(), 'sw-json-init-scaffold-bare-'));
     const bareResult = await run(['init', '--name', project.name, '--bare', '--json'], {

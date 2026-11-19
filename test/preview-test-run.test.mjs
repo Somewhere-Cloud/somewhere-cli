@@ -15,6 +15,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { hashFiles } from '../dist/lib/base-files.js';
 import { collectFiles } from '../dist/lib/files.js';
+import { CLI_PACKAGE_VERSION } from './local-cli-pack.mjs';
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 const distIndex = join(repoRoot, 'dist', 'index.js');
@@ -337,7 +338,7 @@ try {
 
 const PROD_RECORD = { project_id: PROJECT, email: 'sw-prod@example.com', id: 'prod-user-1', run: 'old-production-run', pid: 999999998, created_at: '2026-11-14T00:00:00.000Z' };
 let root, configDir, prodRecordPath;
-function makeProject() {
+function makeProject(lightweight = false) {
   const dir = mkdtempSync(join(process.env.TMPDIR ?? tmpdir(), 'sw-preview-test-run-'));
   writeFileSync(join(dir, '.somewhere.json'), JSON.stringify({ project_id: PROJECT, name: 'e5', subdomain: 'e5' }));
   mkdirSync(join(dir, '.somewhere'), { recursive: true });
@@ -347,12 +348,12 @@ function makeProject() {
   mkdirSync(prodDir, { recursive: true });
   prodRecordPath = join(prodDir, '1700000000000-0badf00d.json');
   writeFileSync(prodRecordPath, JSON.stringify(PROD_RECORD) + '\n');
-  writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'e5', private: true, type: 'module' }));
+  writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'e5', private: true, type: 'module', ...(lightweight ? { somewhere: { cli_version: CLI_PACKAGE_VERSION } } : {}) }));
   mkdirSync(join(dir, 'node_modules', '@somewhere-cloud'), { recursive: true });
   symlinkSync(join(repoRoot, 'node_modules', '@playwright'), join(dir, 'node_modules', '@playwright'));
   symlinkSync(join(repoRoot, 'node_modules', 'playwright'), join(dir, 'node_modules', 'playwright'));
   symlinkSync(join(repoRoot, 'node_modules', 'playwright-core'), join(dir, 'node_modules', 'playwright-core'));
-  symlinkSync(repoRoot, join(dir, 'node_modules', '@somewhere-cloud', 'cli'));
+  if (!lightweight) symlinkSync(repoRoot, join(dir, 'node_modules', '@somewhere-cloud', 'cli'));
   mkdirSync(join(dir, 'tests'));
   for (const [name, content] of [['preview.spec.ts', SPEC], ['fails.spec.ts', FAILS], ['save.spec.ts', SAVE], ['save-unnoticed.spec.ts', SAVE_UNNOTICED], ['close.spec.ts', CLOSE], ['teams.spec.ts', TEAMS], ['shared.spec.ts', SHARED], ['check.mjs', SCRIPT], ['save-unnoticed.mjs', SCRIPT_SAVE_UNNOTICED]]) writeFileSync(join(dir, 'tests', name), content);
   // What `somewhere preview` records after a save: the folder's published files exactly as sent.
@@ -440,6 +441,27 @@ test('somewhere test --preview runs the journey on the preview with its own cred
   assert.equal(results.environment, 'preview'); assert.equal(results.preview_session_id, DRAFT); assert.equal(results.release, CANDIDATE); assert.equal(results.releaseConfirmed, true);
   assert.ok(!JSON.parse(readFileSync(join(root, '.somewhere', 'tests', 'runner.config.cjs'), 'utf8').replace(/^module\.exports = /, '').replace(/;\s*$/, '')).toString().includes(CREDENTIAL));
   assert.deepEqual(leaked(r.all), [], 'no password, code, cookie, session or credential in any artifact or output');
+});
+
+test('a lightweight starter runs both browser test forms without installing a project CLI', { timeout: 300_000 }, async () => {
+  const originalRecord = prodRecordPath;
+  const project = makeProject(true);
+  try {
+    for (const [args, summary, referenceReads] of [
+      [['--preview', 'tests/preview.spec.ts'], /3 passed, 0 failed/, []],
+      // The script selects its preview. The CLI launcher still reads the last deploy's check.
+      [['tests/check.mjs'], /PASSED: 3 checks in 1 script/, ['GET /v1/deploy/log']],
+    ]) {
+      reset();
+      const result = await somewhere(['test', ...args], project);
+      assert.equal(result.status, 0, result.all);
+      assert.match(result.stdout, summary);
+      assert.deepEqual(state.production.map((request) => request.split(' ').slice(0, 2).join(' ')), referenceReads);
+    }
+    assert.equal(existsSync(join(project, 'node_modules', '@somewhere-cloud', 'cli')), false);
+  } finally {
+    prodRecordPath = originalRecord;
+  }
 });
 
 test('at the moment of failure: no artifact, report or output holds a secret, for the starter form and a custom form; a plain page is still photographed', { timeout: 300_000 }, async () => {

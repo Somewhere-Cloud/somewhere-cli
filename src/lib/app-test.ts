@@ -416,7 +416,7 @@ export async function dataReady(scope: Page | Locator, timeout = 5_000): Promise
     if (error instanceof Error && error.name === 'TimeoutError'
         && page.url() !== 'about:blank'
         && await page.evaluate('document.readyState !== "loading" && !!document.body').catch(() => false)) {
-      throw new Error('The page loaded without the expected [data-sw-data] marker, which your app sets on the data view to "loading", "ready", or "error" as shown beside the privacy check in tests/app-check.mjs.');
+      throw new Error('The page loaded without the expected [data-sw-data] marker, which your app sets on the data view to "loading", "ready", or "error" as shown in `somewhere test --help`.');
     }
     throw error;
   }

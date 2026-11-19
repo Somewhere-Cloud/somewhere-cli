@@ -18,6 +18,7 @@ export function registerTest(program: Command): void {
     .option('--phone', 'Run every test again in a 390x844 phone viewport ([phone] in results)')
     .option('--json', 'Print structured results')
     .option('--verbose', 'Also print where the full result file is when everything passed')
+    .addHelpText('after', '\nFor the starter privacy check, mark the data view with data-sw-data="loading" while fetching, "ready" once data loads, or "error" if fetching fails.\n')
     .action(async (files: string[], opts: { workers: string; failed?: boolean; failFast?: boolean; grep?: string; url?: string; json?: boolean; phone?: boolean; preview?: boolean; verbose?: boolean }) => {
       markProcessStart('cli');
       mark('cli:action');

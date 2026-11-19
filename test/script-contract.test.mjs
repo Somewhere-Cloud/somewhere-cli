@@ -186,7 +186,7 @@ test('dataReady names a missing marker only after a loaded page has no data view
   try {
     await assert.rejects(dataReady(page, 100), { name: 'TimeoutError' });
     await page.goto('/notes');
-    await assert.rejects(dataReady(page, 100), /page loaded without.*data-sw-data.*"loading", "ready", or "error".*tests\/app-check\.mjs/);
+    await assert.rejects(dataReady(page, 100), /page loaded without.*data-sw-data.*"loading", "ready", or "error".*somewhere test --help/);
     await page.locator('body').evaluate(node => { node.dataset.swData = 'loading'; });
     await assert.rejects(dataReady(page, 100), /still loading/);
     await page.locator('body').evaluate(node => { node.dataset.swData = 'error'; });

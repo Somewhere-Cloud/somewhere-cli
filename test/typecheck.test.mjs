@@ -76,11 +76,11 @@ test('typecheck verdict is advisory on errors and keeps the clean summary unchan
   reportTypecheck({
     ok: true,
     errors: [],
-    via: 'bundled',
+    via: 'project',
     raw: '',
   });
 
-  assert.deepEqual(stdout, ['✓ Typecheck clean (via bundled tsc).']);
+  assert.deepEqual(stdout, ['✓ Typecheck clean (via project tsc).']);
   assert.deepEqual(stderr, []);
 });
 

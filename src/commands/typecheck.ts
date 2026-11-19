@@ -72,7 +72,7 @@ export function registerTypecheck(program: Command) {
           printJson({
             ok: false,
             errors: [],
-            via: 'bundled',
+            via: typecheckCompilerSource(dir),
             raw: '',
             spawnError: MISSING_TSCONFIG_GUIDANCE,
           });

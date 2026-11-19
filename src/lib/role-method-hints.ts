@@ -1,14 +1,25 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
-import { join, relative } from 'node:path';
-import ts from 'typescript';
+import { createRequire } from 'node:module';
+import { join, relative, resolve } from 'node:path';
+import type * as TypeScript from 'typescript';
 
 const METHODS = new Set(['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']);
 const REMOVED_ROLE_METHODS: Record<string, string> = { grantRole: 'add', revokeRole: 'remove' };
 
 /** Removed role-method names, and setRoles in explicit GET-only routes; not an authorization analysis. */
-export function roleMethodHints(projectDir: string): string[] {
+export function roleMethodHints(projectDir: string, { removedOnly = false } = {}): string[] {
   const api = join(projectDir, 'api');
   if (!existsSync(api)) return [];
+  const skipped = ['Role-method hints skipped: TypeScript is unavailable in this project.'];
+  let ts: typeof TypeScript;
+  try {
+    const projectRequire = createRequire(resolve(projectDir, 'package.json'));
+    ts = projectRequire('typescript');
+  } catch {
+    return skipped;
+  }
+  if (typeof ts.createSourceFile !== 'function') return skipped;
+
   const hints: string[] = [];
   function visitDir(dir: string): void {
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -24,20 +35,22 @@ export function roleMethodHints(projectDir: string): string[] {
           if (!statement.exportClause || !ts.isNamedExports(statement.exportClause)) unknown = true;
           else for (const spec of statement.exportClause.elements) exports.add(spec.name.text);
         }
-        if (ts.canHaveModifiers(statement)) {
-          const modifiers = ts.getModifiers(statement);
-          if (modifiers?.some(m => m.kind === ts.SyntaxKind.DefaultKeyword)) unknown = true;
-          if (!modifiers?.some(m => m.kind === ts.SyntaxKind.ExportKeyword)) continue;
-          if (ts.isVariableStatement(statement)) for (const decl of statement.declarationList.declarations) {
-            if (ts.isIdentifier(decl.name)) exports.add(decl.name.text);
-          }
-          if (ts.isFunctionDeclaration(statement) && statement.name) exports.add(statement.name.text);
+        // TypeScript before 4.8 exposed modifiers directly on the node.
+        const modifiers = ts.canHaveModifiers
+          ? ts.canHaveModifiers(statement) && ts.getModifiers(statement)
+          : (statement as TypeScript.Statement & { modifiers?: readonly TypeScript.ModifierLike[] }).modifiers;
+        if (!modifiers) continue;
+        if (modifiers.some(m => m.kind === ts.SyntaxKind.DefaultKeyword)) unknown = true;
+        if (!modifiers.some(m => m.kind === ts.SyntaxKind.ExportKeyword)) continue;
+        if (ts.isVariableStatement(statement)) for (const decl of statement.declarationList.declarations) {
+          if (ts.isIdentifier(decl.name)) exports.add(decl.name.text);
         }
+        if (ts.isFunctionDeclaration(statement) && statement.name) exports.add(statement.name.text);
       }
       const rel = relative(projectDir, path).replaceAll('\\', '/');
       let write: string | undefined;
       const removed = new Set<string>();
-      function walk(node: ts.Node): void {
+      function walk(node: TypeScript.Node): void {
         if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)
           && node.expression.expression.getText(file) === 'sw.auth.server') {
           const name = node.expression.name.text;
@@ -48,6 +61,7 @@ export function roleMethodHints(projectDir: string): string[] {
       }
       walk(file);
       for (const name of removed) hints.push(`hint: ${rel}: sw.auth.server.${name} was removed; call sw.auth.server.setRoles(userId, { ${REMOVED_ROLE_METHODS[name]}: [role] }).`);
+      if (removedOnly) continue;
       const methods = [...exports].filter(name => METHODS.has(name));
       if (unknown || methods.length !== 1 || methods[0] !== 'GET') continue;
       if (write) hints.push(`hint: ${rel}: ${write} is called in a GET-only route; use a POST setup handler once after sign-up/profile completion (cookie GET cannot change roles).`);

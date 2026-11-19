@@ -268,7 +268,7 @@ test('runLocalPreflight: skips typecheck without tsconfig and always skips the p
   const result = await runLocalPreflight(
     dir,
     collected({ files: { 'index.html': '<html>' }, skipped: [], excluded: [] }),
-    async () => { typechecked = true; return { ok: true, errors: [], via: 'bundled', raw: '' }; },
+    async () => { typechecked = true; return { ok: true, errors: [], via: 'project', raw: '' }; },
   );
   assert.equal(typechecked, false);
   assert.deepEqual(result.checks.map((c) => [c.name, c.status]), [
@@ -285,7 +285,7 @@ test('runLocalPreflight: a type error fails the verdict with file:line detail', 
   const result = await runLocalPreflight(
     dir,
     collected({ functions: { 'api/a.ts': 'x' }, skipped: [], excluded: [] }),
-    async () => ({ ok: false, errors: [error], via: 'bundled', raw: '' }),
+    async () => ({ ok: false, errors: [error], via: 'project', raw: '' }),
   );
   assert.equal(result.ok, false);
   assert.equal(result.verdict, 'failed');

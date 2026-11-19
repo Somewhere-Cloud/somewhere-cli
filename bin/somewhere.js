@@ -8,4 +8,5 @@ if (olderThan(process.versions.node, minimum)) {
   process.stderr.write(`✗ ${unsupportedNodeMessage(process.versions.node, minimum)}\n`);
   process.exit(1);
 }
-await import('../dist/index.js');
+const { runCli } = await import('../dist/index.js');
+await runCli();

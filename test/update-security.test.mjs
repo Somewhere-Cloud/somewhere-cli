@@ -297,6 +297,11 @@ test('authenticated dependency closure rejects unpinned and non-official package
     /leaves node_modules\/kleur unpinned/,
   );
 
+  assert.throws(
+    () => validateLockedClosure({ ...manifest, peerDependencies: { 'unexpected-peer': '1.0.0' } }, lock, release),
+    /asks npm to resolve peer dependencies/,
+  );
+
   const poisoned = structuredClone(lock);
   poisoned.packages['node_modules/kleur'].resolved = 'https://evil.example/kleur-4.1.5.tgz';
   assert.throws(
@@ -305,7 +310,7 @@ test('authenticated dependency closure rejects unpinned and non-official package
   );
 });
 
-test('the release artifact bundles its complete authenticated dependency lock', async () => {
+test('the release artifact installs from an authenticated empty runtime lock', async () => {
   const manifest = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
   const lock = JSON.parse(readFileSync(new URL('../npm-shrinkwrap.json', import.meta.url), 'utf8'));
   assert.equal(manifest.files.includes('npm-shrinkwrap.json'), true);
@@ -323,13 +328,16 @@ test('the release artifact bundles its complete authenticated dependency lock', 
     const tarballPath = join(root, packed[0].filename);
     const packedPaths = packed[0].files.map(file => file.path);
     assert.equal(packedPaths.some(path => /^dist\/local\/|^dist\/commands\/exec\.|^runtime\/(?:compiler\/|sw-init\.|platform-context\.)/.test(path)), false, 'retired local runtime must not survive in the npm artifact');
-    assert.ok(packedPaths.includes('dist/lib/chrome.js'), 'independent browser tooling stays packaged');
+    assert.ok(packedPaths.includes('dist/lib/bundle.js'), 'the command runtime stays packaged');
+    assert.ok(packedPaths.includes('runtime/browser-probes.mjs'), 'independent browser tooling stays packaged');
+    assert.equal(packedPaths.some(path => path.startsWith('node_modules/')), false);
 
     const productionNames = new Set(Object.entries(lock.packages)
       .filter(([path, entry]) => path !== '' && entry.dev !== true)
       .map(([path]) => path.match(/node_modules\/(?:@[^/]+\/[^/]+|[^/]+)$/)?.[0].slice('node_modules/'.length)));
     productionNames.delete(undefined);
-    assert.deepEqual(new Set(packed[0].bundled), productionNames);
+    assert.equal(productionNames.size, 0);
+    assert.deepEqual(packed[0].bundled, []);
     mkdirSync(operationDir);
     process.env.NPM_CONFIG_PREFIX = prefix;
     process.env.NPM_CONFIG_REGISTRY = 'http://127.0.0.1:48731/';
@@ -377,7 +385,8 @@ test('real isolated install survives post-verification path and writable-fd swap
   const lockedClosure = Object.fromEntries(closurePaths.map((path) => {
     const entry = repositoryLock.packages[path];
     assert.equal(typeof entry?.integrity, 'string');
-    return [path, entry];
+    const { dev: _dev, ...locked } = entry;
+    return [path, { ...locked, inBundle: true }];
   }));
   const promptsVersion = lockedClosure['node_modules/prompts'].version;
   const pinnedSemver = {

@@ -1,3 +1,4 @@
+import { CLI_PACKAGE_ROOT } from './package-root.js';
 import { cliInvocation } from './cli-invocation.js';
 /**
  * The "is this safe to deploy?" gate: run `tsc --noEmit` over a pulled tree
@@ -12,7 +13,6 @@ import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { dirname, join, relative } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { SCAFFOLD_TSCONFIG_FILENAME } from './scaffold.js';
 import { TYPECHECK_TYPESCRIPT_VERSION } from './typecheck-version.js';
 import { API_BASE_URL } from './client.js';
@@ -512,5 +512,5 @@ async function runTypecheckWith(
 
 /** Where this module lives — used by tests that need the CLI package root. */
 export function cliPackageRoot(): string {
-  return join(dirname(fileURLToPath(import.meta.url)), '..', '..');
+  return CLI_PACKAGE_ROOT;
 }

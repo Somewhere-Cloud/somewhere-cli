@@ -1,3 +1,7 @@
+## 0.38.121
+
+- Ship the same CLI as a readable JavaScript bundle with a source map and third-party notices.
+
 ## 0.38.120
 
 - Stop shipping TypeScript inside the CLI. Type checks use the project compiler or a pinned version cached by npm. Role-method hints use the project compiler when available.

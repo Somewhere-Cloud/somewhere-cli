@@ -56,12 +56,30 @@ export function assertPublicArtifact(text, filename) {
   }
 }
 
+// The first release with a source map and public declarations packed to
+// 43 files, 2.28 MB compressed and 10.13 MB unpacked.
+export const BUNDLE_BUDGET = { entryCount: 50, size: 2_500_000, unpackedSize: 11_000_000 };
+
+export function assertBundleBudget(pack) {
+  for (const [field, maximum] of Object.entries(BUNDLE_BUDGET)) {
+    const actual = pack[field];
+    if (!Number.isSafeInteger(actual) || actual <= 0 || actual > maximum) {
+      throw new Error(`npm artifact ${field} is ${actual}; limit is ${maximum}. Inspect the packed file list.`);
+    }
+  }
+  if (pack.files.some(({ path }) => path.startsWith('node_modules/'))) {
+    throw new Error('npm artifact contains a node_modules directory');
+  }
+}
+
 // npm owns the shipped-file list: declarations, JSON, docs and templates are
 // checked alongside executable bundles, with no extension-based exclusions.
-export function assertPublicPackage(root) {
+export function assertPublicPackage(root, scanPackage = () => {}) {
   const result = spawnSync('npm', ['pack', '--dry-run', '--json', '--ignore-scripts'], { cwd: root, encoding: 'utf8' });
   if (result.status !== 0) throw new Error('Cannot enumerate public package files');
-  const [{ files }] = JSON.parse(result.stdout);
+  const [pack] = JSON.parse(result.stdout);
+  scanPackage(pack);
+  const { files } = pack;
   for (const { path } of files) {
     assertPublicArtifact(path, path);
     assertPublicArtifact(readFileSync(join(root, path)).toString('utf8'), path);

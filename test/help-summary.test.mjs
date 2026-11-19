@@ -24,7 +24,7 @@ test('every registered command, alias, argument and full command help survives r
     const module = await import(`../dist/commands/${path}.js`);
     for (const name of names.split(', ')) registrations.set(name, module[name]);
   }
-  for (const [, name] of source.matchAll(/^(register\w+)\(program\);/gm)) {
+  for (const [, name] of source.matchAll(/^\s*(register\w+)\(program\);/gm)) {
     assert.equal(typeof registrations.get(name), 'function', name);
     registrations.get(name)(program);
   }

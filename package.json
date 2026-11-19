@@ -1,7 +1,7 @@
 {
   "name": "@somewhere-cloud/cli",
-  "version": "0.38.120",
-  "description": "CLI for somewhere.cloud — auth, projects, deploy, pull, promote, db, logs, env, MCP bridge.",
+  "version": "0.38.121",
+  "description": "CLI for somewhere.cloud \u2014 auth, projects, deploy, pull, promote, db, logs, env, MCP bridge.",
   "keywords": [
     "somewhere",
     "somewhere.cloud",
@@ -28,18 +28,34 @@
   "files": [
     "CHANGELOG.md",
     "LICENSE",
+    "NOTICE.third-party.txt",
     "README.md",
     "bin",
-    "dist",
+    "dist/commands/docs.js",
+    "dist/commands/init.js",
+    "dist/index.js",
+    "dist/lib/bundle.js",
+    "dist/lib/bundle.js.map",
+    "dist/lib/declared-data.js",
+    "dist/lib/files.js",
+    "dist/lib/init-feature-template.js",
+    "dist/lib/init-features.js",
+    "dist/lib/skills-pack.generated.js",
+    "dist/lib/source-lint.js",
+    "dist/lib/test-reporter.js",
+    "dist/lib/typecheck.js",
+    "dist/script.js",
+    "dist/testing.js",
+    "dist/types",
     "npm-shrinkwrap.json",
     "runtime",
     "src/testing.ts"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && node scripts/build-bundle.mjs",
     "dev": "tsc --watch",
     "prepublishOnly": "npm run build && node scripts/check-public-package.mjs",
-    "test": "npm run check:credentials && npm run build && node --test --test-concurrency=1 \"test/*.test.mjs\"",
+    "test": "npm run check:credentials && npm run build && node scripts/test-packed.mjs",
     "test:roundtrip": "node scripts/e2e-roundtrip.mjs",
     "prebuild": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
     "check:credentials": "node scripts/check-credentials.mjs"
@@ -47,52 +63,33 @@
   "engines": {
     "node": ">=22.19.0"
   },
-  "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.29.0",
-    "chokidar": "^4.0.3",
-    "commander": "^12.0.0",
-    "prompts": "^2.4.2",
-    "semver": "^7.6.3",
-    "sigstore": "4.1.1",
-    "tar": "7.5.20",
-    "undici": "^8.4.1"
-  },
-  "bundledDependencies": [
-    "@modelcontextprotocol/sdk",
-    "chokidar",
-    "commander",
-    "prompts",
-    "semver",
-    "sigstore",
-    "tar",
-    "undici"
-  ],
   "devDependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "@playwright/test": "^1.65.0",
     "@types/node": "^22.19.21",
     "@types/prompts": "^2.4.0",
     "@types/semver": "^7.5.8",
-    "typescript": "^5.4.0"
+    "chokidar": "^4.0.3",
+    "commander": "^12.0.0",
+    "esbuild": "0.25.12",
+    "prompts": "^2.4.2",
+    "semver": "^7.6.3",
+    "sigstore": "4.1.1",
+    "tar": "7.5.20",
+    "typescript": "^5.4.0",
+    "undici": "^8.4.1"
   },
   "exports": {
     "./testing": {
-      "types": "./dist/testing.d.ts",
+      "types": "./dist/types/testing.d.ts",
       "import": "./dist/testing.js"
     },
     "./package.json": "./package.json",
     "./script": {
-      "types": "./dist/script.d.ts",
+      "types": "./dist/types/script.d.ts",
       "default": "./dist/script.js"
     }
   },
-  "bundleDependencies": [
-    "@modelcontextprotocol/sdk",
-    "chokidar",
-    "commander",
-    "prompts",
-    "semver",
-    "sigstore",
-    "tar",
-    "undici"
-  ]
+  "bundleDependencies": [],
+  "bundledDependencies": []
 }

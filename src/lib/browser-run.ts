@@ -1,3 +1,4 @@
+import { CLI_PACKAGE_ROOT } from './package-root.js';
 import { cliInvocation } from './cli-invocation.js';
 /**
  * Run the `somewhere browser` health check against a page on this machine.
@@ -9,8 +10,8 @@ import { cliInvocation } from './cli-invocation.js';
  * preview of the hosted answer, not a second opinion.
  */
 import { writeFileSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { join, resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import {
   DevToolsSession,
   findBrowser,
@@ -101,7 +102,7 @@ export interface LocalBrowserReport {
 
 /** The platform's interactive-element probe, vendored verbatim. */
 async function domOutlineScript(): Promise<string> {
-  const path = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'runtime', 'browser-probes.mjs');
+  const path = join(CLI_PACKAGE_ROOT, 'runtime', 'browser-probes.mjs');
   const probes = (await import(pathToFileURL(path).href)) as { DOM_OUTLINE_SCRIPT: string };
   return probes.DOM_OUTLINE_SCRIPT;
 }

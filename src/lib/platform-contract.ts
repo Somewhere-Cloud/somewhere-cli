@@ -1,3 +1,4 @@
+import { CLI_PACKAGE_ROOT } from './package-root.js';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
@@ -21,7 +22,7 @@ import { cliConfigDir } from './config.js';
  * lint make no network or model call; recording happens only when other commands already talk to the
  * platform.
  */
-const require = createRequire(import.meta.url);
+const require = createRequire(CLI_PACKAGE_ROOT);
 
 export const CONTRACT_HEADER = 'x-sw-consumer-contract';
 export interface ConsumerContract { version: number; digest: string }
@@ -38,7 +39,7 @@ interface ContractVendor {
   parseConsumerContractHeader(value: string | null | undefined): ConsumerContract | null;
   consumerContractVerdict(cli: ConsumerContract | null | undefined, seen: SeenPlatformContract | null | undefined, now?: number): Omit<ContractVerdict, 'cli' | 'platform'>;
 }
-const vendor = (): ContractVendor => require('../../runtime/declared-data.cjs') as ContractVendor;
+const vendor = (): ContractVendor => require('./runtime/declared-data.cjs') as ContractVendor;
 const seenPath = () => join(cliConfigDir(), 'platform-contract.json');
 
 /** The CLI's own contract, from the vendored platform bundle (null: a bundle from before it existed). */

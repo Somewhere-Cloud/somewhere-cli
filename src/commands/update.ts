@@ -1,3 +1,4 @@
+import { CLI_PACKAGE_ROOT } from '../lib/package-root.js';
 import { cliInvocation } from '../lib/cli-invocation.js';
 import { spawn } from 'node:child_process';
 import { fetchWithProxy as fetch } from '../lib/http.js';
@@ -17,8 +18,7 @@ import {
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
 import { Command } from 'commander';
 import semver from 'semver';
 import { dim, error, info, success, teal } from '../lib/output.js';
@@ -70,7 +70,7 @@ function refuse(cause: unknown): number {
 function currentVersion(): string {
   try {
     const pkg = JSON.parse(
-      readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'package.json'), 'utf8'),
+      readFileSync(join(CLI_PACKAGE_ROOT, 'package.json'), 'utf8'),
     ) as { version: string };
     return pkg.version;
   } catch {

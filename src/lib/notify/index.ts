@@ -1,6 +1,6 @@
+import { CLI_PACKAGE_ROOT } from '../package-root.js';
 import { readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
 import type { NoticeContext, NoticeProvider } from './types.js';
 import { getOutdatedWarning, updateProvider } from './providers/update.js';
 
@@ -34,9 +34,8 @@ export function subcommandSuppressesNotifications(argv: string[]): boolean {
 
 function currentVersion(): string {
   try {
-    // dist/lib/notify/index.js → package root is three levels up.
     const pkg = JSON.parse(
-      readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'package.json'), 'utf8'),
+      readFileSync(join(CLI_PACKAGE_ROOT, 'package.json'), 'utf8'),
     ) as { version: string };
     return pkg.version;
   } catch {

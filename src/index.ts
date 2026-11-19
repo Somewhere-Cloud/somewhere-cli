@@ -1,8 +1,8 @@
+import { CLI_PACKAGE_ROOT } from './lib/package-root.js';
 import { cliInvocation } from './lib/cli-invocation.js';
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
 import { Command, CommanderError } from 'commander';
 import { registerAuth } from './commands/auth.js';
 import { registerInit } from './commands/init.js';
@@ -63,167 +63,171 @@ import { helpSummary } from './lib/help-summary.js';
 import { decidePin, PINNED_CHILD_ENV } from './lib/project-pin.js';
 import { CLI_VERSION } from './lib/version.js';
 
-// A project pinned to another CLI version says so in one line, and a pinned
-// version installed in its node_modules runs the command.
-const pinned = decidePin(process.cwd(), CLI_VERSION, process.argv, process.env);
-if (pinned.notice) process.stderr.write(pinned.notice + '\n');
-if (pinned.delegate) {
-  const child = spawnSync(process.execPath, [pinned.delegate, ...process.argv.slice(2)], {
-    stdio: 'inherit',
-    env: { ...process.env, [PINNED_CHILD_ENV]: '1' },
+export async function runCli(): Promise<void> {
+  // A project pinned to another CLI version says so in one line, and a pinned
+  // version installed in its node_modules runs the command.
+  const pinned = decidePin(process.cwd(), CLI_VERSION, process.argv, process.env);
+  if (pinned.notice) process.stderr.write(pinned.notice + '\n');
+  if (pinned.delegate) {
+    const child = spawnSync(process.execPath, [pinned.delegate, ...process.argv.slice(2)], {
+      stdio: 'inherit',
+      env: { ...process.env, [PINNED_CHILD_ENV]: '1' },
+    });
+    if (child.error) throw child.error;
+    if (child.signal) process.kill(process.pid, child.signal);
+    process.exit(child.status ?? 1);
+  }
+
+  // First, before any command, help, version or usage error can run: remove a run
+  // record an older CLI may have filled with argument values.
+  removeStaleRunRecord();
+
+  const pkg = JSON.parse(
+    readFileSync(join(CLI_PACKAGE_ROOT, 'package.json'), 'utf8'),
+  ) as { version: string };
+
+  const program = new Command()
+    .name(cliInvocation())
+    .description(`CLI for somewhere.cloud. Run ${cliInvocation()} init first, then read generated AGENTS.md: call shapes and access patterns for a typical app; docs are for exceptions.`)
+    .version(pkg.version);
+
+  recordLastRun(pkg.version);
+  const jsonOutputRequested = process.argv.includes('--json');
+  setJsonOutputMode(jsonOutputRequested);
+
+  // Local repro capture: typed fields of the failure plus registered command names
+  // only. The support group's own failures never replace the record it reports on.
+  const startedAt = Date.now();
+  let commandNames: string[] = [];
+  program.hook('preAction', (_self, action) => {
+    noteLastRunCommand(action);
+    const names: string[] = [];
+    for (let at: Command | null = action; at && at.parent; at = at.parent) names.unshift(at.name());
+    commandNames = names;
   });
-  if (child.error) throw child.error;
-  if (child.signal) process.kill(process.pid, child.signal);
-  process.exit(child.status ?? 1);
-}
+  setFailureHook((cause) => {
+    const command = commandPath(commandNames);
+    if (command?.split(' ')[0] === 'support') return;
+    writeLastError(buildRecord(cause, { cliVersion: pkg.version, command, projectId: loadProjectConfig()?.project_id, startedAt }));
+  });
 
-// First, before any command, help, version or usage error can run: remove a run
-// record an older CLI may have filled with argument values.
-removeStaleRunRecord();
-
-const pkg = JSON.parse(
-  readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'package.json'), 'utf8'),
-) as { version: string };
-
-const program = new Command()
-  .name(cliInvocation())
-  .description(`CLI for somewhere.cloud. Run ${cliInvocation()} init first, then read generated AGENTS.md: call shapes and access patterns for a typical app; docs are for exceptions.`)
-  .version(pkg.version);
-
-recordLastRun(pkg.version);
-const jsonOutputRequested = process.argv.includes('--json');
-setJsonOutputMode(jsonOutputRequested);
-
-// Local repro capture: typed fields of the failure plus registered command names
-// only. The support group's own failures never replace the record it reports on.
-const startedAt = Date.now();
-let commandNames: string[] = [];
-program.hook('preAction', (_self, action) => {
-  noteLastRunCommand(action);
-  const names: string[] = [];
-  for (let at: Command | null = action; at && at.parent; at = at.parent) names.unshift(at.name());
-  commandNames = names;
-});
-setFailureHook((cause) => {
-  const command = commandPath(commandNames);
-  if (command?.split(' ')[0] === 'support') return;
-  writeLastError(buildRecord(cause, { cliVersion: pkg.version, command, projectId: loadProjectConfig()?.project_id, startedAt }));
-});
-
-// First output of every interactive command — see lib/startup-notice.ts.
-const notice = startupNotice(pkg.version, {
-  isTTY: Boolean(process.stdout.isTTY),
-  jsonOutput: jsonOutputRequested,
-  passThrough: false,
-});
-if (notice) process.stderr.write(notice + '\n');
-if (jsonOutputRequested) {
-  program.exitOverride();
-  program.configureOutput({ writeErr: () => {} });
-}
-
-registerAuth(program);
-registerInit(program);
-registerLink(program);
-registerProject(program);
-registerDeploy(program);
-registerDeploys(program);
-registerPrivacy(program);
-registerPull(program);
-registerTypecheck(program);
-registerLint(program);
-registerHooks(program);
-registerPromote(program);
-registerRollback(program);
-registerRestore(program);
-registerDb(program);
-registerPostgres(program);
-registerDocs(program);
-registerAdvisor(program);
-registerCatalog(program);
-registerLogs(program);
-registerErrors(program);
-registerEnv(program);
-registerRun(program);
-registerStatus(program);
-registerOpen(program);
-registerClaim(program);
-registerDev(program);
-registerPreview(program);
-registerBrowser(program);
-registerVerify(program);
-registerTestUsers(program);
-registerTest(program);
-registerSupport(program);
-registerCheck(program);
-registerApi(program);
-registerFs(program);
-registerMcp(program);
-registerUpdate(program);
-registerUpgrade(program);
-registerCall(program);
-registerTasks(program);
-registerFeedback(program);
-registerGrep(program);
-registerUsage(program);
-registerGit(program);
-registerCron(program);
-registerEmail(program);
-registerSkills(program);
-registerAi(program);
-
-// Configure only the root after registration: command help keeps its full contract.
-program.configureHelp({
-  subcommandDescription: (command) => command.summary() || helpSummary(command.description()),
-});
-program.addHelpText('after', `\nRun ${cliInvocation()} <command> --help for full command details.`);
-
-// User-notification pipeline (update-available, advisories, announcements…).
-// Centrally gated to interactive, non-CI, non-pass-through commands and emitted to
-// STDERR as a parting line AFTER the command, never stdout or agent output.
-// Fail-open: collectNotices swallows all errors.
-//
-// Do NOT await this before parsing — the once-a-day cache-refresh fetch would add
-// startup latency to every command. Kick it off, parse immediately; if it resolves
-// before the process exits (the common cache-hit path is instant) it prints on
-// exit, otherwise it silently lags to the next invocation.
-// A reader that closed stdout early (`somewhere docs | head -1`) is a local
-// closed pipe, not a failure of the command: stop quietly, as Unix tools do.
-process.stdout.on('error', (err: NodeJS.ErrnoException) => {
-  if (err.code === 'EPIPE') process.exit(0);
-  throw err;
-});
-collectNotices(process.argv)
-  .then((notices) => {
-    if (notices.length) process.on('exit', () => printExitNotices(notices));
-  })
-  .catch(() => {});
-try {
-  const command = process.argv[2] || '';
-  // file --version selects the deployed version.
-  if (command === 'file') program.enablePositionalOptions();
-  // Help, version and update never wait on, or fail because of, an API call.
-  const skipRecovery = ['lint', 'upgrade', 'update', 'login', 'signup', 'logout', 'docs', 'help', '--help', '-h', '--version', '-V'].includes(command);
-  const recovery = skipRecovery ? { kind: 'none' as const } : await recoverClaimHandoff();
-  if (recovery.kind === 'recovered' && recovery.message && !jsonOutputRequested && command !== 'file') info(recovery.message);
-  if (recovery.kind === 'stale' && recovery.message) {
-    if (jsonOutputRequested || command === 'file') console.error(recovery.message);
-    else info(recovery.message);
+  // First output of every interactive command — see lib/startup-notice.ts.
+  const notice = startupNotice(pkg.version, {
+    isTTY: Boolean(process.stdout.isTTY),
+    jsonOutput: jsonOutputRequested,
+    passThrough: false,
+  });
+  if (notice) process.stderr.write(notice + '\n');
+  if (jsonOutputRequested) {
+    program.exitOverride();
+    program.configureOutput({ writeErr: () => {} });
   }
-  if (recovery.kind === 'manual' && recovery.message && !['login', 'signup', 'logout', 'docs'].includes(command)) {
-    throw new Error(recovery.message);
-  }
-  await program.parseAsync();
-} catch (err) {
-  if (jsonOutputRequested && err instanceof CommanderError) {
-    if (err.code !== 'commander.helpDisplayed' && err.code !== 'commander.version') {
-      printJsonError('USAGE_ERROR', stripAnsi(err.message.replace(/^error:\s*/i, '')));
-      process.exitCode = err.exitCode || 1;
-    }
-  } else if (err instanceof Error) {
-    error(err.message, err);
-    process.exitCode = 1;
-  } else {
+
+  registerAuth(program);
+  registerInit(program);
+  registerLink(program);
+  registerProject(program);
+  registerDeploy(program);
+  registerDeploys(program);
+  registerPrivacy(program);
+  registerPull(program);
+  registerTypecheck(program);
+  registerLint(program);
+  registerHooks(program);
+  registerPromote(program);
+  registerRollback(program);
+  registerRestore(program);
+  registerDb(program);
+  registerPostgres(program);
+  registerDocs(program);
+  registerAdvisor(program);
+  registerCatalog(program);
+  registerLogs(program);
+  registerErrors(program);
+  registerEnv(program);
+  registerRun(program);
+  registerStatus(program);
+  registerOpen(program);
+  registerClaim(program);
+  registerDev(program);
+  registerPreview(program);
+  registerBrowser(program);
+  registerVerify(program);
+  registerTestUsers(program);
+  registerTest(program);
+  registerSupport(program);
+  registerCheck(program);
+  registerApi(program);
+  registerFs(program);
+  registerMcp(program);
+  registerUpdate(program);
+  registerUpgrade(program);
+  registerCall(program);
+  registerTasks(program);
+  registerFeedback(program);
+  registerGrep(program);
+  registerUsage(program);
+  registerGit(program);
+  registerCron(program);
+  registerEmail(program);
+  registerSkills(program);
+  registerAi(program);
+
+  // Configure only the root after registration: command help keeps its full contract.
+  program.configureHelp({
+    subcommandDescription: (command) => command.summary() || helpSummary(command.description()),
+  });
+  program.addHelpText('after', `\nRun ${cliInvocation()} <command> --help for full command details.`);
+
+  // User-notification pipeline (update-available, advisories, announcements…).
+  // Centrally gated to interactive, non-CI, non-pass-through commands and emitted to
+  // STDERR as a parting line AFTER the command, never stdout or agent output.
+  // Fail-open: collectNotices swallows all errors.
+  //
+  // Do NOT await this before parsing — the once-a-day cache-refresh fetch would add
+  // startup latency to every command. Kick it off, parse immediately; if it resolves
+  // before the process exits (the common cache-hit path is instant) it prints on
+  // exit, otherwise it silently lags to the next invocation.
+  // A reader that closed stdout early (`somewhere docs | head -1`) is a local
+  // closed pipe, not a failure of the command: stop quietly, as Unix tools do.
+  process.stdout.on('error', (err: NodeJS.ErrnoException) => {
+    if (err.code === 'EPIPE') process.exit(0);
     throw err;
+  });
+  collectNotices(process.argv)
+    .then((notices) => {
+      if (notices.length) process.on('exit', () => printExitNotices(notices));
+    })
+    .catch(() => {});
+  try {
+    const command = process.argv[2] || '';
+    // file --version selects the deployed version.
+    if (command === 'file') program.enablePositionalOptions();
+    // Help, version and update never wait on, or fail because of, an API call.
+    const skipRecovery = ['lint', 'upgrade', 'update', 'login', 'signup', 'logout', 'docs', 'help', '--help', '-h', '--version', '-V'].includes(command);
+    const recovery = skipRecovery ? { kind: 'none' as const } : await recoverClaimHandoff();
+    if (recovery.kind === 'recovered' && recovery.message && !jsonOutputRequested && command !== 'file') info(recovery.message);
+    if (recovery.kind === 'stale' && recovery.message) {
+      if (jsonOutputRequested || command === 'file') console.error(recovery.message);
+      else info(recovery.message);
+    }
+    if (recovery.kind === 'manual' && recovery.message && !['login', 'signup', 'logout', 'docs'].includes(command)) {
+      throw new Error(recovery.message);
+    }
+    await program.parseAsync();
+  } catch (err) {
+    if (jsonOutputRequested && err instanceof CommanderError) {
+      if (err.code !== 'commander.helpDisplayed' && err.code !== 'commander.version') {
+        printJsonError('USAGE_ERROR', stripAnsi(err.message.replace(/^error:\s*/i, '')));
+        process.exitCode = err.exitCode || 1;
+      }
+    } else if (err instanceof Error) {
+      error(err.message, err);
+      process.exitCode = 1;
+    } else {
+      throw err;
+    }
   }
 }
+
+if (import.meta.main) void runCli();

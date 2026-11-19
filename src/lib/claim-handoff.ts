@@ -15,23 +15,18 @@ interface Envelope<T> {
 }
 
 interface RegisterResult { handoff_id: string; expires_at: string }
-type ApprovedScope = 'project' | 'account';
-interface ExchangeResult { status: 'ready'; project_id: string; approved_scope?: ApprovedScope; ciphertext: string; iv: string }
+interface ExchangeResult { status: 'ready'; project_id: string; approved_scope?: string; ciphertext: string; iv: string }
 interface DeliveredCredentials {
   token: string;
   refresh_token: string;
   expires_at: string;
   email: string;
   project_id: string;
-  /** null only for an all-projects approval. */
-  scope: { projects: string[] } | null;
-  approved_scope?: ApprovedScope;
+  scope: { projects: string[] };
+  approved_scope?: string;
   session_id: string;
 }
 
-/** Tells the claim page this CLI can install an all-projects sign-in, so the
- *  owner may be offered that choice. Project-only stays the default. */
-const CAPABILITIES = ['account_scope'];
 type HttpResponse = Awaited<ReturnType<typeof fetch>>;
 
 export interface ClaimHandoffRecovery {
@@ -53,16 +48,13 @@ function decodeCredentials(state: ClaimCliHandoff, response: ExchangeResult): De
   if (!state.handoff_id || response.project_id !== state.project_id) {
     throw new Error('Claim continuation returned a different project. No credential was installed.');
   }
-  // The scope is part of the authenticated data, so a response that relabels
-  // a project grant as all-projects (or back) fails to decrypt.
-  const account = response.approved_scope === 'account';
   const key = createHash('sha256').update(`claim-cli-handoff:v1:${state.verifier}`, 'utf8').digest();
   const combined = Buffer.from(response.ciphertext, 'base64');
   if (combined.length <= 16) throw new Error('Claim continuation returned an invalid credential payload.');
   const encrypted = combined.subarray(0, -16);
   const tag = combined.subarray(-16);
   const decipher = createDecipheriv('aes-256-gcm', key, Buffer.from(response.iv, 'base64'));
-  decipher.setAAD(Buffer.from(`${state.handoff_id}:${state.project_id}${account ? ':account' : ''}`, 'utf8'));
+  decipher.setAAD(Buffer.from(`${state.handoff_id}:${state.project_id}`, 'utf8'));
   decipher.setAuthTag(tag);
   const plaintext = Buffer.concat([decipher.update(encrypted), decipher.final()]).toString('utf8');
   const parsed = JSON.parse(plaintext) as Partial<DeliveredCredentials>;
@@ -72,9 +64,9 @@ function decodeCredentials(state: ClaimCliHandoff, response: ExchangeResult): De
     || typeof parsed.expires_at !== 'string'
     || typeof parsed.email !== 'string'
     || parsed.project_id !== state.project_id
-    || (account
-      ? parsed.scope !== null || parsed.approved_scope !== 'account'
-      : parsed.scope?.projects?.length !== 1 || parsed.scope.projects[0] !== state.project_id)
+    || (parsed.approved_scope !== undefined && parsed.approved_scope !== 'project')
+    || parsed.scope?.projects?.length !== 1
+    || parsed.scope.projects[0] !== state.project_id
   ) {
     throw new Error('Claim continuation credential did not match the approved project. Nothing was installed.');
   }
@@ -112,7 +104,6 @@ export async function ensureClaimHandoff(projectId: string): Promise<ClaimCliHan
     verifier_hash: verifierHash(state.verifier),
     device_name: getDeviceKeyName(),
     client: describeThisDevice(),
-    capabilities: CAPABILITIES,
   }, config.token);
   if (!response.ok || !envelope.ok || !envelope.data) {
     throw new Error(envelope.message || envelope.error || `CLI continuation registration failed (HTTP ${response.status}).`);
@@ -188,6 +179,16 @@ export async function recoverClaimHandoff(): Promise<ClaimHandoffRecovery> {
     return { kind: 'none' }; // Network trouble must not block a still-live temp session.
   }
 
+  if (
+    envelope.error === 'CLAIM_CLI_ACCOUNT_SCOPE_FORBIDDEN'
+    || (envelope.data?.approved_scope !== undefined && envelope.data.approved_scope !== 'project')
+  ) {
+    return {
+      kind: 'manual',
+      message: `A claim link connects this CLI only to the claimed project. Run \`${cliInvocation()} login\` for account access.`,
+    };
+  }
+
   if (!response.ok || !envelope.ok || !envelope.data) {
     if (['CLAIM_CLI_HANDOFF_PENDING', 'CLAIM_CLI_HANDOFF_IN_PROGRESS'].includes(envelope.error || '')) {
       return { kind: 'none' };
@@ -238,8 +239,6 @@ export async function recoverClaimHandoff(): Promise<ClaimHandoffRecovery> {
   }
   return {
     kind: 'recovered',
-    message: delivered.scope === null
-      ? `Connected to ${delivered.email} with access to all its projects. The existing project link was kept.`
-      : `Connected to ${delivered.email} for this project only. The existing project link was kept.`,
+    message: `Connected to ${delivered.email} for this project only. The existing project link was kept. Run \`${cliInvocation()} login\` for account access.`,
   };
 }

@@ -127,7 +127,7 @@ test('deploy while logged out — mint, auto-create project, claim relay, then s
   assert.match(first.stdout, /Live URL:/);
   assert.match(first.stdout, /Open https:\/\/somewhere\.cloud\/claim/);
   assert.match(first.stdout, /Expires in about 3 hours/);
-  assert.match(first.stdout, /"Save project and connect agent".*connect this terminal automatically/);
+  assert.match(first.stdout, /"Save and connect agent".*connect this terminal to it only.*somewhere login.*for account access/);
   assert.ok(first.stdout.includes('https://somewhere.cloud/claim?token=swtc_e2e'), 'claim URL present in stdout');
 
   const configPath = join(HOME, '.somewhere', 'config.json');
@@ -157,7 +157,7 @@ test('deploy while logged out — mint, auto-create project, claim relay, then s
   assert.match(second.stdout, /Live URL:/);
   assert.match(second.stdout, /Expires in about 3 hours\./);
   assert.match(second.stdout, /Open https:\/\/somewhere\.cloud\/claim/);
-  assert.match(second.stdout, /"Save project and connect agent".*connect this terminal automatically/);
+  assert.match(second.stdout, /"Save and connect agent".*connect this terminal to it only.*somewhere login.*for account access/);
 
   assert.equal(tempCreateCalls, 1, 'still exactly ONE temp-create total — silent reuse');
   assert.equal(projectsCalls, 1, 'still exactly ONE project create total — .somewhere.json was reused');
@@ -339,7 +339,7 @@ test('deploy rejects an empty directory locally while static-only and functions-
   assert.equal(empty.status, 1);
   assert.match(empty.stderr, /No deployable source found/);
   assert.match(empty.stderr, /Create an index\.html or add raw app source files/);
-  assert.match(empty.stderr, /serverless handlers under functions\//);
+  assert.match(empty.stderr, /API handlers under api\//);
   assert.deepEqual(
     { tempCreateCalls, projectsCalls, deployCalls },
     callsBeforeEmpty,

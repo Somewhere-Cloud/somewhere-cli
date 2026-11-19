@@ -362,7 +362,7 @@ function assertSessionSeedSize(flow: Pick<VerifyFlow, 'local_storage' | 'cookies
     cookies: flow.cookies ?? [],
     headers: flow.headers ?? {},
   }));
-  if (bytes > 8 * 1024) throw new Error(`Verification session seed is ${bytes} bytes; the platform limit is 8192 bytes (8 KB).`);
+  if (bytes > 8 * 1024) throw new Error('The verification session data is too large. Remove unused local storage entries, cookies, or headers and run again.');
 }
 
 function normalizeViewports(raw: unknown): VerifyViewportInput[] {
@@ -1191,7 +1191,7 @@ export interface VerifyJourneyRun {
   closeAll(): Promise<{ cleanup: VerifyJourneyCleanup[]; cleanup_ms: number }>;
 }
 
-const UNCONFIRMED_BACKSTOP = 'the platform closes an idle browser within 5 minutes';
+const UNCONFIRMED_BACKSTOP = 'the platform closes idle browsers when they expire';
 /** A call the client stopped waiting for may still be admitted on the
  *  platform; wait this long (inside the cleanup budget) before closing again. */
 const RECLOSE_AFTER_ABANDONED_MS = 5_000;
@@ -1277,14 +1277,14 @@ export function createVerifyJourneyRun(
   };
 
   const removeTestUsers = async (): Promise<VerifyTestUsers['cleanup']> => {
-    if (opts.keepTestUsers) return { status: 'kept', reason: 'kept on request; they expire 24 hours after creation' };
+    if (opts.keepTestUsers) return { status: 'kept', reason: 'kept on request until they expire' };
     if (keep && keptForReuse.size > 0 && testActors.every((name) => keptForReuse.has(name))) return { status: 'kept', reason: 'kept with their browsers for the next --keep-actors run; remove them with --close-actors' };
     try {
       const removed = await client.call<{ deleted?: number }>('DELETE', '/auth/test-users', { project_id: target.project_id, ids: [...testIdentities.values()].map((item) => item.user_id) });
       return { status: 'deleted', deleted: typeof removed?.deleted === 'number' ? removed.deleted : undefined };
     } catch (cause) {
       const code = cause instanceof CliApiError ? cause.code : cause instanceof Error ? cause.message : String(cause);
-      return { status: 'unconfirmed', reason: `delete failed (${code}); the platform removes test users 24 hours after creation` };
+      return { status: 'unconfirmed', reason: `delete failed (${code}); the platform removes test users when they expire` };
     }
   };
 
@@ -1535,7 +1535,7 @@ export function createVerifyJourneyRun(
           // A continued actor whose browser was reaped would carry on signed out
           // in a fresh browser; that is a different person, so the journey stops.
           if (!first && report.session_note) {
-            const message = `${segment.as}'s browser ended between segments (${report.session_note}), so ${segment.as} is no longer the same signed-in user. Keep each actor's gap between segments under 5 minutes and run the journey again.`;
+            const message = `${segment.as}'s browser ended between segments (${report.session_note}), so ${segment.as} is no longer the same signed-in user. Shorten the gaps between that actor's segments and run the journey again.`;
             itemStop ??= stopAt('error', 'VERIFY_ACTOR_SESSION_ENDED', message);
             segments.push({ ...base, ...timing, ran: true, final_url: report.final_url === undefined ? undefined : reportUrl(report.final_url), error: { code: 'VERIFY_ACTOR_SESSION_ENDED', message } });
             continue;
@@ -1948,10 +1948,10 @@ export function registerVerify(program: Command): void {
     .option('--cookie <name=value>', 'Existing app cookie to seed in every viewport. Repeatable.', collectCookie)
     .option('--json', 'Print the structured verification report as JSON.')
     .option('--out <file>', 'Write the full report to a new private file; print a bounded summary (JSON with --json).')
-    .option('--keep-actors', 'Multi-user flows: after a fully passed run, keep each actor\'s signed-in browser and test user, and reconnect to them on the next run of the same flow file in this project folder. Each run navigates every actor to its starting path and runs the same checks, but cookies, storage and app data the actors created carry over, so checks must not assume an empty account. One run per kept flow at a time. Close with --close-actors; otherwise the platform closes a kept browser after 5 minutes idle, and at most 10 minutes after it started.')
+    .option('--keep-actors', 'Multi-user flows: after a fully passed run, keep each actor\'s signed-in browser and test user, and reconnect to them on the next run of the same flow file in this project folder. Each run starts at the same paths and runs the same checks. Cookies, storage and app data carry over. One run per kept flow at a time. Use --close-actors to close the kept browsers, or let them expire.')
     .option('--resume-page', 'With --keep-actors: an explicit stateful warm continuation. An actor whose first segment starts at exactly the page path the last passed run left it on keeps that page as it was last observed (no reload, like reusing a Playwright page); if the app moved it afterwards, the run continues from there. A different actor, flow, project or start path, or a page told apart only by its query or fragment, reloads normally. The kept page may run code from before the latest deploy, so a resumed run is not fresh-release evidence; the report lists resumed actors.')
     .option('--close-actors', 'Close every browser and delete every test user that --keep-actors kept for this project in this folder, then exit.')
-    .option('--keep-test-users', 'Multi-user flows: keep the test users created for "test_user" actors instead of deleting them when the run ends (they expire 24 hours after creation).')
+    .option('--keep-test-users', 'Multi-user flows: keep the users created for "test_user" actors until they expire.')
     .option('--schema', 'Print the JSON Schema for --flow files (one user, or several users) and exit.')
     .addHelpText('after', `
 Minimal --flow JSON:
@@ -1995,15 +1995,12 @@ Several users in one run (--project required; each actor is its own browser):
   }
 Segments run in order; a later segment for the same actor continues in that
 actor's browser (path becomes a goto). For realtime checks, an item
-{ "parallel": [segment, segment] } runs 2-${VERIFY_JOURNEY_LIMITS.parallel_segments} segments by different actors at the
-same time (alice waits for a message while bob sends it). Limits: ${VERIFY_JOURNEY_LIMITS.actors} actors, ${VERIFY_JOURNEY_LIMITS.segments} segments,
-${VERIFY_JOURNEY_LIMITS.actions_per_segment} actions per segment, ${VERIFY_JOURNEY_LIMITS.total_actions} in total, ${VERIFY_JOURNEY_LIMITS.deadline_ms / 60000} minutes. Each segment is one browser
-run against your plan's browser limits. When the run ends or is interrupted,
-every actor browser is closed within ${VERIFY_JOURNEY_LIMITS.cleanup_budget_ms / 1000} seconds; any close that cannot be
-confirmed is reported, and the platform closes idle browsers within 5 minutes.
-Several users need a claimed account and a CLI login approved for all your
-projects: a login approved for "Only these projects" cannot open named browsers
-(SESSION_SCOPE_FORBIDDEN). Print the full flow schema with: ${cliInvocation()} verify --schema
+{ "parallel": [segment, segment] } runs segments by different actors at the
+same time (alice waits for a message while bob sends it). When the run ends or is
+interrupted, verification closes each actor's browser and reports any close it
+could not confirm. The platform closes idle browsers when they expire.
+For named browsers in a multi-user run, claim the project and use ${cliInvocation()} login
+with account access. Print the full flow schema with ${cliInvocation()} verify --schema.
 `)
     .action(async (target: string | undefined, opts: { project?: string; url?: string; path?: string; flow?: string; session?: string; cookie?: string; json?: boolean; out?: string; schema?: boolean; keepTestUsers?: boolean; keepActors?: boolean; closeActors?: boolean; resumePage?: boolean }) => {
       if (opts.schema) {

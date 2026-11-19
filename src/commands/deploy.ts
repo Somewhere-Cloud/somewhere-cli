@@ -42,12 +42,12 @@ import {
   type StoredTempSession,
 } from '../lib/config.js';
 import { httpsOrigin } from '../lib/project-urls.js';
-import { collectFiles, formatBytes, oversizeRefusal, sensitiveReferenceRefusal, type CollectedFiles } from '../lib/files.js';
+import { collectFiles, oversizeRefusal, sensitiveReferenceRefusal, type CollectedFiles } from '../lib/files.js';
 import { CLI_VERSION } from '../lib/version.js';
 import { mintTempAccount } from '../lib/temp-auth.js';
 import { recordPinIfMissing } from '../lib/project-pin.js';
 import { ensureClaimHandoff } from '../lib/claim-handoff.js';
-import { dim, error, green, info, platformErrorEnvelope, printJson, printJsonError, red, success, teal, warn, yellow } from '../lib/output.js';
+import { dim, error, green, info, noteFailure, platformErrorEnvelope, printJson, printJsonError, red, success, teal, warn, yellow } from '../lib/output.js';
 import type { CliConfig, ProjectConfig } from '../types.js';
 import { showProjectNotices } from '../lib/project-notices.js';
 import { prepareRunner } from '../lib/test-run.js';
@@ -665,7 +665,7 @@ export function registerDeploy(program: Command) {
     // Kept working for scripts that already call it; no longer documented. The exit-safe form is
     // `somewhere deploy && somewhere test`.
     .addOption(new Option('--test', 'After a successful deploy, run somewhere test once against the new release').hideHelp())
-    .option('-m, --message <text>', 'User-supplied note for this version (max 200 characters)')
+    .option('-m, --message <text>', 'Add a note for this version')
     .option('--json', 'Print the deploy result and its uploaded file list as JSON on stdout. Stderr lists files left out locally by path and reason.')
     .option('--list-unpublished', 'List the local files deploy would keep on your machine, then exit')
     .option('--allow-type-errors', 'Upload even when the local TypeScript check fails')
@@ -757,7 +757,7 @@ export function registerDeploy(program: Command) {
       ) {
         const message =
           'No deployable source found. Create an index.html or add raw app source files, ' +
-          `or add serverless handlers under functions/, then run \`${cliInvocation()} deploy\` again.`;
+          `or add API handlers under api/, then run \`${cliInvocation()} deploy\` again.`;
         if (opts.json) printJsonError('NO_DEPLOYABLE_SOURCE', message);
         else error(message);
         process.exit(1);
@@ -891,7 +891,7 @@ export function registerDeploy(program: Command) {
           const signupSpinner = opts.json ? null : ora('Starting a temporary session…').start();
           try {
             const account = await mintTempAccount(undefined, () => {
-              if (signupSpinner) signupSpinner.text = 'Solving the proof-of-work requested by the server…';
+              if (signupSpinner) signupSpinner.text = 'Completing the temporary session check…';
             });
             signupSpinner?.stop();
             if (besideRealLogin) {
@@ -932,7 +932,18 @@ export function registerDeploy(program: Command) {
             // same shape a signed-in deploy reports.
             const status = err instanceof CliApiError
               ? ` ${dim(err.statusCode ? `[${err.code}, HTTP ${err.statusCode}]` : `[${err.code}]`)}` : '';
-            error(`${err instanceof Error ? err.message : String(err)}${status}`, err);
+            const envelope = platformErrorEnvelope(err);
+            if (envelope?.code === 'INVALID_POW' || envelope?.code === 'POW_REQUIRED') {
+              const message = `The temporary session check failed. Run \`${cliInvocation()} deploy\` to try again.`;
+              if (opts.json) {
+                noteFailure(err);
+                printJsonError(envelope.code, message, envelope.extra);
+              } else {
+                error(`${message}${status}`, err);
+              }
+            } else {
+              error(`${err instanceof Error ? err.message : String(err)}${status}`, err);
+            }
             process.exit(1);
           }
         }
@@ -1169,7 +1180,7 @@ export function registerDeploy(program: Command) {
           warn(`This looks like a Node server app (${serverSignal}) — somewhere.cloud does not run server processes.`);
           warn('It will deploy as static files only: your routes will NOT run, and the');
           warn('server source will be publicly readable at its file path.');
-          warn('The platform shape: static files at the root + API handlers under functions/');
+          warn('The platform accepts static files at the root and API handlers under api/.');
           warn('(each default-exports async (req, sw) and becomes a route).');
           warn(`Full quickstart: ${cliInvocation()} docs start`);
         }
@@ -1180,25 +1191,19 @@ export function registerDeploy(program: Command) {
         Object.keys(files).length +
         Object.keys(binaryFiles).length +
         Object.keys(functions).length;
-      const textBytes = Object.values(files)
-        .concat(Object.values(functions))
-        .reduce((sum, c) => sum + c.length, 0);
-      const binaryBytes = Object.values(binaryFiles)
-        .reduce((sum, b64) => sum + Math.floor((b64.length * 3) / 4), 0);
-      const totalBytes = textBytes + binaryBytes;
       // The exact paths this request carries: one source for the headline count,
       // the terminal list and the JSON `uploaded` field.
       const inventory = uploadInventory(files, binaryFiles, functions, scope);
 
       if (opts.dryRun && !opts.json) {
         spinner?.stop();
-        info(dim(`Dry run: sending ${totalFiles} files (${formatBytes(totalBytes)}) to Somewhere to compute the change. Nothing is published.`));
+        info(dim(`Dry run: sending ${totalFiles} files to Somewhere to check what would change. Nothing is published.`));
         if (process.stderr.isTTY) spinner?.start();
       }
       if (spinner) {
         spinner.text = opts.dryRun
-          ? `Checking ${totalFiles} files (${formatBytes(totalBytes)})...`
-          : `Deploying ${totalFiles} files (${formatBytes(totalBytes)})...`;
+          ? `Checking ${totalFiles} files...`
+          : `Deploying ${totalFiles} files...`;
       }
 
       // The platform answered the deploy (or dry run); a later failure is not
@@ -1381,7 +1386,6 @@ export function registerDeploy(program: Command) {
           scope,
           functionCount: countFunctionRoutes(functions),
           staticFileCount: inventory.static_files.length,
-          totalBytes,
           linkedProject: await linkedProjectWithSubdomain(client, result, targetProjectConfig),
         });
         if (opts.timing && !opts.json) {
@@ -1616,7 +1620,7 @@ export function registerDeploy(program: Command) {
           info(formatTempExpiry(tempSession.expiresAt, tempSession.ttlSeconds));
           const link = teal(tempSession.claimUrl);
           if (tempSession.handoffReady) {
-            info(`Open ${link} and select "Save project and connect agent" to save the project to your account and connect this terminal automatically.`);
+            info(`Open ${link} and select "Save and connect agent" to save the project and connect this terminal to it only. Run \`${cliInvocation()} login\` for account access.`);
           } else if (besideRealLogin) {
             info(`Open ${link} to save the project to your account, then run \`${cliInvocation()} init --link --project ${projectId}\` in an unlinked folder to work on it.`);
           } else {
@@ -1869,7 +1873,6 @@ interface DeploySuccessFormatOptions {
    * remain the fallback for callers that have no local tree.
    */
   staticFileCount?: number;
-  totalBytes: number;
   linkedProject?: Pick<ProjectConfig, 'project_id' | 'subdomain'>;
 }
 
@@ -1930,7 +1933,7 @@ export function formatDeploySuccess(
     // "uploaded", not "deployed": the count is the source this command sent,
     // and the platform may keep some of it private.
     headline =
-      `${staticLabel} uploaded (${formatBytes(options.totalBytes)}) — functions left untouched`;
+      `${staticLabel} uploaded — functions left untouched`;
   } else {
     // The whole surface, in the shape preview and promote also print.
     const both = formatPublishSurface({
@@ -1938,7 +1941,7 @@ export function formatDeploySuccess(
       functions: options.functionCount,
     });
     headline =
-      `${staticFileCount === null && options.functionCount === 0 ? staticLabel : both} uploaded (${formatBytes(options.totalBytes)})`;
+      `${staticFileCount === null && options.functionCount === 0 ? staticLabel : both} uploaded`;
   }
 
   const responseUrl =

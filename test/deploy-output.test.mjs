@@ -28,7 +28,6 @@ test('formats the current release activation deploy response with its real count
 
   const formatted = formatDeploySuccess(response, {
     functionCount: 0,
-    totalBytes: 1024,
     linkedProject: {
       project_id: 'proj_release_v1',
       subdomain: 'release-v1-app',
@@ -36,7 +35,7 @@ test('formats the current release activation deploy response with its real count
   });
 
   assert.equal(formatted.staticFileCount, 7);
-  assert.equal(formatted.headline, '7 static files uploaded (1 KB)');
+  assert.equal(formatted.headline, '7 static files uploaded');
   assert.equal(formatted.projectRef, 'proj_release_v1');
   assert.equal(formatted.liveUrl, 'https://release-v1-app.somewhere.site');
   assert.equal(formatted.liveMessage, 'Live at https://release-v1-app.somewhere.site');
@@ -51,7 +50,6 @@ test('does not construct a linked-project URL when the deploy response omits pro
     },
     {
       functionCount: 0,
-      totalBytes: 1024,
       linkedProject: {
         project_id: 'proj_linked',
         subdomain: 'linked-app',
@@ -60,7 +58,7 @@ test('does not construct a linked-project URL when the deploy response omits pro
   );
 
   assert.equal(formatted.staticFileCount, 2);
-  assert.equal(formatted.headline, '2 static files uploaded (1 KB)');
+  assert.equal(formatted.headline, '2 static files uploaded');
   assert.equal(formatted.projectRef, null);
   assert.equal(formatted.liveUrl, null);
   assert.equal(formatted.liveMessage, 'Deployed. The platform did not report the live URL; `somewhere project view <project>` shows it.');
@@ -69,7 +67,7 @@ test('does not construct a linked-project URL when the deploy response omits pro
 test('a missing URL names the command that shows it for this project', () => {
   const formatted = formatDeploySuccess(
     { project_id: 'proj_owned', has_functions: false },
-    { functionCount: 0, totalBytes: 1024 },
+    { functionCount: 0 },
   );
   assert.equal(formatted.liveUrl, null);
   assert.equal(formatted.liveMessage, 'Deployed. The platform did not report the live URL; `somewhere project view proj_owned` shows it.');
@@ -79,7 +77,7 @@ test('a missing URL names the command that shows it for this project', () => {
 test('a server-reported url is the live URL even with no link (owned --project deploy)', () => {
   const formatted = formatDeploySuccess(
     { project_id: 'proj_owned', url: 'https://owned-app.somewhere.site', has_functions: false },
-    { functionCount: 0, totalBytes: 1024 },
+    { functionCount: 0 },
   );
   assert.equal(formatted.liveUrl, 'https://owned-app.somewhere.site');
   assert.equal(formatted.liveMessage, 'Live at https://owned-app.somewhere.site');
@@ -88,11 +86,11 @@ test('a server-reported url is the live URL even with no link (owned --project d
 test('reports missing deploy fields honestly without rendering undefined', () => {
   const formatted = formatDeploySuccess(
     { has_functions: false },
-    { functionCount: 0, totalBytes: 1024 },
+    { functionCount: 0 },
   );
 
   assert.equal(formatted.staticFileCount, null);
-  assert.equal(formatted.headline, 'Static files uploaded (1 KB)');
+  assert.equal(formatted.headline, 'Static files uploaded');
   assert.equal(formatted.projectRef, null);
   assert.equal(formatted.liveUrl, null);
   assert.equal(formatted.liveMessage, 'Deployed. The platform did not report the live URL; `somewhere project view <project>` shows it.');

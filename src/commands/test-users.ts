@@ -139,7 +139,7 @@ export function registerTestUsers(program: Command): void {
       if (failure) {
         fail(opts, failure);
         warn(`Prepared ${manifest.actors.length} of ${specs.length} actors; the ones created are recorded in ${TEST_STATE_DIR}/${MANIFEST_FILE}. Run \`somewhere test-users cleanup\` to remove them.`
-          + ' If the platform may have created more than were returned, they expire 24 hours after creation.');
+          + ' The platform removes any remaining test users when they expire.');
       } else {
         success(`Prepared ${manifest.actors.length} signed-in test user${manifest.actors.length === 1 ? '' : 's'} for ${target.origin}.`);
       }

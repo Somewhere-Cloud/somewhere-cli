@@ -77,9 +77,9 @@ test('deploy, preview and promote describe the same project identically', () => 
   // deploy — the headline is built by the real formatter.
   const deployed = formatDeploySuccess(
     { files_deployed: 2, has_functions: true, project_id: 'proj_x' },
-    { functionCount: counts.functions, staticFileCount: counts.staticFiles, totalBytes: 383 },
+    { functionCount: counts.functions, staticFileCount: counts.staticFiles },
   );
-  assert.equal(deployed.headline, `${expected} uploaded (383 B)`);
+  assert.equal(deployed.headline, `${expected} uploaded`);
   // Deploy must prefer what it actually uploaded over the platform's own tally:
   // the response said 2 for a tree the project then listed as 3.
   assert.equal(deployed.staticFileCount, 3);
@@ -145,9 +145,9 @@ test('promote response fixtures use an exact function count and safely fall back
 });
 
 test('deploy still reports honestly when it has no local tree to count', () => {
-  const formatted = formatDeploySuccess({ has_functions: false }, { functionCount: 0, totalBytes: 1024 });
+  const formatted = formatDeploySuccess({ has_functions: false }, { functionCount: 0 });
   assert.equal(formatted.staticFileCount, null);
-  assert.equal(formatted.headline, 'Static files uploaded (1 KB)');
+  assert.equal(formatted.headline, 'Static files uploaded');
   assert.doesNotMatch(JSON.stringify(formatted), /undefined/);
 });
 

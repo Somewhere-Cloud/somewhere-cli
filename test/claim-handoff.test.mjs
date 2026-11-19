@@ -33,6 +33,10 @@ const server = createServer(async (req, res) => {
       res.statusCode = 410;
       return res.end(JSON.stringify({ ok: false, error: 'CLAIM_CLI_HANDOFF_EXPIRED', message: 'Run `somewhere login` in this directory. Keep the existing project link and do not redeploy.' }));
     }
+    if (exchangeMode === 'account-refused') {
+      res.statusCode = 403;
+      return res.end(JSON.stringify({ ok: false, error: 'CLAIM_CLI_ACCOUNT_SCOPE_FORBIDDEN' }));
+    }
     return res.end(JSON.stringify({ ok: true, data: delivered }));
   }
   if (req.url === '/v1/auth/temp-handoff/register') {
@@ -85,6 +89,7 @@ test('same-project continuation saves permanent credential before acknowledgemen
   writeConfig({ token: 'smt_temp', user: { email: 'temporary', username: '' }, temporary: true, claim_handoff: { project_id: projectId, verifier, handoff_id: handoffId } });
   const result = await recoverClaimHandoff();
   assert.equal(result.kind, 'recovered');
+  assert.match(result.message, /for this project only.*somewhere login.*for account access/);
   const config = readConfig();
   assert.equal(config.token, 'smt_project_bound');
   assert.equal(config.temporary, undefined);
@@ -209,31 +214,42 @@ test('fresh exchange acknowledgement cannot overwrite a login made after install
   ackStarted = undefined;
 });
 
-test('registration declares the all-projects capability; project-only stays the server default', async () => {
+test('registration requests only the claimed project', async () => {
   calls = [];
   writeConfig({ token: 'smt_temp_register', user: { email: 'temporary', username: '' }, temporary: true });
   const state = await ensureClaimHandoff(projectId);
   assert.equal(state.handoff_id, 'cch_registered');
   const register = calls.find((call) => call.url === '/v1/auth/temp-handoff/register');
-  assert.deepEqual(register.body.capabilities, ['account_scope']);
+  assert.equal(register.body.project_id, projectId);
+  assert.equal('capabilities' in register.body, false);
   assert.equal('verifier' in register.body, false, 'only the verifier hash leaves the machine');
   assert.match(register.body.verifier_hash, /^[a-f0-9]{64}$/);
 });
 
-test('all-projects approval installs and says so', async () => {
-  delivered = encrypted(verifier, handoffId, projectId, { account: true });
-  ackOk = true;
-  writeConfig({ token: 'smt_temp', user: { email: 'temporary', username: '' }, temporary: true, claim_handoff: { project_id: projectId, verifier, handoff_id: handoffId } });
-  const result = await recoverClaimHandoff();
-  assert.equal(result.kind, 'recovered');
-  assert.match(result.message, /all its projects/);
-  delivered = encrypted(verifier, handoffId, projectId);
+test('account approval or refusal leaves temporary state intact and directs the user to login', async () => {
+  const original = { token: 'smt_temp', user: { email: 'temporary', username: '' }, temporary: true, claim_handoff: { project_id: projectId, verifier, handoff_id: handoffId } };
+  try {
+    delivered = encrypted(verifier, handoffId, projectId, { account: true });
+    writeConfig(original);
+    for (const mode of ['ready', 'account-refused']) {
+      exchangeMode = mode;
+      calls = [];
+      const result = await recoverClaimHandoff();
+      assert.equal(result.kind, 'manual');
+      assert.match(result.message, /only to the claimed project.*somewhere login.*for account access/);
+      assert.deepEqual(readConfig(), original);
+      assert.deepEqual(calls.map((call) => call.url), ['/v1/auth/temp-handoff/exchange']);
+    }
+  } finally {
+    delivered = encrypted(verifier, handoffId, projectId);
+    exchangeMode = 'ready';
+  }
 });
 
-test('a project grant relabelled as all-projects is refused and nothing is installed', async () => {
-  delivered = { ...encrypted(verifier, handoffId, projectId), approved_scope: 'account' };
+test('a project envelope cannot install account credentials', async () => {
+  delivered = { ...encrypted(verifier, handoffId, projectId, { account: true, aadAccount: false }), approved_scope: 'project' };
   writeConfig({ token: 'smt_temp_relabel', user: { email: 'temporary', username: '' }, temporary: true, claim_handoff: { project_id: projectId, verifier, handoff_id: handoffId } });
-  await assert.rejects(() => recoverClaimHandoff());
+  await assert.rejects(() => recoverClaimHandoff(), /did not match the approved project/);
   assert.equal(readConfig().token, 'smt_temp_relabel');
   delivered = encrypted(verifier, handoffId, projectId);
 });

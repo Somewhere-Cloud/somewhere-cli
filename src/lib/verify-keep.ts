@@ -151,7 +151,7 @@ export async function closeKept(client: Pick<ApiClient, 'call'>, entry: KeepEntr
     const removed = await client.call<{ deleted?: number }>('DELETE', '/auth/test-users', { project_id: entry.project_id, ids });
     return { browsers, identities: { status: 'deleted', ...(typeof removed?.deleted === 'number' ? { deleted: removed.deleted } : {}) } };
   } catch (cause) {
-    return { browsers, identities: { status: `unconfirmed (${cause instanceof CliApiError ? cause.code : 'delete failed'}); they expire 24 hours after creation` } };
+    return { browsers, identities: { status: `unconfirmed (${cause instanceof CliApiError ? cause.code : 'delete failed'}); the platform removes them when they expire` } };
   }
 }
 

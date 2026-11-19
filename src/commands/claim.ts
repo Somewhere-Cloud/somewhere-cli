@@ -1,6 +1,6 @@
 import { cliInvocation } from '../lib/cli-invocation.js';
 import { Command } from 'commander';
-import { cliConfigPathForDisplay, loadConfig, temporaryConfigExpired } from '../lib/config.js';
+import { loadConfig, temporaryConfigExpired } from '../lib/config.js';
 import { error, info, printJson, teal } from '../lib/output.js';
 
 /** `somewhere claim`: the claim URL of this computer's temporary workspace,
@@ -15,8 +15,8 @@ export function registerClaim(program: Command) {
       const config = loadConfig();
       if (!config?.temporary || !config.claim_url) {
         const message = config?.token
-          ? `This computer is signed in to an account, so there is nothing to claim: its projects are already yours (\`${cliInvocation()} projects\`).`
-          : `This computer has no temporary workspace (nothing in ${cliConfigPathForDisplay()}). If you deployed signed out from another terminal, run \`${cliInvocation()} claim\` there; or run \`${cliInvocation()} deploy\` here to start one.`;
+          ? `This terminal has no temporary workspace to claim. Run \`${cliInvocation()} projects\` to see the projects it can access.`
+          : `This terminal has no temporary workspace. If you deployed signed out from another terminal, run \`${cliInvocation()} claim\` there. Run \`${cliInvocation()} deploy\` here to start one.`;
         if (opts.json) printJson({ ok: false, error: config?.token ? 'NOT_TEMPORARY' : 'NO_TEMPORARY_WORKSPACE', message });
         else error(message);
         process.exit(1);
@@ -33,6 +33,10 @@ export function registerClaim(program: Command) {
       }
       info(`Claim URL: ${teal(config.claim_url)}`);
       if (config.temp_expires_at) info(`Expires at: ${config.temp_expires_at} (UTC)`);
-      info(`Open it in a browser and sign in (or create an account) to keep these projects. Choose "Save project and connect agent" to sign this CLI in as well; otherwise run \`${cliInvocation()} login\` here afterwards.`);
+      info('Open it in a browser and sign in or create an account to keep these projects.');
+      if (config.claim_handoff?.handoff_id) {
+        info('Choose "Save and connect agent" to connect this terminal to the claimed project only.');
+      }
+      info(`Run \`${cliInvocation()} login\` for account access.`);
     });
 }

@@ -634,8 +634,7 @@ export function registerCron(program: Command): void {
         + 'and waits within --timeout. Changes to schedule settings or a disabled schedule stop the wait.\n'
         + 'The observation uses at most --limit recent rows per read (default 100 while waiting).\n'
         + 'A timeout reports what was not observed; it does not mean the timer never fired.\n'
-        + 'An already-started login renewal finishes with its existing 10-second request budgets before\n'
-        + 'the command exits, so credential persistence can add grace beyond the observation deadline.\n',
+        + 'If a login renewal is already underway, it can finish after the observation deadline.\n',
     )
     .action(async (target: string, opts: CronRunsOptions) => {
       try {

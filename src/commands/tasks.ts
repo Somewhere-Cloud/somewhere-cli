@@ -285,7 +285,7 @@ export function registerTasks(program: Command): void {
 
   tasks
     .command('delete <task-ids...>')
-    .description('Delete a task that should never have existed; restorable for 30 days (board owner only)')
+    .description('Delete a task that should never have existed (board owner only)')
     .option('-p, --project <project>', 'Project slug or ID; defaults to the linked project')
     .requiredOption('--reason <text>', 'Why this task should never have existed')
     .option('--json', 'Print the complete response as JSON')
@@ -296,9 +296,10 @@ export function registerTasks(program: Command): void {
       ]), opts.json, (value) => {
         const data = unwrapPlatformData(value);
         if (!isRecord(data) || typeof data.id !== 'string') { printJson(value); return; }
-        const purgeAt = typeof data.purge_at === 'number' ? new Date(data.purge_at).toISOString() : 'in 30 days';
         console.log(`${teal(data.id)}  ${data.already_deleted ? 'was already deleted' : 'deleted'}`);
-        console.log(dim(`Restorable until ${purgeAt}: ${cliInvocation()} tasks restore ${data.id}`));
+        const restore = `\`${cliInvocation()} tasks restore ${data.id}\``;
+        const deadline = typeof data.purge_at === 'number' ? ` until ${new Date(data.purge_at).toISOString()}` : '';
+        console.log(dim(`Restore${deadline} with ${restore}.`));
       });
     });
 

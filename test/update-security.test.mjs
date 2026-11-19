@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { packCli } from '../scripts/pack-cli.mjs';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import {
@@ -320,13 +321,9 @@ test('the release artifact installs from an authenticated empty runtime lock', a
   const previousPrefix = process.env.NPM_CONFIG_PREFIX;
   const previousRegistry = process.env.NPM_CONFIG_REGISTRY;
   try {
-    const packed = JSON.parse(execFileSync(
-      'npm',
-      ['pack', '--ignore-scripts', '--json', `--pack-destination=${root}`],
-      { cwd: new URL('..', import.meta.url), encoding: 'utf8' },
-    ));
-    const tarballPath = join(root, packed[0].filename);
-    const packedPaths = packed[0].files.map(file => file.path);
+    const packed = packCli(root);
+    const tarballPath = join(root, packed.filename);
+    const packedPaths = packed.files.map(file => file.path);
     assert.equal(packedPaths.some(path => /^dist\/local\/|^dist\/commands\/exec\.|^runtime\/(?:compiler\/|sw-init\.|platform-context\.)/.test(path)), false, 'retired local runtime must not survive in the npm artifact');
     assert.ok(packedPaths.includes('dist/lib/bundle.js'), 'the command runtime stays packaged');
     assert.ok(packedPaths.includes('runtime/browser-probes.mjs'), 'independent browser tooling stays packaged');
@@ -337,7 +334,7 @@ test('the release artifact installs from an authenticated empty runtime lock', a
       .map(([path]) => path.match(/node_modules\/(?:@[^/]+\/[^/]+|[^/]+)$/)?.[0].slice('node_modules/'.length)));
     productionNames.delete(undefined);
     assert.equal(productionNames.size, 0);
-    assert.deepEqual(packed[0].bundled, []);
+    assert.deepEqual(packed.bundled, []);
     mkdirSync(operationDir);
     process.env.NPM_CONFIG_PREFIX = prefix;
     process.env.NPM_CONFIG_REGISTRY = 'http://127.0.0.1:48731/';

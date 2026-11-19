@@ -74,12 +74,10 @@ export function assertBundleBudget(pack) {
 
 // npm owns the shipped-file list: declarations, JSON, docs and templates are
 // checked alongside executable bundles, with no extension-based exclusions.
-export function assertPublicPackage(root, scanPackage = () => {}) {
+export function assertPublicPackage(root) {
   const result = spawnSync('npm', ['pack', '--dry-run', '--json', '--ignore-scripts'], { cwd: root, encoding: 'utf8' });
   if (result.status !== 0) throw new Error('Cannot enumerate public package files');
-  const [pack] = JSON.parse(result.stdout);
-  scanPackage(pack);
-  const { files } = pack;
+  const [{ files }] = JSON.parse(result.stdout);
   for (const { path } of files) {
     assertPublicArtifact(path, path);
     assertPublicArtifact(readFileSync(join(root, path)).toString('utf8'), path);

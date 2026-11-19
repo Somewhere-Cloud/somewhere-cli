@@ -1,6 +1,6 @@
 {
   "name": "@somewhere-cloud/cli",
-  "version": "0.38.121",
+  "version": "0.38.122",
   "description": "CLI for somewhere.cloud \u2014 auth, projects, deploy, pull, promote, db, logs, env, MCP bridge.",
   "keywords": [
     "somewhere",
@@ -54,7 +54,7 @@
   "scripts": {
     "build": "tsc && node scripts/build-bundle.mjs",
     "dev": "tsc --watch",
-    "prepublishOnly": "npm run build && node scripts/check-public-package.mjs",
+    "prepublishOnly": "node -e \"console.error('Use the CLI publish workflow to publish the staged runtime tarball.'); process.exit(1)\"",
     "test": "npm run check:credentials && npm run build && node scripts/test-packed.mjs",
     "test:roundtrip": "node scripts/e2e-roundtrip.mjs",
     "prebuild": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",

@@ -49,7 +49,7 @@ test('device login binds private verifier without URL/output exposure and never 
     res.setHeader('content-type','application/json');
     if (req.url === '/v1/auth/device-code') {
       registered = body;
-      res.end(JSON.stringify({ok:true,data:{approval_url:'https://fixture.invalid/auth?code='+body.code,verifier_bound:mode !== 'old'}}));
+      res.end(JSON.stringify({ok:true,data:{approval_url:'https://fixture.invalid/auth?code='+body.code,verifier_bound:mode !== 'old',expires_in:600}}));
     } else {
       polls.push({url:req.url,method:req.method,body});
       res.statusCode = mode === 'unknown' ? 503 : 200;

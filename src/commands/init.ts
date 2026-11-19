@@ -197,7 +197,7 @@ export async function runInit(opts: InitOptions, command: Command): Promise<void
   }
   const scaffoldFiles = (projectName: string): InitScaffoldFile[] =>
     template === 'minimal' && !plan
-      ? createGreenTemplate()
+      ? createGreenTemplate(projectName)
       : createFeatureTemplate(plan?.selection ?? DEFAULT_AUTH_SELECTION, { appName: projectName });
 
   // Missing credentials never block local source generation. Linking and

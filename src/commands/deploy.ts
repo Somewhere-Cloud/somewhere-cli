@@ -1,4 +1,5 @@
 import { FIRST_CLI_PERMISSION } from '../lib/first-cli-permission.js';
+import { readStarterProjectName, starterNameSlug } from '../lib/init-scaffold.js';
 import { newProjectCommand } from '../lib/link-hint.js';
 import { roleMethodHints } from '../lib/role-method-hints.js';
 import { cliInvocation } from '../lib/cli-invocation.js';
@@ -189,10 +190,7 @@ export function detectNodeServerShape(
   return null;
 }
 
-// --temporary auto-creates a project (no `somewhere init` to run without an
-// account): name/subdomain both derive from the target dir's basename,
-// slugified, plus a random suffix so a common dir name (e.g. "app") doesn't
-// collide with someone else's temp project on a shared subdomain namespace.
+// Without a recorded name, derive a project name from the directory.
 export function slugify(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9-]/g, '-');
 }
@@ -206,23 +204,15 @@ export function deriveNewProjectName(dirPath: string): string {
   return `${base}-${randomSuffix()}`;
 }
 
-// The first-mint claim-relay block derives its "N hours" from the server's
-// ttl_seconds (10800 → 3). Reused sessions with no saved expiry (old configs)
-// still fall back here instead of crashing.
-export function formatTtlHours(ttlSeconds?: number): number {
-  if (!ttlSeconds || !Number.isFinite(ttlSeconds)) return 3;
-  return Math.round(ttlSeconds / 3600) || 3;
-}
-
 export function formatTempExpiry(expiresAt?: string, ttlSeconds?: number, nowMs = Date.now()): string {
   const remainingMs = expiresAt ? Date.parse(expiresAt) - nowMs : NaN;
-  // If this terminal's clock disagrees with the server, describe the lifetime
-  // from creation rather than making a promise about how much is left.
+  // When the remaining time cannot be established, the claim instructions
+  // that follow still tell the user how to save the project.
   if (!Number.isFinite(remainingMs) || (
     ttlSeconds !== undefined && Number.isFinite(ttlSeconds)
     && (remainingMs > ttlSeconds * 1000 + 60_000 || remainingMs < -60_000)
   )) {
-    return `Temporary app. Expires about ${plural(formatTtlHours(ttlSeconds), 'hour')} after it was created.`;
+    return 'Temporary app.';
   }
   if (remainingMs <= 0) return 'Temporary app. It has expired.';
   const minutes = Math.ceil(remainingMs / 60_000);
@@ -654,7 +644,7 @@ export function registerDeploy(program: Command) {
     .option('--new', 'Publish to a new project and replace this folder’s .somewhere.json link')
     .option(
       '--temporary',
-      'Explicitly deploy to a temporary 3-hour workspace (automatic when logged out)',
+      'Deploy to a temporary workspace and show when it expires (automatic when logged out)',
     )
     .option(
       '--force',
@@ -864,7 +854,7 @@ export function registerDeploy(program: Command) {
           ? isTempSessionLive(sideCar)
           : hasReusableTempCredential(storedConfig)) {
           // Reuse silently — this is the "one credential across shells"
-          // requirement: a second `--temporary` deploy in the same 3h window
+          // requirement: a second `--temporary` deploy before the session expires
           // (a different terminal, a re-run) must not mint a second project.
           const live = besideRealLogin
             ? sideCar!
@@ -979,17 +969,26 @@ export function registerDeploy(program: Command) {
           // project so a temporary deploy stays a single command.
           const createSpinner = opts.json ? null : ora(tempSession ? 'Creating a temporary project...' : 'Creating a new project...').start();
           try {
-            const name = deriveNewProjectName(targetDir);
-            const created = await client.call<{ id: string; name: string; subdomain: string }>(
+            const starterName = tempSession && !besideRealLogin && !opts.new ? readStarterProjectName(targetDir) : undefined;
+            const name = starterName ?? deriveNewProjectName(targetDir);
+            // Older servers use the requested label. Current servers allocate a
+            // hostname from the display name and return the label they chose.
+            const subdomain = starterName
+              ? `${starterNameSlug(starterName).slice(0, 35).replace(/-$/, '') || 'project'}-${randomSuffix()}`
+              : name;
+            const created = await client.call<{ id: string; name: string; subdomain: string; status?: string }>(
               'POST',
               '/projects',
-              { name, subdomain: name, cli_version: CLI_VERSION },
+              { name, subdomain, cli_version: CLI_VERSION },
             );
+            if (starterName && created.status && created.status !== 'draft') {
+              throw new Error('A temporary project already uses this name. Change somewhere.project_name in package.json or deploy from the linked folder.');
+            }
             createSpinner?.stop();
             targetProjectConfig = {
               project_id: created.id,
               name: created.name,
-              subdomain: created.subdomain ?? name,
+              subdomain: created.subdomain ?? subdomain,
               source_base: sourceBaseState(created.id, null),
             };
             if (besideRealLogin && sideCar) {

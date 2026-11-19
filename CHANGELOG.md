@@ -1,3 +1,9 @@
+## 0.38.124
+
+- Keep the name from signed-out init when creating the temporary project.
+- Show temporary deploy expiry only when it can be established from the server's expiry.
+- Save temporary projects during device login and follow the server's approval-code lifetime.
+
 ## 0.38.123
 
 - Install only app packages and types when creating a starter. Keep the CLI version as a pin and add Vite or Playwright when needed.

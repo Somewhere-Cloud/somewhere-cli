@@ -24,7 +24,6 @@ import { fetchWithProxy as fetch } from './http.js';
 // staging / a local platform); this flow addresses /v1/auth/* itself.
 const API_BASE = API_BASE_URL.replace(/\/v1$/, '');
 const POLL_INTERVAL_MS = 1000;
-const TIMEOUT_MS = 5 * 60 * 1000;
 
 // Skip ambiguous chars (no I, O, 0, 1) — same alphabet the worker validates.
 const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -61,6 +60,7 @@ interface StatusApproved {
     /** Present once the platform reports the approved scope. */
     scope?: DeviceSessionScope | null;
     session_id?: string;
+    merged_project_count?: number;
   };
 }
 interface StatusExpired {
@@ -81,7 +81,7 @@ export interface DeviceSessionScope {
 }
 
 export interface DeviceLoginCallbacks {
-  onPrompt: (info: { code: string; approvalUrl: string }) => void;
+  onPrompt: (info: { code: string; approvalUrl: string; expiresIn: number }) => void;
   onWaiting?: () => void;
 }
 
@@ -135,9 +135,10 @@ export function describeThisDevice(): DeviceClientMeta {
 export interface DeviceLoginResult {
   config: CliConfig;
   scope: DeviceSessionScope | null;
+  mergedProjectCount?: number;
 }
 
-export async function deviceLogin(callbacks: DeviceLoginCallbacks): Promise<DeviceLoginResult> {
+export async function deviceLogin(callbacks: DeviceLoginCallbacks, temporaryToken?: string): Promise<DeviceLoginResult> {
   const code = generateCode();
   const verifier = randomBytes(32).toString('base64url');
   const codeChallenge = createHash('sha256').update(verifier).digest('hex');
@@ -145,8 +146,14 @@ export async function deviceLogin(callbacks: DeviceLoginCallbacks): Promise<Devi
 
   const startRes = await fetch(`${API_BASE}/v1/auth/device-code`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ code, code_challenge: codeChallenge, device_name: deviceName, client: describeThisDevice() }),
+    headers: {
+      'Content-Type': 'application/json',
+      ...(temporaryToken ? { Authorization: `Bearer ${temporaryToken}` } : {}),
+    },
+    body: JSON.stringify({
+      code, code_challenge: codeChallenge, device_name: deviceName, client: describeThisDevice(),
+      ...(temporaryToken ? { merge_temporary: true } : {}),
+    }),
   });
 
   if (startRes.status === 404) {
@@ -154,18 +161,32 @@ export async function deviceLogin(callbacks: DeviceLoginCallbacks): Promise<Devi
     throw new DeviceCodeUnsupported();
   }
   if (!startRes.ok) {
+    if (temporaryToken) {
+      // Keep response bodies from credential-bearing requests out of output and capture.
+      const reason = startRes.status === 401
+        ? 'The temporary session is invalid or expired.'
+        : `The server refused the request (HTTP ${startRes.status}).`;
+      throw new Error(`Could not start sign-in to save temporary projects. ${reason}`);
+    }
     const text = await startRes.text();
     // A sandbox proxy that blocks the host answers here too (often 403): name it.
     throw new Error(`Failed to start login: ${new URL(API_BASE).host} answered HTTP ${startRes.status} ${text.slice(0, 200)}. If this shell only allows listed sites (an agent sandbox), add ${new URL(API_BASE).host}, or run \`${cliInvocation()} login\` in your own terminal.`);
   }
-  const start = (await startRes.json()) as StartResponse & { data: { verifier_bound?: boolean } };
+  const start = (await startRes.json().catch(() => {
+    throw new Error('The server returned an unreadable login registration. Start login again.');
+  })) as StartResponse & { data: { verifier_bound?: boolean } };
   if (start.data.verifier_bound !== true) throw new Error('This server does not support secure device redemption. Update the platform before login.');
-  callbacks.onPrompt({ code, approvalUrl: start.data.approval_url });
+  const expiresIn = start.data.expires_in;
+  if (!Number.isSafeInteger(expiresIn) || expiresIn <= 0) {
+    throw new Error('The server did not say when the login code expires. Start login again.');
+  }
+  const deadline = performance.now() + expiresIn * 1000;
+  callbacks.onPrompt({ code, approvalUrl: start.data.approval_url, expiresIn });
   callbacks.onWaiting?.();
 
-  const startedAt = Date.now();
-  while (Date.now() - startedAt < TIMEOUT_MS) {
-    await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+  while (performance.now() < deadline) {
+    await new Promise((r) => setTimeout(r, Math.min(POLL_INTERVAL_MS, Math.ceil(deadline - performance.now()))));
+    if (performance.now() >= deadline) break;
     const pollRes = await fetch(
       `${API_BASE}/v1/auth/device-code/status`,
       { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code, verifier }) }
@@ -173,7 +194,9 @@ export async function deviceLogin(callbacks: DeviceLoginCallbacks): Promise<Devi
     if (!pollRes.ok) {
       throw new Error(`Login delivery could not be confirmed (HTTP ${pollRes.status}). Restart login; this redemption will not be retried.`);
     }
-    const status = (await pollRes.json()) as StatusResponse;
+    const status = (await pollRes.json().catch(() => {
+      throw new Error('Login delivery could not be confirmed. Restart login; this redemption will not be retried.');
+    })) as StatusResponse;
     if (status.data.status === 'expired') {
       throw new DeviceLoginTimeout();
     }
@@ -181,13 +204,16 @@ export async function deviceLogin(callbacks: DeviceLoginCallbacks): Promise<Devi
       throw new DeviceLoginDenied();
     }
     if (status.data.status === 'approved') {
+      if (typeof status.data.token !== 'string' || !status.data.token || typeof status.data.email !== 'string') {
+        throw new Error('The server did not return a complete login session. Start login again.');
+      }
       const config: CliConfig = {
         token: status.data.token,
         user: { email: status.data.email, username: '' },
       };
       if (status.data.refresh_token) config.refresh_token = status.data.refresh_token;
       if (status.data.expires_at) config.access_expires_at = status.data.expires_at;
-      return { config, scope: status.data.scope ?? null };
+      return { config, scope: status.data.scope ?? null, mergedProjectCount: status.data.merged_project_count };
     }
   }
   throw new DeviceLoginTimeout();

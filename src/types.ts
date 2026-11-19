@@ -18,7 +18,7 @@ export interface CliConfig {
    *  can give temp-aware expiry messaging and deploy can reuse/re-mint
    *  instead of ever prompting `somewhere login`. */
   temporary?: boolean;
-  /** ISO expiry for a temporary credential (3h TTL from the server). Unused
+  /** ISO expiry for a temporary credential, returned by the server. Unused
    *  when `temporary` is not set. */
   temp_expires_at?: string;
   /** Where claiming a temporary workspace happens — printed on every temp

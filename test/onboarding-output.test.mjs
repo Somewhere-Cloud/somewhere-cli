@@ -57,15 +57,17 @@ test('expiry uses the same server instant for fresh and reused sessions, indepen
     process.env.TZ = zone;
     assert.equal(formatTempExpiry(expires, 10800, now), 'Temporary app. Expires in about 3 hours.');
     assert.equal(formatTempExpiry(expires, 10800, now + 140 * 60_000), 'Temporary app. Expires in about 40 minutes.');
-    assert.equal(formatTempExpiry(undefined, 10800, now), 'Temporary app. Expires about 3 hours after it was created.');
+    assert.equal(formatTempExpiry(undefined, 10800, now), 'Temporary app.');
+    assert.equal(formatTempExpiry('2026-09-29T18:00:00Z', 86400, now), 'Temporary app. Expires in about 24 hours.');
     assert.equal(formatTempExpiry(expires, undefined, now + 90 * 60_000), 'Temporary app. Expires in about 2 hours.');
   }
   assert.equal(formatTempExpiry(expires, undefined, now + 4 * 3600_000), 'Temporary app. It has expired.');
 });
 test('detectable clock disagreement or invalid local clock never invents a longer lifetime', () => {
   const expires = '2026-09-28T21:00:00.000Z';
-  assert.equal(formatTempExpiry(expires, 10800, Date.parse('2026-09-28T11:00:00Z')), 'Temporary app. Expires about 3 hours after it was created.');
-  assert.equal(formatTempExpiry(expires, 10800, Number.NaN), 'Temporary app. Expires about 3 hours after it was created.');
+  assert.equal(formatTempExpiry(expires, 10800, Date.parse('2026-09-28T11:00:00Z')), 'Temporary app.');
+  assert.equal(formatTempExpiry(expires, 10800, Number.NaN), 'Temporary app.');
+  assert.equal(formatTempExpiry('invalid', undefined, 0), 'Temporary app.');
 });
 
 test('a run where no browser started is not summarised as "0 failed steps" (Haiku w2-invites, )', () => {

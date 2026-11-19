@@ -2,6 +2,7 @@ import {
   existsSync,
   lstatSync,
   mkdirSync,
+  readFileSync,
   readdirSync,
   writeFileSync,
 } from 'node:fs';
@@ -17,6 +18,23 @@ export interface InitScaffoldFile {
 
 export interface InitScaffoldResult {
   created: string[];
+}
+
+export function starterNameSlug(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9\s-]/g, '').replace(/[\s-]+/g, '-').replace(/^-|-$/g, '');
+}
+
+/** Only use names recorded by init. Arbitrary packages keep the folder fallback. */
+export function readStarterProjectName(dir: string): string | undefined {
+  try {
+    const pkg = JSON.parse(readFileSync(resolve(dir, 'package.json'), 'utf8')) as {
+      somewhere?: { project_name?: unknown };
+    } | null;
+    const name = pkg?.somewhere?.project_name;
+    return typeof name === 'string' ? name.trim() || undefined : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 const INIT_METADATA = new Set([

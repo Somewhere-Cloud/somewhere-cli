@@ -5,17 +5,18 @@ import {spawnSync} from 'node:child_process';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { packCli } from '../scripts/pack-cli.mjs';
 import { assertBundleBudget, BUNDLE_BUDGET } from '../scripts/public-projection.mjs';
 
 test('packed CLI starts and offers deploy notes after an offline production-only install', async () => {
  const repo=fileURLToPath(new URL('../',import.meta.url)),root=mkdtempSync(join(tmpdir(),'sw-production-install-'));
  const run=(cmd,args,cwd=repo)=>{const r=spawnSync(cmd,args,{cwd,env:{...process.env,SOMEWHERE_CONFIG_DIR:join(root,'config'),SOMEWHERE_NO_NOTIFICATIONS:'1',NO_COLOR:'1'},encoding:'utf8',maxBuffer:8e6,timeout:120000});assert.equal(r.status,0,r.stdout+r.stderr);return r.stdout;};
  try {
-  const packed=JSON.parse(run('npm',['pack','--ignore-scripts','--json','--pack-destination',root]));
-  assertBundleBudget(packed[0]);
-  run('npm',['install','--prefix',root,'--offline','--ignore-scripts','--omit=dev',join(root,packed[0].filename)]);
-  assert.ok(!packed[0].files.some(({ path }) => path.startsWith('node_modules/')));
-  const paths = packed[0].files.map(({ path }) => path);
+  const packed = packCli(root, 'a'.repeat(40));
+  assertBundleBudget(packed);
+  run('npm',['install','--prefix',root,'--offline','--ignore-scripts',join(root,packed.filename)]);
+  assert.ok(!packed.files.some(({ path }) => path.startsWith('node_modules/')));
+  const paths = packed.files.map(({ path }) => path);
   for (const path of ['dist/lib/bundle.js', 'dist/lib/bundle.js.map', 'NOTICE.third-party.txt']) {
     assert.ok(paths.includes(path));
   }
@@ -27,6 +28,11 @@ test('packed CLI starts and offers deploy notes after an offline production-only
   assert.deepEqual(manifest.peerDependencies ?? {}, {});
   assert.equal(run(process.execPath, ['-e', "console.log(typeof require('@somewhere-cloud/cli/script').openAppTest)"], root).trim(), 'function');
   assert.equal(run(process.execPath, ['--input-type=module', '-e', "import {UserSession} from '@somewhere-cloud/cli/testing'; console.log(typeof UserSession)"], root).trim(), 'function');
+  assert.equal(manifest.devDependencies, undefined);
+  assert.equal(manifest.gitHead, 'a'.repeat(40));
+  const lock = JSON.parse(readFileSync(join(installed, 'npm-shrinkwrap.json'), 'utf8'));
+  assert.deepEqual(Object.keys(lock.packages), ['']);
+  assert.equal(existsSync(join(installed, 'node_modules')), false);
   const version=JSON.parse(readFileSync(join(repo,'package.json'),'utf8')).version;
   assert.equal(run(process.execPath,[cli,'--version'],root).trim(),version);
   assert.match(run(process.execPath,[cli,'deploy','--help'],root),/-m, --message/);

@@ -12,6 +12,7 @@ export const RELEASE_INPUTS = [
   'runtime',
   'scripts/extract-runtime.mjs',
   'scripts/build-bundle.mjs',
+  'scripts/pack-cli.mjs',
   'scripts/licenses',
   'tsconfig.json',
 ];

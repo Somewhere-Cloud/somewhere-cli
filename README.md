@@ -29,7 +29,7 @@ installs `cli`, the name `npx @somewhere-cloud/cli` resolves to; use
 
 The package ships an unminified `dist/lib/bundle.js`. Its module labels identify
 the source files and npm packages. The adjacent source map maps back to the
-published source commit and the dependencies in `npm-shrinkwrap.json`.
+published source commit and the dependencies in that commit’s build lock.
 `NOTICE.third-party.txt` includes their licenses and notices. npm provenance
 links the exact tarball to the build.
 

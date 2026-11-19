@@ -2,16 +2,15 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { packCli } from './pack-cli.mjs';
 
 const fixture = mkdtempSync(join(tmpdir(), 'somewhere-packed-suite-'));
 const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
 const npmOptions = { encoding: 'utf8', shell: process.platform === 'win32' };
 try {
-  const [pack] = JSON.parse(execFileSync(npm, [
-    'pack', '--ignore-scripts', '--json', '--pack-destination', fixture,
-  ], npmOptions));
+  const pack = packCli(fixture);
   execFileSync(npm, [
-    'install', '--prefix', fixture, '--offline', '--ignore-scripts', '--omit=dev',
+    'install', '--prefix', fixture, '--offline', '--ignore-scripts',
     '--no-audit', '--no-fund', join(fixture, pack.filename),
   ], npmOptions);
   const installed = join(fixture, 'node_modules', '@somewhere-cloud', 'cli');

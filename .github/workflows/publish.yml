@@ -99,7 +99,11 @@ jobs:
         run: node scripts/publish-release.mjs check "$SOURCE_SHA" "$EXPECTED_VERSION"
       - run: npm ci
       - run: npm run build
-      - run: node scripts/check-public-package.mjs
+      - name: Pack and check the exact release tarball
+        id: artifact
+        env:
+          SOURCE_SHA: ${{ steps.trigger.outputs.source }}
+        run: node scripts/check-public-package.mjs "$RUNNER_TEMP" "$SOURCE_SHA"
       - name: Recheck identity immediately before publication
         id: final
         env:
@@ -117,11 +121,12 @@ jobs:
         id: publication
         if: steps.final.outputs.mode == 'release'
         env:
+          TARBALL: ${{ steps.artifact.outputs.tarball }}
           EXPECTED_VERSION: ${{ steps.candidate.outputs.version }}
         run: |
           if [ -n "${NODE_AUTH_TOKEN:-}" ] || [ -n "${NPM_TOKEN:-}" ]; then echo "an npm token is set; this publisher authenticates only through OIDC" >&2; exit 1; fi
           if npm view "@somewhere-cloud/cli@$EXPECTED_VERSION" version >/dev/null 2>&1; then echo "@somewhere-cloud/cli@$EXPECTED_VERSION already exists on npm" >&2; exit 1; fi
-          npm publish --provenance --access public
+          npm publish --provenance --access public "$TARBALL"
 
   verify:
     name: Verify the published npm artifact

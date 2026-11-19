@@ -1,3 +1,7 @@
+## 0.38.122
+
+- Ship a runtime-only npm lock so default installs fetch the bundled CLI without its build dependencies.
+
 ## 0.38.121
 
 - Ship the same CLI as a readable JavaScript bundle with a source map and third-party notices.

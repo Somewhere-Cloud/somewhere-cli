@@ -17,7 +17,7 @@ export function starterInstallPath() {
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
-assert.deepEqual(process.argv.slice(2), ['install', '--no-audit', '--no-fund', '--omit=optional']);
+assert.deepEqual(process.argv.slice(2), ['install', '--no-audit', '--no-fund']);
 assert.equal(pkg.somewhere.cli_version, ${JSON.stringify(CLI_PACKAGE_VERSION)});
 assert.equal(pkg.devDependencies['@somewhere-cloud/cli'], undefined);
 `);

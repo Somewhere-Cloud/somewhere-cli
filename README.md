@@ -66,12 +66,15 @@ the project. The pinned version runs from npm’s cache when needed. `somewhere
 upgrade` moves the pin. Type checking uses the pinned compiler through npm
 when no compiler is installed in the project.
 
-`init` installs the SDK and editor types. Both starters declare React for the
-platform build. To install React and Vite locally, use
-`npm install --include=optional -D --save-exact vite@7.2.2`
+`init` installs React, the SDK, and editor types. For a local Vite server, use
+`npm install -D --save-exact vite@7.2.2`
 for `somewhere dev` and `npm install -D --save-exact @playwright/test@1.65.0`
 for browser tests. `somewhere test` supplies its own helpers to the test files.
 `init --template bare` is the same as `init --bare` and installs no dependencies.
+
+If you created the starter with CLI 0.38.123 or 0.38.124, run
+`npx -y @somewhere-cloud/cli@latest upgrade`, then `npm install` before deploying.
+This makes React a required dependency and refreshes the project's lockfile.
 
 The CLI needs no MCP setup: every command works from the shell, and `somewhere run <script>` executes code against your live project. `somewhere init` keeps AGENTS.md and useful skills, but does not install agent hooks or command-running MCP configuration. Existing agent settings stay unchanged. Run `somewhere typecheck`, `somewhere typecheck --deploy`, or `somewhere typecheck --deploy --watch` explicitly when you want local checks. Use `somewhere mcp install <host>` when you explicitly want MCP tools connected to an agent host.
 

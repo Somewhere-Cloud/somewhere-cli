@@ -89,7 +89,7 @@ test('expired temporary session + unlinked folder: one-line note, replaced only 
   assert.equal(r.status, 1, r.stdout + r.stderr);
   assert.ok(r.stdout.includes(`The temporary session on this machine expired at ${expiredAt}; starting a new one.`), r.stdout);
   assert.doesNotMatch(r.stdout + r.stderr, /Temporary session expired\. Run/);
-  assert.deepEqual(requests, ['GET /auth/pow/challenge']);
+  assert.deepEqual(requests, ['POST /auth/temp-create']);
   // Nothing was minted, so the stored session is left exactly as it was.
   assert.deepEqual(JSON.parse(readFileSync(join(configDir, 'config.json'), 'utf8')), expiredTemp);
 });

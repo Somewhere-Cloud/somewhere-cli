@@ -114,7 +114,7 @@ const NEXT_DEPENDENCY_SECTIONS = [
 const NEXT_APP_WARNING =
   "Next.js apps do not run here. Somewhere supports HTML responses from ordinary server functions. " +
   `Port API routes to api/ handlers and HTML pages to root routes such as [...path].ts, or start from a Vite React app. Read ${cliInvocation()} docs functions; deploy raw JSX/TSX.`;
-const DEPLOY_HEARTBEAT_MS = 30_000;
+const DEPLOY_HEARTBEAT_MS = 10_000;
 const DEPLOY_MAX_ATTEMPTS = 2;
 // The CLI's OWN verdicts — transport failures it detected itself, where no
 // request ever reached a route. The platform's verdict is a separate input:
@@ -702,12 +702,19 @@ export function registerDeploy(program: Command) {
       // Observe rejection immediately, then enforce the result before upload.
       const hasTsconfig = existsSync(join(targetDir, 'tsconfig.json'));
       const missingDependencies = hasTsconfig && missingProjectDependencies(targetDir).length > 0;
-      if (hasTsconfig && !missingDependencies && typecheckCompilerSource(targetDir) === 'npx') {
+      const checkingTypes = hasTsconfig && !missingDependencies;
+      if (checkingTypes && typecheckCompilerSource(targetDir) === 'npx') {
         announceNpxTypeScriptFetch(TYPECHECK_TYPESCRIPT_VERSION);
       }
-      const typecheck = hasTsconfig && !missingDependencies
+      const typecheckHeartbeat = checkingTypes && !opts.json ? setInterval(() => {
+        process.stderr.write(`Still checking types before upload after ${formatDeployElapsed(performance.now() - typecheckStartedAt)}...\n`);
+      }, deployHeartbeatMs()).unref() : undefined;
+      const typecheck = checkingTypes
         ? runTypecheck(targetDir).then(value => ({ value }), (error: unknown) => ({ error }))
-          .finally(() => { typecheckMs = performance.now() - typecheckStartedAt; })
+          .finally(() => {
+            clearInterval(typecheckHeartbeat);
+            typecheckMs = performance.now() - typecheckStartedAt;
+          })
         : Promise.resolve(null);
       // A bad local flow must not publish source or mint a temporary account.
       const verifyFlow = opts.verify && !opts.dryRun
@@ -881,10 +888,12 @@ export function registerDeploy(program: Command) {
             if (opts.json) console.error(note);
             else info(note);
           }
-          const powSpinner = opts.json ? null : ora('Solving proof-of-work…').start();
+          const signupSpinner = opts.json ? null : ora('Starting a temporary session…').start();
           try {
-            const account = await mintTempAccount();
-            powSpinner?.stop();
+            const account = await mintTempAccount(undefined, () => {
+              if (signupSpinner) signupSpinner.text = 'Solving the proof-of-work requested by the server…';
+            });
+            signupSpinner?.stop();
             if (besideRealLogin) {
               const minted: StoredTempSession = {
                 token: account.key,
@@ -918,7 +927,7 @@ export function registerDeploy(program: Command) {
               };
             }
           } catch (err) {
-            powSpinner?.fail('Could not create a temporary session');
+            signupSpinner?.fail('Could not create a temporary session');
             // The platform's typed error (code, status, retry, request ids): the
             // same shape a signed-in deploy reports.
             const status = err instanceof CliApiError

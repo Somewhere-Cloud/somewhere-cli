@@ -23,6 +23,7 @@ export interface UpgradeResult {
   updated: string[];
   changes: ChangelogEntry[];
   next: string[];
+  repairedStarter?: true;
 }
 
 /** Move this folder's CLI pin to the running CLI and list what changed. */
@@ -46,11 +47,11 @@ export function upgradeProject(dir: string, running: string, changelog: () => st
     );
   }
   const alreadyExact = pins.every((pin) => pin.spec === running);
-  const updated = alreadyExact ? [] : writeProjectPins(dir, pins, running);
-  const next = pins.some(pin => pin.source === 'package.json' && !pin.versionOnly && pin.spec !== running)
+  const { updated, repairedStarter } = alreadyExact ? { updated: [], repairedStarter: false } : writeProjectPins(dir, pins, running);
+  const next = repairedStarter || pins.some(pin => pin.source === 'package.json' && !pin.versionOnly && pin.spec !== running)
     ? ['npm install']
     : [];
-  return { from, to: running, updated, changes: changelogBetween(changelog(), from, running), next };
+  return { from, to: running, updated, changes: changelogBetween(changelog(), from, running), next, ...(repairedStarter ? { repairedStarter } : {}) };
 }
 
 export function registerUpgrade(program: Command) {
@@ -92,7 +93,8 @@ export function registerUpgrade(program: Command) {
           console.log('');
         }
       }
-      if (result.next.includes('npm install')) info(`Run ${teal('npm install')} to install ${result.to} in node_modules and update the lockfile.`);
+      if (result.repairedStarter) info(`Made React a required dependency for this starter. Run ${teal('npm install')} to refresh the lockfile before deploying.`);
+      else if (result.next.includes('npm install')) info(`Run ${teal('npm install')} to install ${result.to} in node_modules and update the lockfile.`);
       info(`Agent skills were not changed; \`${cliInvocation()} skills status\` compares them with the latest pack.`);
     });
 }

@@ -39,6 +39,9 @@ test('canonical publisher alone publishes, checks the registry, and pins immutab
   assert.match(publisher, /an npm token is set; this publisher authenticates only through OIDC/);
   assert.ok(publisher.indexOf('already exists on npm') < publishAt, 'refuse an existing version before publishing');
   assert.match(publisher, /node scripts\/check-public-package\.mjs "\$RUNNER_TEMP" "\$SOURCE_SHA"/);
+  const starterGate = publisher.indexOf('run: node scripts/check-live-starters.mjs "$TARBALL"');
+  assert.ok(starterGate > publisher.indexOf('node scripts/check-public-package.mjs') && starterGate < publishAt,
+    'deploy the exact packed starters before npm receives the release');
   assert.match(publisher, /npm publish --provenance --access public "\$TARBALL"/);
   const verifyAt = publisher.indexOf('  verify:\n');
   assert.ok(publishAt >= 0 && verifyAt > publishAt, 'verify the registry artifact in a separate job after publish');

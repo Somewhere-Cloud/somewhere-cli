@@ -69,8 +69,8 @@ export function solvePow(nonce: string, difficulty: number): { suffix: string; h
   }
 }
 
-/** Mint a temporary, no-login developer credential: GET the PoW challenge,
- *  solve it locally, POST the solution for a bearer key.
+/** Mint a temporary, no-login developer credential. The server may ask for a
+ *  proof before issuing a key.
  *
  *  Both routes are public: the request carries no credential, never runs the
  *  stored login's refresh, and is never resent. Failures are the platform's
@@ -78,16 +78,25 @@ export function solvePow(nonce: string, difficulty: number): { suffix: string; h
  *  (RATE_LIMITED, INVALID_POW, TEMP_DEPLOYS_DISABLED, ...), HTTP status,
  *  retry / retry_after_ms and request/trace ids, and INVALID_RESPONSE with
  *  the status for a body that is not JSON. */
-export async function mintTempAccount(client: Pick<ApiClient, 'call'> = new ApiClient(null)): Promise<TempAccount> {
-  const challenge = await client.call<Partial<PowChallenge>>('GET', '/auth/pow/challenge', undefined, undefined, { refresh: false });
-  if (!challenge || typeof challenge.nonce !== 'string' || typeof challenge.difficulty !== 'number') {
-    throw new CliApiError('INVALID_RESPONSE', 'The proof-of-work challenge response had no nonce or difficulty.', 200);
+export async function mintTempAccount(
+  client: Pick<ApiClient, 'call'> = new ApiClient(null),
+  onChallenge?: () => void,
+): Promise<TempAccount> {
+  let data: Record<string, unknown>;
+  try {
+    data = await client.call<Record<string, unknown>>('POST', '/auth/temp-create', {}, undefined, { refresh: false });
+  } catch (error) {
+    if (!(error instanceof CliApiError) || error.code !== 'POW_REQUIRED') throw error;
+    const challenge = error.data?.challenge as Partial<PowChallenge> | undefined;
+    if (typeof challenge?.nonce !== 'string' || !challenge.nonce
+        || typeof challenge.difficulty !== 'number' || !Number.isInteger(challenge.difficulty)
+        || challenge.difficulty < 0 || challenge.difficulty > 32) throw error;
+    onChallenge?.();
+    const { suffix } = solvePow(challenge.nonce, challenge.difficulty);
+    data = await client.call<Record<string, unknown>>(
+      'POST', '/auth/temp-create', { nonce: challenge.nonce, suffix }, undefined, { refresh: false },
+    );
   }
-  const { suffix } = solvePow(challenge.nonce, challenge.difficulty);
-
-  const data = await client.call<Record<string, unknown>>(
-    'POST', '/auth/temp-create', { nonce: challenge.nonce, suffix }, undefined, { refresh: false },
-  );
   // Prefer `key` (the field name every other stored CLI credential uses);
   // fall back to `access_token` — the contract names both.
   const key = (data?.key as string | undefined) ?? (data?.access_token as string | undefined);

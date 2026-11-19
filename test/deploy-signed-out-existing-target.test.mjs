@@ -92,7 +92,7 @@ test('signed out, unlinked: the first anonymous deploy still mints and goes live
   const result = await run(['deploy', '--json']);
   assert.equal(result.status, 0, result.out);
   assert.equal(JSON.parse(result.stdout).url, 'https://proj_tmp_new.somewhere.site');
-  assert.deepEqual(requests.filter((r) => r.path.startsWith('/v1/auth/')).map((r) => r.path).slice(0, 2), ['/v1/auth/pow/challenge', '/v1/auth/temp-create']);
+  assert.deepEqual(requests.filter((r) => r.path.startsWith('/v1/auth/')).map((r) => r.path).slice(0, 2), ['/v1/auth/temp-create', '/v1/auth/temp-handoff/register']);
 });
 
 test('a live cached temporary session redeploys its own linked project without minting', async () => {

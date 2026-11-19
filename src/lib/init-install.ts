@@ -16,7 +16,7 @@ export interface InitInstallSpawnSpec {
 export function initInstallSpawnSpec(platform: NodeJS.Platform): InitInstallSpawnSpec {
   return {
     command: platform === 'win32' ? 'npm.cmd' : 'npm',
-    args: ['install', '--no-audit', '--no-fund', '--omit=optional'],
+    args: ['install', '--no-audit', '--no-fund'],
     shell: platform === 'win32',
   };
 }

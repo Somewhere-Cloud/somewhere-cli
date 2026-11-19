@@ -123,8 +123,8 @@ test('minimal starter is a small typed frontend, function, and schema', () => {
   ]);
 
   const pkg = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'));
-  assert.deepEqual(pkg.dependencies, { '@somewhere-cloud/sdk': '0.14.2' });
-  assert.deepEqual(pkg.optionalDependencies, {
+  assert.deepEqual(pkg.dependencies, {
+    '@somewhere-cloud/sdk': '0.14.2',
     react: '19.2.7',
     'react-dom': '19.2.7',
   });
@@ -140,7 +140,6 @@ test('minimal starter is a small typed frontend, function, and schema', () => {
   for (const version of [
     ...Object.values(pkg.dependencies),
     ...Object.values(pkg.devDependencies),
-    ...Object.values(pkg.optionalDependencies),
   ]) {
     assert.match(version, /^\d+\.\d+\.\d+$/, `dependency is not pinned: ${version}`);
   }
@@ -392,12 +391,12 @@ test('init dependency installation is required for a green completion', async ()
 test('init launches npm with platform-correct command and literal arguments', async () => {
   assert.deepEqual(initInstallSpawnSpec('linux'), {
     command: 'npm',
-    args: ['install', '--no-audit', '--no-fund', '--omit=optional'],
+    args: ['install', '--no-audit', '--no-fund'],
     shell: false,
   });
   assert.deepEqual(initInstallSpawnSpec('win32'), {
     command: 'npm.cmd',
-    args: ['install', '--no-audit', '--no-fund', '--omit=optional'],
+    args: ['install', '--no-audit', '--no-fund'],
     shell: true,
   });
 
@@ -426,7 +425,7 @@ test('init launches npm with platform-correct command and literal arguments', as
 
   assert.deepEqual(JSON.parse(readFileSync(record, 'utf8')), {
     cwd: realpathSync(app),
-    args: 'install --no-audit --no-fund --omit=optional',
+    args: 'install --no-audit --no-fund',
   });
 });
 

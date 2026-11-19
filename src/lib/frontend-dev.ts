@@ -120,7 +120,7 @@ export async function startFrontendDev(cwd: string, target: string, port = 8787,
   try { vitePath = createRequire(join(cwd, 'package.json')).resolve('vite'); }
   catch {
     if (readProjectPin(cwd)?.versionOnly) {
-      throw new Error('Install the local frontend tools: npm install --include=optional -D --save-exact vite@7.2.2');
+      throw new Error('Install the local frontend tools: npm install -D --save-exact vite@7.2.2');
     }
     throw new Error(`Install this frontend’s Vite dependencies before running ${cliInvocation()} dev. Backend changes run through ${cliInvocation()} deploy or ${cliInvocation()} preview.`);
   }

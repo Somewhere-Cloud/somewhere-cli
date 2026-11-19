@@ -163,14 +163,31 @@ export function pinnedNpx(version: string): { command: string; args: string[] } 
   return entry ? { command: process.execPath, args: [entry, ...args] } : null;
 }
 
+function repairStarterReact(json: Record<string, unknown>, from: string): boolean {
+  if (from !== '0.38.123' && from !== '0.38.124') return false;
+  const deps = json.dependencies as Record<string, unknown> | undefined;
+  const optional = json.optionalDependencies as Record<string, unknown> | undefined;
+  if (deps?.['@somewhere-cloud/sdk'] !== '0.14.2' || deps.react !== undefined
+      || deps['react-dom'] !== undefined || optional?.react !== '19.2.7'
+      || optional['react-dom'] !== '19.2.7') return false;
+  deps.react = optional.react;
+  deps['react-dom'] = optional['react-dom'];
+  delete optional.react;
+  delete optional['react-dom'];
+  if (Object.keys(optional).length === 0) delete json.optionalDependencies;
+  return true;
+}
+
 /** Write `version` into every place this folder records a pin. */
-export function writeProjectPins(dir: string, pins: ProjectPin[], version: string): PinSource[] {
-  const written: PinSource[] = [];
+export function writeProjectPins(dir: string, pins: ProjectPin[], version: string): { updated: PinSource[]; repairedStarter: boolean } {
+  const updated: PinSource[] = [];
+  let repairedStarter = false;
   for (const pin of pins) {
     const path = join(dir, pin.source);
     const raw = readFileSync(path, 'utf8');
     const json = JSON.parse(raw) as Record<string, unknown>;
     if (pin.versionOnly) {
+      repairedStarter = repairStarterReact(json, pin.spec);
       (json.somewhere as Record<string, unknown>)[PIN_FILE_KEY] = version;
     } else if (pin.source === 'package.json') {
       for (const section of ['devDependencies', 'dependencies']) {
@@ -182,9 +199,9 @@ export function writeProjectPins(dir: string, pins: ProjectPin[], version: strin
     }
     const indent = /^\{\s*\n(\s+)/.exec(raw)?.[1] ?? '  ';
     writeFileSync(path, JSON.stringify(json, null, indent) + '\n');
-    if (!written.includes(pin.source)) written.push(pin.source);
+    if (!updated.includes(pin.source)) updated.push(pin.source);
   }
-  return written;
+  return { updated, repairedStarter };
 }
 
 /** Record this CLI in a linked folder that records no version yet: the first

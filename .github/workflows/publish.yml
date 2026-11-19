@@ -6,8 +6,9 @@
 #      expected_version = the package.json version:
 #        gh workflow run publish.yml -R Somewhere-Cloud/somewhere-cli --ref master \
 #          -f source_sha=<40-hex master commit> -f expected_version=<x.y.z>
-#   3. The run pins the exact commit, builds, publishes with provenance, Customers pick the
-#      version up through somewhere update.
+#   3. The run pins the exact commit, builds, and publishes with provenance.
+#      A separate job verifies the artifact served by npm. Customers pick up
+#      the version through somewhere update.
 #
 # npm authentication: trusted publishing only. npmjs.com trusts the GitHub
 # Actions OIDC token for owner Somewhere-Cloud, repository somewhere-cli,
@@ -31,7 +32,6 @@ on:
 
 permissions:
   contents: read
-  id-token: write # npm trusted publishing: @somewhere-cloud/cli <- Somewhere-Cloud/somewhere-cli publish.yml, no environment.
 
 concurrency:
   group: somewhere-cli-publish
@@ -41,6 +41,13 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     timeout-minutes: 40
+    permissions:
+      contents: read
+      id-token: write # npm trusted publishing for publish.yml only
+    outputs:
+      candidate_source: ${{ steps.trigger.outputs.source }}
+      published_source: ${{ steps.final.outputs.published_head }}
+      version: ${{ steps.candidate.outputs.version }}
     steps:
       # Inline trusted workflow code runs before any candidate checkout.
       - name: Authenticate trigger and immutable source
@@ -116,24 +123,43 @@ jobs:
           if npm view "@somewhere-cloud/cli@$EXPECTED_VERSION" version >/dev/null 2>&1; then echo "@somewhere-cloud/cli@$EXPECTED_VERSION already exists on npm" >&2; exit 1; fi
           npm publish --provenance --access public
 
-      - name: Confirm npm serves the published version
+  verify:
+    name: Verify the published npm artifact
+    needs: publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.publish.outputs.candidate_source }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install -g npm@11.19.0
+      - run: npm ci
+      - run: npm run build
+      - name: Verify source commit, SHA-512 integrity and signed provenance from npm
         env:
-          EXPECTED_VERSION: ${{ steps.candidate.outputs.version }}
+          PUBLISHED_SOURCE: ${{ needs.publish.outputs.published_source }}
+          EXPECTED_VERSION: ${{ needs.publish.outputs.version }}
+        run: node scripts/publish-release.mjs verify "$PUBLISHED_SOURCE" "$EXPECTED_VERSION"
+      - name: Confirm npm latest points to the verified version
+        env:
+          EXPECTED_VERSION: ${{ needs.publish.outputs.version }}
         run: |
-          # The registry serves a new version some minutes after a successful publish (0.38.95 and 0.38.96:
-          # about 7 min), so read until it does, for at most 15 min, instead of failing on the first read.
-          actual=""
-          for attempt in $(seq 1 60); do
-            actual=$(npm view "@somewhere-cloud/cli@$EXPECTED_VERSION" version --registry=https://registry.npmjs.org --fetch-retries=0 --fetch-timeout=15000 2>/dev/null) || actual=""
-            if [ "$actual" = "$EXPECTED_VERSION" ]; then echo "npm serves $EXPECTED_VERSION after $attempt read(s)"; break; fi
-            sleep 15
-          done
-          if [ "$actual" != "$EXPECTED_VERSION" ]; then
-            echo "::error::publish reported success but npm still does not serve $EXPECTED_VERSION after 15 minutes"
-            exit 1
-          fi
           latest=$(npm view @somewhere-cloud/cli dist-tags.latest --registry=https://registry.npmjs.org --fetch-retries=0 --fetch-timeout=15000)
           if [ "$latest" != "$EXPECTED_VERSION" ]; then
             echo "::error::npm latest is $latest, expected $EXPECTED_VERSION"
             exit 1
           fi
+          echo "Verified npm artifact and latest tag for @somewhere-cloud/cli@$EXPECTED_VERSION" >> "$GITHUB_STEP_SUMMARY"
+      - name: Surface verification failure to the operator
+        if: failure()
+        env:
+          EXPECTED_VERSION: ${{ needs.publish.outputs.version }}
+        run: |
+          echo "::error::Registry verification failed for @somewhere-cloud/cli@$EXPECTED_VERSION. Investigate this run before publishing again."
+          echo "Registry verification failed for @somewhere-cloud/cli@$EXPECTED_VERSION. Investigate this run before publishing again." >> "$GITHUB_STEP_SUMMARY"

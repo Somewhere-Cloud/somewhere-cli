@@ -55,11 +55,15 @@ async function run(args, { token, config: storedConfig, prepare, explicitLink = 
 }
 for (const selection of [[], ['--template', 'minimal'], ['--features', 'private-data', '--ui', 'headless']]) {
   test(`anonymous init writes valid raw starter and installs dependencies without creating an account: ${selection.join(' ') || 'default'}`, async () => {
-    const result = await run(['--name', 'starter', '--json', ...selection]);
+    const result = await run(['--name', 'Planner & Notes', '--json', ...selection]);
     assert.equal(result.status, 0, result.stdout + result.stderr);
     const body = JSON.parse(result.stdout);
     assert.equal(body.local, true); assert.equal(body.linked, false); assert.equal(body.dependencies_installed, true);
     assert.equal(body.project_id, undefined); assert.ok(body.next.includes('somewhere deploy'));
+    assert.equal(body.name, 'Planner & Notes');
+    const pkg = JSON.parse(readFileSync(join(result.cwd, 'package.json'), 'utf8'));
+    assert.equal(pkg.name, 'planner-notes');
+    assert.equal(pkg.somewhere.project_name, body.name);
     assert.deepEqual(requests, []); assert.deepEqual(readdirSync(result.config).filter(name => name !== 'last-run.json'), []);
     for (const path of ['.somewhere.json', '.mcp.json', 'node_modules', 'dist', 'build']) assert.equal(existsSync(join(result.cwd, path)), false, path);
     assert.equal(existsSync(join(result.cwd, 'install-called')), true);

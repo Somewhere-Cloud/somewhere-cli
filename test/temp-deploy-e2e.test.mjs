@@ -31,6 +31,8 @@ let tempCreateCalls = 0;
 let projectsCalls = 0;
 let deployCalls = 0;
 let createdSubdomain = 'stub-project';
+let lastProjectRequest;
+let projectReply;
 
 const server = createServer((req, res) => {
   let body = '';
@@ -84,11 +86,13 @@ const server = createServer((req, res) => {
 
     if (req.method === 'POST' && req.url === '/v1/projects') {
       projectsCalls++;
-      const parsed = JSON.parse(body);
-      createdSubdomain = parsed.subdomain;
+      lastProjectRequest = JSON.parse(body);
+      const project = projectReply?.(lastProjectRequest)
+        ?? { id: 'proj_e2e_1', name: lastProjectRequest.name, subdomain: lastProjectRequest.subdomain };
+      createdSubdomain = project.subdomain;
       send(201, {
         ok: true,
-        data: { id: 'proj_e2e_1', name: parsed.name, subdomain: parsed.subdomain },
+        data: project,
       });
       return;
     }
@@ -218,7 +222,8 @@ test('deploy --temporary reuses old temp configs without temp_expires_at and kee
 
   assert.equal(result.status, 0, `expected exit 0, got ${result.status}\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`);
   assert.match(result.stdout, /Live URL:/);
-  assert.match(result.stdout, /Expires about 3 hours after it was created/);
+  assert.match(result.stdout, /Temporary app\.\s+Open https:\/\/somewhere\.cloud\/claim/);
+  assert.doesNotMatch(result.stdout, /Expires (?:about|in)/);
   assert.match(result.stdout, /https:\/\/somewhere\.cloud\/claim\?token=swtc_old/);
   assert.equal(tempCreateCalls, beforeTempCreateCalls, 'missing temp_expires_at falls back without minting a new temp session');
 });
@@ -397,6 +402,66 @@ test('deploy rejects an empty directory locally while static-only and functions-
       `${fixture.name}-only deploy failed\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`,
     );
     assert.equal(deployCalls, beforeDeploys + 1, `${fixture.name}-only source must reach deploy`);
+  }
+});
+
+test('deploy help sends readers to the reported expiry', async () => {
+  const home = mkdtempSync(join(tmpdir(), 'sw-temp-help-home-'));
+  const result = await run(['deploy', '--help'], {
+    cwd: home, env: { HOME: home, USERPROFILE: home, SOMEWHERE_API_URL: apiUrl },
+  });
+  assert.equal(result.status, 0, result.stderr);
+  const help = result.stdout.replace(/\s+/g, ' ');
+  assert.match(help, /--temporary Deploy to a temporary workspace and show when it expires/);
+  assert.doesNotMatch(help, /\b\d+-hour workspace\b/);
+});
+
+test('the first temporary deploy after signed-out init uses the chosen name on both hostname contracts', async () => {
+  for (const serverAssignsHostname of [false, true]) {
+    const base = mkdtempSync(join(tmpdir(), 'sw-temp-starter-'));
+    const cwd = join(base, 'unrelated-folder');
+    const home = join(base, 'home');
+    const bin = join(base, 'bin');
+    for (const dir of [cwd, home, bin]) mkdirSync(dir);
+    writeFileSync(join(bin, 'npm'), '#!/bin/sh\nexit 0\n', { mode: 0o700 });
+    const env = { HOME: home, USERPROFILE: home, SOMEWHERE_API_URL: apiUrl, PATH: bin + ':' + process.env.PATH };
+    if (serverAssignsHostname) {
+      projectReply = request => ({ id: 'proj_e2e_1', name: request.name, subdomain: 'planner-notes-0123456789ab', status: 'draft' });
+    }
+    try {
+      const init = await run(['init', '--name', 'Planner & Notes', '--template', 'minimal', '--json'], { cwd, env });
+      assert.equal(init.status, 0, init.stdout + init.stderr);
+      assert.equal(JSON.parse(init.stdout).name, 'Planner & Notes');
+      const result = await run(['deploy', '--json'], { cwd, env });
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.equal(lastProjectRequest.name, 'Planner & Notes');
+      assert.match(lastProjectRequest.subdomain, /^planner-notes-[a-z0-9]{4}$/);
+      const expected = serverAssignsHostname ? 'planner-notes-0123456789ab' : lastProjectRequest.subdomain;
+      const link = JSON.parse(readFileSync(join(cwd, '.somewhere.json'), 'utf8'));
+      assert.equal(link.name, 'Planner & Notes');
+      assert.equal(link.subdomain, expected);
+      assert.equal(JSON.parse(result.stdout).url, `https://${expected}.somewhere.cloud`);
+    } finally {
+      projectReply = undefined;
+    }
+  }
+});
+
+test('an existing temporary project with the same name is never adopted or overwritten by an unlinked folder', async () => {
+  const HOME = mkdtempSync(join(tmpdir(), 'sw-temp-reused-name-home-'));
+  const cwd = mkdtempSync(join(tmpdir(), 'sw-temp-reused-name-project-'));
+  writeFileSync(join(cwd, 'index.html'), '<html><body>another project</body></html>');
+  writeFileSync(join(cwd, 'package.json'), JSON.stringify({ somewhere: { project_name: 'Planner & Notes' } }));
+  projectReply = request => ({ id: 'already-live', name: request.name, subdomain: 'planner-notes-0123456789ab', status: 'active' });
+  const before = deployCalls;
+  try {
+    const result = await run(['deploy', '--force'], { cwd, env: { HOME, USERPROFILE: HOME, SOMEWHERE_API_URL: apiUrl } });
+    assert.equal(result.status, 1, result.stdout + result.stderr);
+    assert.match(result.stderr, /A temporary project already uses this name/);
+    assert.equal(deployCalls, before);
+    assert.equal(existsSync(join(cwd, '.somewhere.json')), false);
+  } finally {
+    projectReply = undefined;
   }
 });
 

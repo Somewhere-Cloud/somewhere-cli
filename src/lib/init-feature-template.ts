@@ -3,7 +3,7 @@ import { starterTests } from './init-test-template.js';
 import { buildScaffoldGitignore } from './scaffold.js';
 import { CLI_VERSION } from './version.js';
 import { ASSET_TYPES_FILE } from './init-asset-types.js';
-import { PROJECT_LINK_README, type InitScaffoldFile } from './init-scaffold.js';
+import { PROJECT_LINK_README, starterNameSlug, type InitScaffoldFile } from './init-scaffold.js';
 import type { InitSelection } from './init-features.js';
 import { INIT_AGENTS_MD, INIT_CLAUDE_MD } from './init-agent-guide.js';
 import { APP_CSS, PLAIN_AUTH_CARD, PLAIN_UI_KIT, STYLED_AUTH_CARD, STYLED_UI_KIT, STYLED_VERIFY_EMAIL, TOKENS_CSS } from './init-ui-kit.js';
@@ -17,12 +17,12 @@ export interface FeatureTemplateOptions {
   appName: string;
 }
 
-const PACKAGE_JSON = `{
-  "name": "somewhere-app",
+const packageJson = (appName: string) => `{
+  "name": ${JSON.stringify(starterNameSlug(appName).slice(0, 214) || 'somewhere-app')},
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "somewhere": { "cli_version": "${CLI_VERSION}" },
+  "somewhere": { "cli_version": "${CLI_VERSION}", "project_name": ${JSON.stringify(appName)} },
   "scripts": {
     "dev": "npx -y @somewhere-cloud/cli dev",
     "typecheck": "npx -y @somewhere-cloud/cli typecheck"
@@ -3454,7 +3454,7 @@ Rerun only to answer a question. A pass means the checks you wrote passed; say w
 After edits:`) },
     { path: 'CLAUDE.md', content: INIT_CLAUDE_MD },
     { path: 'README.md', content: readme(selection) },
-    { path: 'package.json', content: PACKAGE_JSON },
+    { path: 'package.json', content: packageJson(options.appName) },
     { path: 'tsconfig.json', content: TSCONFIG },
     { path: 'index.html', content: indexHtml(options.appName) },
     { path: 'api/auth/[...path].ts', content: AUTH_API },

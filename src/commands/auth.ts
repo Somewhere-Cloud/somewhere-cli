@@ -148,7 +148,8 @@ async function loginAction(opts: { browserCallback?: boolean; signup?: boolean }
     await runBrowserCallbackLogin();
     return;
   }
-  await runDeviceLogin();
+  const saved = loadConfig();
+  await runDeviceLogin(saved?.temporary ? saved.token : undefined);
 }
 
 /**
@@ -642,21 +643,26 @@ function installCancelHandler(getSpinner: () => Ora | null): void {
   });
 }
 
-async function runDeviceLogin(): Promise<void> {
+async function runDeviceLogin(temporaryToken?: string): Promise<void> {
   for (const line of loginIntroLines()) console.log(line);
 
   let spinner: Ora | null = null;
   installCancelHandler(() => spinner);
 
   try {
-    const { config, scope } = await deviceLogin({
-      onPrompt: ({ code, approvalUrl }) => {
+    const { config, scope, mergedProjectCount } = await deviceLogin({
+      onPrompt: ({ code, approvalUrl, expiresIn }) => {
         console.log(`  Code: ${teal(code)}`);
+        const minutes = expiresIn % 60 === 0 ? expiresIn / 60 : null;
+        const duration = minutes === null ? `${expiresIn} second${expiresIn === 1 ? '' : 's'}`
+          : `${minutes} minute${minutes === 1 ? '' : 's'}`;
+        info(`Code expires in ${duration}.`);
         console.log('');
-        console.log('  Opening your browser…');
-        console.log(`  If it doesn't open, visit: ${teal(approvalUrl)}`);
+        const openBrowser = !process.env.SOMEWHERE_NO_BROWSER;
+        if (openBrowser) console.log('  Opening your browser…');
+        console.log(`  ${openBrowser ? "If it doesn't open, visit" : 'Visit'}: ${teal(approvalUrl)}`);
         console.log('');
-        open(approvalUrl).catch(() => {
+        if (openBrowser) open(approvalUrl).catch(() => {
           // Browser didn't open — URL is already printed above
         });
       },
@@ -666,11 +672,14 @@ async function runDeviceLogin(): Promise<void> {
           color: 'cyan',
         }).start();
       },
-    });
+    }, temporaryToken);
     (spinner as Ora | null)?.stop();
     saveConfig(config);
     saveGlobalMcpConfig();
     success(`Logged in as ${teal(config.user.email || '(unknown)')}`);
+    if (mergedProjectCount && mergedProjectCount > 0) {
+      info(`Added ${mergedProjectCount} temporary project${mergedProjectCount === 1 ? '' : 's'} to ${config.user.email}.`);
+    }
     success(`Device: ${getDeviceKeyName()}`);
     success(`Access: ${describeScope(scope)}`);
     success('Claude Code MCP configured');
@@ -682,7 +691,8 @@ async function runDeviceLogin(): Promise<void> {
       error(err.message);
       process.exit(1);
     }
-    error(err instanceof Error ? err.message : String(err), err);
+    const message = err instanceof Error ? err.message : String(err);
+    error(message, temporaryToken ? undefined : err);
     process.exit(1);
   }
 }

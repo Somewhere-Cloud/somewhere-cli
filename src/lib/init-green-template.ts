@@ -1,15 +1,15 @@
 import { CLI_VERSION } from './version.js';
 import { buildScaffoldGitignore } from './scaffold.js';
-import { PROJECT_LINK_README, type InitScaffoldFile } from './init-scaffold.js';
+import { PROJECT_LINK_README, starterNameSlug, type InitScaffoldFile } from './init-scaffold.js';
 import { INIT_AGENTS_MD, INIT_CLAUDE_MD } from './init-agent-guide.js';
 import { ASSET_TYPES_FILE } from './init-asset-types.js';
 
-const PACKAGE_JSON = `{
-  "name": "somewhere-starter",
+const packageJson = (appName: string) => `{
+  "name": ${JSON.stringify(starterNameSlug(appName).slice(0, 214) || 'somewhere-starter')},
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "somewhere": { "cli_version": "${CLI_VERSION}" },
+  "somewhere": { "cli_version": "${CLI_VERSION}", "project_name": ${JSON.stringify(appName)} },
   "scripts": {
     "dev": "npx -y @somewhere-cloud/cli dev",
     "typecheck": "npx -y @somewhere-cloud/cli typecheck"
@@ -180,13 +180,13 @@ Deploy the raw source. The platform compiles it; do not create or deploy a
 \`dist/\` or \`build/\` directory.
 `;
 
-export function createGreenTemplate(): InitScaffoldFile[] {
+export function createGreenTemplate(appName = 'somewhere-starter'): InitScaffoldFile[] {
   return [
     { path: '.gitignore', content: buildScaffoldGitignore() },
     { path: 'AGENTS.md', content: INIT_AGENTS_MD },
     { path: 'CLAUDE.md', content: INIT_CLAUDE_MD },
     { path: 'README.md', content: README },
-    { path: 'package.json', content: PACKAGE_JSON },
+    { path: 'package.json', content: packageJson(appName) },
     { path: 'tsconfig.json', content: TSCONFIG },
     {
       path: 'index.html',

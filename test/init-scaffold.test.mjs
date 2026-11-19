@@ -132,7 +132,7 @@ test('minimal starter is a small typed frontend, function, and schema', () => {
     '@types/react': '19.2.2',
     '@types/react-dom': '19.2.2',
   });
-  assert.deepEqual(pkg.somewhere, { cli_version: CLI_PACKAGE_VERSION });
+  assert.deepEqual(pkg.somewhere, { cli_version: CLI_PACKAGE_VERSION, project_name: 'somewhere-starter' });
   assert.equal(
     readFileSync(join(dir, '.gitignore'), 'utf8'),
     'node_modules\ndist\nbuild\n.env\n# Generated from db/schema.ts by somewhere typecheck, dev and deploy.\n__somewhere_data.d.ts\n__somewhere_files.d.ts\n.somewhere/\n',

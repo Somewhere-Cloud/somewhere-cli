@@ -11,7 +11,7 @@ const SCRIPT = (privateData: boolean) => `// tests/app-check.mjs — an ordinary
 //   npx @somewhere-cloud/cli deploy && npx @somewhere-cloud/cli test
 // Tests that need the email inbox work after you claim the app.
 // It writes its result once to .somewhere/app-check.json; the exit code is the verdict.
-// It stops at the first failed check and prints the page's URL and visible error text.
+// Independent checks keep running. A check that needs an earlier step reports why it was skipped.
 // After a fix, rerun the scripts that failed, each one whole: npx @somewhere-cloud/cli test --failed.
 // From a .cjs script: const { openAppTest } = require('@somewhere-cloud/cli/script');
 import { chromium } from '@playwright/test';
@@ -27,42 +27,71 @@ const person = async () => {
   return { page, account: await app.signUp(page) };
 };
 try {
-  await app.check('the sign-in page loads', async () => {
+  await app.check('the sign-in page loads', async (at) => {
     const page = await browser.newPage({ baseURL: app.origin });
     try {
+      at('Open the sign-in page', app.origin);
       await page.goto('/');
-      await page.locator('[data-app-state="signed-out"]').waitFor({ timeout: 5_000 });
+      const selector = '[data-app-state="signed-out"]';
+      at('Wait for the signed-out page', selector);
+      await page.locator(selector).waitFor({ timeout: 5_000 });
     } finally {
       await page.close();
     }
   });
   let ana, ben;
-  const signedUp = await app.check('sign up through the app', async () => {
+  const signup = 'sign up through the app';
+  const signedUp = await app.check(signup, async () => {
     // Finish both attempts before cleanup, even if one fails.
     const people = await Promise.allSettled([person(), person()]);
     for (const result of people) if (result.status === 'rejected') throw result.reason;
     [ana, ben] = people.map(result => result.value);
   });
-  if (signedUp) {
-    await app.check('the signed-in page shows the account', () => ana.page.getByText(ana.account.email).waitFor());
-    await app.check('sign out, then sign back in', async () => {
-      await app.signOut(ana.page);
-      await app.signIn(ana.page, ana.account);
-    });
-${privateData ? `    await app.check('a note stays private to its owner', async () => {
+  const needsSignup = { name: signup, passed: signedUp };
+  await app.check('the signed-in page shows the account', () => ana.page.getByText(ana.account.email).waitFor(), { requires: needsSignup });
+  const roundTrip = 'sign out, then sign back in';
+  const signedBackIn = await app.check(roundTrip, async (at) => {
+    at('Sign out');
+    await app.signOut(ana.page);
+    at('Sign back in');
+    await app.signIn(ana.page, ana.account);
+  }, { requires: needsSignup });
+${privateData ? `    await app.check('a note stays private to its owner', async (at) => {
       const secret = 'private ' + crypto.randomUUID(); // a unique value: search for it, not a common word
+      at('Create the first person’s note');
       await ana.page.getByLabel('Title').fill(secret);
       await ana.page.getByRole('button', { name: 'Add note' }).click();
       await ana.page.getByRole('heading', { name: secret }).waitFor();
       const seen = captureResponses(ben.page);
-      await ben.page.reload();
-      await dataReady(ben.page); // the list has loaded, not merely "signed in"
-      const leaks = await seen.find(secret);
-      if (leaks.length) throw new Error('the other person received the note: ' + JSON.stringify(leaks));
-      const { data: [note] } = await app.data(ana.page, { table: 'notes', operation: 'list', where: { title: secret } });
+      try {
+        at('Reload the second person’s page', app.origin);
+        await ben.page.reload();
+        // On the data view, set data-sw-data="loading" while fetching, "ready" when
+        // the list has loaded, or "error" if fetching failed. dataReady waits for this marker.
+        at('Wait for the second person’s notes to load', '[data-sw-data]');
+        if (await dataReady(ben.page) === 'error') throw new Error('The second person’s notes view reported a loading error.');
+        at('Check the second person’s responses for the note');
+        const leaks = await seen.find(secret);
+        if (leaks.length) {
+          at('Check the second person’s responses for the note', leaks[0].url);
+          throw new Error('The second person received the first person’s note.');
+        }
+      } finally {
+        seen.stop();
+      }
+      at('Read the note as its owner');
+      const owned = await app.data(ana.page, { table: 'notes', operation: 'list', where: { title: secret } });
+      const note = Array.isArray(owned.data) ? owned.data[0] : undefined;
+      if (!note) throw new Error('The owner’s request did not return the new note (HTTP ' + owned.status + ').');
+      at('Check that the second person cannot read the note');
       await app.expectRefused(ben.page, { table: 'notes', operation: 'get', id: note.id }, { allowed: ana.page });
+      at('Check that the second person cannot edit the note');
       await app.expectRefused(ben.page, { table: 'notes', operation: 'update', id: note.id, values: { title: 'changed' } }, { allowed: ana.page });
+      at('Check that the second person cannot delete the note');
       await app.expectRefused(ben.page, { table: 'notes', operation: 'delete', id: note.id }, { allowed: ana.page });
+    }, {
+      requires: signedUp ? { name: roundTrip, passed: signedBackIn } : needsSignup,
+      expected: 'Only the owner can read, edit, or delete the note.',
     });
 ` : `    // Your own tables (db/schema.ts), called as a signed-in person: app.data adds the release's
     // data contract and the Origin, and says ok, empty or refused. No need to read either from the page.
@@ -72,17 +101,18 @@ ${privateData ? `    await app.check('a note stays private to its owner', async 
     // inside it: a test that clicks the inner link passes even when clicking the item does nothing.
     //   await ana.page.getByTestId('team-item').first().click();
     //   await ana.page.getByTestId('team-name').waitFor();   // the item's own page, reached in the app
-    await app.check('at phone width nothing scrolls sideways', async () => {
-      await ana.page.setViewportSize({ width: 390, height: 844 });
-      await ana.page.reload();
-      await ana.page.getByText(ana.account.email).waitFor();
-      const wide = await ana.page.evaluate(() => [document.documentElement, ...document.querySelectorAll('body *')]
+    await app.check('at phone width nothing scrolls sideways', async (at) => {
+      at('Open the signed-in page at phone width', app.origin);
+      await ben.page.setViewportSize({ width: 390, height: 844 });
+      await ben.page.reload();
+      await ben.page.getByText(ben.account.email).waitFor();
+      at('Measure horizontal overflow', app.origin);
+      const wide = await ben.page.evaluate(() => [document.documentElement, ...document.querySelectorAll('body *')]
         .filter((el) => el.scrollWidth > el.clientWidth + 1
           && (el === document.documentElement || ['auto', 'scroll'].includes(getComputedStyle(el).overflowX)))
         .map((el) => el.tagName.toLowerCase() + (typeof el.className === 'string' && el.className ? '.' + el.className.split(' ')[0] : '')));
       if (wide.length) throw new Error('scrolls sideways at 390 px: ' + wide.join(', '));
-    });
-  }
+    }, { requires: needsSignup });
 } finally {
   await app.finish(); // confirms the release, deletes the accounts, writes the result once
   await browser.close();

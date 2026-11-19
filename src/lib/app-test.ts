@@ -4,7 +4,7 @@ import { lookup } from 'node:dns/promises';
 import { testAddressOrder } from './test-connectivity.js';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join, relative, resolve } from 'node:path';
-import { describeReport, TEST_COMMAND, type ReportCheck } from './test-report.js';
+import { describeReport, type CheckFailure, type ReportCheck } from './test-report.js';
 import type { APIRequestContext, BrowserContext, LaunchOptions, Locator, Page } from '@playwright/test';
 import { loadProjectConfig } from './config.js';
 import type { TestTarget } from './test-target.js';
@@ -41,7 +41,24 @@ export interface DataResult { status: number; kind: DataKind; data: unknown; err
 type Who = Page | BrowserContext | APIRequestContext;
 
 /** One check's outcome, including whether a prerequisite kept it from running. */
-export interface Check { name: string; ok: boolean; ms: number; error?: string; skipped?: ReportCheck['skipped'] }
+export interface Check extends ReportCheck { ms: number }
+export interface CheckOptions { expected?: string; requires?: { name: string; passed: boolean } }
+type MarkStep = (step: string, evidence?: string) => void;
+
+function describeCheckFailure(message: string, expected: string, step: string, evidence: string | undefined, pageUrl?: string): CheckFailure {
+  const detail = (pattern: RegExp) => message.match(pattern)?.[1]?.trim();
+  const observed = detail(/^Received(?: \w+)?: *(.*)$/m);
+  const header = message.split('\n').find(line => line.trim())?.trim() || 'The check did not finish.';
+  const artifact = detail(/\b(HTTP [1-5][0-9]{2}(?: [A-Z][A-Z_0-9]+)?)/) ?? detail(/^(?:Locator|Selector): *(.*)$/mi)
+    ?? evidence ?? pageUrl;
+  const singleLine = (value: string) => scrub(value).replace(/\s+/g, ' ').trim().slice(0, 500);
+  return {
+    expected: singleLine(detail(/^Expected(?: \w+)?: *(.*)$/m) ?? expected),
+    happened: singleLine(observed ? `Received ${observed}.` : header),
+    step: singleLine(step),
+    ...(artifact ? { evidence: singleLine(artifact) } : {}),
+  };
+}
 /** What a result file was run against. */
 export interface RunIdentity { project_id: string; environment: string; preview_session_id: string | null; origin: string; script: string | null }
 export interface OpenOptions {
@@ -254,16 +271,24 @@ export class AppTest {
     return result;
   }
 
-  /** Run one named check. The first failure stops the run: it prints the check, the error and
-   *  what each signed-in page shows (URL, visible error text), and every later check is skipped
-   *  instead of waiting out its own timeout. `somewhere test --failed` reruns a failed script whole,
-   *  so setup done inside earlier checks runs again. */
-  async check(label: string, work: () => unknown | Promise<unknown>): Promise<boolean> {
+  /** Run one named check unless its prerequisite did not pass. Use at() inside a
+   *  check that has several steps. `somewhere test --failed` reruns the whole script. */
+  async check(label: string, work: (at: MarkStep) => unknown | Promise<unknown>, options: CheckOptions = {}): Promise<boolean> {
     // The name is recorded and printed scrubbed: a check named after a password never stores it.
     const name = scrub(label);
     if (this.stopped) { this.checks.push({ name, ok: false, ms: 0, skipped: 'after-failure' }); return false; }
+    if (options.requires && !options.requires.passed) {
+      this.checks.push({ name, ok: false, ms: 0, skipped: 'prerequisite', error: `Requires “${scrub(options.requires.name)}”, which did not pass.` });
+      return false;
+    }
     const start = performance.now();
-    try { await work(); this.checks.push({ name, ok: true, ms: Math.round(performance.now() - start) }); return true; }
+    let step = label;
+    let evidence: string | undefined;
+    try {
+      await work((current, artifact) => { step = current; evidence = artifact; });
+      this.checks.push({ name, ok: true, ms: Math.round(performance.now() - start) });
+      return true;
+    }
     catch (error) {
       if (error instanceof TestInboxNeedsClaim) {
         this.checks.push({ name, ok: false, ms: 0, skipped: 'needs-claim', error: error.message });
@@ -274,11 +299,12 @@ export class AppTest {
       await this.rememberPageSecrets();
       const pages = await Promise.all([...this.host.pages].map(pageState));
       const stopped = [...this.host.pages].map((page) => browserStoppedMessage(page, error)).find(Boolean);
-      const message = stopped ?? scrub((error instanceof Error ? error.message.split('\n').slice(0, 6).join('\n') : String(error))
-        + pages.map((state, i) => `\npage ${i + 1}: ${state}`).join(''));
-      this.checks.push({ name, ok: false, ms: Math.round(performance.now() - start), error: message });
-      this.stopped = true;
-      process.stdout.write(`FAIL ${name}\n  ${message.replaceAll('\n', '\n  ')}\nStopping here: later checks are skipped. After a fix, rerun the scripts that failed: ${TEST_COMMAND} --failed\n`);
+      const message = stopped ?? scrub(error instanceof Error ? error.message : String(error));
+      const failure = describeCheckFailure(message, options.expected ?? name, step, evidence,
+        [...this.host.pages].find(page => !page.isClosed())?.url());
+      const detail = message.split('\n').slice(0, 12).join('\n') + pages.map((state, i) => `\npage ${i + 1}: ${state}`).join('');
+      this.checks.push({ name, ok: false, ms: Math.round(performance.now() - start), error: detail, failure });
+      this.stopped = process.env.SW_TEST_FAIL_FAST === '1';
       return false;
     }
   }
@@ -317,6 +343,11 @@ export class AppTest {
     await this.rememberPageSecrets();
     await this.control.close();
     if (cleanup.length) this.checks.push({ name: 'cleanup of sign-up accounts', ok: false, ms: 0, error: cleanup.join('; ') });
+    for (const check of this.checks) {
+      if (!check.ok && !check.skipped && !check.failure) {
+        check.failure = describeCheckFailure(check.error ?? '', check.name, check.name, this.origin);
+      }
+    }
     const passed = this.checks.filter(check => check.ok).length;
     const failed = this.checks.filter(check => !check.ok && !check.skipped).length;
     mkdirSync(dirname(this.resultsPath), { recursive: true });
@@ -325,7 +356,8 @@ export class AppTest {
     // The result: failures first, one line each, then passes, one summary line, what to do next and (after a
     // failure, or with --verbose) the result file relative to the project. Under `somewhere test` the runner prints
     // it for every script together, so this script hands its checks over instead of printing them.
-    const reported: ReportCheck[] = this.checks.map((check) => ({ name: scrub(check.name), ok: check.ok, ...(check.skipped ? { skipped: check.skipped } : {}), ...(check.error ? { error: scrub(check.error) } : {}) }));
+    const reported: ReportCheck[] = this.checks.map(({ ms, ...check }) => ({ ...check,
+      ...(check.error ? { error: scrub(check.error) } : {}) }));
     const resultFile = relative(this.root, this.resultsPath);
     const handOver = process.env.SW_TEST_REPORT;
     if (handOver) writeFileSync(handOver, JSON.stringify({ checks: reported, resultFile }) + '\n');
@@ -377,7 +409,17 @@ export function captureResponses(page: Page) {
 export async function dataReady(scope: Page | Locator, timeout = 5_000): Promise<'ready' | 'error'> {
   const root = typeof (scope as Page).goto === 'function' ? (scope as Page).locator(':root') : scope as Locator;
   const views = root.locator('[data-sw-data]');
-  await views.first().waitFor({ state: 'attached', timeout });
+  try {
+    await views.first().waitFor({ state: 'attached', timeout });
+  } catch (error) {
+    const page = root.page();
+    if (error instanceof Error && error.name === 'TimeoutError'
+        && page.url() !== 'about:blank'
+        && await page.evaluate('document.readyState !== "loading" && !!document.body').catch(() => false)) {
+      throw new Error('The page loaded without the expected [data-sw-data] marker, which your app sets on the data view to "loading", "ready", or "error" as shown beside the privacy check in tests/app-check.mjs.');
+    }
+    throw error;
+  }
   await root.locator('[data-sw-data="loading"]').first().waitFor({ state: 'detached', timeout }).catch(async () => {
     if (await root.locator('[data-sw-data="loading"]').count()) throw new Error(`dataReady: a data view was still loading after ${timeout / 1000} s`);
   });

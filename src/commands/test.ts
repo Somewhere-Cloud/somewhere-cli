@@ -12,12 +12,13 @@ export function registerTest(program: Command): void {
     .option('--preview', 'Test this folder\'s open preview (its own users, data copy and captured mail), pinned to the version saved when the run starts. Production is never touched.')
     .option('--workers <count>', 'Parallel workers', '5')
     .option('--failed', 'Rerun what failed last time: each failed tests/*.mjs or *.cjs script, all its checks (specs: only the failed tests)')
+    .option('--fail-fast', 'Stop app-check scripts at their first failed check')
     .option('--grep <name>', 'Filter test names (subset)')
     .option('--url <url>', 'Unsupported in phase 1')
     .option('--phone', 'Run every test again in a 390x844 phone viewport ([phone] in results)')
     .option('--json', 'Print structured results')
     .option('--verbose', 'Also print where the full result file is when everything passed')
-    .action(async (files: string[], opts: { workers: string; failed?: boolean; grep?: string; url?: string; json?: boolean; phone?: boolean; preview?: boolean; verbose?: boolean }) => {
+    .action(async (files: string[], opts: { workers: string; failed?: boolean; failFast?: boolean; grep?: string; url?: string; json?: boolean; phone?: boolean; preview?: boolean; verbose?: boolean }) => {
       markProcessStart('cli');
       mark('cli:action');
       if (opts.url) throw new Error('--url is unsupported: tests use the linked project canonical production origin only.');
@@ -36,6 +37,7 @@ export function registerTest(program: Command): void {
         if (unsupported.length) throw new Error(`${unsupported.join(', ')} apply to tests/**/*.spec.ts. A script chooses its own target and checks (openAppTest({ preview: true }) for a preview).`);
         const scripts = opts.failed ? lastFailedScripts(root) : listScripts(root, files);
         if (opts.failed && !scripts.length) throw new Error('No failed scripts are recorded from the last run here; run somewhere test.');
+        if (opts.failFast) process.env.SW_TEST_FAIL_FAST = '1';
         const results = await runScripts(root, scripts, []);
         await note;
         if (results.length) recordScriptResults(root, results, Boolean(opts.failed));
@@ -46,6 +48,7 @@ export function registerTest(program: Command): void {
         process.exitCode = failed || !results.length ? 1 : 0;
         return;
       }
+      if (opts.failFast) throw new Error('--fail-fast applies to app-check scripts (tests/*.mjs or *.cjs).');
       // A preview run carries only the preview's own credential: your sign-in is not read at all.
       const outcome = await runTests({ root, ...(opts.preview ? {} : { client: new ApiClient(getToken()) }), projectId, prepared: prepareRunner(root), options: { ...opts, files } });
       await note;

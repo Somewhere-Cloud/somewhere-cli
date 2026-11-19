@@ -38,18 +38,27 @@ test('a project with specs keeps the spec runner; an empty tests/ says what to a
   assert.match(describeScriptResults([])[0], /^No tests found: add a Playwright script as tests\/<name>\.mjs or \.cjs/);
 });
 
-test('a script that hands over its checks gets one line per check, one summary line, and its result file only after a failure', async () => {
+test('the CLI prints a handed-over failure in full, with short passes and the result path', async () => {
   const report = (checks) => `require('node:fs').writeFileSync(process.env.SW_TEST_REPORT, JSON.stringify({ checks: ${JSON.stringify('CHECKS')}, resultFile: '.somewhere/app-check.json' }));\n`.replace('"CHECKS"', JSON.stringify(checks));
   const passing = project({ 'tests/app-check.cjs': report([{ name: 'the signed-in page shows the account', ok: true }, { name: 'sign out, then sign back in', ok: true }, { name: 'at phone width nothing scrolls sideways', ok: true }]) });
   const ok = describeScriptResults(await runScripts(passing, listScripts(passing, []), [], process.env));
   assert.deepEqual(ok, ['PASS the signed-in page shows the account', 'PASS sign out, then sign back in', 'PASS at phone width nothing scrolls sideways', 'PASSED: 3 checks in 1 script']);
   assert.match(describeScriptResults(await runScripts(passing, listScripts(passing, []), [], process.env), { verbose: true }).at(-1), /^Full result: \.somewhere\/app-check\.json$/);
-  const failing = project({ 'tests/app-check.cjs': report([{ name: 'sign up', ok: true }, { name: 'owner adds a member', ok: false, error: 'member-error never appeared\npage 1: …' }, { name: 'phone width', ok: false, skipped: 'after-failure' }]) + 'process.exitCode = 1;\n' });
+  const failing = project({ 'tests/app-check.cjs': report([
+    { name: 'sign up', ok: true },
+    { name: 'owner adds a member', ok: false, error: 'member-error never appeared\npage 1: …',
+      failure: { expected: 'The member is listed.', happened: 'The app refused the invite.', step: 'Send the invitation', evidence: 'HTTP 403' } },
+    { name: 'edit the member', ok: false, skipped: 'prerequisite', error: 'Requires “owner adds a member”, which did not pass.' },
+  ]) + 'process.exitCode = 1;\n' });
   assert.deepEqual(describeScriptResults(await runScripts(failing, listScripts(failing, []), [], process.env)), [
-    'FAIL owner adds a member: member-error never appeared',
+    'FAIL owner adds a member',
+    '  Expected: The member is listed.',
+    '  Happened: The app refused the invite.',
+    '  Step: Send the invitation',
+    '  Evidence: HTTP 403',
     'PASS sign up',
-    'NOT RUN phone width (after the first failure)',
-    'FAILED: 1 of 3 checks in 1 script (1 not run)',
+    'SKIPPED edit the member: Requires “owner adds a member”, which did not pass.',
+    'FAILED: 1 of 3 checks in 1 script (1 skipped)',
     'Next: fix what each FAIL line names, run npx @somewhere-cloud/cli deploy, then npx @somewhere-cloud/cli test --failed to rerun each script that failed.',
     'Full result: .somewhere/app-check.json',
   ]);

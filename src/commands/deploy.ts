@@ -1416,7 +1416,7 @@ export function registerDeploy(program: Command) {
           const release = result.active_release_id ?? result.release_id ?? null;
           if (hasFunctionErrors) return { status: 'not_run', release, reason: 'functions failed to deploy' };
           if (verificationFailed) return { status: 'not_run', release, reason: 'the deploy verification did not pass' };
-          return runDeployTests({ client, root: deployStateEntry?.dir ?? targetDir, projectId: result.project_id ?? projectId ?? undefined, temporary: Boolean(tempSession), json: Boolean(opts.json), release: release ?? undefined, renderPending: postLive.kind === 'timeout', prepared: prepareDeployTests(() => prepareRunner(deployStateEntry?.dir ?? targetDir)) });
+          return runDeployTests({ client, root: deployStateEntry?.dir ?? targetDir, projectId: result.project_id ?? projectId ?? undefined, json: Boolean(opts.json), release: release ?? undefined, renderPending: postLive.kind === 'timeout', prepared: prepareDeployTests(() => prepareRunner(deployStateEntry?.dir ?? targetDir)) });
         };
         const verificationNextSteps = besideRealLogin ? [
           'Inspect the live URL; keep this project and its claim URL.',

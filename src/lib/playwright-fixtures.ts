@@ -9,7 +9,7 @@ import { diagnostics, rememberSecrets, scrub, scrubTestErrors, describeError, ti
 import { mark as timelineMark, markProcessStart, span, trackPage } from './test-timeline.js';
 import { forgetRecord } from './form-accounts.js';
 import { ready, signUp, signIn, signOut, verify, type FormHost, type FormControl, type Attempt, type Person, type FormSteps, type CodeSteps, type SignUpOptions, type SignInOptions, type FormAdapter } from './form-auth.js';
-import { openPreviewControl, openProductionControl, TestInboxNeedsClaim, type TestControl } from './test-control.js';
+import { openPreviewControl, openProductionControl, type TestControl } from './test-control.js';
 import { safeToScreenshot } from './screenshot-guard.js';
 export type { Person, FormSteps, CodeSteps, SignUpOptions, SignInOptions, FormAdapter };
 import type { TestTarget } from './test-target.js';
@@ -69,13 +69,6 @@ function runner() {
   let pw: typeof import('@playwright/test');
   try { pw = require('@playwright/test') as typeof import('@playwright/test'); }
   catch { throw new Error('Install project test dependencies: npm install -D @playwright/test @somewhere-cloud/cli'); }
-  const withInboxSkip = async <T>(work: () => Promise<T>): Promise<T> => {
-    try { return await work(); }
-    catch (error) {
-      if (error instanceof TestInboxNeedsClaim) pw.test.skip(true, error.message);
-      throw error;
-    }
-  };
   const test = pw.test.extend<Fixtures, WorkerFixtures>({
     _preview: [async ({}, use) => {
       const control = await previewControlForWorker();
@@ -214,9 +207,9 @@ function runner() {
       run.pages.add(page);
       try { await use(run); } finally { await run.finish(); }
     },
-    signUp: async ({ _forms }, use, info) => { await use((page, options) => span('signUp', { test: titled(info.project.name, info.title) }, () => withInboxSkip(() => signUp(_forms, page, options ?? {})))); },
-    verify: async ({ _forms }, use, info) => { await use((page, person) => span('verify', { test: titled(info.project.name, info.title) }, () => withInboxSkip(() => verify(_forms, page, person)))); },
-    signIn: async ({ _forms }, use, info) => { await use((page, person, options) => span('signIn', { test: titled(info.project.name, info.title) }, () => withInboxSkip(() => signIn(_forms, page, person, options ?? {})))); },
+    signUp: async ({ _forms }, use, info) => { await use((page, options) => span('signUp', { test: titled(info.project.name, info.title) }, () => signUp(_forms, page, options ?? {}))); },
+    verify: async ({ _forms }, use, info) => { await use((page, person) => span('verify', { test: titled(info.project.name, info.title) }, () => verify(_forms, page, person))); },
+    signIn: async ({ _forms }, use, info) => { await use((page, person, options) => span('signIn', { test: titled(info.project.name, info.title) }, () => signIn(_forms, page, person, options ?? {}))); },
     signOut: async ({ _forms }, use, info) => { await use((page, options) => span('signOut', { test: titled(info.project.name, info.title) }, () => signOut(_forms, page, options ?? {}))); },
   });
   loaded = { test, expect: pw.expect };

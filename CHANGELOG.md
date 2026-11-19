@@ -1,3 +1,8 @@
+## 0.38.127
+
+- Starter test checks continue after independent failures and explain skipped prerequisites. Use `somewhere test --fail-fast` to stop each app-check script after its first failure.
+- Explain how to add a missing data-loaded marker and show the step, expected and observed outcomes, and evidence in the test summary.
+
 ## 0.38.126
 
 - A claim link connects the CLI only to the claimed project. Use `somewhere login` for account access.

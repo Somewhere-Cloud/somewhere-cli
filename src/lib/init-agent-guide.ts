@@ -160,8 +160,8 @@ tests/app-check.mjs: change its checks to the journeys you changed and your acce
 Keep each run short:
 - Short waits: page.setDefaultTimeout(5_000) on every page; a deployed app answers in under
   a second. Never sleep for a fixed time: wait for the thing itself (the text, the response).
-- Stop at the first failure and print what the page showed (page.url(), the visible error
-  text). Checks after a failure only wait out their timeouts. app.check() does both.
+- Keep independent checks running. For a dependent check, pass { requires: { name, passed } }
+  to app.check() using the earlier check's boolean result, so a skip explains what it needed.
 - After a fix, rerun the scripts that failed, each one whole: npx @somewhere-cloud/cli test --failed.
 The CLI supplies its test helpers when it runs your tests. For the first browser test, install Playwright with npm install -D --save-exact @playwright/test@1.65.0.
 For a local Vite server, install the frontend tools with npm install -D --save-exact vite@7.2.2.

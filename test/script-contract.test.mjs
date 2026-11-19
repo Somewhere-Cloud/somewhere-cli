@@ -2,7 +2,7 @@
 // shared form lifecycle: a real Chromium against routed fake apps, no network, no project.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { chromium } from '@playwright/test';
 import { signUp, signIn, signOut, FIND_MS } from '../dist/lib/form-auth.js';
@@ -181,33 +181,78 @@ test('launchOptions keeps caller options and adds the system-resolver switch onc
   assert.deepEqual(launchOptions({ headless: false, args: ['--x'] }), { headless: false, args: ['--disable-features=AsyncDns', '--x'] });
 });
 
-// The first failed check stops the run: it says what the page showed, later checks are skipped without
-// waiting (bench-1115: nine dependent checks each waited a 30 s timeout after one real failure). --failed reruns
-// the whole script, so setup done inside earlier checks runs again (bench-1115c: a skipped setup check left teamId empty).
-test('check() stops at the first failure, prints the page it was on, skips the rest', async () => {
-  const page = await pageFor('<!doctype html><html><body><main><h1>Teams</h1><p role="alert">Could not open the team</p></main></body></html>');
+test('dataReady names a missing marker only after a loaded page has no data view', async () => {
+  const page = await pageFor('<!doctype html><h1>Notes</h1>');
+  try {
+    await assert.rejects(dataReady(page, 100), { name: 'TimeoutError' });
+    await page.goto('/notes');
+    await assert.rejects(dataReady(page, 100), /page loaded without.*data-sw-data.*"loading", "ready", or "error".*somewhere test --help/);
+    await page.locator('body').evaluate(node => { node.dataset.swData = 'loading'; });
+    await assert.rejects(dataReady(page, 100), /still loading/);
+    await page.locator('body').evaluate(node => { node.dataset.swData = 'error'; });
+    assert.equal(await dataReady(page), 'error');
+  } finally { await page.context().close(); }
+});
+
+test('checks continue after failures, skip unmet prerequisites and print the same details as the result file', async () => {
+  const page = await pageFor('<!doctype html><h1>Teams</h1><p role="alert">Could not open the team</p>');
   await page.goto('/teams');
-  const results = join(mkdtempSync(join(process.env.TMPDIR, 'app-check-')), 'app-check.json');
-  const client = { call: async () => { throw new Error('unexpected control-plane call'); } };
+  const root = mkdtempSync(join(process.env.TMPDIR, 'app-check-'));
+  const results = join(root, '.somewhere', 'app-check.json');
+  const client = { call: async () => ({ active_release_id: 'rel_1' }) };
   const target = { projectId: 'p-1', origin: ORIGIN, host: 'app.test', releaseId: 'rel_1', contractDigest: 'd' };
   const out = [];
   const write = process.stdout.write.bind(process.stdout);
+  const exitCode = process.exitCode;
   process.stdout.write = (chunk) => { out.push(String(chunk)); return true; };
   const ran = [];
   try {
-    const app = new AppTest(process.env.TMPDIR, productionControl(client, target), results);
+    const app = new AppTest(root, productionControl(client, target), results);
     app.host.pages.add(page);
-    const started = Date.now();
-    await app.check('one', () => { ran.push('one'); });
-    await app.check('two', () => { ran.push('two'); throw new Error('the team page did not open'); });
-    for (const n of ['three', 'four']) await app.check(n, async () => { ran.push(n); await page.waitForTimeout(30_000); });
-    assert.ok(Date.now() - started < 5_000, 'later checks never wait');
-    assert.deepEqual(ran, ['one', 'two']);
-    assert.deepEqual(app.checks.map((c) => [c.name, c.ok, c.skipped ?? null]), [['one', true, null], ['two', false, null], ['three', false, 'after-failure'], ['four', false, 'after-failure']]);
+    const passed = await app.check('the team opens', (at) => {
+      at('Open team details', '[data-testid="team"]');
+      throw new Error('the team page did not open');
+    }, { expected: 'The team name is visible.' });
+    await app.check('edit the team', () => { assert.fail('dependent check ran'); }, { requires: { name: 'the team opens', passed } });
+    await app.check('the public page opens', () => { ran.push('public'); });
+    await app.check('health is OK', (at) => { at('Request health'); throw new Error('The server returned HTTP 503 UNAVAILABLE.'); });
+    await app.finish();
+    assert.equal(process.exitCode, 1);
+    assert.deepEqual(ran, ['public']);
+    const report = JSON.parse(readFileSync(results, 'utf8'));
+    assert.equal(report.failed, 2);
+    assert.equal(report.checks[1].skipped, 'prerequisite');
+    for (const check of report.checks.filter(c => c.failure)) {
+      for (const [label, value] of Object.entries(check.failure)) {
+        assert.ok(out.join('').includes(label[0].toUpperCase() + label.slice(1) + ': ' + value));
+      }
+    }
     const said = out.join('');
-    assert.match(said, /FAIL two\n  the team page did not open\n  page 1: https:\/\/app\.test\/teams shows: Could not open the team/, 'the page it was on and what it shows');
-    assert.match(said, /--failed/);
-  } finally { process.stdout.write = write; await page.context().close(); }
+    assert.match(said, /SKIPPED edit the team: Requires “the team opens”, which did not pass/);
+    assert.match(said, /PASS the public page opens/);
+    assert.match(said, /Evidence: HTTP 503 UNAVAILABLE/);
+    assert.match(said, /Full result: \.somewhere\/app-check\.json/);
+    assert.match(report.checks[0].error, /page 1: https:\/\/app\.test\/teams shows: Could not open the team/);
+  } finally {
+    process.exitCode = exitCode;
+    process.stdout.write = write;
+    await page.context().close();
+  }
+});
+
+test('fail-fast keeps the old stop-after-one-failure behavior when requested', async () => {
+  const previous = process.env.SW_TEST_FAIL_FAST;
+  process.env.SW_TEST_FAIL_FAST = '1';
+  try {
+    const target = { projectId: 'p-1', origin: ORIGIN, host: 'app.test', releaseId: 'rel_1', contractDigest: 'd' };
+    const app = new AppTest(process.env.TMPDIR, productionControl({}, target), 'unused');
+    await app.check('one', () => { throw new Error('failed'); });
+    await app.check('two', () => { assert.fail('later check ran'); });
+    assert.equal(app.checks[1].skipped, 'after-failure');
+  } finally {
+    if (previous === undefined) delete process.env.SW_TEST_FAIL_FAST;
+    else process.env.SW_TEST_FAIL_FAST = previous;
+  }
 });
 
 // tsk_25a5feaf (Astra): a failing check prints nothing a test could have touched in the clear: not an emailed link's
@@ -221,22 +266,26 @@ test('a failing check never prints a capability link, a remembered secret or a s
   const results = join(mkdtempSync(join(process.env.TMPDIR, 'app-check-')), 'app-check.json');
   const target = { projectId: 'p-1', origin: ORIGIN, host: 'app.test', releaseId: 'rel_1', contractDigest: 'd' };
   const out = [];
+  const exitCode = process.exitCode;
   const writes = { stdout: process.stdout.write.bind(process.stdout), stderr: process.stderr.write.bind(process.stderr) };
   process.stdout.write = (chunk) => { out.push(String(chunk)); return true; };
   process.stderr.write = (chunk) => { out.push(String(chunk)); return true; };
   try {
-    const app = new AppTest(process.env.TMPDIR, productionControl({ call: async () => ({}) }, target), results);
+    const app = new AppTest(process.env.TMPDIR, productionControl({ call: async () => ({ active_release_id: 'rel_1' }) }, target), results);
     app.host.pages.add(page);
     await app.check(`sign in as ${password}`, () => {
       throw new Error(`expected the dashboard at ${ORIGIN}/verify/vrf_capability_42?token=tok_secret_ABC123 for ${password}; cookie cookie_session_value_77aa`);
     });
+    await app.finish();
     const said = out.join('');
+    const saved = readFileSync(results, 'utf8');
     for (const secret of ['rst_live_capability_9f8e7d', 'tok_secret_ABC123', 'vrf_capability_42', password, 'cookie_session_value_77aa']) {
       assert.ok(!said.includes(secret), `printed ${secret}: ${said}`);
-      assert.ok(!JSON.stringify(app.checks).includes(secret), `recorded ${secret}`);
+      assert.ok(!saved.includes(secret), `recorded ${secret}`);
     }
     assert.match(said, /FAIL sign in as \[redacted\]/);
-    assert.match(said, /page 1: https:\/\/app\.test\/reset-password\/\[redacted\]\?\[redacted\] shows: Link expired/, 'the page is named; its capability and query are not');
-  } finally { process.stdout.write = writes.stdout; process.stderr.write = writes.stderr; await page.context().close(); }
+    assert.match(said, /Evidence: https:\/\/app\.test\/reset-password\/\[redacted\]\?\[redacted\]/, 'the page is named; its capability and query are not');
+    assert.match(JSON.parse(saved).checks[0].error, /shows: Link expired/, 'the report keeps visible context');
+  } finally { process.exitCode = exitCode; process.stdout.write = writes.stdout; process.stderr.write = writes.stderr; await page.context().close(); }
 });
 

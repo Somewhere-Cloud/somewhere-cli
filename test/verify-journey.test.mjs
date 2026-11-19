@@ -315,7 +315,8 @@ test('--schema prints the machine-readable flow contract; --help carries a valid
   assert.ok(match, help.stdout);
   const example = JSON.parse(match[1].replace(/^  /gm, ''));
   assert.equal(normalizeVerifyJourney(example).journey.length, 3);
-  assert.match(help.stdout, /3 actors, 12 segments,\s+30 actions per segment, 120 in total, 10 minutes/);
+  assert.match(help.stdout, /somewhere login\s+with account access/);
+  assert.doesNotMatch(help.stdout, /3 actors, 12 segments|plan's browser limits/);
 });
 
 test('Ctrl-C during a journey closes every opened actor browser before exiting', async () => {

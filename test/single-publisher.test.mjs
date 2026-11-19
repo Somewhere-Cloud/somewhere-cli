@@ -38,6 +38,8 @@ test('canonical publisher alone publishes, checks the registry, and pins immutab
   assert.match(publisher, /id-token: write/);
   assert.match(publisher, /an npm token is set; this publisher authenticates only through OIDC/);
   assert.ok(publisher.indexOf('already exists on npm') < publishAt, 'refuse an existing version before publishing');
+  // Registry visibility is the workflow's post-publish check. The standalone
+  // verifier still tests source, integrity, and provenance separately.
   const verifyAt = publisher.indexOf('name: Confirm npm serves the published version');
   assert.ok(publishAt >= 0 && verifyAt > publishAt, 'verify registry visibility after publishing');
   const registryCheck = publisher.slice(verifyAt);

@@ -192,7 +192,7 @@ deploys but does not undeploy the current site.
 | `--dry-run` | Upload source and show what would change without publishing |
 | `--replace-functions` | Drop deployed functions not present locally. A full deploy already does this and names each removed function; use it with `--scope functions`, which otherwise keeps them |
 | `--project <id>` | Deploy to a specific project instead of the linked one |
-| `-m, --message <text>` | Optional user-supplied version note (max 200 characters after controls are stripped) |
+| `-m, --message <text>` | Add a note for this version |
 | `--force` | Overwrite remote changes even when this machine has an older deployed version |
 | `--yes` | Skip the `--force` confirmation prompt |
 

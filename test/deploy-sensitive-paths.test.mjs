@@ -254,7 +254,7 @@ test('deploy --dry-run keeps the remote diff, discloses the upload, and sends no
   const deploys = requests.filter((q) => q.url === '/v1/deploy');
   assert.equal(deploys.length, 1);
   assert.equal(deploys[0].body.dry_run, true, 'the dry run is still computed by the platform');
-  assert.match(r.all, /Dry run: sending \d+ files \(.+\) to Somewhere to compute the change\. Nothing is published\./);
+  assert.match(r.all, /Dry run: sending \d+ files to Somewhere to check what would change\. Nothing is published\./);
   assert.match(r.all, /Never uploaded \(9\): /);
   assert.match(r.all, /Files blocked by the sensitive-path policy stay on your machine/);
   assert.match(r.all, /matches file names only: a secret under any other name uploads like any other file/);

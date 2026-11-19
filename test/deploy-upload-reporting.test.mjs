@@ -109,7 +109,7 @@ for (const [label, warnings] of [['a server that names private files', [SERVER_W
 
       assert.match(first.all, /Not published: 3 local files \(notes, tests, tooling\) stay on your machine\. See them: somewhere deploy --list-unpublished/);
       assert.doesNotMatch(first.all, /A deploy publishes your app/);
-      assert.match(first.all, /2 static files uploaded \(/);
+      assert.match(first.all, /2 static files uploaded$/m);
       // : the headline's files are named, from the same selection the request carried.
       assert.match(first.all, /Uploaded: index\.html, src\/main\.js/);
       assert.doesNotMatch(first.all, /static files? deployed/);

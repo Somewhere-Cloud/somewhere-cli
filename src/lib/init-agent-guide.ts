@@ -73,7 +73,7 @@ not enough. So tickets lists create: ['staff']; without it every staff reply is 
 Publish pages in an owner-checked endpoint. Share with caller-scoped
 sw.db.insert('note_shares', { grantee_id, note_id }); it checks row ownership.
 Browser calls THROW, not { error }; catch below.
-Browser list: max 100, paginate after; no order (sort locally or in an endpoint).
+Browser list: paginate with after. Sort locally or in an endpoint.
 
 \`\`\`ts
 import { data } from 'somewhere:data';

@@ -5,7 +5,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
-import { createHash } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -13,18 +12,6 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const distIndex = join(dirname(fileURLToPath(import.meta.url)), '..', 'dist', 'index.js');
-const DIFFICULTY = 8;
-
-function leadingZeroBits(buf) {
-  let bits = 0;
-  for (const byte of buf) {
-    if (byte === 0) { bits += 8; continue; }
-    let mask = 0x80;
-    while (mask > 0 && (byte & mask) === 0) { bits++; mask >>= 1; }
-    break;
-  }
-  return bits;
-}
 
 // Stub API: every temp-create mints a distinct credential, every project
 // create returns a distinct id, and every deploy records (project, credential).
@@ -42,14 +29,8 @@ const server = createServer((req, res) => {
       res.end(JSON.stringify(status < 300 ? { ok: true, data } : { ok: false, ...data }));
     };
     const auth = (req.headers.authorization ?? '').replace(/^Bearer /, '');
-    if (req.method === 'GET' && req.url === '/v1/auth/pow/challenge') {
-      return send(200, { nonce: 'n', difficulty: DIFFICULTY, algorithm: 'sha256', input: 'n:<suffix>', expires_at: new Date(Date.now() + 600_000).toISOString(), ttl_seconds: 600 });
-    }
     if (req.method === 'POST' && req.url === '/v1/auth/temp-create') {
-      const parsed = JSON.parse(body);
-      if (leadingZeroBits(createHash('sha256').update(`${parsed.nonce}:${parsed.suffix}`, 'utf8').digest()) < DIFFICULTY) {
-        return send(400, { error: 'INVALID_SOLUTION', message: 'bad pow' });
-      }
+      assert.deepEqual(JSON.parse(body), {});
       mints++;
       return send(201, {
         access_token: `smt_temp_${mints}`, key: `smt_temp_${mints}`, key_prefix: 'smt_temp', key_id: `key_${mints}`,

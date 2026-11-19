@@ -1,3 +1,7 @@
+## 0.38.120
+
+- Stop shipping TypeScript inside the CLI. Type checks use the project compiler or a pinned version cached by npm. Role-method hints use the project compiler when available.
+
 ## 0.38.119
 
 - Put the installed skills and the build, deploy, and test steps at the top of generated AGENTS.md.

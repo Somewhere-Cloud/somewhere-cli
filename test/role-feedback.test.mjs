@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtempSync,mkdirSync,writeFileSync,rmSync,readFileSync} from 'node:fs';
+import {mkdtempSync,mkdirSync,writeFileSync,rmSync,readFileSync,symlinkSync} from 'node:fs';
+import {fileURLToPath} from 'node:url';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {roleMethodHints} from '../dist/lib/role-method-hints.js';
@@ -27,9 +28,12 @@ test('GET-only role hint parses exports/calls, ignoring comments, defaults and P
    'comment.ts':`// sw.auth.server.setRoles('u',{})\nexport const GET=()=>({});`,
   };
   for(const [file,source] of Object.entries(examples))writeFileSync(join(dir,'api',file),source);
+  assert.deepEqual(roleMethodHints(dir), ['Role-method hints skipped: TypeScript is unavailable in this project.']);
+  mkdirSync(join(dir, 'node_modules'));
+  symlinkSync(fileURLToPath(new URL('../node_modules/typescript', import.meta.url)), join(dir, 'node_modules', 'typescript'), 'junction');
   const hints=roleMethodHints(dir);assert.equal(hints.length,2);assert.ok(hints.every(x=>x.includes('POST setup handler')));
   writeFileSync(join(dir,'api','old.ts'),`export default (_, sw) => { sw.auth.server.grantRole('u','staff'); return sw.auth.server.revokeRole('u','staff'); };`);
-  const removed=roleMethodHints(dir).filter(x=>x.includes('was removed'));
+  const removed=roleMethodHints(dir, { removedOnly: true });
   assert.deepEqual(removed,["hint: api/old.ts: sw.auth.server.grantRole was removed; call sw.auth.server.setRoles(userId, { add: [role] }).","hint: api/old.ts: sw.auth.server.revokeRole was removed; call sw.auth.server.setRoles(userId, { remove: [role] })."]);
  }finally{rmSync(dir,{recursive:true,force:true});}
 });

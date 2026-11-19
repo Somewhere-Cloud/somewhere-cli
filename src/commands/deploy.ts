@@ -5,7 +5,8 @@ import { cliInvocation } from '../lib/cli-invocation.js';
 import { suppressExitNotices } from '../lib/notify/index.js';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { missingProjectDependencies, runTypecheck } from '../lib/typecheck.js';
+import { announceNpxTypeScriptFetch, typecheckCompilerSource, missingProjectDependencies, runTypecheck } from '../lib/typecheck.js';
+import { TYPECHECK_TYPESCRIPT_VERSION } from '../lib/typecheck-version.js';
 import { reportTypecheck } from './typecheck.js';
 import { clearBaseFiles, hashFiles, loadLastActivation, saveBaseFiles } from '../lib/base-files.js';
 import { withVerifyProgress } from '../lib/verify-progress.js';
@@ -711,6 +712,9 @@ export function registerDeploy(program: Command) {
       // Observe rejection immediately, then enforce the result before upload.
       const hasTsconfig = existsSync(join(targetDir, 'tsconfig.json'));
       const missingDependencies = hasTsconfig && missingProjectDependencies(targetDir).length > 0;
+      if (hasTsconfig && !missingDependencies && typecheckCompilerSource(targetDir) === 'npx') {
+        announceNpxTypeScriptFetch(TYPECHECK_TYPESCRIPT_VERSION);
+      }
       const typecheck = hasTsconfig && !missingDependencies
         ? runTypecheck(targetDir).then(value => ({ value }), (error: unknown) => ({ error }))
           .finally(() => { typecheckMs = performance.now() - typecheckStartedAt; })
@@ -1284,7 +1288,7 @@ export function registerDeploy(program: Command) {
         if (checked && 'error' in checked) throw checked.error;
         if (checked && !checked.value.ok) {
           reportTypecheck(checked.value);
-          for (const hint of roleMethodHints(targetDir)) if (hint.includes(' was removed;')) console.error(hint);
+          for (const hint of roleMethodHints(targetDir, { removedOnly: true })) console.error(hint);
           if (!opts.allowTypeErrors) {
             stopPrestart();
             spinner?.stop();

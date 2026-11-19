@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtempSync,readFileSync,rmSync} from 'node:fs';
+import {existsSync,mkdtempSync,readFileSync,rmSync} from 'node:fs';
 import {spawnSync} from 'node:child_process';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
@@ -12,6 +12,8 @@ test('packed CLI starts and offers deploy notes after an offline production-only
  try {
   const packed=JSON.parse(run('npm',['pack','--ignore-scripts','--json','--pack-destination',root]));
   run('npm',['install','--prefix',root,'--offline','--ignore-scripts','--omit=dev',join(root,packed[0].filename)]);
+  assert.ok(!packed[0].files.some(({ path }) => path.startsWith('node_modules/typescript/')));
+  assert.equal(existsSync(join(root, 'node_modules/typescript')), false);
   const cli=join(root,'node_modules/@somewhere-cloud/cli/bin/somewhere.js');
   const version=JSON.parse(readFileSync(join(repo,'package.json'),'utf8')).version;
   assert.equal(run(process.execPath,[cli,'--version'],root).trim(),version);

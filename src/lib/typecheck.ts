@@ -6,13 +6,11 @@ import { cliInvocation } from './cli-invocation.js';
  *
  * tsc resolution order (first that exists wins):
  *   1. the project's own node_modules/.bin/tsc (if they ran `npm install`)
- *   2. the CLI checkout's TypeScript during development/tests (a devDependency)
- *   3. `npx -y typescript` as a last resort
+ *   2. a pinned TypeScript version through npx (cached by npm)
  */
 import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
-import { createRequire } from 'node:module';
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { SCAFFOLD_TSCONFIG_FILENAME } from './scaffold.js';
@@ -59,7 +57,7 @@ export interface TypecheckResult {
   ok: boolean;
   errors: TypeError[];
   /** How tsc was located, for a one-line "ran via …" note. */
-  via: 'project' | 'bundled' | 'npx';
+  via: 'project' | 'npx';
   /** Raw combined stdout+stderr — shown when we couldn't parse structured errors. */
   raw: string;
   /** Set when tsc itself couldn't be run at all. */
@@ -101,7 +99,7 @@ export function typecheckArgs(prefixArgs: readonly string[] = []): string[] {
   ];
 }
 
-/** Locate a runnable tsc. Never throws — npx is the always-available fallback. */
+/** Prefer the project's compiler, otherwise ask npx for the pinned version. */
 function resolveTsc(projectDir: string): TscInvocation {
   const projectBin = join(
     projectDir,
@@ -111,20 +109,6 @@ function resolveTsc(projectDir: string): TscInvocation {
   );
   if (existsSync(projectBin)) {
     return { command: projectBin, args: [], via: 'project' };
-  }
-
-  // TypeScript is a CLI devDependency, so this resolves in a source checkout
-  // and tests. Published installs omit devDependencies and use the pinned npx
-  // fallback below unless the project has its own compiler.
-  try {
-    const require = createRequire(import.meta.url);
-    // typescript ships bin/tsc (a Node script). Resolve its package dir.
-    const tscBin = require.resolve('typescript/bin/tsc');
-    if (existsSync(tscBin)) {
-      return { command: process.execPath, args: [tscBin], via: 'bundled' };
-    }
-  } catch {
-    // not resolvable from here — fall through to npx
   }
 
   return npxTscInvocation();
@@ -280,8 +264,6 @@ export function runBounded(
         cwd, env: process.env, stdio: ['ignore', 'pipe', 'pipe'], detached: posixGroup,
         // Windows: tsc.cmd / npx.cmd are batch shims, and since Node 18.20/20.12
         // (CVE-2024-27980) spawning a .cmd/.bat without a shell throws EINVAL.
-        // The bundled path runs node directly (process.execPath) and must NOT
-        // shell — its arg is a resolved file path that a shell could mis-split.
         shell: /\.(cmd|bat)$/i.test(command),
       });
     } catch (err) {
@@ -445,7 +427,7 @@ export function runTypecheck(
   try { declaredData = prepareDeclaredData(projectDir); }
   catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    return Promise.resolve(withContract({ ok: false, errors: [{ file: 'db/schema.ts', line: 1, column: 1, code: 'SCHEMA_DECLARATION_INVALID', message }], via: 'bundled', raw: message }));
+    return Promise.resolve(withContract({ ok: false, errors: [{ file: 'db/schema.ts', line: 1, column: 1, code: 'SCHEMA_DECLARATION_INVALID', message }], via: typecheckCompilerSource(projectDir), raw: message }));
   }
   // Only a caller-supplied installer resolves declared type packages; the
   // default never installs into the project.

@@ -220,3 +220,54 @@ test('non-TTY deploy prints collection once across all preflight warnings and ke
       [...[...EXPECTED_OMISSIONS].sort((a, b) => a.localeCompare(b)).map((path) => `not published: ${path}`), 'not uploaded: linked.html'], json.all);
   });
 });
+
+
+test('typecheck and deploy use the installed compiler or pinned fallback, with identical upload rules', async () => {
+  for (const via of ['project', 'npx']) {
+    const { HOME, dir } = project();
+    writeFileSync(join(dir, 'tsconfig.json'), JSON.stringify({ include: ['api/**/*.ts'] }));
+    mkdirSync(join(dir, 'api'));
+    if (via === 'project') {
+      const modules = join(dir, 'node_modules');
+      mkdirSync(join(modules, '.bin'), { recursive: true });
+      symlinkSync(join(repoRoot, 'node_modules', 'typescript'), join(modules, 'typescript'), 'junction');
+      if (process.platform === 'win32') {
+        writeFileSync(join(modules, '.bin', 'tsc.cmd'), '@node "%~dp0..\\typescript\\bin\\tsc" %*\r\n');
+      } else {
+        symlinkSync(join('..', 'typescript', 'bin', 'tsc'), join(modules, '.bin', 'tsc'));
+      }
+    }
+    const route = join(dir, 'api', 'check.ts');
+    const source = `declare const sw: { auth: { server: { grantRole(): void } } };
+export const GET = () => { sw.auth.server.grantRole(); return VALUE; };
+`;
+    writeFileSync(route, source.replace('VALUE', 'missing'));
+    await withPlatform([], async (apiUrl, requests) => {
+      const env = { HOME, USERPROFILE: HOME, SOMEWHERE_API_URL: apiUrl };
+      const checked = await run(['typecheck', '--json'], { cwd: dir, env });
+      assert.equal(checked.status, 1, checked.all);
+      const verdict = JSON.parse(checked.stdout);
+      assert.equal(verdict.via, via);
+      assert.deepEqual(verdict.errors.map(({ file, code }) => [file, code]), [['api/check.ts', 'TS2304']]);
+
+      const stopped = await run(['deploy'], { cwd: dir, env });
+      assert.equal(stopped.status, 1, stopped.all);
+      assert.match(stopped.all, /Deploy stopped before upload/);
+      assert.ok(requests.every(({ url }) => url !== '/v1/deploy'));
+      for (const { stderr } of [checked, stopped]) {
+        const roleLines = stderr.split('\n').filter(line => /Role-method hints skipped|grantRole was removed/.test(line));
+        assert.equal(roleLines.length, 1);
+        assert.match(roleLines[0], via === 'project' ? /grantRole was removed/ : /TypeScript is unavailable/);
+      }
+
+      writeFileSync(route, source.replace('VALUE', '42'));
+      const clean = await run(['typecheck', '--json'], { cwd: dir, env });
+      assert.equal(clean.status, 0, clean.all);
+      assert.deepEqual(JSON.parse(clean.stdout).errors, []);
+      const deployed = await run(['deploy', '--json'], { cwd: dir, env });
+      assert.equal(deployed.status, 0, deployed.all);
+      assert.deepEqual(uploaded(requests.find(({ url }) => url === '/v1/deploy')), [...EXPECTED_UPLOAD, 'tsconfig.json']);
+      assert.deepEqual(JSON.parse(deployed.stdout).uploaded.functions, ['api/check.ts']);
+    });
+  }
+});

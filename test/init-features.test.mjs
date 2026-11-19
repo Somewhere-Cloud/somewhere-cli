@@ -14,7 +14,6 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
-import { pinStarterToLocalCli } from './local-cli-pack.mjs';
 const CLI_PACKAGE_VERSION = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
 
 const source = Boolean(process.env.SOMEWHERE_TEST_SOURCE);
@@ -170,7 +169,8 @@ test('every combination separates types, services, hooks, pages and presentation
     assert.doesNotMatch(all, /user_id|owner_id|\.owner\b|where: \{ *user/, `${label}: no client-side owner filters`);
     assert.doesNotMatch(all, /fonts\.googleapis|@import url|https?:\/\/[^\s'"`]*\.(woff2?|ttf)/, `${label}: no remote fonts`);
     const pkg = JSON.parse(read('package.json'));
-    assert.deepEqual(Object.keys(pkg.dependencies).sort(), ['@somewhere-cloud/sdk', 'react', 'react-dom']);
+    assert.deepEqual(Object.keys(pkg.dependencies), ['@somewhere-cloud/sdk']);
+    assert.deepEqual(pkg.optionalDependencies, { react: '19.2.7', 'react-dom': '19.2.7' });
     assert.equal(pkg.dependencies['@somewhere-cloud/sdk'], '0.14.2', 'the SDK release whose sign-in lockout answer keeps retry_after_ms and sends Retry-After');
     assert.equal(pkg.scripts.build, undefined);
   }
@@ -447,13 +447,11 @@ const installStarter = (specs, cwd) => {
 };
 // The install brings the starter's pinned dependencies too, so this checks against the real,
 // published SDK the starter pins. SOMEWHERE_TEST_SDK_TARBALL points it at a
-// local `npm pack` instead (an SDK change that is not published yet). The CLI
-// pin always installs from this working tree (local-cli-pack.mjs).
+// local `npm pack` instead (an SDK change that is not published yet).
 const sdkTarball = process.env.SOMEWHERE_TEST_SDK_TARBALL;
 test('every combination typechecks against the SDK and the generated somewhere:data declaration', async () => {
   for (const [features, ui] of COMBINATIONS) {
     const { dir } = generate(features, ui);
-    pinStarterToLocalCli(dir);
     if (sdkTarball) {
       const pkgPath = join(dir, 'package.json');
       const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'));

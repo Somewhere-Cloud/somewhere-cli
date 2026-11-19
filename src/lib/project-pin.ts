@@ -1,17 +1,17 @@
 import { CLI_PACKAGE_ROOT } from './package-root.js';
 import { cliInvocation } from './cli-invocation.js';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import semver from 'semver';
 
 /**
- * A project records the CLI version it was built with, the way an npm project
- * records any dependency. Getting a newer CLI is then a
- * deliberate `somewhere upgrade`, not whatever `npx …@latest` fetched today.
+ * A project records the CLI version it was built with. Moving the pin is a
+ * deliberate `somewhere upgrade`.
  *
  * Where the pin lives, read in this order (the first one found is the pin):
+ *   package.json   somewhere.cli_version — used by new starters
  *   package.json   devDependencies (or dependencies) "@somewhere-cloud/cli"
- *                  — what `somewhere init` writes into a new starter
+ *                  — used by older starters or explicitly installed tools
  *   .somewhere.json "cli_version" — for a linked folder whose package.json
  *                  does not declare the CLI (or that has none): written by
  *                  init --bare/link and by the first deploy, never into a
@@ -28,6 +28,7 @@ export interface ProjectPin {
   /** Exactly as written: an exact version, or a range someone chose. */
   spec: string;
   source: PinSource;
+  versionOnly?: true;
 }
 
 function readJson(path: string): Record<string, unknown> | null {
@@ -54,7 +55,15 @@ function packageJsonSpec(pkg: Record<string, unknown> | null): string | null {
 /** Every place this folder records a CLI version, in precedence order. */
 export function readProjectPins(dir: string): ProjectPin[] {
   const pins: ProjectPin[] = [];
-  const fromPackage = packageJsonSpec(readJson(join(dir, 'package.json')));
+  const pkg = readJson(join(dir, 'package.json'));
+  const settings = pkg?.somewhere;
+  const fromSettings = settings && typeof settings === 'object' && !Array.isArray(settings)
+    ? (settings as Record<string, unknown>)[PIN_FILE_KEY]
+    : undefined;
+  if (typeof fromSettings === 'string' && fromSettings.trim()) {
+    pins.push({ spec: fromSettings.trim(), source: 'package.json', versionOnly: true });
+  }
+  const fromPackage = packageJsonSpec(pkg);
   if (fromPackage) pins.push({ spec: fromPackage, source: 'package.json' });
   const recorded = readJson(join(dir, '.somewhere.json'))?.[PIN_FILE_KEY];
   if (typeof recorded === 'string' && recorded.trim()) pins.push({ spec: recorded.trim(), source: '.somewhere.json' });
@@ -99,7 +108,7 @@ export function pinNotice(pin: ProjectPin, running: string, delegatedTo: string 
   if (newer) return `${head}; you are running ${running}. ${move}`;
   const exact = semver.valid(pin.spec) ? pin.spec : semver.minVersion(pin.spec)?.version ?? pin.spec;
   return `${head}; you are running ${running}, which is older. `
-    + (pin.source === 'package.json' ? 'Run `npm install` here, or use ' : 'Use ')
+    + (pin.source === 'package.json' && !pin.versionOnly ? 'Run `npm install` here, or use ' : 'Use ')
     + `\`npx -y ${CLI_PACKAGE_NAME}@${exact} <command>\`.`;
 }
 
@@ -113,6 +122,7 @@ export interface PinDecision {
   notice: string | null;
   /** The installed pinned CLI's entrypoint to hand this command to. */
   delegate: string | null;
+  delegateVersion?: string;
 }
 
 export function decidePin(dir: string, running: string, argv: string[], env: NodeJS.ProcessEnv): PinDecision {
@@ -121,6 +131,14 @@ export function decidePin(dir: string, running: string, argv: string[], env: Nod
   const pin = readProjectPin(dir);
   if (!pin || pinSatisfied(pin, running)) return none;
   const installed = installedPinnedCli(dir, pin, running);
+  if (pin.versionOnly) {
+    if (installed) return { notice: pinNotice(pin, running, installed.version), delegate: installed.bin };
+    const version = semver.valid(pin.spec);
+    if (version) {
+      return { notice: `This project is pinned to somewhere CLI ${version}. Running it through npm’s cache. Run \`${cliInvocation()} upgrade\` to move the pin.`,
+        delegate: null, delegateVersion: version };
+    }
+  }
   if (argv[2] === 'deploy' && installed && semver.valid(running) && semver.lt(installed.version, running)) {
     return {
       notice: `This project is pinned to somewhere CLI ${pin.spec} (${pin.source}); deploy is using the running CLI ${running}.`,
@@ -130,6 +148,17 @@ export function decidePin(dir: string, running: string, argv: string[], env: Nod
   return { notice: pinNotice(pin, running, installed?.version ?? null), delegate: installed?.bin ?? null };
 }
 
+export function pinnedNpx(version: string): { command: string; args: string[] } | null {
+  const args = ['--yes', '--prefer-offline', '--ignore-scripts', `${CLI_PACKAGE_NAME}@${version}`];
+  if (process.platform !== 'win32') return { command: 'npx', args };
+  const besideNode = join(dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npx-cli.js');
+  const besideNpm = process.env.npm_execpath?.endsWith('npm-cli.js')
+    ? join(dirname(process.env.npm_execpath), 'npx-cli.js')
+    : besideNode;
+  const entry = [besideNpm, besideNode].find(path => existsSync(path));
+  return entry ? { command: process.execPath, args: [entry, ...args] } : null;
+}
+
 /** Write `version` into every place this folder records a pin. */
 export function writeProjectPins(dir: string, pins: ProjectPin[], version: string): PinSource[] {
   const written: PinSource[] = [];
@@ -137,7 +166,9 @@ export function writeProjectPins(dir: string, pins: ProjectPin[], version: strin
     const path = join(dir, pin.source);
     const raw = readFileSync(path, 'utf8');
     const json = JSON.parse(raw) as Record<string, unknown>;
-    if (pin.source === 'package.json') {
+    if (pin.versionOnly) {
+      (json.somewhere as Record<string, unknown>)[PIN_FILE_KEY] = version;
+    } else if (pin.source === 'package.json') {
       for (const section of ['devDependencies', 'dependencies']) {
         const deps = json[section] as Record<string, unknown> | undefined;
         if (deps && typeof deps === 'object' && typeof deps[CLI_PACKAGE_NAME] === 'string') deps[CLI_PACKAGE_NAME] = version;
@@ -147,7 +178,7 @@ export function writeProjectPins(dir: string, pins: ProjectPin[], version: strin
     }
     const indent = /^\{\s*\n(\s+)/.exec(raw)?.[1] ?? '  ';
     writeFileSync(path, JSON.stringify(json, null, indent) + '\n');
-    written.push(pin.source);
+    if (!written.includes(pin.source)) written.push(pin.source);
   }
   return written;
 }

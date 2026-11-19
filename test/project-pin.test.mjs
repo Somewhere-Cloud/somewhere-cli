@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { delimiter, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { changelogBetween, decidePin, readProjectPin, recordPinIfMissing } from '../dist/lib/project-pin.js';
@@ -38,13 +38,14 @@ function run(cwd, args, env = {}) {
 
 const pkg = (spec) => ({ name: 'app', private: true, devDependencies: { '@somewhere-cloud/cli': spec, typescript: '5.9.3' } });
 
-test('init writes the running CLI version as an exact devDependency pin', () => {
+test('init writes the exact CLI pin without making the CLI a dependency', () => {
   const dir = folder();
   const result = run(dir, ['init', '--name', 'pinned', '--json'], { PATH: starterInstallPath() });
   assert.equal(result.status, 0, result.stderr);
   const written = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'));
-  assert.equal(written.devDependencies['@somewhere-cloud/cli'], VERSION);
-  assert.deepEqual(readProjectPin(dir), { spec: VERSION, source: 'package.json' });
+  assert.equal(written.devDependencies['@somewhere-cloud/cli'], undefined);
+  assert.equal(written.somewhere.cli_version, VERSION);
+  assert.deepEqual(readProjectPin(dir), { spec: VERSION, source: 'package.json', versionOnly: true });
   // A pinned folder at its own version prints nothing extra.
   const lint = run(dir, ['lint']);
   assert.doesNotMatch(lint.stderr, /pinned to somewhere CLI/);
@@ -152,4 +153,24 @@ test('upgrade in a folder with no pin and no link refuses with the way to add on
   const result = run(dir, ['upgrade', '--json']);
   assert.equal(result.status, 1);
   assert.match(result.stdout, /UPGRADE_REFUSED/);
+});
+
+
+test('a version-only pin delegates commands through npm and upgrade changes only the version string', { skip: process.platform === 'win32' }, () => {
+  const dir = folder({
+    'package.json': { name: 'app', somewhere: { cli_version: '0.38.12' } },
+    'bin/npx': '#!/usr/bin/env node\nconsole.log(JSON.stringify({argv: process.argv.slice(2), child: process.env.SOMEWHERE_PINNED_CLI})); process.exit(7);\n',
+  });
+  chmodSync(join(dir, 'bin/npx'), 0o755);
+  const result = run(dir, ['deploy', '--message', 'name with spaces'], { PATH: [join(dir, 'bin'), process.env.PATH].join(delimiter) });
+  assert.equal(result.status, 7, result.stderr);
+  assert.deepEqual(JSON.parse(result.stdout), {
+    argv: ['--yes', '--prefer-offline', '--ignore-scripts', '@somewhere-cloud/cli@0.38.12', 'deploy', '--message', 'name with spaces'],
+    child: '1',
+  });
+  assert.equal(existsSync(join(dir, 'node_modules')), false);
+  const moved = upgradeProject(dir, '0.38.15', () => CHANGELOG);
+  assert.deepEqual(moved.updated, ['package.json']);
+  assert.deepEqual(moved.next, []);
+  assert.deepEqual(JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8')), { name: 'app', somewhere: { cli_version: '0.38.15' } });
 });

@@ -1,3 +1,4 @@
+import { readProjectPin } from './project-pin.js';
 import { cliInvocation } from './cli-invocation.js';
 import { INSTALL_PROJECT_DEPENDENCIES, missingProjectDependencies } from './typecheck.js';
 import type { IncomingMessage, ServerResponse } from 'node:http';
@@ -117,7 +118,12 @@ export async function startFrontendDev(cwd: string, target: string, port = 8787,
   if (missingProjectDependencies(cwd).length) throw new Error(INSTALL_PROJECT_DEPENDENCIES);
   let vitePath: string;
   try { vitePath = createRequire(join(cwd, 'package.json')).resolve('vite'); }
-  catch { throw new Error(`Install this frontend’s Vite dependencies before running ${cliInvocation()} dev. Backend changes run through ${cliInvocation()} deploy or ${cliInvocation()} preview.`); }
+  catch {
+    if (readProjectPin(cwd)?.versionOnly) {
+      throw new Error('Install the local frontend tools: npm install --include=optional -D --save-exact vite@7.2.2');
+    }
+    throw new Error(`Install this frontend’s Vite dependencies before running ${cliInvocation()} dev. Backend changes run through ${cliInvocation()} deploy or ${cliInvocation()} preview.`);
+  }
   const vite = await import(pathToFileURL(vitePath).href) as ViteModule;
   const localOrigin = `http://localhost:${port}`;
   const proxy = frontendProxy(origin, localOrigin);

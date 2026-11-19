@@ -29,7 +29,7 @@ interface CronCreateOptions extends ProjectOptions {
   timezone?: string;
 }
 
-interface CronUpdateOptions {
+interface CronUpdateOptions extends ProjectOptions {
   schedule?: string;
   timezone?: string;
   handler?: string;
@@ -37,7 +37,6 @@ interface CronUpdateOptions {
   payload?: string;
   enable?: boolean;
   disable?: boolean;
-  json?: boolean;
 }
 
 interface CronRow extends Record<string, unknown> {
@@ -373,7 +372,7 @@ async function findNamedCronRow(target: string, explicit: string | undefined, si
   return { ...matches[0], cron_id: id };
 }
 
-async function resolveCronRunId(target: string, explicit: string | undefined): Promise<string> {
+async function resolveCronId(target: string, explicit: string | undefined): Promise<string> {
   if (target.startsWith('cron_')) return target;
   return (await findNamedCronRow(target, explicit)).cron_id;
 }
@@ -569,7 +568,7 @@ export function registerCron(program: Command): void {
         if (opts.timeout !== undefined && !opts.wait) {
           throw new Error('USAGE_ERROR: --timeout only applies with --wait.');
         }
-        const cronId = await resolveCronRunId(target, opts.project);
+        const cronId = await resolveCronId(target, opts.project);
         if (opts.preview) {
           await runCronInPreview(cronId, opts, timeoutSeconds);
           return;
@@ -725,8 +724,9 @@ export function registerCron(program: Command): void {
     });
 
   cron
-    .command('update <cron-id>')
+    .command('update <cron-id-or-name>')
     .description('Update a scheduled trigger')
+    .option('-p, --project <project>', 'Project slug or ID used to resolve a task name; defaults to the linked project')
     .option('--schedule <expression>', "New 5-field cron expression, read in the trigger's stored time zone (shown by cron list) unless --timezone changes it")
     .option('--timezone <iana>', 'New IANA time zone the schedule is read in, e.g. America/Los_Angeles; omit to keep the stored zone')
     .option('--handler <path-or-url>', 'New project-relative /api path or https URL')
@@ -735,11 +735,10 @@ export function registerCron(program: Command): void {
     .option('--enable', 'Resume future runs')
     .option('--disable', 'Pause future runs')
     .option('--json', 'Print the complete response as JSON')
-    .action(async (cronId: string, opts: CronUpdateOptions) => {
+    .action(async (target: string, opts: CronUpdateOptions) => {
       try {
         if (opts.enable && opts.disable) throw new Error('Pass --enable or --disable, not both.');
         const args = compactRecord([
-          ['cron_id', cronId],
           ['schedule', opts.schedule],
           ['timezone', opts.timezone],
           ['handler', opts.handler],
@@ -747,24 +746,32 @@ export function registerCron(program: Command): void {
           ['payload', parsePayload(opts.payload)],
           ['enabled', opts.enable ? true : opts.disable ? false : undefined],
         ]);
-        if (Object.keys(args).length === 1) {
+        if (Object.keys(args).length === 0) {
           throw new Error('No update supplied. Pass a field such as --schedule, --timezone, --handler, --enable, or --disable.');
         }
-        await runCronTool('cron_update', args, opts.json, (value) => printCronMutation('Scheduled trigger updated', value));
+        const cronId = await resolveCronId(target, opts.project);
+        await runCronTool('cron_update', { cron_id: cronId, ...args }, opts.json, (value) => printCronMutation('Scheduled trigger updated', value));
       } catch (err) {
-        error(err instanceof Error ? err.message : String(err), err);
-        process.exitCode = 1;
+        const { code, message, extra } = platformErrorParts(err);
+        printTypedCronError(code, message, opts.json, extra);
       }
     });
 
   cron
-    .command('delete <cron-id>')
+    .command('delete <cron-id-or-name>')
     .alias('rm')
     .description('Delete a scheduled trigger')
+    .option('-p, --project <project>', 'Project slug or ID used to resolve a task name; defaults to the linked project')
     .option('--json', 'Print the complete response as JSON')
-    .action(async (cronId: string, opts: { json?: boolean }) => {
-      await runCronTool('cron_delete', { cron_id: cronId }, opts.json, (value) => {
-        printCronMutation('Scheduled trigger deleted', value);
-      });
+    .action(async (target: string, opts: ProjectOptions) => {
+      try {
+        const cronId = await resolveCronId(target, opts.project);
+        await runCronTool('cron_delete', { cron_id: cronId }, opts.json, (value) => {
+          printCronMutation('Scheduled trigger deleted', value);
+        });
+      } catch (err) {
+        const { code, message, extra } = platformErrorParts(err);
+        printTypedCronError(code, message, opts.json, extra);
+      }
     });
 }

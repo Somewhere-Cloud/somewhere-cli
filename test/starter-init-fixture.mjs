@@ -7,7 +7,7 @@ import { CLI_PACKAGE_VERSION } from './local-cli-pack.mjs';
 let bin;
 
 // These tests cover init and project linking. The separate starter build tests
-// install the real dependencies and the local CLI tarball.
+// install the real app dependencies.
 export function starterInstallPath() {
   if (!bin) {
     bin = mkdtempSync(join(tmpdir(), 'sw-starter-install-'));
@@ -16,9 +16,10 @@ export function starterInstallPath() {
     writeFileSync(script, `
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
-assert.deepEqual(process.argv.slice(2), ['install', '--no-audit', '--no-fund']);
 const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
-assert.equal(pkg.devDependencies['@somewhere-cloud/cli'], ${JSON.stringify(CLI_PACKAGE_VERSION)});
+assert.deepEqual(process.argv.slice(2), ['install', '--no-audit', '--no-fund', '--omit=optional']);
+assert.equal(pkg.somewhere.cli_version, ${JSON.stringify(CLI_PACKAGE_VERSION)});
+assert.equal(pkg.devDependencies['@somewhere-cloud/cli'], undefined);
 `);
     if (process.platform === 'win32') {
       writeFileSync(join(bin, 'npm.cmd'), '@node "%~dp0install.cjs" %*\r\n');

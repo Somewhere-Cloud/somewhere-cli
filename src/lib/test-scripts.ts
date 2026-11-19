@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, wri
 import { describeReport, TEST_COMMAND, type ReportCheck } from './test-report.js';
 import { dirname, join, relative, resolve } from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
-import { testDependencyError } from './test-run.js';
+import { testDependencyError, testImportEnv } from './test-run.js';
 import { cliConfigDir } from './config.js';
 
 // `somewhere test` for a project with no tests/**/*.spec.ts: run each tests/*.mjs and tests/*.cjs script (an
@@ -78,6 +78,7 @@ export function failureReason(output: string): string | null {
 
 /** Run each script once, streaming its output, and return one result per script. */
 export async function runScripts(root: string, scripts: string[], extraArgs: string[], env: NodeJS.ProcessEnv = scriptBrowserEnv(root)): Promise<ScriptResult[]> {
+  env = testImportEnv(root, env);
   const results: ScriptResult[] = [];
   for (const script of scripts) {
     if (!existsSync(join(root, script))) { results.push({ script, ok: false, exitCode: 1, ms: 0, reason: 'no such file' }); continue; }

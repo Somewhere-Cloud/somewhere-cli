@@ -60,20 +60,31 @@ import { loadProjectConfig } from './lib/config.js';
 import { noteLastRunCommand, recordLastRun, removeStaleRunRecord } from './lib/last-run.js';
 import { recoverClaimHandoff } from './lib/claim-handoff.js';
 import { helpSummary } from './lib/help-summary.js';
-import { decidePin, PINNED_CHILD_ENV } from './lib/project-pin.js';
+import { decidePin, pinnedNpx, PINNED_CHILD_ENV } from './lib/project-pin.js';
 import { CLI_VERSION } from './lib/version.js';
 
 export async function runCli(): Promise<void> {
-  // A project pinned to another CLI version says so in one line, and a pinned
-  // version installed in its node_modules runs the command.
+  // Run a project's pinned CLI from its dependencies or npm's cache.
   const pinned = decidePin(process.cwd(), CLI_VERSION, process.argv, process.env);
   if (pinned.notice) process.stderr.write(pinned.notice + '\n');
-  if (pinned.delegate) {
-    const child = spawnSync(process.execPath, [pinned.delegate, ...process.argv.slice(2)], {
+  const invocation = pinned.delegate
+    ? { command: process.execPath, args: [pinned.delegate] }
+    : pinned.delegateVersion && pinnedNpx(pinned.delegateVersion);
+  if (!invocation && pinned.delegateVersion) {
+    process.stderr.write(`Could not find npx. Run npx -y @somewhere-cloud/cli@${pinned.delegateVersion} with this command.\n`);
+    process.exitCode = 1;
+    return;
+  }
+  if (invocation) {
+    const child = spawnSync(invocation.command, [...invocation.args, ...process.argv.slice(2)], {
       stdio: 'inherit',
       env: { ...process.env, [PINNED_CHILD_ENV]: '1' },
     });
-    if (child.error) throw child.error;
+    if (child.error) {
+      process.stderr.write(`Could not start the pinned CLI: ${child.error.message}\n`);
+      process.exitCode = 1;
+      return;
+    }
     if (child.signal) process.kill(process.pid, child.signal);
     process.exit(child.status ?? 1);
   }

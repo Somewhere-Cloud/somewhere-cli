@@ -282,3 +282,57 @@ test('cron update forwards --timezone verbatim and omits it otherwise', async ()
   assert.deepEqual(calls[0], { cron_id: 'cron_la', timezone: 'Europe/Paris' });
   assert.deepEqual(calls[1], { cron_id: 'cron_la', schedule: '0 8 * * *' });
 });
+
+
+test('cron update and delete resolve names to IDs in the chosen project', async () => {
+  const home = credentialHome('sw-cron-mutation-name-');
+  const cwd = mkdtempSync(join(tmpdir(), 'sw-cron-mutation-app-'));
+  writeFileSync(join(cwd, '.somewhere.json'), JSON.stringify({ project_id: 'proj_linked', name: 'Linked' }));
+  const calls = [];
+  await withFixture(params => {
+    calls.push(params);
+    if (params.name === 'cron_list') {
+      const project = params.arguments.project_id;
+      return toolSuccess([{ cron_id: project === 'proj_linked' ? 'cron_linked' : 'cron_explicit', name: 'tick' }]);
+    }
+    return toolSuccess({ cron_id: params.arguments.cron_id });
+  }, async (url) => {
+    const env = { HOME: home, USERPROFILE: home, SOMEWHERE_MCP_URL: url };
+    const update = await run(['cron', 'update', 'tick', '--disable', '--json'], env, cwd);
+    assert.equal(update.status, 0, update.stderr);
+    assert.equal(JSON.parse(update.stdout).data.cron_id, 'cron_linked');
+    const remove = await run(['cron', 'delete', 'tick', '--project', 'other', '--json'], env, cwd);
+    assert.equal(remove.status, 0, remove.stderr);
+    assert.equal(JSON.parse(remove.stdout).data.cron_id, 'cron_explicit');
+    const byId = await run(['cron', 'rm', 'cron_direct', '--json'], env, cwd);
+    assert.equal(byId.status, 0, byId.stderr);
+    const noUpdate = await run(['cron', 'update', 'tick', '--json'], env, cwd);
+    assert.equal(noUpdate.status, 1, noUpdate.stdout);
+  });
+  assert.deepEqual(calls, [
+    { name: 'cron_list', arguments: { project_id: 'proj_linked' } },
+    { name: 'cron_update', arguments: { cron_id: 'cron_linked', enabled: false } },
+    { name: 'cron_list', arguments: { project_id: 'other' } },
+    { name: 'cron_delete', arguments: { cron_id: 'cron_explicit' } },
+    { name: 'cron_delete', arguments: { cron_id: 'cron_direct' } },
+  ]);
+});
+
+test('cron mutations refuse missing and duplicate names without sending a write', async () => {
+  const home = credentialHome('sw-cron-mutation-ambiguous-');
+  const cwd = mkdtempSync(join(tmpdir(), 'sw-cron-mutation-unlinked-'));
+  const calls = [];
+  await withFixture(params => {
+    calls.push(params.name);
+    return toolSuccess([{ cron_id: 'cron_first', name: 'tick' }, { cron_id: 'cron_second', name: 'tick' }]);
+  }, async (url) => {
+    const env = { HOME: home, USERPROFILE: home, SOMEWHERE_MCP_URL: url };
+    const ambiguous = await run(['cron', 'delete', 'tick', '--json'], env, cwd);
+    assert.equal(ambiguous.status, 1, ambiguous.stdout);
+    assert.equal(JSON.parse(ambiguous.stdout).error, 'CRON_NAME_AMBIGUOUS');
+    const missing = await run(['cron', 'update', 'no-such-job', '--disable', '--json'], env, cwd);
+    assert.equal(missing.status, 1, missing.stdout);
+    assert.equal(JSON.parse(missing.stdout).error, 'CRON_NOT_FOUND');
+  });
+  assert.deepEqual(calls, ['cron_list', 'cron_list']);
+});

@@ -1,3 +1,7 @@
+## 0.38.132
+
+- `somewhere open --dashboard` opens the dashboard at https://somewhere.cloud/app, and the sign-up link the CLI prints is https://somewhere.cloud/app/sign-in?intent=signup.
+
 ## 0.38.131
 
 - The claim link is called a claim link everywhere the CLI prints it (`somewhere claim` prints `Claim link:`). New claim links read `https://somewhere.cloud/claim/<code>`.

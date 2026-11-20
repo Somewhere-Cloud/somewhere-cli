@@ -609,7 +609,8 @@ export function registerDeploy(program: Command) {
     .addHelpText('after', `\n${FIRST_CLI_PERMISSION}\n\nFunctions missing from the directory: a full \`${cliInvocation()} deploy\` REMOVES deployed functions that\n`
       + 'are not in this directory (each one is named in the output). `--scope functions` keeps them unless\n'
       + `--replace-functions. \`${cliInvocation()} promote\` is the opposite: it keeps them unless --prune.\n`
-      + '\nNo project yet? Signed in, deploy never creates one on its own:\n'
+      + '\nNo project yet? Signed out, deploy creates a temporary app and prints its claim link; no other step.\n'
+      + 'Signed in, deploy never creates one on its own:\n'
       + `  ${cliInvocation()} init --bare --name <name>   create a project in your account and link this folder\n`
       + `  ${cliInvocation()} deploy                       then deploy it\n`
       + `Existing project: \`${cliInvocation()} init --link --project <ref>\` (see \`${cliInvocation()} projects\`), or \`--project <ref>\` here.\n`)

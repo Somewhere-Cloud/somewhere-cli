@@ -19,7 +19,7 @@ npx @somewhere-cloud/cli deploy
 ```
 
 From a project folder, that single command deploys anonymously when no account
-is configured and prints the live URL, claim URL, and expiry.
+is configured and prints the live URL, claim link, and expiry.
 
 The package installs the `somewhere` command and the short alias `sw`. It also
 installs `cli`, the name `npx @somewhere-cloud/cli` resolves to; use

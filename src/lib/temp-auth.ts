@@ -25,7 +25,7 @@ export interface TempAccount {
   scopes: string[];
   expires_at: string;
   ttl_seconds: number;
-  claim_token: string;
+  claim_code: string;
   claim_url: string;
 }
 
@@ -106,7 +106,7 @@ export async function mintTempAccount(
     scopes: (data.scopes as string[] | undefined) ?? [],
     expires_at: data.expires_at as string,
     ttl_seconds: data.ttl_seconds as number,
-    claim_token: data.claim_token as string,
+    claim_code: data.claim_code as string,
     claim_url: data.claim_url as string,
   };
 }

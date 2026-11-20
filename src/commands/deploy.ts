@@ -804,7 +804,7 @@ export function registerDeploy(program: Command) {
       // saved credential should get a live app from `somewhere deploy`, not a
       // successful no-op that asks them to discover and rerun a hidden flag.
       // Stored temporary sessions follow the same path so every redeploy keeps
-      // relaying its claim URL and expiry without requiring --temporary again.
+      // relaying its claim link and expiry without requiring --temporary again.
       const useTemporary = Boolean(
         opts.temporary || !storedConfig?.token || storedConfig.temporary,
       );
@@ -1420,7 +1420,7 @@ export function registerDeploy(program: Command) {
           return runDeployTests({ client, root: deployStateEntry?.dir ?? targetDir, projectId: result.project_id ?? projectId ?? undefined, json: Boolean(opts.json), release: release ?? undefined, renderPending: postLive.kind === 'timeout', prepared: prepareDeployTests(() => prepareRunner(deployStateEntry?.dir ?? targetDir)) });
         };
         const verificationNextSteps = besideRealLogin ? [
-          'Inspect the live URL; keep this project and its claim URL.',
+          'Inspect the live URL; keep this project and its claim link.',
           `After claiming and connecting this project, run: ${cliInvocation()} verify --project <PROJECT>`,
         ] : [
           `Read the live release: ${cliInvocation()} status --project <PROJECT>`,

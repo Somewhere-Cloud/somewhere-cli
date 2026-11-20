@@ -42,7 +42,7 @@ const server = createServer((req, res) => {
       const expires = new Date(Date.now() + 3 * 3600e3).toISOString();
       json(200, { ok: true, data: { user: { id: 'u_tmp', email: 'tmp@anon.invalid', is_anonymous: true, is_temporary: true, expires_at: expires },
         access_token: 'smt_tmp_fixture', key: 'smt_tmp_fixture', key_prefix: 'smt_tmp', key_id: 'key_tmp', scopes: ['projects', 'deploy'],
-        expires_at: expires, ttl_seconds: 10800, claim_token: 'swtc_fixture', claim_url: 'https://somewhere.cloud/claim?token=swtc_fixture' } });
+        expires_at: expires, ttl_seconds: 10800, claim_code: 'swtc_fixture', claim_url: 'https://somewhere.cloud/claim/swtc_fixture' } });
     });
     if (req.method === 'POST' && path === '/v1/projects') return json(200, { ok: true, data: { id: 'proj_anon', name: 'app-x1', subdomain: 'app-x1', slug: 'app-x1' } });
     if (path === '/v1/auth/temp-handoff/register') return json(201, { ok: true, data: { handoff_id: 'cch_fixture', expires_at: new Date(Date.now() + 3 * 3600e3).toISOString() } });
@@ -78,7 +78,7 @@ test('first anonymous deploy against the real-shaped routes goes live; no creden
   assert.equal(result.status, 0, result.out);
   const out = JSON.parse(result.stdout);
   assert.equal(out.url, 'https://app-x1.somewhere.site');
-  assert.equal(out.claim_url, 'https://somewhere.cloud/claim?token=swtc_fixture');
+  assert.equal(out.claim_url, 'https://somewhere.cloud/claim/swtc_fixture');
   assert.deepEqual(publicCalls().map((r) => [r.method, r.path, r.auth]), [['POST', '/v1/auth/temp-create', null]]);
   assert.equal(requests.find((r) => r.path === '/v1/deploy').auth, 'Bearer smt_tmp_fixture');
   assert.ok(result.savedSession);

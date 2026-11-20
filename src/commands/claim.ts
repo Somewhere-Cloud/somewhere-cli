@@ -3,13 +3,13 @@ import { Command } from 'commander';
 import { loadConfig, temporaryConfigExpired } from '../lib/config.js';
 import { error, info, printJson, teal } from '../lib/output.js';
 
-/** `somewhere claim`: the claim URL of this computer's temporary workspace,
+/** `somewhere claim`: the claim link of this computer's temporary workspace,
  *  for a signed-out person who deployed and wants to keep the app
  *. Reads the local credential only; nothing is sent. */
 export function registerClaim(program: Command) {
   program
     .command('claim')
-    .description("Print the claim URL for this computer's temporary apps")
+    .description("Print the claim link for this computer's temporary apps")
     .option('--json', 'Print { claim_url, expires_at } as JSON')
     .action((opts: { json?: boolean }) => {
       const config = loadConfig();
@@ -31,7 +31,7 @@ export function registerClaim(program: Command) {
         error(`This computer's temporary workspace expired at ${config.temp_expires_at}. Unclaimed apps are gone. Run \`${cliInvocation()} deploy\` to start a new one.`);
         process.exit(1);
       }
-      info(`Claim URL: ${teal(config.claim_url)}`);
+      info(`Claim link: ${teal(config.claim_url)}`);
       if (config.temp_expires_at) info(`Expires at: ${config.temp_expires_at} (UTC)`);
       info('Open it in a browser and sign in or create an account to keep these apps.');
       if (config.claim_handoff?.handoff_id) {

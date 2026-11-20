@@ -163,8 +163,8 @@ async function withStubTempPlatform(fn) {
             scopes: ['projects', 'deploy', 'promote', 'db', 'fs', 'logs', 'smoke', 'browser'],
             expires_at: new Date(Date.now() + 10_800_000).toISOString(),
             ttl_seconds: 10800,
-            claim_token: 'swtc_temp_out',
-            claim_url: 'https://somewhere.cloud/claim?token=swtc_temp_out',
+            claim_code: 'swtc_temp_out',
+            claim_url: 'https://somewhere.cloud/claim/swtc_temp_out',
           },
         });
         return;
@@ -228,7 +228,7 @@ test('first anonymous deploy ends with live URL, expiry and one claim instructio
     const last = result.stdout.trimEnd().split('\n').slice(-3);
     assert.match(last[0], /^✓ Live URL: https:\/\//);
     assert.match(last[1], /^  Temporary app\. Expires in about 3 hours\./);
-    assert.equal(last[2], '  Open https://somewhere.cloud/claim?token=swtc_temp_out and select "Save and connect agent" to work on the saved apps and create new ones. You can choose to include your other apps.');
+    assert.equal(last[2], '  Open https://somewhere.cloud/claim/swtc_temp_out and select "Save and connect agent" to work on the saved apps and create new ones. You can choose to include your other apps.');
     assert.doesNotMatch(result.stdout + result.stderr, /no privacy page|table "notes" is created|somewhere (claim|browser|preview)/);
     assert.match(result.stderr, /A real warning/);
 

@@ -56,7 +56,7 @@ test('mintTempAccount solves an inline challenge only after the server asks and 
       : {
         access_token: 'smt_fallback_should_not_be_used', key: 'smt_temp_123', key_prefix: 'smt_temp', key_id: 'key_1',
         scopes: ['projects', 'deploy'], expires_at: '2026-07-02T16:00:00.000Z', ttl_seconds: 10800,
-        claim_token: 'swtc_xyz', claim_url: 'https://somewhere.cloud/claim?token=swtc_xyz',
+        claim_code: 'swtc_xyz', claim_url: 'https://somewhere.cloud/claim/swtc_xyz',
       },
   });
   let asked = 0;
@@ -68,13 +68,13 @@ test('mintTempAccount solves an inline challenge only after the server asks and 
   ]);
   assert.ok(client.calls.every((c) => c.opts?.refresh === false));
   assert.equal(account.key, 'smt_temp_123');
-  assert.equal(account.claim_url, 'https://somewhere.cloud/claim?token=swtc_xyz');
+  assert.equal(account.claim_url, 'https://somewhere.cloud/claim/swtc_xyz');
   assert.equal(account.ttl_seconds, 10800);
 });
 
 test('mintTempAccount — falls back to access_token when key is absent', async () => {
   const client = fakeClient({
-    '/auth/temp-create': { access_token: 'smt_only_access_token', scopes: [], expires_at: 'x', ttl_seconds: 10800, claim_token: 'swtc_1', claim_url: 'https://somewhere.cloud/claim?token=swtc_1' },
+    '/auth/temp-create': { access_token: 'smt_only_access_token', scopes: [], expires_at: 'x', ttl_seconds: 10800, claim_code: 'swtc_1', claim_url: 'https://somewhere.cloud/claim/swtc_1' },
   });
   assert.equal((await mintTempAccount(client, () => assert.fail('no proof requested'))).key, 'smt_only_access_token');
   assert.deepEqual(client.calls.map(({method,path,body}) => [method,path,body]), [['POST','/auth/temp-create',{}]]);

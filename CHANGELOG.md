@@ -1,3 +1,7 @@
+## 0.38.131
+
+- The claim link is called a claim link everywhere the CLI prints it (`somewhere claim` prints `Claim link:`). New claim links read `https://somewhere.cloud/claim/<code>`.
+
 ## 0.38.130
 
 - Signed out, a command that needs an account also says that `somewhere deploy` puts a folder live without one, with a claim link. `somewhere deploy --help` says the same under "No project yet?".

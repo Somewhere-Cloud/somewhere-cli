@@ -45,9 +45,11 @@ try {
 ${privateData ? `  await app.check('a note stays private to its owner', async (at) => {
     const secret = 'private ' + crypto.randomUUID();
     at('Create the first person’s note');
-    await ana.page.getByLabel('Title').fill(secret);
-    await ana.page.getByRole('button', { name: 'Add note' }).click();
-    await ana.page.getByRole('heading', { name: secret }).waitFor();
+    // Controls are found by data-testid, not their words: keep note-title, note-save and note-item
+    // on the form field, the save button and each listed note when you rename or restyle them.
+    await ana.page.getByTestId('note-title').fill(secret);
+    await ana.page.getByTestId('note-save').click();
+    await ana.page.getByTestId('note-item').filter({ hasText: secret }).waitFor();
     const seen = captureResponses(ben.page);
     try {
       await ben.page.reload();

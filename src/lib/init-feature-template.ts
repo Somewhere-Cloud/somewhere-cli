@@ -2,6 +2,7 @@ import { FIRST_CLI_PERMISSION } from './first-cli-permission.js';
 import { starterTests } from './init-test-template.js';
 import { buildScaffoldGitignore } from './scaffold.js';
 import { CLI_VERSION } from './version.js';
+import { TYPECHECK_TYPESCRIPT_VERSION } from './typecheck-version.js';
 import { ASSET_TYPES_FILE } from './init-asset-types.js';
 import { PROJECT_LINK_README, starterNameSlug, type InitScaffoldFile } from './init-scaffold.js';
 import type { InitSelection } from './init-features.js';
@@ -34,7 +35,8 @@ const packageJson = (appName: string) => `{
   },
   "devDependencies": {
     "@types/react": "19.2.2",
-    "@types/react-dom": "19.2.2"
+    "@types/react-dom": "19.2.2",
+    "typescript": "${TYPECHECK_TYPESCRIPT_VERSION}"
   },
   "allowScripts": {
     "esbuild": true
@@ -2163,7 +2165,7 @@ export function NotesBoard({ notes }: { notes: NotesController }) {
         <h1 id="note-form-title" className="panel__title">{editing ? 'Edit note' : 'New note'}</h1>
         <div className="field">
           <label htmlFor="note-title">Title</label>
-          <input id="note-title" name="title" required value={draft.title}
+          <input id="note-title" name="title" required value={draft.title} data-testid="note-title"
             aria-invalid={draftErrors.title ? true : undefined}
             aria-describedby={draftErrors.title ? 'note-title-error' : undefined}
             onChange={(event) => notes.setDraft({ ...draft, title: event.target.value })} />
@@ -2178,7 +2180,7 @@ export function NotesBoard({ notes }: { notes: NotesController }) {
           {draftErrors.body ? <p id="note-body-error" className="error">{draftErrors.body}</p> : null}
         </div>
         <div className="actions">
-          <button type="submit" className="button" disabled={!notes.canSave} aria-busy={notes.saving}>
+          <button type="submit" className="button" disabled={!notes.canSave} aria-busy={notes.saving} data-testid="note-save">
             {notes.saving ? 'Saving…' : notes.retryingCreate ? 'Retry original save' : editing ? 'Save changes' : 'Add note'}
           </button>
           {editing ? <button type="button" className="button button--quiet" onClick={notes.cancelEdit} disabled={notes.saving}>Cancel</button> : null}
@@ -2200,7 +2202,7 @@ export function NotesBoard({ notes }: { notes: NotesController }) {
         {notes.status === 'ready' && notes.notes.length > 0 ? (
           <ul className="note-list">
             {notes.notes.map((note) => (
-              <li key={note.id} className="note" aria-current={note.id === notes.editingId ? 'true' : undefined}>
+              <li key={note.id} className="note" aria-current={note.id === notes.editingId ? 'true' : undefined} data-testid="note-item">
                 <div className="note__text">
                   <h3 className="note__title"><a {...linkTo('/things/' + note.id)}>{note.title}</a></h3>
                   {note.body ? <p className="note__body">{note.body}</p> : null}
@@ -2340,7 +2342,7 @@ export function NotesBoard({ notes }: { notes: NotesController }) {
       <form onSubmit={onSubmit} noValidate>
         <p>
           <label htmlFor="note-title">Title</label><br />
-          <input id="note-title" name="title" required value={draft.title} aria-invalid={draftErrors.title ? true : undefined}
+          <input id="note-title" name="title" required value={draft.title} data-testid="note-title" aria-invalid={draftErrors.title ? true : undefined}
             onChange={(event) => notes.setDraft({ ...draft, title: event.target.value })} />
           {draftErrors.title ? <span role="alert"> {draftErrors.title}</span> : null}
         </p>
@@ -2350,7 +2352,7 @@ export function NotesBoard({ notes }: { notes: NotesController }) {
             onChange={(event) => notes.setDraft({ ...draft, body: event.target.value })} />
           {draftErrors.body ? <span role="alert"> {draftErrors.body}</span> : null}
         </p>
-        <button type="submit" disabled={!notes.canSave} aria-busy={notes.saving}>
+        <button type="submit" disabled={!notes.canSave} aria-busy={notes.saving} data-testid="note-save">
           {notes.saving ? 'Saving…' : notes.retryingCreate ? 'Retry original save' : editing ? 'Save changes' : 'Add note'}
         </button>{' '}
         {editing ? <button type="button" onClick={notes.cancelEdit}>Cancel</button> : null}
@@ -2362,7 +2364,7 @@ export function NotesBoard({ notes }: { notes: NotesController }) {
       {notes.status === 'ready' && notes.notes.length === 0 ? <EmptyState title="No notes yet." /> : null}
       <ul>
         {notes.notes.map((note) => (
-          <li key={note.id}>
+          <li key={note.id} data-testid="note-item">
             <strong><a {...linkTo('/things/' + note.id)}>{note.title}</a></strong> {note.body}{' '}
             <button type="button" onClick={() => notes.startEdit(note)} aria-label={'Edit ' + note.title}>Edit</button>{' '}
             <button type="button" onClick={() => void notes.remove(note)} disabled={notes.removingId === note.id} aria-label={'Delete ' + note.title}>Delete</button>

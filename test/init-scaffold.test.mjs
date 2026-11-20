@@ -131,6 +131,8 @@ test('minimal starter is a small typed frontend, function, and schema', () => {
   assert.deepEqual(pkg.devDependencies, {
     '@types/react': '19.2.2',
     '@types/react-dom': '19.2.2',
+    // Installed by init, so a deploy's type check never fetches TypeScript with npx.
+    typescript: '5.9.3',
   });
   assert.deepEqual(pkg.somewhere, { cli_version: CLI_PACKAGE_VERSION, project_name: 'somewhere-starter' });
   assert.equal(
@@ -249,6 +251,26 @@ export const views = [<Logo className="logo" />, <Icon width={16} />];
       if (withTypes) assert.deepEqual(probeErrors, [], `${name}: ${result.raw}`);
       else assert.ok(probeErrors.some((e) => e.code === 'TS2307'), `${name}: without the declarations the imports are refused`);
     }
+  }
+});
+
+test('the notes check finds controls by test ids the starter carries, not by their words', () => {
+  for (const ui of ['styled', 'headless']) {
+    const dir = tempDir();
+    writeInitScaffold(dir, createFeatureTemplate(
+      { requested: ['auth', 'private-data'], added: [], modules: ['auth', 'private-data'], ui },
+      { appName: 'Starter' },
+    ));
+    const script = readFileSync(join(dir, 'tests/app-check.mjs'), 'utf8');
+    const board = readFileSync(join(dir, 'src/ui/NotesBoard.tsx'), 'utf8');
+    for (const id of ['note-title', 'note-save', 'note-item']) {
+      assert.match(script, new RegExp(`getByTestId\\('${id}'\\)`), `${ui}: script uses ${id}`);
+      assert.match(board, new RegExp(`data-testid="${id}"`), `${ui}: board carries ${id}`);
+    }
+    assert.doesNotMatch(script, /getByLabel\('Title'\)|name: 'Add note'|getByRole\('heading'/, `${ui}: no visible words`);
+    assert.match(script, /keep note-title, note-save and note-item/);
+    // Renaming the button's words leaves the check's locators valid.
+    assert.ok(board.replace(/'Add note'/, "'Add entry'").includes('data-testid="note-save"'));
   }
 });
 

@@ -6,8 +6,8 @@ import { spawn, spawnSync } from 'node:child_process';
 import { testDependencyError, testImportEnv } from './test-run.js';
 import { cliConfigDir } from './config.js';
 
-// `somewhere test` for a project with no tests/**/*.spec.ts: run each tests/*.mjs and tests/*.cjs script (an
-// ordinary Playwright script, such as the starter's tests/app-check.mjs) with node, one at a time, with the
+// `somewhere test <file>` (and --failed) for a project with no tests/**/*.spec.ts: run each named tests/*.mjs or
+// tests/*.cjs script (an ordinary Playwright script) with node, one at a time, with the
 // project's Playwright and a browser it can launch, and report each script's result. A script is its own test:
 // its exit code is the verdict.
 
@@ -123,7 +123,7 @@ export async function runScripts(root: string, scripts: string[], extraArgs: str
 /** The result for the whole run: every check that ran, failures first, one line each, then one summary line.
  *  A script that reports no checks (an ordinary script without openAppTest) counts as one check named by its file. */
 export function describeScriptResults(results: ScriptResult[], options: { verbose?: boolean } = {}): string[] {
-  if (!results.length) return [`No tests found: add a Playwright script as tests/<name>.mjs or .cjs (somewhere init writes tests/app-check.mjs), then run ${TEST_COMMAND}.`];
+  if (!results.length) return [`No tests found: add a Playwright script as tests/<name>.mjs or .cjs, then run it with ${TEST_COMMAND} tests/<name>.mjs.`];
   const lines = describeReport(results.map((result) => {
     const checks = result.checks ?? [{ name: result.script, ok: result.ok, ...(result.ok ? {} : { error: result.reason ?? `exit ${result.exitCode}` }) }];
     // A script that failed after reporting only passes (it crashed after finish) still fails, by its own name;

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.38.136
+
+- `somewhere test` runs the live release's checks in Somewhere's browser: the saved `checks/*.json` journeys, the stranger and signed-out access probes and a page crawl. It prints one PASS or FAIL line per check, failures first, then the summary sentence, and exits 1 unless every check passed (also when the checks have not finished within 150 s). `--json` prints the record. Nothing is installed locally.
+- `somewhere test <file>` still runs a `tests/*.mjs` or `*.cjs` script, and a project with `tests/**/*.spec.ts` (or `--preview`) still runs its Playwright specs.
+- New starters save their journey as `checks/add-a-note.json` (signed in, desktop and phone) instead of `tests/app-check.mjs`, and the starter guide says how to save more. `somewhere deploy` publishes `checks/`.
+- After a live deploy, the CLI waits up to 120 s (was 45 s) for the access check before printing `Checks: ...`.
+
 ## 0.38.135
 
 - somewhere typecheck knows sw.mail and sw.mail.project in functions: list, get, attachment, search, send and addresses, with their result types.

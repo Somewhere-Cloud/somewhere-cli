@@ -4,8 +4,8 @@ import type { ApiClient } from './client.js';
 /**
  * After a live deploy the platform runs its access check in the background and
  * answers the deploy with checks: { status: 'running', read: 'GET /v1/deploy/log?…' }.
- * The CLI reads that log every 3 s for up to 120 s and prints the check's
- * sentence. The result never changes the deploy's exit code.
+ * A deploy never waits on it (it warns, never blocks; architect 2026-11-20): it prints one line saying the check is
+ * running and how to read it. `somewhere test` reads the stored result, waiting only while that run is still going.
  */
 export interface CheckLine { name: string; as?: string; method?: string; path?: string; status?: number; expected?: string; pass: boolean }
 
@@ -23,7 +23,6 @@ export interface DeployChecks {
   read?: string;
 }
 
-export const DEPLOY_CHECKS_WAIT_MS = 120_000;
 export const DEPLOY_CHECKS_POLL_MS = 3_000;
 
 /** The API path (without /v1) and query the platform named in checks.read. */
@@ -46,7 +45,7 @@ export async function awaitDeployChecks(
   const now = opts.now ?? Date.now;
   const sleep = opts.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
   const pollMs = opts.pollMs ?? DEPLOY_CHECKS_POLL_MS;
-  const deadline = now() + (opts.waitMs ?? DEPLOY_CHECKS_WAIT_MS);
+  const deadline = now() + (opts.waitMs ?? TEST_CHECKS_WAIT_MS);
   let last: AccessCheck | null = null;
   for (;;) {
     try {
@@ -62,23 +61,25 @@ export async function awaitDeployChecks(
   }
 }
 
-export const DEPLOY_CHECKS_STILL_RUNNING = `Checks: still running; \`${cliInvocation()} call project_deploy_log '{}'\` shows the result.`;
-
-/** The line a deploy prints for its checks, or null when a settled check has no sentence. */
-export function formatDeployChecksLine(check: AccessCheck | null): string | null {
-  if (!check || check.status === 'pending') return DEPLOY_CHECKS_STILL_RUNNING;
-  return check.sentence ? `Checks: ${check.sentence}` : null;
-}
+/** The one line a deploy prints; the deploy never waits for the check. */
+export const DEPLOY_CHECKS_RUNNING = `Checks: running in the background; \`${cliInvocation()} test\` shows the result.`;
 
 export const TEST_CHECKS_WAIT_MS = 150_000;
 
-/** `somewhere test`: run the after-deploy check now on the live release (POST /v1/deploy/checks), then read
- *  its record until it settles, up to 150 s. Null or pending means it had not finished. */
+/** `somewhere test`: the live release's stored check result (the run every deploy starts). While that run is still
+ *  going it waits for it, up to 150 s. With `again`, or when the release has no result yet, it starts a fresh run
+ *  (POST /v1/deploy/checks) and waits for that. Null or pending means it had not finished. */
 export async function runChecksNow(
   client: Pick<ApiClient, 'call'>,
   projectId: string,
-  opts: Parameters<typeof awaitDeployChecks>[2] = {},
+  opts: Parameters<typeof awaitDeployChecks>[2] & { again?: boolean } = {},
 ): Promise<AccessCheck | null> {
+  if (!opts.again) {
+    const read = `GET /v1/deploy/log?project_id=${encodeURIComponent(projectId)}`;
+    const stored = await awaitDeployChecks(client, { read }, { ...opts, waitMs: 0 });
+    if (stored && stored.status !== 'pending') return stored;
+    if (stored) return awaitDeployChecks(client, { read }, { waitMs: TEST_CHECKS_WAIT_MS, ...opts });
+  }
   const started = await client.call<{ status?: string; version?: number; read?: string }>('POST', '/deploy/checks', { project_id: projectId });
   return awaitDeployChecks(client, { read: started?.read }, { waitMs: TEST_CHECKS_WAIT_MS, ...opts });
 }

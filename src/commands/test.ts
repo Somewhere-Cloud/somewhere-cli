@@ -12,6 +12,7 @@ export function registerTest(program: Command): void {
     .description('Run the live release\'s checks now in Somewhere\'s browser: your saved checks/*.json journeys, the stranger and signed-out access probes and a page crawl (the same check that runs after every deploy). Exits 1 when one fails. With a file, runs that tests/*.mjs or *.cjs script; a project with tests/**/*.spec.ts runs its Playwright specs (--preview: this folder\'s open preview)')
     .option('--preview', 'Test this folder\'s open preview (its own users, data copy and captured mail), pinned to the version saved when the run starts. Production is never touched.')
     .option('--workers <count>', 'Parallel workers', '5')
+    .option('--again', 'Start a fresh run of the checks on the live release instead of reading the result of the last deploy\'s run')
     .option('--failed', 'Rerun what failed last time: each failed tests/*.mjs or *.cjs script, all its checks (specs: only the failed tests)')
     .option('--fail-fast', 'Stop app-check scripts at their first failed check')
     .option('--grep <name>', 'Filter test names (subset)')
@@ -20,7 +21,7 @@ export function registerTest(program: Command): void {
     .option('--json', 'Print structured results')
     .option('--verbose', 'Also print where the full result file is when everything passed')
     .addHelpText('after', '\nSave each journey you want re-checked after every deploy as checks/<plain-name>.json; the platform runs them in its browser after each deploy and `somewhere test` runs them now.\n')
-    .action(async (files: string[], opts: { workers: string; failed?: boolean; failFast?: boolean; grep?: string; url?: string; json?: boolean; phone?: boolean; preview?: boolean; verbose?: boolean }) => {
+    .action(async (files: string[], opts: { workers: string; again?: boolean; failed?: boolean; failFast?: boolean; grep?: string; url?: string; json?: boolean; phone?: boolean; preview?: boolean; verbose?: boolean }) => {
       markProcessStart('cli');
       mark('cli:action');
       if (opts.url) throw new Error('--url is unsupported: tests use the linked project canonical production origin only.');
@@ -32,7 +33,7 @@ export function registerTest(program: Command): void {
       if (!files.length && !opts.preview && !opts.failed && !hasSpecFiles(root)) {
         const unsupported = [opts.phone && '--phone', opts.grep && '--grep', opts.workers !== '5' && '--workers', opts.failFast && '--fail-fast'].filter(Boolean);
         if (unsupported.length) throw new Error(`${unsupported.join(', ')} apply to Playwright specs and scripts; the platform runs checks/*.json as saved.`);
-        const check = await runChecksNow(new ApiClient(getToken()), projectId);
+        const check = await runChecksNow(new ApiClient(getToken()), projectId, { again: opts.again === true });
         mark('cli:exit');
         if (opts.json) process.stdout.write(JSON.stringify(check, null, 2) + '\n');
         else process.stdout.write(formatChecksReport(check).join('\n') + '\n');

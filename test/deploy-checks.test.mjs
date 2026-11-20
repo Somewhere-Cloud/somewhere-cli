@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { awaitDeployChecks, checksExitCode, formatChecksReport, formatDeployChecksLine, parseChecksRead, runChecksNow, DEPLOY_CHECKS_STILL_RUNNING } from '../dist/lib/deploy-checks.js';
+import { awaitDeployChecks, checksExitCode, formatChecksReport, parseChecksRead, runChecksNow, DEPLOY_CHECKS_RUNNING } from '../dist/lib/deploy-checks.js';
 
 const checks = { status: 'running', read: 'GET /v1/deploy/log?project_id=p1&version=3' };
 
@@ -23,25 +23,17 @@ test('polls every 3 s until the access check settles and prints its sentence', a
   assert.equal(check.status, 'checked');
   assert.deepEqual(calls.map(x => x.at), [0, 3000, 6000]);
   assert.deepEqual(calls[0], { method: 'GET', path: '/deploy/log', query: { project_id: 'p1', version: '3' }, at: 0 });
-  assert.equal(formatDeployChecksLine(check), 'Checks: Only owners can read notes.');
 });
 
-test('stops at 120 s and says the check is still running', async () => {
+test('reading for somewhere test stops at 150 s; every read failing is the same as still running, never an error', async () => {
   const c = clock();
   let n = 0;
   const client = { call: async () => { n += 1; return { access_check: { status: 'pending', sentence: null } }; } };
   const check = await awaitDeployChecks(client, checks, c);
   assert.equal(check.status, 'pending');
-  assert.ok(c.now() <= 120_000 && n === 41, `${n} reads by ${c.now()} ms`);
-  assert.equal(formatDeployChecksLine(check), DEPLOY_CHECKS_STILL_RUNNING);
-  assert.match(DEPLOY_CHECKS_STILL_RUNNING, /^Checks: still running; .* shows the result\.$/);
-  // Every read failing is the same: still running, never an error.
+  assert.ok(c.now() <= 150_000 && n === 51, `${n} reads by ${c.now()} ms`);
   const failing = { call: async () => { throw new Error('down'); } };
-  assert.equal(formatDeployChecksLine(await awaitDeployChecks(failing, checks, clock())), DEPLOY_CHECKS_STILL_RUNNING);
-});
-
-test('an unavailable check prints its sentence too', () => {
-  assert.equal(formatDeployChecksLine({ status: 'unavailable', sentence: 'The access check could not run.' }), 'Checks: The access check could not run.');
+  assert.equal(await awaitDeployChecks(failing, checks, clock()), null);
 });
 
 // End to end: a deploy whose answer carries checks prints the sentence (or puts access_check in --json), exit 0.
@@ -54,7 +46,7 @@ import { fileURLToPath } from 'node:url';
 const distIndex = join(dirname(fileURLToPath(import.meta.url)), '..', 'dist', 'index.js');
 const PROJECT = 'aaaaaaaa-1111-4222-8333-666666666666';
 
-test('a deploy with checks reads the log and reports the access check without changing the exit code', async () => {
+test('a deploy with checks returns at once: one line saying the check is running, the read pointer in --json, no wait', async () => {
   const HOME = mkdtempSync(join(process.env.TMPDIR, 'sw-checks-home-'));
   const dir = mkdtempSync(join(process.env.TMPDIR, 'sw-checks-app-'));
   mkdirSync(join(HOME, '.somewhere'), { recursive: true });
@@ -89,13 +81,19 @@ test('a deploy with checks reads the log and reports the access check without ch
     child.on('close', (status) => resolvePromise({ status, stdout, stderr }));
   });
   try {
+    const started = Date.now();
     const human = await run([]);
     assert.equal(human.status, 0, human.stderr);
-    assert.match(human.stdout + human.stderr, /^ *Checks: The access check could not run on this release\.$/m);
-    assert.equal(reads[0], `/v1/deploy/log?project_id=${PROJECT}&version=3`);
+    assert.ok(human.stdout.includes(DEPLOY_CHECKS_RUNNING) || human.stderr.includes(DEPLOY_CHECKS_RUNNING), human.stdout + human.stderr);
+    assert.match(DEPLOY_CHECKS_RUNNING, /^Checks: running in the background; .* test` shows the result\.$/);
+    assert.deepEqual(reads, [], 'the deploy never waits on the check');
+    assert.ok(Date.now() - started < 15_000, 'no wait after the deploy answers');
     const json = await run(['--json']);
     assert.equal(json.status, 0, json.stderr);
-    assert.deepEqual(JSON.parse(json.stdout).access_check, settled);
+    const out = JSON.parse(json.stdout);
+    assert.deepEqual(out.checks, { status: 'running', read: `GET /v1/deploy/log?project_id=${PROJECT}&version=3` });
+    assert.equal(out.access_check, undefined);
+    assert.deepEqual(reads, []);
   } finally { await new Promise((r) => s.close(r)); }
 });
 
@@ -108,29 +106,35 @@ const record = {
   passed: false, saved_checks: 1, pages_checked: 3, test_users: 2,
 };
 
-test('somewhere test asks the platform to run the checks now, then reads the record for up to 150 s', async () => {
-  const c = clock();
-  const calls = [];
-  const client = { call: async (method, path, body, query) => {
+test('somewhere test reads the stored result of the last deploy; waits only while it is running; --again or no result starts a run', async () => {
+  // Settled result stored: one read, no new run.
+  const stored = []; const c0 = clock();
+  const settledClient = { call: async (method, path, body, query) => { stored.push({ method, path, query }); return { access_check: record }; } };
+  const s1 = await runChecksNow(settledClient, 'p1', c0);
+  assert.deepEqual(stored, [{ method: 'GET', path: '/deploy/log', query: { project_id: 'p1' } }]);
+  assert.deepEqual(formatChecksReport(s1), ['FAIL Your check "add a note" on a phone', 'PASS Your check "add a note"', record.sentence]);
+  assert.equal(checksExitCode(s1), 1);
+  assert.equal(checksExitCode({ ...record, passed: true }), 0);
+  // Still running: it waits for that same run.
+  const c1 = clock(); let reads = 0;
+  const runningClient = { call: async (method) => { if (method === 'POST') throw new Error('no new run'); reads += 1; return { access_check: reads < 3 ? { status: 'pending', sentence: null } : record }; } };
+  assert.equal((await runChecksNow(runningClient, 'p1', c1)).status, 'checked');
+  // No stored result, or --again: a fresh run, then its record.
+  const calls = []; const c2 = clock();
+  const freshClient = { call: async (method, path, body, query) => {
     calls.push({ method, path, body, query });
     if (method === 'POST') return { status: 'running', version: 4, read: 'GET /v1/deploy/log?project_id=p1&version=4' };
-    return { access_check: calls.length < 3 ? { status: 'pending', sentence: null } : record };
+    return { access_check: calls.length < 4 ? (query.version ? { status: 'pending', sentence: null } : null) : record };
   } };
-  const check = await runChecksNow(client, 'p1', c);
-  assert.deepEqual(calls[0], { method: 'POST', path: '/deploy/checks', body: { project_id: 'p1' }, query: undefined });
-  assert.deepEqual(calls[1].query, { project_id: 'p1', version: '4' });
-  assert.deepEqual(formatChecksReport(check), [
-    'FAIL Your check "add a note" on a phone',
-    'PASS Your check "add a note"',
-    record.sentence,
-  ]);
-  assert.equal(checksExitCode(check), 1);
-  assert.equal(checksExitCode({ ...record, passed: true }), 0);
+  await runChecksNow(freshClient, 'p1', c2);
+  assert.deepEqual(calls[1], { method: 'POST', path: '/deploy/checks', body: { project_id: 'p1' }, query: undefined });
+  const again = []; 
+  await runChecksNow({ call: async (method, path, body, query) => { again.push(method); return method === 'POST' ? { read: 'GET /v1/deploy/log?project_id=p1&version=5' } : { access_check: record }; } }, 'p1', { ...clock(), again: true });
+  assert.deepEqual(again, ['POST', 'GET']);
   // Never finished: no verdict, so not a pass.
-  const slow = { call: async (method) => method === 'POST' ? { read: 'GET /v1/deploy/log?project_id=p1&version=4' } : { access_check: { status: 'pending', sentence: null } } };
-  const c2 = clock();
-  const pending = await runChecksNow(slow, 'p1', c2);
-  assert.ok(c2.now() <= 150_000 && c2.now() >= 147_000, `${c2.now()} ms`);
+  const c3 = clock();
+  const pending = await runChecksNow({ call: async (method) => method === 'POST' ? { read: 'GET /v1/deploy/log?project_id=p1&version=4' } : { access_check: { status: 'pending', sentence: null } } }, 'p1', c3);
+  assert.ok(c3.now() <= 150_000 && c3.now() >= 147_000, `${c3.now()} ms`);
   assert.match(formatChecksReport(pending)[0], /did not finish within 150 s/);
   assert.equal(checksExitCode(pending), 1);
 });
@@ -171,7 +175,7 @@ test('somewhere test with no file runs the platform checks with no local browser
     assert.equal(failing.status, 1, failing.stderr);
     assert.deepEqual(failing.stdout.trim().split('\n'), ['FAIL Your check "add a note" on a phone', 'PASS Your check "add a note"', record.sentence]);
     assert.doesNotMatch(failing.stdout + failing.stderr, /must not run|Playwright/);
-    assert.deepEqual(requests.slice(0, 2), [`POST /v1/deploy/checks {"project_id":"${PROJECT}"}`, 'GET /v1/deploy/log']);
+    assert.deepEqual(requests.slice(0, 1), ['GET /v1/deploy/log'], 'it reads the last deploy\'s stored result first');
     const json = await run(['--json']);
     assert.equal(json.status, 1);
     assert.equal(JSON.parse(json.stdout).passed, false);

@@ -150,36 +150,20 @@ headers: { 'content-type': 'application/json' }, body: JSON.stringify(values) })
 Access cookies refresh automatically. Cookie-auth POST/PATCH/DELETE from scripts
 need Origin equal to the app URL.
 
-After every deploy, somewhere verify checks the page loads and looks right at desktop and phone size, with no
-test to write. Journeys, several users and access rules go in tests/*.mjs with somewhere test.
+After every deploy the platform checks the live app in its own browser: pages load signed out and as a
+test user, a stranger and a signed-out visitor cannot read a person's data, and your saved checks pass.
+Save each journey you want re-checked after every deploy as checks/<plain-name>.json; the platform runs them
+in its browser after each deploy and \`somewhere test\` runs them now.
 ${FIRST_CLI_PERMISSION}
-Run somewhere test after a successful deploy: npx @somewhere-cloud/cli deploy && npx @somewhere-cloud/cli test
-It runs every tests/*.mjs and tests/*.cjs Playwright script and prints failures first. Start from
-tests/app-check.mjs: change its checks to the journeys you changed and your access boundaries.
-Keep each run short:
-- Short waits: page.setDefaultTimeout(5_000) on every page; a deployed app answers in under
-  a second. Never sleep for a fixed time: wait for the thing itself (the text, the response).
-- Keep independent checks running. For a dependent check, pass { requires: { name, passed } }
-  to app.check() using the earlier check's boolean result, so a skip explains what it needed.
-- After a fix, rerun the scripts that failed, each one whole: npx @somewhere-cloud/cli test --failed.
-The CLI supplies its test helpers when it runs your tests. For the first browser test, install Playwright with npm install -D --save-exact @playwright/test@1.65.0.
-For a local Vite server, install the frontend tools with npm install -D --save-exact vite@7.2.2.
-The test helper, @somewhere-cloud/cli/script (import or require); these are all the calls a test needs:
-  const app = await openAppTest();              // the live origin, release and data contract
-  const ana = await app.signUp(page);           // through your form: { id, email, password, verified }
-    //   { email: 'Ana@Staff.Example' } is used exactly as typed; or { domain: 'staff.example' };
-    //   then app.verify(page, ana) if your app needs a verified address
-  const benPage = await browser.newPage(); const ben = await app.signUp(benPage);   // a second user
-  await app.signOut(page); await app.signIn(page, ana);
-  const r = await app.data(page, { table, operation, id, values, where, limit });   // as that person
-    //   r.kind: ok | empty | refused | missing-or-refused | malformed | stale-contract | error
-    //   (also r.status, r.data, r.error); the contract and Origin are added for you
-  await app.expectRefused(benPage, { table, operation: 'get', id }, { allowed: page });
-    //   401/403 passes; an empty or 404 answer passes only with allowed: someone it succeeds for
-  const seen = captureResponses(benPage); await seen.find(secret);   // where a secret appeared
-  await app.check('name', async () => { ... }); await app.finish();  // finish deletes the sign-ups
-It finds your form by data-testid "auth-email", "auth-password", "auth-signup", "auth-signin",
-"signout" (or data-sw-auth); otherwise pass app.signUp(page, { form: { email, password, signUp, signIn } }).
+Run them now: npx @somewhere-cloud/cli test (one PASS or FAIL line per check, failures first; exit 1 when one fails).
+A saved check is the somewhere verify --flow actions list; "signed_in": true runs it as a test user the platform
+creates and removes, and "viewports": ["desktop", "mobile"] runs it at both sizes:
+  { "actions": [ { "fill": "[data-testid=note-title]", "value": "Lunch with Ana 42" },
+      { "click": "[data-testid=note-save]" },
+      { "expect": { "selector": "[data-testid=note-item]", "text": "Lunch with Ana 42" } } ],
+    "signed_in": true, "viewports": ["desktop", "mobile"] }
+Find controls by data-testid so renaming a button does not break a check; keep the ids when you restyle.
+The notes starter ships this one as checks/add-a-note.json (note-title, note-save, note-item): start from it.
 Open a list item by clicking the item element itself (what a person clicks), not a link inside it.
 Deploy raw source, no frontend build; type errors stop upload.
 The complete team spec, with removal and leaving: somewhere docs sw.groups --section team-example.

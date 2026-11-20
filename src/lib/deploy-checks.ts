@@ -4,13 +4,17 @@ import type { ApiClient } from './client.js';
 /**
  * After a live deploy the platform runs its access check in the background and
  * answers the deploy with checks: { status: 'running', read: 'GET /v1/deploy/log?…' }.
- * The CLI reads that log every 3 s for up to 45 s and prints the check's
+ * The CLI reads that log every 3 s for up to 120 s and prints the check's
  * sentence. The result never changes the deploy's exit code.
  */
+export interface CheckLine { name: string; as?: string; method?: string; path?: string; status?: number; expected?: string; pass: boolean }
+
 export interface AccessCheck {
   status: 'pending' | 'checked' | 'unavailable' | string;
   sentence: string | null;
   findings?: unknown[];
+  checks?: CheckLine[];
+  passed?: boolean;
   checked_at?: string | null;
 }
 
@@ -19,7 +23,7 @@ export interface DeployChecks {
   read?: string;
 }
 
-export const DEPLOY_CHECKS_WAIT_MS = 45_000;
+export const DEPLOY_CHECKS_WAIT_MS = 120_000;
 export const DEPLOY_CHECKS_POLL_MS = 3_000;
 
 /** The API path (without /v1) and query the platform named in checks.read. */
@@ -64,4 +68,35 @@ export const DEPLOY_CHECKS_STILL_RUNNING = `Checks: still running; \`${cliInvoca
 export function formatDeployChecksLine(check: AccessCheck | null): string | null {
   if (!check || check.status === 'pending') return DEPLOY_CHECKS_STILL_RUNNING;
   return check.sentence ? `Checks: ${check.sentence}` : null;
+}
+
+export const TEST_CHECKS_WAIT_MS = 150_000;
+
+/** `somewhere test`: run the after-deploy check now on the live release (POST /v1/deploy/checks), then read
+ *  its record until it settles, up to 150 s. Null or pending means it had not finished. */
+export async function runChecksNow(
+  client: Pick<ApiClient, 'call'>,
+  projectId: string,
+  opts: Parameters<typeof awaitDeployChecks>[2] = {},
+): Promise<AccessCheck | null> {
+  const started = await client.call<{ status?: string; version?: number; read?: string }>('POST', '/deploy/checks', { project_id: projectId });
+  return awaitDeployChecks(client, { read: started?.read }, { waitMs: TEST_CHECKS_WAIT_MS, ...opts });
+}
+
+/** One PASS/FAIL line per check, failures first, then the sentence. */
+export function formatChecksReport(check: AccessCheck | null): string[] {
+  if (!check || check.status === 'pending') {
+    return [`The checks did not finish within ${TEST_CHECKS_WAIT_MS / 1000} s; \`${cliInvocation()} call project_deploy_log '{}'\` shows the result when they do.`];
+  }
+  const lines = Array.isArray(check.checks) ? check.checks : [];
+  return [
+    ...lines.filter((line) => !line.pass).map((line) => `FAIL ${line.name}`),
+    ...lines.filter((line) => line.pass).map((line) => `PASS ${line.name}`),
+    ...(check.sentence ? [check.sentence] : []),
+  ];
+}
+
+/** Exit 0 only for a finished record that passed. */
+export function checksExitCode(check: AccessCheck | null): number {
+  return check?.passed === true ? 0 : 1;
 }

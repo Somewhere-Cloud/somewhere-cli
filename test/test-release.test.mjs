@@ -2,7 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { formatDeployTestsLine, deployTestStatus } from '../dist/lib/deploy-tests.js';
 import { confirmedRelease } from '../dist/lib/test-reporter.js';
-import { starterTests } from '../dist/lib/init-test-template.js';
+import { starterChecks } from '../dist/lib/init-test-template.js';
+import { collectFiles } from '../dist/lib/files.js';
 import { hasSpecFiles, listScripts } from '../dist/lib/test-scripts.js';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -25,30 +26,20 @@ test('deploy --test is passed only for the release it published, and never green
   assert.match(formatDeployTestsLine({ status: 'passed', release: 'rel_1', results: { passed: 2, skipped: 2 } }), /2 passed, 2 skipped \(a skipped test proves nothing\)/);
 });
 
-test('the starter ships one ordinary script that somewhere test discovers and can clean up', (t) => {
-  const root = mkdtempSync(join(tmpdir(), 'sw-starter-test-discovery-'));
+test('the starter saves its journey as checks/add-a-note.json, which deploy publishes and no local runner picks up', (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'sw-starter-checks-'));
   t.after(() => rmSync(root, { recursive: true, force: true }));
-  for (const privateData of [false, true]) {
-    const files = starterTests({ privateData });
-    assert.deepEqual(files.map(file => file.path), ['tests/app-check.mjs']);
-    const script = files[0].content;
-    const scriptPath = join(root, files[0].path);
-    mkdirSync(dirname(scriptPath), { recursive: true });
-    writeFileSync(scriptPath, script);
-    assert.equal(hasSpecFiles(root), false);
-    assert.deepEqual(listScripts(root, []), [join('tests', 'app-check.mjs')]);
-    assert.match(script, /from '@somewhere-cloud\/cli\/script'/);
-    assert.match(script, /chromium\.launch\(app\.launchOptions\(\)\)/);
-    assert.match(script, /npx @somewhere-cloud\/cli deploy && npx @somewhere-cloud\/cli test/);
-    assert.match(script, /finally\s*\{\s*await app\.finish\(\)/);
-    assert.match(script, /at phone width nothing scrolls sideways/);
-    assert.doesNotMatch(script, /waitForTimeout|setTimeout/, 'no fixed sleeps');
-    assert.ok(script.split('\n').length <= (privateData ? 80 : 70), 'keeps the starter short even with the private-data journey');
-    if (privateData) {
-      assert.match(script, /captureResponses\(ben\.page\)/);
-      assert.match(script, /await dataReady\(ben\.page\)/);
-      assert.match(script, /expectRefused\(ben\.page, \{ table: 'notes', operation: 'update'/);
-      assert.match(script, /\{ allowed: ana\.page \}/);
-    }
-  }
+  assert.deepEqual(starterChecks({ privateData: false }), [], 'no notes form, no saved check');
+  const files = starterChecks({ privateData: true });
+  assert.deepEqual(files.map(file => file.path), ['checks/add-a-note.json']);
+  const check = JSON.parse(files[0].content);
+  assert.equal(check.signed_in, true);
+  assert.deepEqual(check.viewports, ['desktop', 'mobile']);
+  mkdirSync(join(root, 'checks'), { recursive: true });
+  writeFileSync(join(root, files[0].path), files[0].content);
+  writeFileSync(join(root, 'index.html'), '<h1>app</h1>');
+  assert.deepEqual(listScripts(root, []), []);
+  const collected = collectFiles(root);
+  assert.ok(collected.published.includes('checks/add-a-note.json'), 'deploy publishes checks/*.json');
+  assert.deepEqual(collected.excluded.filter(e => e.path.startsWith('checks/')), []);
 });

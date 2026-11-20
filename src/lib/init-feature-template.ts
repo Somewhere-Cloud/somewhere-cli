@@ -1,5 +1,4 @@
-import { FIRST_CLI_PERMISSION } from './first-cli-permission.js';
-import { starterTests } from './init-test-template.js';
+import { starterChecks } from './init-test-template.js';
 import { buildScaffoldGitignore } from './scaffold.js';
 import { CLI_VERSION } from './version.js';
 import { TYPECHECK_TYPESCRIPT_VERSION } from './typecheck-version.js';
@@ -3437,20 +3436,9 @@ export function createFeatureTemplate(
   const agent = selection.modules.includes('agent');
   const magicLink = selection.modules.includes('magic-link');
   const files: InitScaffoldFile[] = [
-    ...starterTests({ privateData }),
+    ...starterChecks({ privateData }),
     { path: '.gitignore', content: buildScaffoldGitignore() },
-    { path: 'AGENTS.md', content: INIT_AGENTS_MD.replace(/## Getting started[^]*?After edits:/, `## Testing
-${FIRST_CLI_PERMISSION}
-Run somewhere test after a successful deploy: npx @somewhere-cloud/cli deploy && npx @somewhere-cloud/cli test
-It runs every tests/*.mjs and tests/*.cjs Playwright script and prints failures first.
-Start from tests/app-check.mjs: change its checks to the journeys you changed and your access boundaries.
-Helpers from @somewhere-cloud/cli/script (import or require): signUp/signIn/signOut through your form,
-data(page, { table, operation, id, values, where }) as that person, expectRefused with a positive control,
-captureResponses, dataReady (the list has loaded), launchOptions. A rebuilt sign-in form keeps
-data-sw-auth="email", "password", "sign-up", "sign-in" on its controls, or pass { form: { … } } selectors.
-Rerun only to answer a question. A pass means the checks you wrote passed; say what they do not cover.
-
-After edits:`) },
+    { path: 'AGENTS.md', content: INIT_AGENTS_MD },
     { path: 'CLAUDE.md', content: INIT_CLAUDE_MD },
     { path: 'README.md', content: readme(selection) },
     { path: 'package.json', content: packageJson(options.appName) },

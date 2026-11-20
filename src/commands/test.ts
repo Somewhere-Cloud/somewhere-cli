@@ -4,11 +4,12 @@ import { getToken, loadProjectConfig } from '../lib/config.js';
 import { prepareRunner, runTests } from '../lib/test-run.js';
 import { mark, markProcessStart } from '../lib/test-timeline.js';
 import { referenceCheckNote } from '../lib/reference-check-note.js';
+import { checksExitCode, formatChecksReport, runChecksNow } from '../lib/deploy-checks.js';
 import { describeScriptResults, hasSpecFiles, isScript, lastFailedScripts, listScripts, recordScriptResults, runScripts } from '../lib/test-scripts.js';
 
 export function registerTest(program: Command): void {
   program.command('test [files...]')
-    .description('Run this project\'s tests: every tests/*.mjs and tests/*.cjs script (such as tests/app-check.mjs), or, when the project has tests/**/*.spec.ts, its Playwright specs against the live release (--preview: this folder\'s open preview)')
+    .description('Run the live release\'s checks now in Somewhere\'s browser: your saved checks/*.json journeys, the stranger and signed-out access probes and a page crawl (the same check that runs after every deploy). Exits 1 when one fails. With a file, runs that tests/*.mjs or *.cjs script; a project with tests/**/*.spec.ts runs its Playwright specs (--preview: this folder\'s open preview)')
     .option('--preview', 'Test this folder\'s open preview (its own users, data copy and captured mail), pinned to the version saved when the run starts. Production is never touched.')
     .option('--workers <count>', 'Parallel workers', '5')
     .option('--failed', 'Rerun what failed last time: each failed tests/*.mjs or *.cjs script, all its checks (specs: only the failed tests)')
@@ -18,7 +19,7 @@ export function registerTest(program: Command): void {
     .option('--phone', 'Run every test again in a 390x844 phone viewport ([phone] in results)')
     .option('--json', 'Print structured results')
     .option('--verbose', 'Also print where the full result file is when everything passed')
-    .addHelpText('after', '\nFor the starter privacy check, mark the data view with data-sw-data="loading" while fetching, "ready" once data loads, or "error" if fetching fails.\n')
+    .addHelpText('after', '\nSave each journey you want re-checked after every deploy as checks/<plain-name>.json; the platform runs them in its browser after each deploy and `somewhere test` runs them now.\n')
     .action(async (files: string[], opts: { workers: string; failed?: boolean; failFast?: boolean; grep?: string; url?: string; json?: boolean; phone?: boolean; preview?: boolean; verbose?: boolean }) => {
       markProcessStart('cli');
       mark('cli:action');
@@ -27,6 +28,17 @@ export function registerTest(program: Command): void {
       const root = process.cwd();
       const projectId = loadProjectConfig()?.project_id;
       if (!projectId) throw new Error('Run somewhere test from a linked project folder');
+      // No file, no specs, no preview: the platform runs the live release's checks in its own browser.
+      if (!files.length && !opts.preview && !opts.failed && !hasSpecFiles(root)) {
+        const unsupported = [opts.phone && '--phone', opts.grep && '--grep', opts.workers !== '5' && '--workers', opts.failFast && '--fail-fast'].filter(Boolean);
+        if (unsupported.length) throw new Error(`${unsupported.join(', ')} apply to Playwright specs and scripts; the platform runs checks/*.json as saved.`);
+        const check = await runChecksNow(new ApiClient(getToken()), projectId);
+        mark('cli:exit');
+        if (opts.json) process.stdout.write(JSON.stringify(check, null, 2) + '\n');
+        else process.stdout.write(formatChecksReport(check).join('\n') + '\n');
+        process.exitCode = checksExitCode(check);
+        return;
+      }
       // The last deploy's background reference check: one line when it is not clean, printed as soon as it is read.
       // Production runs only (a preview has its own saved version). The read takes about a second, so the tests do not
       // wait for it; the results do.

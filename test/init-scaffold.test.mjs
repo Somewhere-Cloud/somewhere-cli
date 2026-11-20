@@ -160,10 +160,10 @@ test('minimal starter is a small typed frontend, function, and schema', () => {
   assert.equal(agents, INIT_AGENTS_MD);
   assert.match(agents, /## Build, deploy, test\n\nEnough to start a typical app/);
   assert.match(agents, /Teams are built-in groups/);
-  // The test helper's calls, options and result kinds are in AGENTS.md (bench-1115c: every builder read the .d.ts files).
-  for (const call of ['await openAppTest()', 'await app.signUp(page)', "{ email: 'Ana@Staff.Example' } is used exactly as typed", 'const benPage = await browser.newPage(); const ben = await app.signUp(benPage)',
-    'r.kind: ok | empty | refused | missing-or-refused | malformed | stale-contract | error', 'await app.expectRefused(benPage,', 'captureResponses(benPage)', 'await app.finish()',
-    'clicking the item element itself']) assert.ok(agents.includes(call), call);
+  // Saved checks are how a journey is re-checked; no local browser script is the default.
+  for (const line of ['Save each journey you want re-checked after every deploy as checks/<plain-name>.json; the platform runs them\nin its browser after each deploy and `somewhere test` runs them now.',
+    '"signed_in": true', '"viewports": ["desktop", "mobile"]', 'Find controls by data-testid', 'clicking the item element itself']) assert.ok(agents.includes(line), line);
+  assert.doesNotMatch(agents, /tests\/app-check\.mjs|openAppTest|@playwright\/test/);
   // Apps that cannot ask for email verification (bench-1115b: every Team Board and Help Desk build looked this up).
   assert.match(agents, /^No email verification in your app: keep membership in your own table with member\(\) \(somewhere docs sw\.groups --section relationships-that-are-not-teams\) and assign staff with setRoles in the sign-up route \(above\)\.$/m);
   // Pages that need several reads (bench-1115b: a subject shown before its messages; an input overwritten by a late answer).
@@ -254,23 +254,29 @@ export const views = [<Logo className="logo" />, <Icon width={16} />];
   }
 });
 
-test('the notes check finds controls by test ids the starter carries, not by their words', () => {
+test('the starter saves one check, add a note, that the platform runs and finds controls by test ids the starter carries', () => {
   for (const ui of ['styled', 'headless']) {
     const dir = tempDir();
-    writeInitScaffold(dir, createFeatureTemplate(
+    const result = writeInitScaffold(dir, createFeatureTemplate(
       { requested: ['auth', 'private-data'], added: [], modules: ['auth', 'private-data'], ui },
       { appName: 'Starter' },
     ));
-    const script = readFileSync(join(dir, 'tests/app-check.mjs'), 'utf8');
+    assert.deepEqual(result.created.filter(path => path.startsWith('tests/') || path.startsWith('checks/')), ['checks/add-a-note.json']);
+    const check = JSON.parse(readFileSync(join(dir, 'checks/add-a-note.json'), 'utf8'));
+    assert.deepEqual(check, {
+      actions: [
+        { fill: '[data-testid=note-title]', value: 'Lunch with Ana 42' },
+        { click: '[data-testid=note-save]' },
+        { expect: { selector: '[data-testid=note-item]', text: 'Lunch with Ana 42' } },
+      ],
+      viewports: ['desktop', 'mobile'],
+      signed_in: true,
+    });
     const board = readFileSync(join(dir, 'src/ui/NotesBoard.tsx'), 'utf8');
-    for (const id of ['note-title', 'note-save', 'note-item']) {
-      assert.match(script, new RegExp(`getByTestId\\('${id}'\\)`), `${ui}: script uses ${id}`);
-      assert.match(board, new RegExp(`data-testid="${id}"`), `${ui}: board carries ${id}`);
-    }
-    assert.doesNotMatch(script, /getByLabel\('Title'\)|name: 'Add note'|getByRole\('heading'/, `${ui}: no visible words`);
-    assert.match(script, /keep note-title, note-save and note-item/);
-    // Renaming the button's words leaves the check's locators valid.
-    assert.ok(board.replace(/'Add note'/, "'Add entry'").includes('data-testid="note-save"'));
+    for (const id of ['note-title', 'note-save', 'note-item']) assert.match(board, new RegExp(`data-testid="${id}"`), `${ui}: board carries ${id}`);
+    const guide = readFileSync(join(dir, 'AGENTS.md'), 'utf8');
+    assert.match(guide, /checks\/add-a-note\.json \(note-title, note-save, note-item\): start from it/);
+    assert.match(guide, /keep the ids when you restyle/);
   }
 });
 
@@ -283,15 +289,8 @@ test('default starter is the auth module: SDK client, packaged handler, hooks, r
   assert.ok(result.created.includes('src/auth/hooks.ts'));
   assert.ok(result.created.includes('src/ui/AuthCard.tsx'));
   assert.ok(!result.created.includes('db/schema.ts'), 'private data is opt-in');
-  // One ordinary example script, which `somewhere test` runs (the project has no specs).
-  assert.deepEqual(result.created.filter(path => path.startsWith('tests/')), ['tests/app-check.mjs']);
-  const script = readFileSync(join(dir, 'tests/app-check.mjs'), 'utf8');
-  assert.match(script, /await app\.signUp\(page\)[\s\S]*await app\.signOut\(ana\.page\)[\s\S]*await app\.signIn\(ana\.page, ana\.account\)/, 'signs up through the real form');
-  assert.doesNotMatch(script, /'notes'/, 'the default script must not refer to an absent table');
-  // The data call an agent would otherwise look up (and scrape the contract digest for) is on the page, as a comment.
-  assert.match(script, /^ +\/\/   const \{ data: \[task\] \} = await app\.data\(ana\.page, \{ table: 'tasks', operation: 'list' \}\);$/m);
-  assert.match(script, /^ +\/\/   await app\.expectRefused\(ben\.page, /m);
-  assert.doesNotMatch(script.replace(/^\s*\/\/.*$/gm, ''), /app\.data|'tasks'/, 'only as a comment: the default starter declares no table');
+  // No notes form without private data, so no saved check; the platform's probes and crawl still run.
+  assert.deepEqual(result.created.filter(path => path.startsWith('tests/') || path.startsWith('checks/')), []);
   // The hooks signUp/signIn/signOut find, by action: the submit names what it does.
   const authCard = readFileSync(join(dir, 'src/ui/AuthCard.tsx'), 'utf8');
   // Both actions are on the page at once: Sign in and Create account, no mode switch (bench-1115b: every first build
@@ -334,15 +333,13 @@ test('default starter is the auth module: SDK client, packaged handler, hooks, r
   assert.doesNotMatch(Object.values(collectFiles(dir).files).join('\n'), /\bany\b/);
 });
 
-test('the test file, both AGENTS guides and the test output write the commands one way, which works without a global install', () => {
+test('both AGENTS guides write the commands one way, which works without a global install', () => {
   const dir = tempDir();
   writeInitScaffold(dir, createFeatureTemplate({ requested: ['auth'], added: [], modules: ['auth'], ui: 'styled' }, { appName: 'Starter' }));
-  const script = readFileSync(join(dir, 'tests/app-check.mjs'), 'utf8');
   const guide = readFileSync(join(dir, 'AGENTS.md'), 'utf8');
-  assert.match(script, /npx @somewhere-cloud\/cli test --failed/);
-  for (const [name, text] of [['tests/app-check.mjs', script], ['AGENTS.md', guide]]) {
-    assert.match(text, /npx @somewhere-cloud\/cli deploy && npx @somewhere-cloud\/cli test/, name);
-    assert.doesNotMatch(text, /npx somewhere |node tests\/app-check\.mjs/, `${name}: a bare "npx somewhere" can fetch an unrelated package`);
+  for (const text of [guide, INIT_AGENTS_MD]) {
+    assert.match(text, /npx @somewhere-cloud\/cli test/);
+    assert.doesNotMatch(text, /npx somewhere |node tests\/app-check\.mjs|tests\/app-check\.mjs/, 'a bare "npx somewhere" can fetch an unrelated package; the starter has no script');
   }
 });
 
@@ -530,13 +527,13 @@ test('one generated template consumes the SDK auth adapter and server data/files
   }
 
   const guide = readFileSync(join(dir, 'AGENTS.md'), 'utf8');
-  assert.match(guide, /^Run somewhere test after a successful deploy: npx @somewhere-cloud\/cli deploy && npx @somewhere-cloud\/cli test$/m);
+  assert.match(guide, /^Run them now: npx @somewhere-cloud\/cli test \(one PASS or FAIL line per check, failures first; exit 1 when one fails\)\.$/m);
   assert.doesNotMatch(guide, /node tests\/app-check\.mjs/, 'one way to run the tests');
   assert.doesNotMatch(guide, /You do not need a separate browser script/);
   assert.doesNotMatch(guide, /allow-type-errors/);
-  // The split, next to the testing line (FACTS-VERIFY): verify needs nothing written; journeys, users and access go in tests.
-  assert.match(guide, /After every deploy, somewhere verify checks the page loads and looks right at desktop and phone size, with no\ntest to write\. Journeys, several users and access rules go in tests\/\*\.mjs with somewhere test\./);
-  assert.match(guide, /rerun the scripts that failed, each one whole: npx @somewhere-cloud\/cli test --failed/);
+  // What the platform checks after every deploy, and where a journey goes.
+  assert.match(guide, /After every deploy the platform checks the live app in its own browser/);
+  assert.match(guide, /checks\/<plain-name>\.json; the platform runs them\nin its browser after each deploy and `somewhere test` runs them now\./);
   assert.match(guide, /Deploy raw source/);
   assert.doesNotMatch(guide, /worker\/src\/runtime\/auth\.ts/);
   assert.equal(

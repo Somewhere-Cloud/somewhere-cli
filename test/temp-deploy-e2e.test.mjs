@@ -45,8 +45,8 @@ const server = createServer((req, res) => {
           scopes: ['projects', 'deploy', 'promote', 'db', 'fs', 'logs', 'smoke', 'browser'],
           expires_at: new Date(Date.now() + 10_800_000).toISOString(),
           ttl_seconds: 10800,
-          claim_token: 'swtc_e2e',
-          claim_url: 'https://somewhere.cloud/claim?token=swtc_e2e',
+          claim_code: 'swtc_e2e',
+          claim_url: 'https://somewhere.cloud/claim/swtc_e2e',
         },
       });
       return;
@@ -128,14 +128,14 @@ test('deploy while logged out — mint, auto-create project, claim relay, then s
   assert.match(first.stdout, /Open https:\/\/somewhere\.cloud\/claim/);
   assert.match(first.stdout, /Expires in about 3 hours/);
   assert.match(first.stdout, /"Save and connect agent".*work on the saved apps and create new ones.*choose to include your other apps/);
-  assert.ok(first.stdout.includes('https://somewhere.cloud/claim?token=swtc_e2e'), 'claim URL present in stdout');
+  assert.ok(first.stdout.includes('https://somewhere.cloud/claim/swtc_e2e'), 'claim URL present in stdout');
 
   const configPath = join(HOME, '.somewhere', 'config.json');
   assert.ok(existsSync(configPath), 'config.json written');
   const config = JSON.parse(readFileSync(configPath, 'utf8'));
   assert.equal(config.temporary, true);
   assert.equal(config.token, 'smt_e2e_temp');
-  assert.equal(config.claim_url, 'https://somewhere.cloud/claim?token=swtc_e2e');
+  assert.equal(config.claim_url, 'https://somewhere.cloud/claim/swtc_e2e');
   assert.equal(config.claim_handoff.handoff_id, 'cch_e2e');
   assert.equal(config.claim_handoff.project_id, 'proj_e2e_1');
   assert.notEqual(config.claim_handoff.verifier, config.claim_url, 'CLI proof is distinct from the browser claim URL');
@@ -178,7 +178,7 @@ test('deploy --temporary reuses old temp configs without temp_expires_at and kee
   writeFileSync(join(HOME, '.somewhere', 'config.json'), JSON.stringify({
     token: 'smt_old_temp',
     temporary: true,
-    claim_url: 'https://somewhere.cloud/claim?token=swtc_old',
+    claim_url: 'https://somewhere.cloud/claim/swtc_old',
     user: { email: '', username: '' },
   }) + '\n');
 
@@ -192,7 +192,7 @@ test('deploy --temporary reuses old temp configs without temp_expires_at and kee
   assert.match(result.stdout, /Live URL:/);
   assert.match(result.stdout, /Temporary app\.\s+Open https:\/\/somewhere\.cloud\/claim/);
   assert.doesNotMatch(result.stdout, /Expires (?:about|in)/);
-  assert.match(result.stdout, /https:\/\/somewhere\.cloud\/claim\?token=swtc_old/);
+  assert.match(result.stdout, /https:\/\/somewhere\.cloud\/claim\/swtc_old/);
   assert.equal(tempCreateCalls, beforeTempCreateCalls, 'missing temp_expires_at falls back without minting a new temp session');
 });
 
@@ -215,7 +215,7 @@ test('deploy --json with no stored credential deploys and emits the anonymous co
     ...SERVER_DEPLOY_FIELDS,
     uploaded: { static_files: ['index.html'], functions: [] },
     url: `https://${project.subdomain}.somewhere.cloud`,
-    claim_url: 'https://somewhere.cloud/claim?token=swtc_e2e',
+    claim_url: 'https://somewhere.cloud/claim/swtc_e2e',
     expires_at: config.temp_expires_at,
     claim_connects_agent: true,
   }, 'the temporary contract adds claim fields to the server result; it does not replace it');

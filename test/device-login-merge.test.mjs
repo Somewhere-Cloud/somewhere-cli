@@ -12,7 +12,7 @@ import { CLI_PACKAGE_VERSION } from './local-cli-pack.mjs';
 const cli = fileURLToPath(new URL('../dist/index.js', import.meta.url));
 const temporaryKey = 'smt_temporary_fixture_only';
 const memberKey = 'smt_new_member_fixture_only';
-const claimLink = 'https://somewhere.cloud/claim?token=swtc_fixture_only';
+const claimLink = 'https://somewhere.cloud/claim/swtc_fixture_only';
 const email = 'member@example.invalid';
 
 async function withFixture(t, { temporary = true, count = 2 } = {}) {

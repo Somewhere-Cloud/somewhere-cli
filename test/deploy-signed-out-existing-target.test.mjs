@@ -24,7 +24,7 @@ const server = createServer((req, res) => {
     const json = (status, payload) => { res.writeHead(status, { 'content-type': 'application/json' }); res.end(JSON.stringify(payload)); };
     const expires = new Date(Date.now() + 3 * 3600e3).toISOString();
     if (path === '/v1/auth/pow/challenge') return json(200, { ok: true, data: { nonce: 'tmpc_1', difficulty: 1, algorithm: 'sha256', input: 'tmpc_1:<suffix>', expires_at: expires, ttl_seconds: 600 } });
-    if (path === '/v1/auth/temp-create') return json(200, { ok: true, data: { key: 'smt_tmp_new', access_token: 'smt_tmp_new', scopes: [], expires_at: expires, ttl_seconds: 10800, claim_token: 'swtc_new', claim_url: 'https://somewhere.cloud/claim?token=swtc_new' } });
+    if (path === '/v1/auth/temp-create') return json(200, { ok: true, data: { key: 'smt_tmp_new', access_token: 'smt_tmp_new', scopes: [], expires_at: expires, ttl_seconds: 10800, claim_code: 'swtc_new', claim_url: 'https://somewhere.cloud/claim/swtc_new' } });
     if (req.method === 'POST' && path === '/v1/projects') return json(200, { ok: true, data: { id: 'proj_tmp_new', name: 'app-x1', subdomain: 'app-x1', slug: 'app-x1' } });
     if (path === '/v1/auth/temp-handoff/register') return json(201, { ok: true, data: { handoff_id: 'cch_1', expires_at: expires } });
     if (req.method === 'POST' && path === '/v1/deploy') {
@@ -98,7 +98,7 @@ test('signed out, unlinked: the first anonymous deploy still mints and goes live
 test('a live cached temporary session redeploys its own linked project without minting', async () => {
   const result = await run(['deploy', '--json'], {
     link: { project_id: 'proj_tmp_cached', name: 'Cached', subdomain: 'cached' },
-    config: { token: 'smt_tmp_cached', temporary: true, temp_expires_at: new Date(Date.now() + 3600e3).toISOString(), claim_url: 'https://somewhere.cloud/claim?token=swtc_c', user: { email: '', username: '' } },
+    config: { token: 'smt_tmp_cached', temporary: true, temp_expires_at: new Date(Date.now() + 3600e3).toISOString(), claim_url: 'https://somewhere.cloud/claim/swtc_c', user: { email: '', username: '' } },
   });
   assert.equal(result.status, 0, result.out);
   assert.equal(JSON.parse(result.stdout).url, 'https://proj_tmp_cached.somewhere.site');

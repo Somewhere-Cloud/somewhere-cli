@@ -71,7 +71,7 @@ export function loadConfig(): CliConfig | null {
   } catch {
     error(
       `${CONFIG_PATH} is not valid JSON, so this computer's Somewhere sign-in cannot be read. Nothing was sent. ` +
-        `Run \`${cliInvocation()} login\` to replace it (a temporary project it held stays reachable through its claim URL).`,
+        `Run \`${cliInvocation()} login\` to replace it (a temporary project it held stays reachable through its claim link).`,
     );
     process.exit(1);
   }

@@ -90,7 +90,7 @@ const liveTemp = {
   token: 'smt_live_temp',
   temporary: true,
   temp_expires_at: new Date(Date.now() + 3_600_000).toISOString(),
-  claim_url: 'https://somewhere.cloud/claim?token=swtc_live',
+  claim_url: 'https://somewhere.cloud/claim/swtc_live',
   user: { email: '', username: '' },
 };
 const signedIn = { token: 'smt_account', user: { email: 'u@example.com', username: 'u' } };
@@ -116,7 +116,7 @@ for (const [label, setup] of [
     assertRefusedWithoutSideEffects(r, fx, before);
     assert.match(r.stderr, /Nothing was created, no temporary workspace was started, and no project or login files were changed\./);
     assert.match(r.stderr, /`somewhere typecheck` and `somewhere lint`/);
-    assert.doesNotMatch(r.all, /deploy-check|proof-of-work|Claim URL|nothing was deployed/i);
+    assert.doesNotMatch(r.all, /deploy-check|proof-of-work|Claim link|nothing was deployed/i);
   });
 }
 

@@ -1,3 +1,10 @@
+# Changelog
+
+## 0.38.134
+
+- somewhere typecheck checks db/schema.ts with the platform's current rules.
+- The agent skills somewhere init writes match the platform's current pack.
+
 ## 0.38.133
 
 - `somewhere deploy` no longer checks types again when no file changed since the folder's last deploy; it says so and the platform reports that nothing changed. A no-change deploy no longer waits on a TypeScript download.
@@ -126,27 +133,25 @@
 - Emit a project_created JSON receipt before init installs dependencies.
 - Document the existing one-step email-code sign-in policy.
 
-# 0.38.107
+## 0.38.107
 
 - Bundle the TypeScript runtime dependency so a fresh production-only CLI install starts correctly, including deploy -m for version notes.
 
-# 0.38.106
+## 0.38.106
 
 - Add deploy -m for user-supplied version notes; promotion quotes its submitted note as data. History shows notes stored on each release.
 
-# 0.38.105
+## 0.38.105
 
 - Deploy and promote print the previous activation hint, naming somewhere rollback; JSON preserves its version and build availability.
 
-# 0.38.104
+## 0.38.104
 
 - Remove the app login, tools, call and logout commands. Existing app tokens are left untouched at <SOMEWHERE_CONFIG_DIR or ~/.somewhere>/app-mcp/tokens.json; use the app MCP server as a custom connector in your AI client.
 
-# 0.38.103
+## 0.38.103
 
 - Describe app MCP terminal commands as developer testing tools; register a neutral Terminal client name.
-
-# Changelog
 
 ## 0.38.102
 

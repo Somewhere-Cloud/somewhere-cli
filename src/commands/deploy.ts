@@ -9,7 +9,7 @@ import { join } from 'node:path';
 import { announceNpxTypeScriptFetch, typecheckCompilerSource, missingProjectDependencies, runTypecheck } from '../lib/typecheck.js';
 import { TYPECHECK_TYPESCRIPT_VERSION } from '../lib/typecheck-version.js';
 import { reportTypecheck } from './typecheck.js';
-import { awaitDeployChecks, formatDeployChecksLine, type AccessCheck, type DeployChecks } from '../lib/deploy-checks.js';
+import { DEPLOY_CHECKS_RUNNING, type AccessCheck, type DeployChecks } from '../lib/deploy-checks.js';
 import { clearBaseFiles, hashFiles, loadBaseFiles, loadLastActivation, saveBaseFiles } from '../lib/base-files.js';
 import { withVerifyProgress } from '../lib/verify-progress.js';
 import { Command, Option } from 'commander';
@@ -1464,8 +1464,7 @@ export function registerDeploy(program: Command) {
           (output as DeployResult & { uploaded?: typeof inventory }).uploaded = inventory;
           if (postLive.kind === 'timeout') output.post_live_render = { status: 'pending', note: POST_LIVE_RENDER_STILL_RUNNING };
           const tests = await runReleaseTests();
-          // The platform's background access check: reported, never a failure.
-          if (result.checks) output.access_check = await awaitDeployChecks(client, result.checks);
+          // The platform's background access check: the deploy never waits for it; result.checks says where to read it.
           printJson(verification || verificationError || tests ? {
             ...output,
             deployment_outcome: 'live',
@@ -1652,11 +1651,8 @@ export function registerDeploy(program: Command) {
           }
         }
 
-        // The platform's background access check: reported, never a failure.
-        if (result.checks) {
-          const checksLine = formatDeployChecksLine(await awaitDeployChecks(client, result.checks));
-          if (checksLine) info(checksLine);
-        }
+        // The platform's background access check: the deploy never waits for it (it warns, never blocks).
+        if (result.checks) info(DEPLOY_CHECKS_RUNNING);
 
         // Exit non-zero if any function failed to deploy — a CI step that
         // shells out to `somewhere deploy` should fail, not pass green.

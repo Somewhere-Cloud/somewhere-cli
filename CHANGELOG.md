@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.38.135
+
+- somewhere typecheck knows sw.mail and sw.mail.project in functions: list, get, attachment, search, send and addresses, with their result types.
+
 ## 0.38.134
 
 - somewhere typecheck checks db/schema.ts with the platform's current rules.

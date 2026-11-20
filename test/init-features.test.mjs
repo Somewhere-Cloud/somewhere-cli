@@ -97,6 +97,7 @@ test('catalog is machine-readable and lists module files from the generator', ()
   assert.ok(catalog.modules[0].files.includes('src/auth/useEmailVerification.ts') && catalog.modules[0].files.includes('src/ui/VerifyEmail.tsx'),
     'email verification is part of the auth module');
   assert.deepEqual(catalog.modules[2].files, [
+    'checks/add-a-note.json',
     'db/schema.ts',
     'src/data/useNotes.ts',
     'src/services/notes.ts',

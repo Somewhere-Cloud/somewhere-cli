@@ -700,7 +700,8 @@ test('init creates the green starter, --bare keeps only the workflow guide, and 
     assert.match(readFileSync(join(empty, 'src/config.ts'), 'utf8'), /APP_NAME = "Scaffold App"/);
     assert.match(readFileSync(join(empty, 'db/schema.ts'), 'utf8'), /notes: table\([\s\S]*scope: owner\(\)/);
     const guide = readFileSync(join(empty, 'AGENTS.md'), 'utf8');
-    assert.match(guide, /somewhere verify checks the page loads and looks right/);
+    assert.match(guide, /After every deploy the platform checks the live app in its own browser/);
+    assert.equal(existsSync(join(empty, 'checks/add-a-note.json')), true);
     assert.match(guide, /npx @somewhere-cloud\/cli deploy && npx @somewhere-cloud\/cli test/);
     assert.equal(
       readFileSync(join(empty, 'CLAUDE.md'), 'utf8'),

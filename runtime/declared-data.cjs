@@ -3832,8 +3832,73 @@ interface SomewhereRuntimeRooms extends SomewhereRoomOps {
   live<Row>(name: string, read: SomewhereDbResult<Row> | PromiseLike<SomewhereDbResult<Row>>): Promise<SomewhereDbLiveResult<Row>>;
 }
 
+// sw.mail: the signed-in app user's own mailbox (the server picks it from the session; no method takes a
+// user). sw.mail.project: the project's mailbox. Failures throw; an id from another mailbox reads as not found.
+type SomewhereMailStatus = 'draft' | 'awaiting_approval' | 'requested' | 'accepted' | 'delivered' | 'bounced'
+  | 'complained' | 'failed' | 'outcome_unknown' | 'received' | 'refused';
+interface SomewhereMailSummary {
+  id: string; direction: 'in' | 'out'; from: string; to: string[]; subject: string; status: SomewhereMailStatus;
+  conversation: string; created_at: number; template_version: string | null; author: string;
+  // The number of attachments; read one with attachment(id, n).
+  attachments: number;
+}
+interface SomewhereMailEmail {
+  id: string; direction: 'in' | 'out'; from_addr: string; to_addrs: string[]; cc_addrs: string[]; bcc_addrs: string[];
+  reply_to: string | null; subject: string; text: string | null; html: string | null;
+  message_id: string | null; in_reply_to: string | null; conversation: string;
+  person: string | null; person_user_id: string | null; status: SomewhereMailStatus; status_at: number;
+  author: string; template_version: string | null; approved_by: string | null; approved_at: number | null;
+  kind: string; test: boolean; spam: string | null; provider_id: string | null; idempotency_key: string | null;
+  note: string | null; created_at: number;
+  attachments: Array<{ n: number; name: string; type: string; size: number }>;
+  // Raw header lines, kept for mail received or written from 2026-11-20 on; null for older mail.
+  headers: Array<{ name: string; value: string }> | null;
+  checks: { spf: string | null; dkim: string | null; dmarc: string | null } | null;
+}
+interface SomewhereMailSearchResult {
+  id: string; subject: string; from_addr: string; to_addrs: string[]; created_at: number; conversation: string;
+  has_attachments: boolean; direction: 'in' | 'out'; status: SomewhereMailStatus;
+}
+interface SomewhereMailSendOptions {
+  // An address registered in this mailbox (sw.mail.project may also send a template from a person address).
+  from: string;
+  // One to ten addresses.
+  to: string | readonly string[];
+  subject?: string; text?: string; html?: string;
+  // Required with subject and html or text when from is a person address; vars fill its {{slots}}.
+  template_key?: string; vars?: Record<string, string>;
+  idempotency_key?: string;
+  // An email in this mailbox to reply to; the reply joins its conversation.
+  reply_to_email_id?: string;
+  // A step name: this step goes to this one recipient at most once.
+  once?: string;
+  // true: send nothing to a recipient this mailbox has received mail from.
+  unless_replied?: boolean;
+}
+interface SomewhereMailSendResult {
+  email_id: string | null; status: SomewhereMailStatus | 'skipped'; duplicate: boolean;
+  skipped?: 'replied'; sent_version?: string; waiting_version?: string | null;
+}
+interface SomewhereMailOps {
+  list(options?: { limit?: number; before?: number; conversation?: string } | null): Promise<{ emails: SomewhereMailSummary[]; mailbox: 'app_user' | 'project' | null }>;
+  get(id: string): Promise<{ email: SomewhereMailEmail }>;
+  // The attachment's bytes as a Response (404 when there is no such attachment).
+  attachment(id: string, n: number): Promise<Response>;
+  search(text: string, options?: { limit?: number } | null): Promise<{ results: SomewhereMailSearchResult[]; searched: Array<{ mailbox: 'app_user' | 'project'; answered: boolean }> }>;
+  send(message: SomewhereMailSendOptions): Promise<SomewhereMailSendResult>;
+  readonly addresses: {
+    list(): Promise<{ addresses: Array<{ address: string; signs_as_user_id: string | null }> }>;
+    create(address: string): Promise<{ address: string; mailbox: 'app_user' | 'project'; sends_as: string }>;
+    remove(address: string): Promise<{ removed: string }>;
+  };
+}
+interface SomewhereRuntimeMail extends SomewhereMailOps {
+  readonly project: SomewhereMailOps;
+}
+
 interface SomewhereRuntimeContext {
   readonly email: SomewhereRuntimeEmail;
+  readonly mail: SomewhereRuntimeMail;
   readonly rooms: SomewhereRuntimeRooms;
   readonly contacts: SomewhereRuntimeContacts;
   readonly notifications: SomewhereRuntimeNotifications;
@@ -4400,8 +4465,8 @@ var require_consumer_contract = __commonJS({
   "worker/containers/compile/consumer-contract.cjs"(exports2, module2) {
     "use strict";
     var CONSUMER_CONTRACT2 = Object.freeze({
-      version: 27,
-      digest: "f4ec703b576673b8586f4a0bbeab5c7a3204bc5edceef4751c9d4ccef1ec0022"
+      version: 28,
+      digest: "e4a7b324f259d0bc92b20434ff153cdfadebf865dd96dfa3e19e8b9811d43692"
     });
     var MEMBERSHIPS = "memberships: table({ id: id(), team_id: text(), member_id: text() }, { scope: owner(), client: { read: true } }),";
     var SHARES = "shares: table({ id: id(), grantee_id: text() }, { scope: owner(), client: { read: true, create: ['grantee_id'], delete: true }, unique: [['user_id', 'grantee_id']] }),";

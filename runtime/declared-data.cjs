@@ -35,29 +35,37 @@ var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: tru
 
 
 function createConsoleDiagnostics() {
+  const nativeStackGetter = Object.getOwnPropertyDescriptor(new Error(), "stack")?.get;
   function sanitizeMessage(input) {
     return input.slice(0, 8192).replace(/https?:\/\/[^\s<>"')]+/gi, (url) => url.replace(/(https?:\/\/)[^/@\s]+@/gi, "$1<redacted>@").split(/[?#]/, 1)[0]).replace(/(["']?(?:password|code|token|key|secret|signature|access_token|refresh_token|authorization|cookie)["']?\s*:\s*)(?:"[^"]*"|'[^']*'|[^\s,}]+)/gi, "$1<redacted>").replace(/\b(?:Cookie|Set-Cookie)\s*[:=]\s*[^\r\n]+/gi, "Cookie: <redacted>").replace(/\bBearer\s+[^\s,;'"<>]+/gi, "Bearer <redacted>").replace(/\b(?:token|code|key|secret|password|signature|access_token|refresh_token|session|sid|sessionid)\s*=\s*(?:"[^"]*"|'[^']*'|[^\s&;,]+)/gi, (match) => match.slice(0, match.indexOf("=") + 1) + "<redacted>").replace(/[A-Z0-9.!#$%&'*+\/=?^_`{|}~-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, "<email>").replace(/\b[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b/g, "<redacted>").replace(/\b(?:smt_|(?:sk|pk)[_-])[A-Za-z0-9_-]+/g, "<redacted>").replace(/[A-Za-z0-9+/_-]{32,}={0,2}/g, "<redacted>").slice(0, 300);
   }
   function safeError(value) {
     try {
       const record2 =                 Object.create(null);
+      let stackGetter;
+      let unsafeFormatting = false;
       if (value && typeof value === "object") {
         let current = value;
         for (let depth = 0; current && depth < 6; depth++, current = Object.getPrototypeOf(current)) {
           for (const key of ["name", "message", "status", "code", "stack"]) {
             if (Object.hasOwn(record2, key)) continue;
             const descriptor = Object.getOwnPropertyDescriptor(current, key);
-            if (descriptor) record2[key] = "value" in descriptor ? descriptor.value : "[Getter]";
+            if (descriptor) {
+              record2[key] = "value" in descriptor ? descriptor.value : "[Getter]";
+              if (key === "stack" && descriptor.get && descriptor.get === nativeStackGetter) stackGetter = descriptor.get;
+              if ((key === "name" || key === "message") && (!("value" in descriptor) || typeof descriptor.value !== "string")) unsafeFormatting = true;
+            }
           }
         }
       }
+      if (stackGetter && !unsafeFormatting && typeof record2.name === "string" && typeof record2.message === "string") record2.stack = stackGetter.call(value);
       const name = typeof record2.name === "string" ? sanitizeMessage(record2.name).slice(0, 80) : "Error";
       const message = typeof record2.message === "string" ? record2.message : typeof value === "string" ? value : "Unknown error";
       const status = typeof record2.status === "number" && Number.isInteger(record2.status) && record2.status >= 100 && record2.status <= 599 ? record2.status : 0;
       const failure = /Network connection lost/i.test(message) ? "connection_lost" : /DEADLINE|timed? ?out/i.test(message) ? "deadline_exceeded" : /object.*reset|reset.*object/i.test(message) ? "object_reset" : /no such column/i.test(message) ? "missing_column" : /no such table/i.test(message) ? "missing_table" : /SQLITE_CONSTRAINT|constraint failed/i.test(message) ? "constraint" : /overload|too many requests|too many resources consumed/i.test(message) ? "overloaded" : "unclassified";
       const code = typeof record2.code === "string" && /^[A-Z][A-Z0-9_]{0,63}$/.test(record2.code) ? sanitizeMessage(record2.code) : void 0;
       const frames = typeof record2.stack === "string" ? record2.stack.split("\n").slice(1).flatMap((line) => {
-        const match = line.match(/([^\s()]+?):(\d+)(?::\d+)?\)?$/);
+        const match = (line.length > 512 ? line.slice(-512) : line).match(/([^\s()]+?):(\d+)(?::\d+)?\)?$/);
         if (!match) return [];
         const file = match[1].split(/[\\/]/).pop() ?? "";
         return [sanitizeMessage(file) + ":" + match[2]];
@@ -76,6 +84,21 @@ var init_console_privacy = __esm({
     diagnostics = createConsoleDiagnostics();
     sanitizeConsoleMessage = diagnostics.sanitizeMessage;
     safeConsoleError = diagnostics.safeError;
+  }
+});
+
+
+var init_d1_region = __esm({
+  "shared/d1-region.ts"() {
+    "use strict";
+  }
+});
+
+
+var init_d1_session = __esm({
+  "shared/d1-session.ts"() {
+    "use strict";
+    init_d1_region();
   }
 });
 
@@ -1540,6 +1563,17 @@ interface SomewhereAuthUserDeletion {
   removed: readonly string[];
   kept: readonly { readonly category: string; readonly reason: string }[];
   not_covered: readonly string[];
+  /** Present with { erase: 'owned' }: the erase of the person's own rows and files, which finishes in the background. */
+  erasure?: { id: string; state: 'requested' | 'closed' | 'complete' | 'incomplete' | 'failed' | 'cancelled'; counts: Record<string, number>; skipped: readonly string[]; reason?: string };
+}
+interface SomewhereAuthUserCopy {
+  exported_at: string;
+  profile: Record<string, unknown>;
+  rows: Record<string, Record<string, unknown>[]>;
+  files: { path: string; size_bytes: number; content_type: string | null; created_at: number; updated_at: number; visibility: string }[];
+  passkeys: { name: string | null; created_at: number }[];
+  not_in_copy: { tables: readonly string[]; reason: string };
+  not_covered: readonly string[];
 }
 interface SomewhereRuntimeAuthModeration {
   ban(req: Request, userId: string, options?: { reason?: string | null } | null): Promise<SomewhereAuthModerationRevoked & {
@@ -1608,10 +1642,12 @@ interface SomewhereRuntimeAuth {
   // Email verification for the request's own session (cookie or Bearer); no token in app code.
   requestEmailVerificationWithCookie(req: Request): Promise<SomewhereAuthVerificationSent>;
   verifyEmailWithCookie(req: Request, options: { code: string }): Promise<{ verified: true }>;
-  deleteUser(token: string): Promise<SomewhereAuthUserDeletion>;
+  deleteUser(token: string, options?: { erase?: 'owned' }): Promise<SomewhereAuthUserDeletion>;
+  /** The signed-in person's own copy of their data. */
+  exportUser(token: string): Promise<SomewhereAuthUserCopy>;
   // Password change and account deletion end every session of the account; these clear the cookies.
   updatePasswordWithCookie(req: Request, options: { new_password: string; current_password?: string }): Promise<{ updated: true }>;
-  deleteUserWithCookie(req: Request): Promise<SomewhereAuthUserDeletion>;
+  deleteUserWithCookie(req: Request, options?: { erase?: 'owned' }): Promise<SomewhereAuthUserDeletion>;
   // Start Google/GitHub/Discord sign-in from a server handler: stages this attempt's HttpOnly
   // verifier cookie on the response and resolves the provider start URL (only its challenge travels).
   oauthStart(provider: 'google' | 'github' | 'discord', options: { redirect_uri: string }): Promise<string>;
@@ -1635,7 +1671,8 @@ interface SomewhereRuntimeAuth {
   signupWithCookie(options: SomewhereAuthSignupOptions): Promise<{ user: SomewhereAuthUser }>;
   clearSessionCookies(): void;
   logoutWithCookie(req: Request): Promise<{ ok: true }>;
-  signInWithOtp(options: { email: string; redirect_uri?: string }): Promise<SomewhereAuthOtpSent>;
+  // purpose 'confirm' words the same link "Confirm your request" (a booking, an order) instead of "Sign in".
+  signInWithOtp(options: { email: string; redirect_uri?: string; purpose?: 'sign_in' | 'confirm' }): Promise<SomewhereAuthOtpSent>;
   verifyOtp(options: { token: string }): Promise<SomewhereAuthOtpSession>;
   // One invite email; the link signs the invitee in as the invited address.
   invite(options: SomewhereAuthInviteOptions): Promise<SomewhereAuthInviteSent>;
@@ -2091,6 +2128,32 @@ interface SomewhereCalendarPolicyInput {
   turnaround_hours?: number | null;
   // Seats per exact [start, end) class slot. Omitted or null: one reservation per overlapping range.
   capacity?: number | null;
+  // Weekly open hours in one IANA zone; hold and rebook refuse ranges outside them (CALENDAR_OUTSIDE_HOURS).
+  hours?: SomewhereCalendarHours | null;
+  // Starts at most this many days from now; hold and rebook refuse later ones (CALENDAR_TOO_FAR_AHEAD).
+  max_days_ahead?: number | null;
+}
+type SomewhereCalendarWeekday = 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun';
+interface SomewhereCalendarHours {
+  timezone: string;
+  // 'HH:MM-HH:MM' wall-clock windows per day, e.g. { mon: ['09:00-12:00', '13:00-17:00'] }. A missing day is closed.
+  weekly: Partial<Record<SomewhereCalendarWeekday, readonly string[]>>;
+}
+interface SomewhereCalendarSlotsOptions {
+  resource: string;
+  range: SomewhereCalendarReadRange;
+  duration_minutes: number;
+  // Distance between starts; defaults to duration_minutes.
+  step_minutes?: number;
+}
+interface SomewhereCalendarOpenSlot { start_ms: number; end_ms: number; start: string; end: string }
+interface SomewhereCalendarSlotsResult {
+  resource: string;
+  range: { start_ms: number; end_ms: number };
+  duration_minutes: number;
+  step_minutes: number;
+  timezone: string | null;
+  slots: SomewhereCalendarOpenSlot[];
 }
 type SomewhereCalendarSetPolicyOptions = { resource: string } & ({ policy: SomewhereCalendarPolicyInput } | (SomewhereCalendarPolicyInput & { policy?: never }));
 interface SomewhereCalendarPolicy {
@@ -2101,6 +2164,8 @@ interface SomewhereCalendarPolicy {
   bookable_from_ms: number | null;
   turnaround_hours: number | null;
   capacity: number | null;
+  hours: SomewhereCalendarHours | null;
+  max_days_ahead: number | null;
   created_at: number | null;
   updated_at: number | null;
 }
@@ -2149,6 +2214,8 @@ interface SomewhereRuntimeCalendar {
   getPolicy(resourceOrOpts: string | { resource: string }): Promise<{ policy: SomewhereCalendarPolicy }>;
   availability(opts: { resource: string; range: SomewhereCalendarReadRange }): Promise<SomewhereCalendarAvailabilityResult>;
   availability(resource: string, range: SomewhereCalendarReadRange): Promise<SomewhereCalendarAvailabilityResult>;
+  slots(opts: SomewhereCalendarSlotsOptions): Promise<SomewhereCalendarSlotsResult>;
+  slots(resource: string, range: SomewhereCalendarReadRange, opts: { duration_minutes: number; step_minutes?: number }): Promise<SomewhereCalendarSlotsResult>;
   list(opts: SomewhereCalendarListOptions): Promise<SomewhereCalendarListResult>;
   list(resource: string, opts?: SomewhereCalendarListExtras | null): Promise<SomewhereCalendarListResult>;
   get(idOrOpts: string | __SomewhereCalendarIdRef): Promise<{ reservation: SomewhereCalendarReservation }>;
@@ -2962,10 +3029,11 @@ interface SomewhereAgentStep {
   duration_ms: number;
   completion_reason: string;
   on_step?: unknown;
-  // Non-enumerable; null while the step's cost is pending.
+  // This model call's cost in cents; null while it is pending. Kept in a durable run's stored steps.
   readonly cost_cents: number | null;
 }
 interface SomewhereAgentPrepareStepContext {
+  // 0 for a run's first model call (it equals the number of steps already taken).
   stepNumber: number;
   steps: SomewhereAgentStep[];
   messages: SomewhereAiMessage[];
@@ -2985,7 +3053,7 @@ interface SomewhereAgentPrepareStepOverride {
   toolChoice?: string | SomewhereJsonObject;
   maxTokens?: number;
 }
-interface SomewhereAgentStepEvent { step: SomewhereAgentStep; steps: SomewhereAgentStep[] }
+interface SomewhereAgentStepEvent { step: SomewhereAgentStep; steps: SomewhereAgentStep[]; agentId: string | null }
 interface SomewhereAgentOnStepEvent {
   agentId: string | null;
   turn: number;
@@ -3119,6 +3187,8 @@ type SomewhereEmailSendOptions = {
   in_reply_to?: string;
   references?: readonly string[];
   app_user_id?: string;
+  // Up to 3 files, 256 KB total, content in base64. Extensions: ics pdf png jpg jpeg gif webp csv txt json.
+  attachments?: readonly { filename: string; content_type?: string; content: string }[];
 } & __SomewhereEmailBody;
 interface SomewhereEmailSendResult {
   id: string;
@@ -3186,6 +3256,8 @@ interface SomewhereEmailTestInboxMessage {
   magic_link: string | null;
   /** The code an auth message carries (email verification, sign-in code); null otherwise. */
   verification_code: string | null;
+  /** Files the send attached; content is base64. Empty when none. */
+  attachments: { filename: string; content_type: string; content: string }[];
   created_at: string;
 }
 interface SomewhereRuntimeEmail {
@@ -3221,179 +3293,6 @@ interface SomewhereRuntimeContacts {
   upsert(contact: { email: string; display_name?: string | null; properties?: SomewhereEmailContactProperties; id?: string }): Promise<{ contact: SomewhereEmailContact }>;
   get(idOrEmail: string): Promise<{ contact: SomewhereEmailContact }>;
   list(options?: { limit?: number; offset?: number } | null): Promise<{ contacts: SomewhereEmailContact[] }>;
-}
-
-// \u2500\u2500 sw.inbox \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
-type SomewhereInboxOwnershipStatus = 'app_user' | 'project_owner' | 'legacy_project';
-// At least one of body / text / html is required (body is an alias of text).
-type __SomewhereInboxBody =
-  | { body: string; text?: string; html?: string }
-  | { text: string; body?: string; html?: string }
-  | { html: string; body?: string; text?: string };
-interface SomewhereInboxAddressCreateOptions {
-  address: string;
-  label?: string;
-  webhook_url?: string;
-  forward_to?: string;
-}
-interface SomewhereInboxAddressCreated {
-  id: string;
-  project_id: string;
-  address: string;
-  label: string | null;
-  kind: 'admin' | 'app';
-  ownership_status: 'app_user' | 'project_owner';
-  webhook_url: string | null;
-  // Returned once, only when webhook_url was set.
-  webhook_secret: string | null;
-  forward?: SomewhereJsonObject;
-  created_at: string;
-}
-interface SomewhereInboxAddress {
-  id: string;
-  address: string;
-  label: string | null;
-  created_at: string;
-  webhook_url: string | null;
-  forward_to: string | null;
-  forward_status: 'active' | 'pending_verification' | null;
-  ownership_status: SomewhereInboxOwnershipStatus;
-}
-interface SomewhereInboxListOptions {
-  address_id?: string;
-  limit?: number;
-  unread?: boolean;
-  q?: string;
-  include_spam?: boolean;
-}
-interface SomewhereInboxMessageSummary {
-  id: string;
-  address_id: string;
-  mail_from: string;
-  mail_to: string;
-  subject: string | null;
-  text_preview: string | null;
-  has_html: boolean;
-  attachment_count: number;
-  size_bytes: number;
-  read_at: string | null;
-  received_at: string;
-  thread_root: string | null;
-  spf_result: string | null;
-  dkim_result: string | null;
-  dmarc_result: string | null;
-  spam_suspect: boolean;
-  ownership_status: SomewhereInboxOwnershipStatus;
-}
-interface SomewhereInboxAttachmentMeta {
-  filename: string | null;
-  content_type: string;
-  size_bytes: number;
-  r2_key: string;
-}
-interface SomewhereInboxMessage extends SomewhereInboxMessageSummary {
-  project_id: string;
-  r2_key: string;
-  message_id_header: string | null;
-  in_reply_to_header: string | null;
-  references_header: string | null;
-  attachments: SomewhereInboxAttachmentMeta[];
-  raw_url: string;
-  // Present only with include_html: true.
-  html_preview?: string | null;
-}
-interface SomewhereInboxSendPending {
-  id: string;
-  message_id: string;
-  status: 'pending';
-  code: 'EMAIL_SEND_PENDING';
-  duplicate?: true;
-}
-interface __SomewhereInboxSentBase {
-  id: string;
-  from: string;
-  to: string;
-  subject: string;
-  thread_root: string;
-  status?: never;
-  duplicate?: true;
-  test_inbox?: { address: string; delivered: false };
-}
-interface SomewhereInboxSent extends __SomewhereInboxSentBase { message_id: string }
-interface SomewhereInboxReplySent extends __SomewhereInboxSentBase { inbox_message_id: string }
-interface SomewhereInboxThreadSummary {
-  thread_root: string;
-  last_at: string;
-  first_at: string;
-  message_count: number;
-  unread_count: number;
-  last_subject: string | null;
-  last_counterparty: string;
-  last_direction: 'in' | 'out';
-  ownership_status: SomewhereInboxOwnershipStatus;
-}
-type SomewhereInboxThreadMessage =
-  | {
-    direction: 'in'; id: string; address_id: string; mail_from: string; mail_to: string;
-    subject: string | null; text_preview: string | null; has_html: boolean;
-    attachment_count: number; read_at: string | null; received_at: string;
-    spf_result: string | null; dkim_result: string | null; dmarc_result: string | null;
-    spam_suspect: boolean; message_id: string | null; ownership_status: SomewhereInboxOwnershipStatus;
-  }
-  | {
-    direction: 'out'; id: string; to: string; from: string; subject: string | null;
-    body: string | null; text_preview: string | null; sent_at: string; is_reply: boolean;
-    message_id: string | null; inbox_message_id: string | null; ownership_status: SomewhereInboxOwnershipStatus;
-  };
-interface SomewhereInboxRule {
-  id: string;
-  address_id: string | null;
-  pattern: string;
-  action: 'allow' | 'deny';
-  created_at: string;
-}
-interface SomewhereInboxRules {
-  list(options?: { address_id?: string } | null): Promise<{ rules: SomewhereInboxRule[] }>;
-  // Omit address_id for a project-wide rule (sw.inbox.project only).
-  create(rule: { pattern: string; action: 'allow' | 'deny'; address_id?: string }): Promise<SomewhereInboxRule & { project_id: string }>;
-  delete(id: string): Promise<{ id: string; deleted: true }>;
-}
-interface SomewhereInboxClient {
-  listAddresses(): Promise<{ addresses: SomewhereInboxAddress[] }>;
-  createAddress(options: SomewhereInboxAddressCreateOptions): Promise<SomewhereInboxAddressCreated>;
-  listAppAddresses(): Promise<{ addresses: SomewhereInboxAddress[] }>;
-  deleteAddress(id: string): Promise<{ id: string; deleted: true }>;
-  list(options?: SomewhereInboxListOptions | null): Promise<{ messages: SomewhereInboxMessageSummary[]; count: number }>;
-  get(id: string, options?: { include_html?: boolean } | null): Promise<SomewhereInboxMessage>;
-  // Raw RFC-822 bytes; the Response carries X-Somewhere-Ownership-Status.
-  raw(id: string): Promise<Response>;
-  attachment(id: string, index: number): Promise<Response>;
-  markRead(id: string, read?: boolean): Promise<{ id: string; read: boolean; ownership_status: SomewhereInboxOwnershipStatus; read_at: string | null }>;
-  delete(id: string): Promise<{ id: string; deleted: true }>;
-  reply(id: string, reply: { subject?: string; idempotency_key?: string } & __SomewhereInboxBody): Promise<SomewhereInboxReplySent | SomewhereInboxSendPending>;
-  send(addressId: string, message: { to: string; subject: string; idempotency_key?: string } & __SomewhereInboxBody): Promise<SomewhereInboxSent | SomewhereInboxSendPending>;
-  threads(options?: { address_id?: string; limit?: number; include_spam?: boolean } | null): Promise<{ threads: SomewhereInboxThreadSummary[] }>;
-  thread(root: string): Promise<{ thread_root: string; messages: SomewhereInboxThreadMessage[] }>;
-  readonly rules: SomewhereInboxRules;
-}
-interface SomewhereInboxGrant {
-  collaborator_user_id: string;
-  role: 'viewer' | 'editor';
-  granted_by: string;
-  created_at: string;
-}
-// Trusted project-scope inbox: createAddress makes admin mailboxes; owner-only grants/migration.
-interface SomewhereRuntimeProjectInbox extends SomewhereInboxClient {
-  assignLegacyOwner(addressId: string, appUserId: string): Promise<{ id: string; ownership_status: 'app_user'; migrated_message_count: number; migration_id: string }>;
-  readonly grants: {
-    list(addressId: string): Promise<{ address_id: string; ownership_status: SomewhereInboxOwnershipStatus; grants: SomewhereInboxGrant[] }>;
-    set(addressId: string, collaboratorUserId: string, role: 'viewer' | 'editor'): Promise<{ address_id: string; collaborator_user_id: string; role: 'viewer' | 'editor'; ownership_status: 'app_user'; created_at: string }>;
-    delete(addressId: string, collaboratorUserId: string): Promise<{ address_id: string; collaborator_user_id: string; deleted: true }>;
-  };
-}
-// Scoped to the request's verified app user; createAddress makes app mailboxes.
-interface SomewhereRuntimeInbox extends SomewhereInboxClient {
-  readonly project: SomewhereRuntimeProjectInbox;
 }
 
 // \u2500\u2500 sw.notifications \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
@@ -3937,7 +3836,6 @@ interface SomewhereRuntimeContext {
   readonly email: SomewhereRuntimeEmail;
   readonly rooms: SomewhereRuntimeRooms;
   readonly contacts: SomewhereRuntimeContacts;
-  readonly inbox: SomewhereRuntimeInbox;
   readonly notifications: SomewhereRuntimeNotifications;
   readonly push: SomewhereRuntimePush;
   readonly queue: SomewhereRuntimeQueue;
@@ -4502,8 +4400,8 @@ var require_consumer_contract = __commonJS({
   "worker/containers/compile/consumer-contract.cjs"(exports2, module2) {
     "use strict";
     var CONSUMER_CONTRACT2 = Object.freeze({
-      version: 22,
-      digest: "da61ee52a81d1b7cb5324c8b88bc0b7f1883d213f8ef7280eddbf8449207c22f"
+      version: 27,
+      digest: "f4ec703b576673b8586f4a0bbeab5c7a3204bc5edceef4751c9d4ccef1ec0022"
     });
     var MEMBERSHIPS = "memberships: table({ id: id(), team_id: text(), member_id: text() }, { scope: owner(), client: { read: true } }),";
     var SHARES = "shares: table({ id: id(), grantee_id: text() }, { scope: owner(), client: { read: true, create: ['grantee_id'], delete: true }, unique: [['user_id', 'grantee_id']] }),";
@@ -5196,6 +5094,7 @@ var ROLE_DOMAIN_MAP_JS = `
 
 
 init_console_privacy();
+init_d1_session();
 
 
 init_console_privacy();

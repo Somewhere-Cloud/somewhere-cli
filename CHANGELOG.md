@@ -1,3 +1,10 @@
+## 0.38.133
+
+- `somewhere deploy` no longer checks types again when no file changed since the folder's last deploy; it says so and the platform reports that nothing changed. A no-change deploy no longer waits on a TypeScript download.
+- New starters list `typescript` 5.9.3 as a devDependency, so `somewhere init` installs it and deploys check types without fetching TypeScript with npx. In an older app, `npm install -D typescript@5.9.3` does the same; the npx notice now says so.
+- The starter's `tests/app-check.mjs` finds the notes form and list by `data-testid` (`note-title`, `note-save`, `note-item`), which the starter's notes view now carries, so renaming a button or label no longer breaks the check.
+- After a live deploy whose answer includes `checks`, the CLI reads the deploy log every 3 s for up to 45 s and prints the access check's sentence as `Checks: ...` (with `--json`, the result includes `access_check`). It never changes the exit code.
+
 ## 0.38.132
 
 - `somewhere open --dashboard` opens the dashboard at https://somewhere.cloud/app, and the sign-up link the CLI prints is https://somewhere.cloud/app/sign-in?intent=signup.

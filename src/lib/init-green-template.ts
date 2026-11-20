@@ -1,4 +1,5 @@
 import { CLI_VERSION } from './version.js';
+import { TYPECHECK_TYPESCRIPT_VERSION } from './typecheck-version.js';
 import { buildScaffoldGitignore } from './scaffold.js';
 import { PROJECT_LINK_README, starterNameSlug, type InitScaffoldFile } from './init-scaffold.js';
 import { INIT_AGENTS_MD, INIT_CLAUDE_MD } from './init-agent-guide.js';
@@ -21,7 +22,8 @@ const packageJson = (appName: string) => `{
   },
   "devDependencies": {
     "@types/react": "19.2.2",
-    "@types/react-dom": "19.2.2"
+    "@types/react-dom": "19.2.2",
+    "typescript": "${TYPECHECK_TYPESCRIPT_VERSION}"
   },
   "allowScripts": {
     "esbuild": true

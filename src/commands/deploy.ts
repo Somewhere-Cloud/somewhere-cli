@@ -9,7 +9,8 @@ import { join } from 'node:path';
 import { announceNpxTypeScriptFetch, typecheckCompilerSource, missingProjectDependencies, runTypecheck } from '../lib/typecheck.js';
 import { TYPECHECK_TYPESCRIPT_VERSION } from '../lib/typecheck-version.js';
 import { reportTypecheck } from './typecheck.js';
-import { clearBaseFiles, hashFiles, loadLastActivation, saveBaseFiles } from '../lib/base-files.js';
+import { awaitDeployChecks, formatDeployChecksLine, type AccessCheck, type DeployChecks } from '../lib/deploy-checks.js';
+import { clearBaseFiles, hashFiles, loadBaseFiles, loadLastActivation, saveBaseFiles } from '../lib/base-files.js';
 import { withVerifyProgress } from '../lib/verify-progress.js';
 import { Command, Option } from 'commander';
 import { basename, resolve } from 'node:path';
@@ -566,6 +567,21 @@ function findProjectConfigEntry(targetDir: string): ProjectConfigEntry | null {
   return loadProjectConfigEntry();
 }
 
+/** This folder's published files hash exactly as they did at the release it
+ *  last deployed or pulled (`.somewhere/base-files.json` for that release). */
+export function unchangedSinceLastPublish(
+  entry: ProjectConfigEntry | null,
+  targetDir: string,
+  hashes: Record<string, string>,
+): boolean {
+  if (!entry || resolve(entry.dir) !== resolve(targetDir)) return false;
+  const projectId = entry.config.project_id;
+  const base = loadBaseFiles(targetDir, projectId, readSourceBase(entry.config, projectId)?.releaseId);
+  if (!base) return false;
+  const paths = Object.keys(hashes);
+  return paths.length === Object.keys(base.files).length && paths.every((path) => base.files[path] === hashes[path]);
+}
+
 /** A temporary credential is reusable until its window closes; no recorded
  *  expiry means the server never gave one, which is not a reason to re-mint. */
 /** The stored temporary session's own expiry time has passed. A session that
@@ -697,26 +713,6 @@ export function registerDeploy(program: Command) {
       timelineMark('cli:action');
       const runTestsAfter = Boolean(opts.test && !opts.dryRun);
       if (runTestsAfter) process.stderr.write('deploy --test: the documented form is `somewhere deploy && somewhere test`; --test still runs somewhere test once after a successful deploy.\n');
-      let typecheckMs = 0;
-      const typecheckStartedAt = performance.now();
-      // Collection, authentication and packaging can proceed while tsc runs.
-      // Observe rejection immediately, then enforce the result before upload.
-      const hasTsconfig = existsSync(join(targetDir, 'tsconfig.json'));
-      const missingDependencies = hasTsconfig && missingProjectDependencies(targetDir).length > 0;
-      const checkingTypes = hasTsconfig && !missingDependencies;
-      if (checkingTypes && typecheckCompilerSource(targetDir) === 'npx') {
-        announceNpxTypeScriptFetch(TYPECHECK_TYPESCRIPT_VERSION);
-      }
-      const typecheckHeartbeat = checkingTypes && !opts.json ? setInterval(() => {
-        process.stderr.write(`Still checking types before upload after ${formatDeployElapsed(performance.now() - typecheckStartedAt)}...\n`);
-      }, deployHeartbeatMs()).unref() : undefined;
-      const typecheck = checkingTypes
-        ? runTypecheck(targetDir).then(value => ({ value }), (error: unknown) => ({ error }))
-          .finally(() => {
-            clearInterval(typecheckHeartbeat);
-            typecheckMs = performance.now() - typecheckStartedAt;
-          })
-        : Promise.resolve(null);
       // A bad local flow must not publish source or mint a temporary account.
       const verifyFlow = opts.verify && !opts.dryRun
         ? loadVerifyFlow(typeof opts.verify === 'string' ? opts.verify : undefined, targetDir)
@@ -766,6 +762,30 @@ export function registerDeploy(program: Command) {
 
       const storedConfig = loadConfig();
       const foundProjectEntry = opts.new ? null : findProjectConfigEntry(targetDir);
+      let typecheckMs = 0;
+      const typecheckStartedAt = performance.now();
+      // Authentication and packaging can proceed while tsc runs.
+      // Observe rejection immediately, then enforce the result before upload.
+      // A plain redeploy of exactly the files this folder last published has
+      // nothing new to check: the platform answers that nothing changed.
+      const sourceUnchanged = !opts.project && !opts.temporary && unchangedSinceLastPublish(foundProjectEntry, targetDir, publishedHashes);
+      if (sourceUnchanged) process.stderr.write('No file changed since this folder\'s last deploy; types were not checked again.\n');
+      const hasTsconfig = !sourceUnchanged && existsSync(join(targetDir, 'tsconfig.json'));
+      const missingDependencies = hasTsconfig && missingProjectDependencies(targetDir).length > 0;
+      const checkingTypes = hasTsconfig && !missingDependencies;
+      if (checkingTypes && typecheckCompilerSource(targetDir) === 'npx') {
+        announceNpxTypeScriptFetch(TYPECHECK_TYPESCRIPT_VERSION);
+      }
+      const typecheckHeartbeat = checkingTypes && !opts.json ? setInterval(() => {
+        process.stderr.write(`Still checking types before upload after ${formatDeployElapsed(performance.now() - typecheckStartedAt)}...\n`);
+      }, deployHeartbeatMs()).unref() : undefined;
+      const typecheck = checkingTypes
+        ? runTypecheck(targetDir).then(value => ({ value }), (error: unknown) => ({ error }))
+          .finally(() => {
+            clearInterval(typecheckHeartbeat);
+            typecheckMs = performance.now() - typecheckStartedAt;
+          })
+        : Promise.resolve(null);
       // The stored temporary session expired unclaimed and this deploy targets
       // an existing project (a folder link or --project). A freshly minted
       // temporary account owns no project, so minting one only to get a
@@ -1444,6 +1464,8 @@ export function registerDeploy(program: Command) {
           (output as DeployResult & { uploaded?: typeof inventory }).uploaded = inventory;
           if (postLive.kind === 'timeout') output.post_live_render = { status: 'pending', note: POST_LIVE_RENDER_STILL_RUNNING };
           const tests = await runReleaseTests();
+          // The platform's background access check: reported, never a failure.
+          if (result.checks) output.access_check = await awaitDeployChecks(client, result.checks);
           printJson(verification || verificationError || tests ? {
             ...output,
             deployment_outcome: 'live',
@@ -1630,6 +1652,12 @@ export function registerDeploy(program: Command) {
           }
         }
 
+        // The platform's background access check: reported, never a failure.
+        if (result.checks) {
+          const checksLine = formatDeployChecksLine(await awaitDeployChecks(client, result.checks));
+          if (checksLine) info(checksLine);
+        }
+
         // Exit non-zero if any function failed to deploy — a CI step that
         // shells out to `somewhere deploy` should fail, not pass green.
         if (hasFunctionErrors) {
@@ -1785,6 +1813,10 @@ export interface DeployResult {
   /** Present when the blank-page check runs after the answer. */
   post_live_render?: (PostLiveRenderRecord & { note?: string }) | null;
   blank_page_check?: unknown;
+  /** Present after a live deploy whose access check runs in the background. */
+  checks?: DeployChecks;
+  /** Added by the CLI with --json: the access check as last read. */
+  access_check?: AccessCheck | null;
 }
 
 /** The line a deploy prints about a blank-page check that ran after it

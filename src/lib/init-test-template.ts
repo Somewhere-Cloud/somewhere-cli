@@ -44,10 +44,10 @@ try {
   }, { requires: needsSignup });
 ${privateData ? `  await app.check('a note stays private to its owner', async (at) => {
     const secret = 'private ' + crypto.randomUUID();
-    at('Create the first person’s note');
-    await ana.page.getByLabel('Title').fill(secret);
-    await ana.page.getByRole('button', { name: 'Add note' }).click();
-    await ana.page.getByRole('heading', { name: secret }).waitFor();
+    at('Create the first person’s note'); // found by data-testid, not words: keep note-title, note-save and note-item when renaming
+    await ana.page.getByTestId('note-title').fill(secret);
+    await ana.page.getByTestId('note-save').click();
+    await ana.page.getByTestId('note-item').filter({ hasText: secret }).waitFor();
     const seen = captureResponses(ben.page);
     try {
       await ben.page.reload();

@@ -30,3 +30,17 @@ test('deploy --help says how to create a project, and that --project targets an 
 test('projects --help names the create command', () => {
   assert.match(help('projects'), /somewhere init --bare --name <name>/);
 });
+
+// A signed-out first-run agent ran `init --bare` and was only told to log in
+// (tsk_c9ee9a5b). Every account-only command now also names the signed-out deploy.
+test('signed out, an account-only command names deploy as the way to go live without an account', () => {
+  const configDir = mkdtempSync(join(tmpdir(), 'sw-signed-out-'));
+  const r = spawnSync(process.execPath, [distIndex, 'init', '--bare', '--name', 'swtest-signed-out'], {
+    encoding: 'utf8',
+    cwd: mkdtempSync(join(tmpdir(), 'sw-signed-out-dir-')),
+    env: { ...process.env, SOMEWHERE_CONFIG_DIR: configDir, SOMEWHERE_API_URL: 'http://127.0.0.1:9', CI: '1', SOMEWHERE_NO_NOTIFICATIONS: '1' },
+  });
+  assert.notEqual(r.status, 0);
+  assert.match(r.stdout + r.stderr, /Not logged in\. To put a folder live without an account, run somewhere deploy there/);
+  assert.match(help('deploy'), /Signed out, deploy creates a temporary app and prints its claim link/);
+});

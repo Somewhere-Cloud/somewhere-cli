@@ -345,7 +345,7 @@ export function getToken(): string {
     process.exit(1);
   }
   if (!config?.token) {
-    error(`Not logged in. Run: ${cliInvocation()} login (it prints a code to approve in any browser). If you deployed signed out from another terminal on this computer, run this command there: its temporary credential is in that terminal\'s ~/.somewhere.`);
+    error(`Not logged in. To put a folder live without an account, run ${cliInvocation()} deploy there: it creates a temporary app and prints its live URL and claim link. To sign in, run ${cliInvocation()} login (it prints a code to approve in any browser). If you deployed signed out from another terminal on this computer, run this command there: its temporary credential is in that terminal\'s ~/.somewhere.`);
     process.exit(1);
   }
   return config.token;

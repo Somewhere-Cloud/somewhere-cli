@@ -1,3 +1,7 @@
+## 0.38.130
+
+- Signed out, a command that needs an account also says that `somewhere deploy` puts a folder live without one, with a claim link. `somewhere deploy --help` says the same under "No project yet?".
+
 ## 0.38.129
 
 - `somewhere test` runs the starter's full check on an unclaimed app: sign-up, sign-in and the privacy check.

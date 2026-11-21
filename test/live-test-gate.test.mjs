@@ -77,7 +77,7 @@ const REFUSED = [
 for (const [label, extra] of REFUSED) {
   test(`the live deploy test skips and makes no request: ${label}`, async () => {
     await withRecordingApi(async (apiUrl, requests) => {
-      const result = await runNode(['--test', 'test/deploy-outcome-live.test.mjs'], childEnv(signedInHome(), apiUrl, extra));
+      const result = await runNode(['--test', '--test-reporter=tap', 'test/deploy-outcome-live.test.mjs'], childEnv(signedInHome(), apiUrl, extra));
       assert.equal(result.status, 0, result.stdout + result.stderr);
       assert.match(result.stdout, /^# skipped 1$/m);
       assert.match(result.stdout, /^# pass 0$/m);

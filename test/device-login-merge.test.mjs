@@ -171,10 +171,15 @@ test('a refused, denied, abandoned or failed redemption leaves the temporary pro
 test('an ordinary login retains its normal registration and prints the issued lifetime', async t => {
   const { folders, run, state, configPath } = await withFixture(t, { temporary: false, count: 1 });
   state.expiresIn = 75;
+  const settings = join(folders[0].cwd, '..', '.claude.json');
+  const existing = '{"mcpServers":{"custom":{"command":"fixture"}}}\n';
+  writeFileSync(settings, existing);
   const result = await run(folders[0].cwd, ['login']);
   assert.equal(result.code, 0);
   assert.match(result.output, /Logged in as member@example\.invalid/);
+  assert.equal(readFileSync(settings, 'utf8'), existing);
   assert.match(result.output, /Code expires in 75 seconds\./);
+  assert.doesNotMatch(result.output, /Create an account: https:\/\/somewhere\.cloud/);
   assert.doesNotMatch(result.output, /Added .*temporary project/);
   assert.equal(state.registered[0].merge, undefined);
   assert.equal(state.registered[0].noBearer, true);

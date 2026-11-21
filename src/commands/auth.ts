@@ -25,6 +25,8 @@ import { API_BASE_URL, ApiClient, CliApiError, typedServerError } from '../lib/c
 import {
   clearConfig,
   getToken,
+  hasGlobalMcpConfig,
+  hasProjectMcpConfig,
   loadConfig,
   loadProjectConfig,
   saveConfig,
@@ -625,6 +627,9 @@ function registerAuthRoles(auth: Command): void {
  *  and this is stdout copy for a human or an agent reading the transcript. */
 function printPostLoginNext(): void {
   console.log('');
+  if (!hasGlobalMcpConfig() && !hasProjectMcpConfig()) {
+    console.log('To connect Somewhere to Claude Code, run somewhere mcp install claude-code');
+  }
   info(bold('Next'));
   const actions = nextActions({ stage: 'login', linkedProject: Boolean(loadProjectConfig()) });
   for (const line of formatNextActions(actions, { command: teal, why: dim })) {

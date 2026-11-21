@@ -177,6 +177,7 @@ test('an ordinary login retains its normal registration and prints the issued li
   const result = await run(folders[0].cwd, ['login']);
   assert.equal(result.code, 0);
   assert.match(result.output, /Logged in as member@example\.invalid/);
+  assert.equal(result.output.match(/^To connect Somewhere to Claude Code, run somewhere mcp install claude-code$/gm)?.length, 1);
   assert.equal(readFileSync(settings, 'utf8'), existing);
   assert.match(result.output, /Code expires in 75 seconds\./);
   assert.doesNotMatch(result.output, /Create an account: https:\/\/somewhere\.cloud/);
@@ -184,4 +185,20 @@ test('an ordinary login retains its normal registration and prints the issued li
   assert.equal(state.registered[0].merge, undefined);
   assert.equal(state.registered[0].noBearer, true);
   assert.ok(JSON.parse(readFileSync(configPath, 'utf8')).token === memberKey);
+});
+
+test('login skips the Claude Code setup hint when Somewhere is configured', async t => {
+  const { folders, run } = await withFixture(t, { temporary: false, count: 1 });
+  const cwd = folders[0].cwd;
+  const projectPath = join(cwd, '.mcp.json');
+  const userPath = join(cwd, '..', '.claude.json');
+  const config = '{"mcpServers":{"somewhere":{"command":"fixture"}}}\n';
+  for (const path of [projectPath, userPath]) {
+    writeFileSync(path, config);
+    const result = await run(cwd, ['login']);
+    assert.equal(result.code, 0);
+    assert.doesNotMatch(result.output, /somewhere mcp install claude-code/);
+    assert.equal(readFileSync(path, 'utf8'), config);
+    rmSync(path);
+  }
 });

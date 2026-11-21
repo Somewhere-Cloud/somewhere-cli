@@ -53,6 +53,28 @@ test('offline CLI needs no account, makes no network attempt and leaves source u
   assert.equal(readFileSync(join(dir, 'src/main.ts'), 'utf8'), 'export const n = 1;');
 });
 
+test('typecheck reports the platform lint warning alongside a clean TypeScript result', () => {
+  const source = 'export default function handler() { return Response.json({ ok: true }); }';
+  const dir = project({
+    'tsconfig.json': JSON.stringify({ compilerOptions: { strict: true, noEmit: true }, include: ['api'] }),
+    'api/docs/index.ts': source,
+    'api/docs.ts': source,
+  });
+  mkdirSync(join(dir, 'node_modules'));
+  symlinkSync(join(root, 'node_modules/.bin'), join(dir, 'node_modules/.bin'));
+  const config = mkdtempSync(join(tmpdir(), 'typecheck-lint-config-'));
+  const run = spawnSync(process.execPath, [join(root, 'dist/index.js'), 'typecheck', dir, '--json'], {
+    encoding: 'utf8',
+    env: { ...process.env, SOMEWHERE_CONFIG_DIR: config },
+    timeout: 10_000,
+  });
+  assert.equal(run.status, 0, run.stderr + run.stdout);
+  const result = JSON.parse(run.stdout);
+  assert.equal(result.ok, true);
+  const warning = result.sourceLint.findings.find(({ rule }) => rule === 'somewhere/index-route');
+  assert.ok(warning?.fix);
+});
+
 test('lint suppresses update checks on a terminal too', async () => {
   let calls = 0;
   assert.deepEqual(await collectNotices(['node', 'somewhere', 'lint'], { isTTY: true, outdatedWarning: async () => { calls++; return 'unexpected'; } }), []);

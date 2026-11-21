@@ -10,6 +10,8 @@ import { IGNORE } from '../lib/files.js';
 import { AGENT_HOSTS, isAgentHost, runAgentHook } from '../lib/agent-hooks.js';
 import { bold, dim, error, info, printJson, red, success, teal, warn } from '../lib/output.js';
 import { announceNpxTypeScriptFetch, missingProjectDependencies, missingTypecheckDependenciesMessage, runTypecheck, typecheckCompilerSource, type TypecheckResult } from '../lib/typecheck.js';
+import { lintProject } from '../lib/source-lint.js';
+import { printLintFindings } from './lint.js';
 import { TYPECHECK_TYPESCRIPT_VERSION } from '../lib/typecheck-version.js';
 
 export const MISSING_TSCONFIG_GUIDANCE =
@@ -19,7 +21,7 @@ export function registerTypecheck(program: Command) {
   program
     .command('typecheck [dir]')
     .description(
-      'Check a source project with `tsc --noEmit`. ' +
+      'Check TypeScript and report advisory Somewhere source warnings. ' +
         `Reports TypeScript errors with file:line before deploy and exits 1 when there are any; \`${cliInvocation()} deploy\` stops on type errors. ` +
         `Requires a local tsconfig.json; add one for a new app, or run \`${cliInvocation()} pull\` for an existing deployed app. ` +
         'It never installs the project\'s dependencies: if the project has missing dependencies, it says so and stops; run npm install first. ' +
@@ -28,7 +30,7 @@ export function registerTypecheck(program: Command) {
         `options and TypeScript ${DEPLOY_CHECK_TYPESCRIPT_VERSION}) against the packages installed here; no tsconfig.json needed. ` +
         'It reports a narrower set than the default project check, which stays the stricter of the two.',
     )
-    .option('--json', 'Print the raw typecheck result as JSON')
+    .option('--json', 'Print typecheck and platform source findings as JSON')
     .option('--deploy', "Run the deploy's reference check: the undefined-name and type findings a deploy reports. Fetches TypeScript " + DEPLOY_CHECK_TYPESCRIPT_VERSION + " through npx unless the project has exactly that version")
     .option('--hook <host>', `With --deploy: run as an agent after-edit hook (${AGENT_HOSTS.join(', ')}), reading the host's event on stdin. Installed by \`${cliInvocation()} hooks install\``)
     .option('--watch', 'Keep running and re-check after each save while this command is open. It is not installed into your editor or agent; start it yourself. Never deploys or touches live data')
@@ -100,28 +102,22 @@ export function registerTypecheck(program: Command) {
         announceNpxTypeScriptFetch(TYPECHECK_TYPESCRIPT_VERSION);
       };
 
-      if (opts.watch) {
-        return watchAndRun(dir, async () => {
-          const refused = notInstalled();
-          if (!refused) announceFetch();
-          const result = refused ?? await runTypecheck(dir);
-          if (opts.json) printJson(result);
-          else reportTypecheck(result);
-          return result;
-        });
-      }
-
-      const refused = notInstalled();
-      if (!refused) announceFetch();
-      const spinner = opts.json || refused ? null : ora('Typechecking (tsc --noEmit)...').start();
-      const result = refused ?? await runTypecheck(dir);
-      spinner?.stop();
-
-      if (opts.json) {
-        printJson(result);
-        process.exit(result.ok ? 0 : 1);
-      }
-      reportTypecheck(result);
+      const check = async () => {
+        const refused = notInstalled();
+        if (!refused) announceFetch();
+        const spinner = opts.json || refused || opts.watch ? null : ora('Typechecking (tsc --noEmit)...').start();
+        const result = refused ?? await runTypecheck(dir);
+        spinner?.stop();
+        const sourceLint = await lintProject(dir);
+        if (opts.json) printJson({ ...result, sourceLint });
+        else {
+          reportTypecheck(result);
+          printLintFindings(sourceLint);
+        }
+        return result;
+      };
+      if (opts.watch) return watchAndRun(dir, check);
+      const result = await check();
       process.exit(result.ok ? 0 : 1);
     });
 }
@@ -129,7 +125,10 @@ export function registerTypecheck(program: Command) {
 /** Print the local TypeScript check verdict. */
 export function reportTypecheck(result: TypecheckResult): void {
   // An unknown platform contract is said once, never presented as a match.
-  if (result.contract?.status === 'unknown') info(dim(result.contract.message));
+  if (result.contract?.status === 'unknown') {
+    const version = result.contract.cli?.version;
+    info(dim(`Using bundled platform rules${version === undefined ? '' : ` (contract ${version})`}. Deploy checks against the platform.`));
+  }
   if (result.spawnError) {
     // A refusal (missing type packages) or a stopped run says what happened in
     // its own words; the install hint is only for a compiler that could not start.

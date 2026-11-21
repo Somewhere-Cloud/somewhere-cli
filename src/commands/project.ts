@@ -1,6 +1,6 @@
 import { cliInvocation } from '../lib/cli-invocation.js';
 import { CLI_VERSION } from '../lib/version.js';
-import { Command } from 'commander';
+import { Command, Option } from 'commander';
 import prompts from 'prompts';
 import ora from '../lib/spinner.js';
 import { ApiClient, CliApiError } from '../lib/client.js';
@@ -31,7 +31,7 @@ export function registerProject(program: Command) {
     .command('create <name>')
     .description('Create a new project')
     .option('--subdomain <subdomain>', 'Custom subdomain')
-    .option('--preview', 'Create without deploying to production')
+    .addOption(new Option('--preview').hideHelp())
     .option('--json', 'Print the raw project response as JSON')
     .action(async (name: string, opts) => {
       const client = new ApiClient(getToken());

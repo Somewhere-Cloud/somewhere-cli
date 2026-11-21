@@ -96,5 +96,8 @@ let warned = false;
 function warnContract(verdict: ContractVerdict): void {
   if (warned || verdict.compatible !== false) return;
   warned = true;
-  console.error(`Warning: CLI consumer contract ${verdict.cli?.version ?? 'unknown'} differs from platform ${verdict.platform?.version ?? 'unknown'}; continuing with this CLI's checks.`);
+  const nextStep = verdict.status === 'outdated'
+    ? 'Run npx -y @somewhere-cloud/cli@latest upgrade in the project, then check again.'
+    : 'Deploy checks against the platform.';
+  console.error(`Warning: CLI consumer contract ${verdict.cli?.version ?? 'unknown'} differs from platform ${verdict.platform?.version ?? 'unknown'}. ${nextStep}`);
 }

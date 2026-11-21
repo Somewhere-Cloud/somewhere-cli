@@ -6,6 +6,7 @@
 - CLI login leaves your agent's settings alone. When you sign in against another server, the CLI uses that server's instructions.
 - `somewhere run` and `somewhere run check` explain the single-file limit and flag relative imports when TypeScript is installed in the project.
 - The package installs the `somewhere` and `sw` commands.
+- Updated CLI dependencies, including the MCP SDK, HTTP client and archive tooling.
 
 ## 0.38.138
 

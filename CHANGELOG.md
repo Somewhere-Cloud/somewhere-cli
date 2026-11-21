@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.38.138
+
+- `somewhere typecheck` knows `appOwner()` in db/schema.ts, and `user.is_owner` on the signed-in user in functions and `sw.endpoint` handlers.
+
 ## 0.38.137
 
 - `somewhere deploy` never waits for the after-deploy check: it prints the live address as soon as the app is live, then one line, `Checks: running in the background; somewhere test shows the result.` (`--json` carries the `checks` pointer). 0.38.136, which was never published, waited up to 120 s.

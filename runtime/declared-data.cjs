@@ -1407,6 +1407,8 @@ interface SomewhereAuthProfileUser extends SomewhereAuthUser {
   locale?: string | null;
   timezone?: string | null;
   agent?: SomewhereJsonObject;
+  /** True when this user is the app's owner: their verified email is the project owner's (appOwner() in db/schema.ts). */
+  is_owner: boolean;
   /** Present when read with { appRoles: true }: the caller's own app-role names, read fresh. */
   appRoles?: string[];
 }
@@ -3932,6 +3934,8 @@ interface SomewhereEndpointUser {
   email?: string | null;
   display_name?: string | null;
   role?: string;
+  /** True when the caller is the app's owner: their verified email is the project owner's. */
+  is_owner: boolean;
   /** The caller's own app roles, read fresh for this request. Present on an endpoint that declares roles. */
   appRoles?: string[];
   [key: string]: unknown;
@@ -4288,6 +4292,8 @@ function allOf(gate: SomewhereSchemaDeclaration.MemberScope | SomewhereSchemaDec
 function parent(options: { via: string; table?: string; author?: string; update?: Array<'author' | 'parent'>; delete?: Array<'author' | 'parent'> }): SomewhereSchemaDeclaration.Scope;
 function group(options?: { column?: string; roles?: Partial<Record<'read' | 'create' | 'update' | 'delete', string[]>>; read?: string[] }): SomewhereSchemaDeclaration.GroupScope;
 function appRole(options: { roles: Partial<Record<'read' | 'create' | 'update' | 'delete', string[]>>; read?: string[] }): SomewhereSchemaDeclaration.AppRoleScope;
+/** The app's owner: the signed-in user whose verified email is the project owner's. Reads, creates, updates and deletes every row. */
+function appOwner(): SomewhereSchemaDeclaration.AppRoleScope;
 `;
     var SCHEMA_DECLARATION2 = types + signatures.replace(/^function /gm, "declare function ") + `declare module 'somewhere/db' {
 ${(signatures + policySignatures).replace(/^function /gm, "  export function ")}}
@@ -4465,8 +4471,8 @@ var require_consumer_contract = __commonJS({
   "worker/containers/compile/consumer-contract.cjs"(exports2, module2) {
     "use strict";
     var CONSUMER_CONTRACT2 = Object.freeze({
-      version: 28,
-      digest: "e4a7b324f259d0bc92b20434ff153cdfadebf865dd96dfa3e19e8b9811d43692"
+      version: 30,
+      digest: "6b27b36b315bece1e2cd83950720930286ed19b8858b7e8cd8f5f5bf7566797b"
     });
     var MEMBERSHIPS = "memberships: table({ id: id(), team_id: text(), member_id: text() }, { scope: owner(), client: { read: true } }),";
     var SHARES = "shares: table({ id: id(), grantee_id: text() }, { scope: owner(), client: { read: true, create: ['grantee_id'], delete: true }, unique: [['user_id', 'grantee_id']] }),";
@@ -6748,6 +6754,23 @@ function readAppRoleScope(r, tableName, line, fail) {
   declaredLines.set(node, { line, names });
   return node;
 }
+var APP_OWNER_ROLE_NAME = "app_owner";
+function readAppOwnerScope(r, tableName, line, fail) {
+  r.expectPunct("(", 'after "appOwner"');
+  if (!r.tryPunct(")")) fail(line, `appOwner() on table "${tableName}" takes no options: the app's owner may read, create, update and delete every row.`);
+  const all = [APP_OWNER_ROLE_NAME];
+  return { kind: "app_role", roles: { read: [...all], create: [...all], update: [...all], delete: [...all] } };
+}
+function usesAppOwner(tables) {
+  const visit = (value) => {
+    if (!value || typeof value !== "object") return false;
+    if (Array.isArray(value)) return value.some(visit);
+    const node = value;
+    if (node.kind === "app_role" && node.roles && APP_ROLE_OPERATIONS.some((op) => Array.isArray(node.roles[op]) && node.roles[op].includes(APP_OWNER_ROLE_NAME))) return true;
+    return Object.values(value).some(visit);
+  };
+  return tables.some((t) => visit(t.scope));
+}
 function resolveAppRoleScopes(tables, appRoles, errors) {
   const vocabulary = new Set((appRoles ?? []).map((role) => role.name));
   for (const t of tables) {
@@ -7172,7 +7195,7 @@ var COLUMN_HELPERS =                 new Set([
   "json",
   "blob"
 ]);
-var SCOPE_HELPERS =                 new Set(["owner", "shared", "serverOnly", "member", "anyOf", "allOf", "parent", "group", "appRole"]);
+var SCOPE_HELPERS =                 new Set(["owner", "shared", "serverOnly", "member", "anyOf", "allOf", "parent", "group", "appRole", "appOwner"]);
 var TABLE_MARKER_HELPERS =                 new Set(["removedTable", "exported"]);
 var SCHEMA_CALLABLE =                 new Set([
   ...COLUMN_HELPERS,
@@ -7778,6 +7801,7 @@ function readAnyOfBranch(r, tableName, which) {
   if (tok.value === "grant") return readGrantScope(r, tableName, tok.line, failAt);
   if (tok.value === "group") return readGroupScope(r, tableName, tok.line, failAt);
   if (tok.value === "appRole") return readAppRoleScope(r, tableName, tok.line, failAt);
+  if (tok.value === "appOwner") return readAppOwnerScope(r, tableName, tok.line, failAt);
   throw new SchemaTsError(`line ${tok.line}: ${ANY_OF_FORMS}`);
 }
 function readAnyOfScope(r, tableName, line) {
@@ -7824,6 +7848,7 @@ function readAllOfScope(r, tableName, line) {
   if (gateTok.value === "member") gate = readPolicyMember(r, tableName, gateTok.line);
   else if (gateTok.value === "group") gate = readGroupScope(r, tableName, gateTok.line, failAt);
   else if (gateTok.value === "appRole") gate = readAppRoleScope(r, tableName, gateTok.line, failAt);
+  else if (gateTok.value === "appOwner") gate = readAppOwnerScope(r, tableName, gateTok.line, failAt);
   else throw new SchemaTsError(`line ${gateTok.line}: ${ALL_OF_FORMS}`);
   r.expectPunct(",", `between the gate and who in allOf() on table "${tableName}"`);
   const whoTok = r.expectIdent(`for who in allOf() on table "${tableName}"`);
@@ -7960,7 +7985,7 @@ function readScope(r, tableName) {
   const tok = r.expectIdent(`for the scope of table "${tableName}"`);
   if (!SCOPE_HELPERS.has(tok.value)) {
     throw new SchemaTsError(
-      `line ${tok.line}: unknown scope "${tok.value}" on table "${tableName}". Table scopes are owner(), group(), appRole(), member(), anyOf(), allOf(), parent(), shared(), and serverOnly().`
+      `line ${tok.line}: unknown scope "${tok.value}" on table "${tableName}". Table scopes are owner(), group(), appRole(), appOwner(), member(), anyOf(), allOf(), parent(), shared(), and serverOnly().`
     );
   }
   if (tok.value === "anyOf") return readAnyOfScope(r, tableName, tok.line);
@@ -7969,8 +7994,8 @@ function readScope(r, tableName) {
   const failAt = (line, message) => {
     throw new SchemaTsError(`line ${line}: ${message}`);
   };
-  if (tok.value === "group" || tok.value === "appRole") {
-    const policy = tok.value === "group" ? readGroupScope(r, tableName, tok.line, failAt) : readAppRoleScope(r, tableName, tok.line, failAt);
+  if (tok.value === "group" || tok.value === "appRole" || tok.value === "appOwner") {
+    const policy = tok.value === "group" ? readGroupScope(r, tableName, tok.line, failAt) : tok.value === "appOwner" ? readAppOwnerScope(r, tableName, tok.line, failAt) : readAppRoleScope(r, tableName, tok.line, failAt);
     refuseBranchRead(policy, tok.line, tableName, `the ${tok.value}() scope`);
     return { kind: "policy", policy };
   }
@@ -8368,7 +8393,13 @@ function extractSchemaTs(source, options = {}) {
     const fail = (line, message) => {
       throw new SchemaTsError(`line ${line}: ${message}`);
     };
-    const { managedSearch, fileCollections, groupRoles, appRoles, payments, jobs, serviceRoles } = readSchemaOptions(reader, fail, fileErrors);
+    const { managedSearch, fileCollections, groupRoles, appRoles: declaredAppRoles, payments, jobs, serviceRoles } = readSchemaOptions(reader, fail, fileErrors);
+    const appOwnerErrors = [];
+    for (const role of declaredAppRoles ?? []) {
+      if (role.name === APP_OWNER_ROLE_NAME) appOwnerErrors.push(`appRoles declares "${APP_OWNER_ROLE_NAME}", which is built in: use appOwner() in a table's scope for the app's owner.`);
+      if (role.grantableBy.includes(APP_OWNER_ROLE_NAME)) appOwnerErrors.push(`appRoles.${role.name}.grantableBy names "${APP_OWNER_ROLE_NAME}". The app's owner holds no grant, so it cannot be a grantor; grant from a function that checks user.is_owner instead.`);
+    }
+    const appRoles = !appOwnerErrors.length && usesAppOwner(tables) ? [...declaredAppRoles ?? [], { name: APP_OWNER_ROLE_NAME, grantableBy: [] }].sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0) : declaredAppRoles;
     reader.expectPunct(")", "closing schema(\u2026)");
     reader.tryPunct(";");
     if (!reader.atEof()) {
@@ -8382,7 +8413,7 @@ function extractSchemaTs(source, options = {}) {
     if (tables.length > MAX_TABLES) {
       return { ok: false, errors: [`db/schema.ts declares ${tables.length} tables (max ${MAX_TABLES}).`] };
     }
-    const errors = [];
+    const errors = [...appOwnerErrors];
     const names = new Set(tables.map((t) => t.name));
     for (const t of tables) {
       for (const c of t.columns) {

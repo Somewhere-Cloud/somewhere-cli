@@ -528,15 +528,22 @@ export function saveGlobalMcpConfig(): void {
   writeFileSync(CLAUDE_CONFIG_PATH, JSON.stringify(config, null, 2) + '\n');
 }
 
-export function hasGlobalMcpConfig(): boolean {
-  if (!existsSync(CLAUDE_CONFIG_PATH)) return false;
+function hasSomewhereMcpConfig(path: string): boolean {
   try {
-    const config = JSON.parse(readFileSync(CLAUDE_CONFIG_PATH, 'utf-8')) as Record<string, unknown>;
+    const config = JSON.parse(readFileSync(path, 'utf-8')) as Record<string, unknown>;
     const servers = config.mcpServers as Record<string, unknown> | undefined;
     return !!servers?.somewhere;
   } catch {
     return false;
   }
+}
+
+export function hasGlobalMcpConfig(): boolean {
+  return hasSomewhereMcpConfig(CLAUDE_CONFIG_PATH);
+}
+
+export function hasProjectMcpConfig(dir = process.cwd()): boolean {
+  return hasSomewhereMcpConfig(join(dir, '.mcp.json'));
 }
 
 const CURSOR_DIR = join(homedir(), '.cursor');

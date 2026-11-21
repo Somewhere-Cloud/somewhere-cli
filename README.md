@@ -60,6 +60,8 @@ somewhere logs --follow  # Stream logs
 somewhere open           # Open in browser
 ```
 
+To use the Somewhere MCP tools in Claude Code, run `somewhere mcp install claude-code` after signing in. Reload Claude Code to make the tools available.
+
 New starters record the CLI version in `package.json` under
 `somewhere.cli_version`. Use `somewhere` or `npx -y @somewhere-cloud/cli` in
 the project. The pinned version runs from npm’s cache when needed. `somewhere
@@ -138,8 +140,7 @@ Short alias: `sw` works everywhere `somewhere` does.
 approve the code. Use `--browser-callback` for Google sign-in with a localhost
 callback. Credentials are saved in `~/.somewhere/config.json` with mode 600.
 
-MCP connections are optional: `somewhere mcp install <host>` configures the
-stdio bridge (`somewhere mcp`). The bridge reads the saved credentials when it
+To connect Claude Code, run `somewhere mcp install claude-code`. The command registers the stdio bridge (`somewhere mcp`). The bridge reads the saved credentials when it
 starts. Refreshable credentials can renew automatically; if renewal fails,
 follow the reported sign-in instructions.
 

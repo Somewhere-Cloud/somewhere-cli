@@ -22,6 +22,7 @@ import { join, dirname, relative } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { liveDeployCredential } from './live-test-gate.mjs';
+import { PUBLIC_PROBE_PATH, verifyRoundtripServing } from './e2e-roundtrip-probe.mjs';
 
 const gate = liveDeployCredential();
 if (!gate.ok) {
@@ -157,6 +158,8 @@ for (const [fixtureName, build] of Object.entries(FIXTURES)) {
   try {
     const srcDir = mkdtempSync(join(tmpdir(), 'sw-rt-src-'));
     build(srcDir);
+    const marker = `round-trip fixture ${project.id}`;
+    if (fixtureName === 'functions-only') writeFileSync(join(srcDir, PUBLIC_PROBE_PATH.slice(1)), marker);
     const original = treeOf(srcDir);
 
     console.log('  deploying...');
@@ -193,15 +196,10 @@ for (const [fixtureName, build] of Object.entries(FIXTURES)) {
       dryRun.split('\n').filter((l) => /Added|Modified|Removed/.test(l)).join(' | ') || dryRun.slice(0, 300),
     );
 
-    // 3. Server-only code never publicly served ( class).
+    // 3. Confirm the app serves this fixture, then check its private route.
     if (fixtureName === 'functions-only') {
-      const res = await fetch(`https://${project.subdomain}.somewhere.site/_lib/secret.ts`, { redirect: 'error' });
-      const text = await res.text();
-      check(
-        '_lib/ source not publicly served',
-        [403, 404].includes(res.status) && !text.includes('do-not-serve'),
-        `GET /_lib/secret.ts → ${res.status}`,
-      );
+      await verifyRoundtripServing(project.subdomain, marker);
+      console.log('  ✓ fixture public file serves and _lib/ returns FUNCTION_NOT_FOUND');
     }
 
     rmSync(srcDir, { recursive: true, force: true });

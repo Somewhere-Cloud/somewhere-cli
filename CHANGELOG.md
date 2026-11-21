@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.38.141
+
+- Typecheck keeps the compiler result and exit code when its advisory source scan fails, and reports the source failure in text and JSON.
+
 ## 0.38.140
 
 - Sign-in prints the Claude Code MCP install command when Somewhere is not configured.

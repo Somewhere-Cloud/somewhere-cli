@@ -108,11 +108,15 @@ export function registerTypecheck(program: Command) {
         const spinner = opts.json || refused || opts.watch ? null : ora('Typechecking (tsc --noEmit)...').start();
         const result = refused ?? await runTypecheck(dir);
         spinner?.stop();
-        const sourceLint = await lintProject(dir);
+        const sourceLint = await lintProject(dir).catch((failure: unknown) => ({
+          ok: false as const,
+          error: failure instanceof Error ? failure.message : String(failure),
+        }));
         if (opts.json) printJson({ ...result, sourceLint });
         else {
           reportTypecheck(result);
-          printLintFindings(sourceLint);
+          if ('error' in sourceLint) warn(`Source lint failed: ${sourceLint.error}`);
+          else printLintFindings(sourceLint);
         }
         return result;
       };

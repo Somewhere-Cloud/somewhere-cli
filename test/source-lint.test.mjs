@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, symlinkSync, readdirSync } from 'node:fs';
+import { chmodSync, mkdtempSync, mkdirSync, writeFileSync, readFileSync, symlinkSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -73,6 +73,48 @@ test('typecheck reports the platform lint warning alongside a clean TypeScript r
   assert.equal(result.ok, true);
   const warning = result.sourceLint.findings.find(({ rule }) => rule === 'somewhere/index-route');
   assert.ok(warning?.fix);
+});
+
+test('unreadable advisory source preserves the compiler verdict in text and JSON', {
+  skip: process.platform === 'win32' || process.getuid?.() === 0,
+}, () => {
+  const dir = project({
+    'tsconfig.json': JSON.stringify({ compilerOptions: { strict: true, noEmit: true }, files: ['src/main.ts'] }),
+    'src/main.ts': 'export const n = 1;',
+    'unreadable/other.ts': 'export const other = 1;',
+  });
+  mkdirSync(join(dir, 'node_modules'));
+  symlinkSync(join(root, 'node_modules/.bin'), join(dir, 'node_modules/.bin'));
+  const config = mkdtempSync(join(tmpdir(), 'typecheck-lint-failure-'));
+  const unreadable = join(dir, 'unreadable');
+  chmodSync(unreadable, 0o000);
+  try {
+    const run = (...args) => spawnSync(process.execPath, [join(root, 'dist/index.js'), 'typecheck', dir, ...args], {
+      encoding: 'utf8',
+      env: { ...process.env, SOMEWHERE_CONFIG_DIR: config },
+      timeout: 10_000,
+    });
+    const text = run();
+    assert.equal(text.status, 0, text.stderr + text.stdout);
+    assert.match(text.stdout, /Typecheck clean/);
+    assert.match(text.stdout + text.stderr, /Source lint failed: .*EACCES.*unreadable/);
+    const json = run('--json');
+    assert.equal(json.status, 0, json.stderr + json.stdout);
+    const result = JSON.parse(json.stdout);
+    assert.equal(result.ok, true);
+    assert.deepEqual(result.errors, []);
+    assert.equal(result.sourceLint.ok, false);
+    assert.match(result.sourceLint.error, /EACCES.*unreadable/);
+    writeFileSync(join(dir, 'src/main.ts'), 'export const n: number = "wrong";');
+    const failed = run('--json');
+    assert.equal(failed.status, 1, failed.stderr + failed.stdout);
+    const failedResult = JSON.parse(failed.stdout);
+    assert.equal(failedResult.ok, false);
+    assert.equal(failedResult.errors[0].code, 'TS2322');
+    assert.match(failedResult.sourceLint.error, /EACCES.*unreadable/);
+  } finally {
+    chmodSync(unreadable, 0o700);
+  }
 });
 
 test('lint suppresses update checks on a terminal too', async () => {

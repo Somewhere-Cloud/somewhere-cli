@@ -546,7 +546,7 @@ async function runDoctor(version: string): Promise<void> {
   if (hasGlobalMcpConfig()) {
     success('Claude Code: "somewhere" entry in ~/.claude.json');
   } else {
-    info(dim(`Claude Code: not configured — ${cliInvocation()} mcp install claude-code (or just ${cliInvocation()} login)`));
+    info(dim(`Claude Code: not configured — ${cliInvocation()} mcp install claude-code`));
   }
   const codexProbe = spawnSync('codex', ['--version'], { stdio: 'ignore', shell: CODEX_SHELL });
   if (codexProbe.error || codexProbe.status !== 0) {

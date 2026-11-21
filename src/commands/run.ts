@@ -2,6 +2,8 @@ import { cliInvocation } from '../lib/cli-invocation.js';
 import { existsSync, readFileSync } from 'node:fs';
 import { isAbsolute, resolve } from 'node:path';
 import { Command } from 'commander';
+import { createRequire } from 'node:module';
+import type * as TypeScript from 'typescript';
 import { ApiClient, CliApiError } from '../lib/client.js';
 import { getToken, loadProjectConfig } from '../lib/config.js';
 import { bold, dim, error, red, teal, warn } from '../lib/output.js';
@@ -51,13 +53,35 @@ function parseArgs(values: string[]): Record<string, string> | undefined {
   return args;
 }
 
+/** The runner receives one file. Ignore type-only references and literal text. */
+export function hasRelativeRuntimeImport(fileName: string, code: string): boolean {
+  let ts: typeof TypeScript;
+  try {
+    ts = createRequire(resolve(fileName))('typescript');
+  } catch {
+    return false;
+  }
+  const source = ts.createSourceFile(fileName, code, ts.ScriptTarget.Latest, true);
+  const relative = (node: TypeScript.Node | undefined) =>
+    node !== undefined && ts.isStringLiteralLike(node) && /^\.\.?\//.test(node.text);
+  const scan = (node: TypeScript.Node): boolean => {
+    if (ts.isImportDeclaration(node)) return !node.importClause?.isTypeOnly && relative(node.moduleSpecifier);
+    if (ts.isExportDeclaration(node)) return !node.isTypeOnly && relative(node.moduleSpecifier);
+    if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword) {
+      return relative(node.arguments[0]);
+    }
+    return ts.forEachChild(node, child => scan(child) || undefined) === true;
+  };
+  return scan(source);
+}
+
 export function registerRun(program: Command) {
   program
     .command('run <script>')
     .description(
       "Run a one-off script once against your project's production bindings and production data " +
         '(sw.db / sw.fs / sw.ai / sw.search …) without deploying, and print its ' +
-        'return value + console logs. The script is an ES module: ' +
+        'return value + console logs. Inline or bundle any local helpers into one ES module: ' +
         'export default async function (sw) { ...; return value }. ' +
         `Example: ${cliInvocation()} run seed.js`,
     )
@@ -74,8 +98,6 @@ export function registerRun(program: Command) {
         error(err instanceof Error ? err.message : String(err));
         process.exit(1);
       }
-      const client = new ApiClient(getToken());
-
       let projectId = opts.project as string | undefined;
       if (!projectId) {
         const config = loadProjectConfig();
@@ -96,6 +118,12 @@ export function registerRun(program: Command) {
         error(`${script} is empty — nothing to run.`);
         process.exit(1);
       }
+
+      if (hasRelativeRuntimeImport(absPath, code)) {
+        error('This command sends one script. Inline local helpers or bundle them into a single ES module, then run that file.');
+        process.exit(1);
+      }
+      const client = new ApiClient(getToken());
 
       let timeoutMs: number | undefined;
       if (opts.timeout !== undefined) {

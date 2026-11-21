@@ -21,14 +21,13 @@ import {
   DeviceLoginDenied,
   type DeviceSessionScope,
 } from '../lib/device-login.js';
-import { ApiClient, CliApiError, typedServerError } from '../lib/client.js';
+import { API_BASE_URL, ApiClient, CliApiError, typedServerError } from '../lib/client.js';
 import {
   clearConfig,
   getToken,
   loadConfig,
   loadProjectConfig,
   saveConfig,
-  saveGlobalMcpConfig,
   cliConfigPathForDisplay,
 } from '../lib/config.js';
 import { getDeviceId, getDeviceKeyName } from '../lib/device.js';
@@ -115,8 +114,9 @@ export function describeScope(scope: DeviceSessionScope | null | undefined): str
 export function loginIntroLines(): string[] {
   return [
     '',
-    '  Login to somewhere.cloud',
-    `  ${SIGNUP_HINT}`,
+    ...(API_BASE_URL === 'https://api.somewhere.cloud/v1'
+      ? ['  Login to somewhere.cloud', `  ${SIGNUP_HINT}`]
+      : ['  Login to your configured Somewhere server']),
     '',
   ];
 }
@@ -376,7 +376,6 @@ export function registerAuth(program: Command) {
         process.exit(1);
       }
       saveConfig({ token, user: { email, username } });
-      saveGlobalMcpConfig();
       success(`Token saved.${email ? ` Logged in as ${teal(email)}.` : ''}`);
       info(`Run \`${cliInvocation()} projects\` to verify.`);
     });
@@ -675,14 +674,12 @@ async function runDeviceLogin(temporaryToken?: string): Promise<void> {
     }, temporaryToken);
     (spinner as Ora | null)?.stop();
     saveConfig(config);
-    saveGlobalMcpConfig();
     success(`Logged in as ${teal(config.user.email || '(unknown)')}`);
     if (mergedProjectCount && mergedProjectCount > 0) {
       info(`Added ${mergedProjectCount} temporary project${mergedProjectCount === 1 ? '' : 's'} to ${config.user.email}.`);
     }
     success(`Device: ${getDeviceKeyName()}`);
     success(`Access: ${describeScope(scope)}`);
-    success('Claude Code MCP configured');
     printPostLoginNext();
     process.exit(0);
   } catch (err) {
@@ -704,10 +701,8 @@ async function runBrowserCallbackLogin(): Promise<void> {
   try {
     const config = await browserLogin();
     saveConfig(config);
-    saveGlobalMcpConfig();
     spinner.stop();
     success(`Logged in as ${teal(config.user.email)}`);
-    success('Claude Code MCP configured');
     printPostLoginNext();
     process.exit(0);
   } catch (err) {

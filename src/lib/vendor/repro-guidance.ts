@@ -190,7 +190,7 @@ function guidanceFor(record: ReproRecord): Guidance {
       investigate: [['somewhere', 'logs', ...project, '--trace', trace]],
       recipe: ['FUNCTION_ERROR usually means the handler\'s own code threw; the stack in the owner\'s logs shows whether it points into the platform, which is what makes it a platform bug.',
         'Resending the failed request can repeat writes: the handler may have written data before it threw.',
-        'Reproduction recipe, not run: a disposable test project without customer data, the same method and route with a synthetic body of the same shape (<FIELD>: <PLACEHOLDER>), read back with somewhere logs --project <TEST_PROJECT> --trace <TRACE_ID>'] };
+        'The packet masks the route and leaves out request bodies. Use the trace to identify the handler in your own logs, then rebuild its input from the handler contract with placeholder values. If you saved the failed response, check its X-SW-Release header for the affected release. Run that request in a disposable test project and read its trace with somewhere logs --project <TEST_PROJECT> --trace <TRACE_ID>.'] };
   }
   if (op === 'tool:site_verify' || /^POST \/browser(\/|$)|^tool:browser|^POST \/verify|^tool:verify/.test(op) || /^(browser|verify)\b/.test(record.command ?? '')) {
     return { surface: 'browser_verify',

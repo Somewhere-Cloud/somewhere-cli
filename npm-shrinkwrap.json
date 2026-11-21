@@ -10,7 +10,6 @@
       "version": "0.38.139",
       "license": "MIT",
       "bin": {
-        "cli": "bin/somewhere.js",
         "somewhere": "bin/somewhere.js",
         "sw": "bin/somewhere.js"
       },

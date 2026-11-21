@@ -64,3 +64,13 @@ test('checkHandler POSTs /check-handler on the runner host, never the /v1 API', 
 });
 
 test.after(() => server.close());
+
+test('run detects relative runtime imports without mistaking text or type imports for dependencies', async () => {
+  const { hasRelativeRuntimeImport } = await import('../dist/commands/run.js');
+  for (const code of ["import x from './helper.js';", "export { x } from '../helper.js';", "async function f() { await import('./helper.js'); }"]) {
+    assert.equal(hasRelativeRuntimeImport('run.ts', code), true);
+  }
+  for (const code of ["// import './helper.js';", `const text = "import './helper.js'";`, "import type { T } from './types';", "import x from 'zod';"]) {
+    assert.equal(hasRelativeRuntimeImport('run.ts', code), false);
+  }
+});

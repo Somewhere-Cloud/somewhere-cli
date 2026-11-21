@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.38.139
+
+- `somewhere typecheck` now reports the same platform source warnings and fixes as `somewhere lint`, alongside TypeScript diagnostics.
+
 ## 0.38.138
 
 - `somewhere typecheck` knows `appOwner()` in db/schema.ts, and `user.is_owner` on the signed-in user in functions and `sw.endpoint` handlers.

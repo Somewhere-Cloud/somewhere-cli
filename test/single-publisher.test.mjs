@@ -108,13 +108,13 @@ test('only explicit 404 is absent; valid registry identity accepted; ambiguity/e
 
 test('propagation polling repeats only verification reads and bounds unknown outcomes', async () => {
   let reads = 0, elapsed = 0;
-  assert.equal(await pollVerification(async () => { reads++; if (elapsed < 9 * 60_000) throw new Error('pending'); return 'verified'; }, async (ms) => { elapsed += ms; }), 'verified');
-  assert.equal(reads, 10);
-  assert.equal(elapsed, 9 * 60_000);
+  assert.equal(await pollVerification(async () => { reads++; if (elapsed < 105 * 60_000) throw new Error('pending'); return 'verified'; }, async (ms) => { elapsed += ms; }), 'verified');
+  assert.ok(reads < 20, 'verification backs off during propagation');
+  assert.ok(elapsed >= 105 * 60_000);
   reads = 0; elapsed = 0;
   await assert.rejects(pollVerification(async () => { reads++; throw new Error('pending'); }, async (ms) => { elapsed += ms; }), /state unknown.*do not retry publication/);
-  assert.equal(reads, 16);
-  assert.equal(elapsed, 15 * 60_000);
+  assert.ok(reads < 20, 'unknown publication stays bounded');
+  assert.equal(elapsed, 120 * 60_000);
 });
 
 test('additional exact provenance source check rejects another commit', () => {

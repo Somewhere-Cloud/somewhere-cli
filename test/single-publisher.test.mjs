@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync } from 'node:fs';
-import { validateCandidate, assertCandidateIdentity, assertProvenanceSource, pollVerification } from '../scripts/publish-release.mjs';
+import { validateCandidate, assertCandidateIdentity, assertProvenanceSource, pollVerification, readPropagatedRelease } from '../scripts/publish-release.mjs';
 import { readPublishedVersion } from '../scripts/version-guard.mjs';
 
 const source = 'a'.repeat(40);
@@ -53,7 +53,7 @@ test('canonical publisher alone publishes, checks the registry, and pins immutab
   assert.match(registryCheck, /PUBLISHED_SOURCE: \$\{\{ needs.publish.outputs.published_source \}\}/);
   assert.match(registryCheck, /EXPECTED_VERSION: \$\{\{ needs.publish.outputs.version \}\}/);
   assert.match(registryCheck, /run: node scripts\/publish-release\.mjs verify "\$PUBLISHED_SOURCE" "\$EXPECTED_VERSION"/);
-  assert.match(registryCheck, /npm view @somewhere-cloud\/cli dist-tags\.latest/);
+  assert.match(registryCheck, /Verify npm latest, source commit, SHA-512 integrity and signed provenance/);
   assert.match(registryCheck, /if: failure\(\)[\s\S]*::error::Registry verification failed[\s\S]*GITHUB_STEP_SUMMARY/);
   assert.doesNotMatch(publisher, /run: npm test/);
   assert.equal((publisher.match(/npm publish --provenance --access public/g) ?? []).length, 1);
@@ -115,6 +115,21 @@ test('propagation polling repeats only verification reads and bounds unknown out
   await assert.rejects(pollVerification(async () => { reads++; throw new Error('pending'); }, async (ms) => { elapsed += ms; }), /state unknown.*do not retry publication/);
   assert.ok(reads < 20, 'unknown publication stays bounded');
   assert.equal(elapsed, 120 * 60_000);
+});
+
+test('a visible version with a stale latest tag waits inside the verification retry', async () => {
+  const manifest = { name: '@somewhere-cloud/cli', version: '1.2.3', gitHead: source };
+  let elapsed = 0;
+  const fetcher = async (url) => ({
+    status: 200,
+    ok: true,
+    json: async () => url.endsWith('/latest') && elapsed === 0 ? { version: '1.2.2' } : manifest,
+  });
+  assert.deepEqual(
+    await pollVerification(() => readPropagatedRelease(source, '1.2.3', fetcher), async (ms) => { elapsed += ms; }),
+    manifest,
+  );
+  assert.equal(elapsed, 60_000);
 });
 
 test('additional exact provenance source check rejects another commit', () => {

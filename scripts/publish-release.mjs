@@ -61,6 +61,17 @@ export async function pollVerification(verify, pause = (ms) => new Promise((done
   }
 }
 
+export async function readPropagatedRelease(source, version, fetcher = fetch) {
+  const packageName = '@somewhere-cloud/cli';
+  const manifest = await readPublishedVersion(packageName, version, fetcher);
+  if (!manifest || manifest.gitHead !== source) throw new Error('registry source identity mismatch or pending publication');
+  const latestResponse = await fetcher(`https://registry.npmjs.org/${encodeURIComponent(packageName)}/latest`, { signal: AbortSignal.timeout(15_000) });
+  if (!latestResponse.ok) throw new Error(`npm latest lookup failed: HTTP ${latestResponse.status}`);
+  const latest = await latestResponse.json();
+  if (latest.version !== version) throw new Error(`npm latest is ${latest.version ?? 'missing'}, expected ${version}`);
+  return manifest;
+}
+
 async function verifyRegistry(source, version) {
   const { parseOfficialRelease, verifyTarballIntegrity, verifyPublishedProvenance } = await import('../dist/lib/update-security.js');
   const get = async (url) => {
@@ -69,8 +80,7 @@ async function verifyRegistry(source, version) {
     return response;
   };
   await pollVerification(async () => {
-    const manifest = await readPublishedVersion('@somewhere-cloud/cli', version);
-    if (!manifest || manifest.gitHead !== source) throw new Error('registry source identity mismatch or pending publication');
+    const manifest = await readPropagatedRelease(source, version);
     const release = parseOfficialRelease({ 'dist-tags': { latest: version }, versions: { [version]: manifest } });
     verifyTarballIntegrity(new Uint8Array(await (await get(release.tarballUrl)).arrayBuffer()), release.integrity);
     const provenance = await (await get(release.attestationUrl)).json();

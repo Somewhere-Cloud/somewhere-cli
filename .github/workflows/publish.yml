@@ -154,21 +154,11 @@ jobs:
       - run: npm install -g npm@11.19.0
       - run: npm ci
       - run: npm run build
-      - name: Verify source commit, SHA-512 integrity and signed provenance from npm
+      - name: Verify npm latest, source commit, SHA-512 integrity and signed provenance
         env:
           PUBLISHED_SOURCE: ${{ needs.publish.outputs.published_source }}
           EXPECTED_VERSION: ${{ needs.publish.outputs.version }}
         run: node scripts/publish-release.mjs verify "$PUBLISHED_SOURCE" "$EXPECTED_VERSION"
-      - name: Confirm npm latest points to the verified version
-        env:
-          EXPECTED_VERSION: ${{ needs.publish.outputs.version }}
-        run: |
-          latest=$(npm view @somewhere-cloud/cli dist-tags.latest --registry=https://registry.npmjs.org --fetch-retries=0 --fetch-timeout=15000)
-          if [ "$latest" != "$EXPECTED_VERSION" ]; then
-            echo "::error::npm latest is $latest, expected $EXPECTED_VERSION"
-            exit 1
-          fi
-          echo "Verified npm artifact and latest tag for @somewhere-cloud/cli@$EXPECTED_VERSION" >> "$GITHUB_STEP_SUMMARY"
       - name: Surface verification failure to the operator
         if: failure()
         env:

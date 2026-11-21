@@ -29,7 +29,7 @@ if (!gate.ok) {
   process.exit(2);
 }
 const { token } = gate;
-const API = 'https://api.somewhere.tech/v1';
+const API = 'https://api.somewhere.cloud/v1';
 // The test key lives only in this run's own config root: owner-only, and
 // removed at process exit ('exit' also fires after an uncaught error or a
 // rejected top-level await; SIGINT/SIGTERM are turned into an exit). A hard
@@ -151,7 +151,7 @@ const FIXTURES = {
 
 const stamp = Date.now().toString(36);
 for (const [fixtureName, build] of Object.entries(FIXTURES)) {
-  const name = `cli-rt-${fixtureName.replace(/[^a-z]/g, '')}-${stamp}`;
+  const name = `swtest-cli-rt-${fixtureName.replace(/[^a-z]/g, '')}-${stamp}`;
   console.log(`\n── fixture: ${fixtureName} (${name})`);
   const project = await api('POST', '/projects', { name, subdomain: name });
   try {
@@ -195,11 +195,11 @@ for (const [fixtureName, build] of Object.entries(FIXTURES)) {
 
     // 3. Server-only code never publicly served ( class).
     if (fixtureName === 'functions-only') {
-      const res = await fetch(`https://${project.subdomain}.somewhere.tech/_lib/secret.ts`);
+      const res = await fetch(`https://${project.subdomain}.somewhere.site/_lib/secret.ts`, { redirect: 'error' });
       const text = await res.text();
       check(
         '_lib/ source not publicly served',
-        !text.includes('do-not-serve'),
+        [403, 404].includes(res.status) && !text.includes('do-not-serve'),
         `GET /_lib/secret.ts → ${res.status}`,
       );
     }

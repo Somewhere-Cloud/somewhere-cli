@@ -7,7 +7,9 @@
 #        gh workflow run publish.yml -R Somewhere-Cloud/somewhere-cli --ref master \
 #          -f source_sha=<40-hex master commit> -f expected_version=<x.y.z>
 #   3. The run pins the exact commit, builds, and publishes with provenance.
-#      A separate job verifies the artifact served by npm. Customers pick up
+#      A separate job verifies the artifact served by npm. Registry propagation
+#      can take over an hour. If it fails, re-run the failed verification job
+#      before considering another publication. Customers pick up
 #      the version through somewhere update.
 #
 # npm authentication: trusted publishing only. npmjs.com trusts the GitHub
@@ -138,7 +140,7 @@ jobs:
     name: Verify the published npm artifact
     needs: publish
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 145
     permissions:
       contents: read
     steps:
@@ -172,5 +174,5 @@ jobs:
         env:
           EXPECTED_VERSION: ${{ needs.publish.outputs.version }}
         run: |
-          echo "::error::Registry verification failed for @somewhere-cloud/cli@$EXPECTED_VERSION. Investigate this run before publishing again."
-          echo "Registry verification failed for @somewhere-cloud/cli@$EXPECTED_VERSION. Investigate this run before publishing again." >> "$GITHUB_STEP_SUMMARY"
+          echo "::error::Registry verification failed for @somewhere-cloud/cli@$EXPECTED_VERSION. Re-run the failed verification job. Check the registry before publishing again."
+          echo "Registry verification failed for @somewhere-cloud/cli@$EXPECTED_VERSION. Re-run the failed verification job. Check the registry before publishing again." >> "$GITHUB_STEP_SUMMARY"

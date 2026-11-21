@@ -43,12 +43,22 @@ export function assertProvenanceSource(body, source) {
 }
 
 export async function pollVerification(verify, pause = (ms) => new Promise((done) => setTimeout(done, ms))) {
-  let lastError;
-  for (let attempt = 0; attempt < 16; attempt++) {
-    try { return await verify(); } catch (error) { lastError = error; }
-    if (attempt < 15) await pause(60_000);
+  const propagationWindowMs = 120 * 60_000;
+  let delayMs = 60_000;
+  let waitedMs = 0;
+  for (;;) {
+    try {
+      return await verify();
+    } catch (error) {
+      if (waitedMs === propagationWindowMs) {
+        throw new Error(`publication state unknown; read verification exhausted; do not retry publication: ${error.message}`);
+      }
+    }
+    const nextWaitMs = Math.min(delayMs, propagationWindowMs - waitedMs);
+    await pause(nextWaitMs);
+    waitedMs += nextWaitMs;
+    delayMs = Math.min(delayMs * 2, 10 * 60_000);
   }
-  throw new Error(`publication state unknown; read verification exhausted; do not retry publication: ${lastError.message}`);
 }
 
 async function verifyRegistry(source, version) {

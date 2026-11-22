@@ -59,3 +59,24 @@ test('delete, restore and deleted call the task tools with the reason and projec
   assert.match(output,/tsk_1/);
 });
 test.after(()=>{hooks.deregister();delete globalThis.__tasksCall;delete globalThis.__tasksResponse;});
+
+test('waiting for you: the list is the platform’s, an answer is one call, and an ask carries who is waited on', async () => {
+  const item = { id: 'tsk_9', project_id: 'proj-1', project_name: 'Bakery', title: 'Create the sign-in app', steps: '1. Open the page.\n2. Press New.', step_list: ['Open the page.', 'Press New.'], sentences: [], why: 'Only the owner can.', kind: 'human', asked_by: { name: 'build-agent', via: { kind: 'terminal', name: 'studio' } }, asked_at: new Date(Date.now() - 7200e3).toISOString() };
+  let output = await run(['tasks', 'waiting'], { ok: true, data: { items: [item], total: 1, more: true, next_cursor: '1' } });
+  assert.deepEqual(calls.at(-1), { name: 'tasks_waiting', args: {} });
+  for (const words of ['tsk_9', 'Create the sign-in app', 'build-agent via studio', 'Bakery', '1. Open the page.', '2. Press New.', 'Why: Only the owner can.', 'tasks answer tsk_9 -p proj-1 --done', 'tasks waiting --cursor 1']) assert.ok(output.includes(words), words + '\n' + output);
+  output = await run(['tasks', 'waiting', '--project', 'proj-1', '--cursor', '2'], { ok: true, data: { items: [], total: 0, more: false, next_cursor: null } });
+  assert.deepEqual(calls.at(-1), { name: 'tasks_waiting', args: { project_id: 'proj-1', cursor: '2' } });
+  assert.match(output, /Nothing is waiting for you\./);
+  await run(['tasks', 'answer', 'tsk_9', '--project', 'proj-1', '--done', '--note', 'It is called Bakery sign-in.'], { ok: true, data: { id: 'tsk_9', title: 'Create the sign-in app', status: 'open' } });
+  assert.deepEqual(calls.at(-1), { name: 'tasks_update', args: { project_id: 'proj-1', task_id: 'tsk_9', answer: 'done', note: 'It is called Bakery sign-in.' } });
+  await run(['tasks', 'answer', 'tsk_9', '--project', 'proj-1', '--cannot'], { ok: true, data: { id: 'tsk_9' } });
+  assert.deepEqual(calls.at(-1).args, { project_id: 'proj-1', task_id: 'tsk_9', answer: 'cannot' });
+  const before = calls.length; const exit = process.exitCode; const oldError = console.error; console.error = () => {};
+  try { await run(['tasks', 'answer', 'tsk_9', '--project', 'proj-1'], {}); await run(['tasks', 'answer', 'tsk_9', '--project', 'proj-1', '--done', '--cannot'], {}); } finally { console.error = oldError; process.exitCode = exit; }
+  assert.equal(calls.length, before, 'an answer that says neither or both is not sent');
+  await run(['tasks', 'create', 'Add the bank details', '--project', 'proj-1', '--waiting-on', 'human', '--status-note', '1. Open Stripe.\n2. Add the account.', '--author', 'build-agent'], { ok: true, data: { id: 'tsk_10' } });
+  assert.deepEqual(calls.at(-1), { name: 'tasks_create', args: { project_id: 'proj-1', title: 'Add the bank details', waiting_on: 'human', status_note: '1. Open Stripe.\n2. Add the account.', author: 'build-agent' } });
+  await run(['tasks', 'update', 'tsk_10', '--project', 'proj-1', '--waiting-on', 'product_decision', '--author', 'build-agent'], { ok: true, data: { id: 'tsk_10' } });
+  assert.deepEqual(calls.at(-1), { name: 'tasks_update', args: { project_id: 'proj-1', task_id: 'tsk_10', waiting_on: 'product_decision', author: 'build-agent' } });
+});

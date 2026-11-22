@@ -55,6 +55,8 @@ interface TaskWriteOptions extends ProjectOptions {
   parent?: string;
   dueAt?: string;
   statusNote?: string;
+  waitingOn?: string;
+  author?: string;
   health?: string;
   comment?: string;
   resolutionNote?: string;
@@ -117,6 +119,31 @@ async function runTaskTool(
   }
 }
 
+/** What is waiting for the person, as the platform lists it: each item with its steps, reason, who asked and how to answer. */
+function printWaiting(value: unknown): void {
+  const data = unwrapPlatformData(value);
+  const items = isRecord(data) && Array.isArray(data.items) ? data.items.filter(isRecord) : null;
+  if (!items) { printJson(value); return; }
+  if (items.length === 0) console.log('Nothing is waiting for you' + (isRecord(data) && data.next_cursor ? ' on the apps checked so far.' : '.'));
+  for (const item of items) {
+    const asked = isRecord(item.asked_by) ? item.asked_by : {};
+    const via = isRecord(asked.via) ? asked.via : {};
+    const who = [typeof asked.name === 'string' ? asked.name : null, typeof via.name === 'string' ? via.name : typeof via.kind === 'string' ? via.kind : null].filter(Boolean).join(' via ');
+    const when = typeof item.asked_at === 'string' ? timeAgo(item.asked_at) : null;
+    console.log(`${teal(String(item.id))}  ${String(item.title ?? '')}`);
+    console.log(dim(`  ${[who || null, when, typeof item.project_name === 'string' ? item.project_name : null, item.kind === 'product_decision' ? 'a decision' : null].filter(Boolean).join(' · ')}`));
+    const steps = Array.isArray(item.step_list) ? item.step_list.filter((step): step is string => typeof step === 'string') : [];
+    const lines = Array.isArray(item.sentences) ? item.sentences.filter((line): line is string => typeof line === 'string') : [];
+    for (const line of lines) console.log(`  ${line}`);
+    steps.forEach((step, at) => console.log(`  ${at + 1}. ${step}`));
+    if (steps.length === 0 && lines.length === 0 && typeof item.steps === 'string') console.log(`  ${item.steps.split('\n').join('\n  ')}`);
+    if (typeof item.why === 'string' && item.why) console.log(dim(`  Why: ${item.why}`));
+    console.log(dim(`  Answer: ${cliInvocation()} tasks answer ${String(item.id)} -p ${String(item.project_id)} --done   (or --cannot, with --note "...")`));
+    console.log('');
+  }
+  if (isRecord(data) && typeof data.next_cursor === 'string') console.log(dim(`More apps to check: ${cliInvocation()} tasks waiting --cursor ${data.next_cursor}`));
+}
+
 function resolveTaskProject(project: string | undefined): string {
   return resolveProjectRef(project, ' Use -p default for the shared organization board if you have access.');
 }
@@ -124,7 +151,7 @@ function resolveTaskProject(project: string | undefined): string {
 export function registerTasks(program: Command): void {
   const tasks = program
     .command('tasks')
-    .description('List, read, create, update, delete, and restore platform tasks')
+    .description('List, read, create, update, answer, delete, and restore platform tasks')
     .addHelpText('after', `\nShared organization board (requires access): ${cliInvocation()} tasks list -p default`);
 
   tasks
@@ -205,6 +232,43 @@ export function registerTasks(program: Command): void {
     });
 
   tasks
+    .command('waiting')
+    .description('List what is waiting for you: what agents have asked you to do, across your projects, with the steps')
+    .option('-p, --project <project>', 'Only this project (slug or ID), read at once')
+    .option('--cursor <cursor>', 'next_cursor from the previous answer: the next 25 projects')
+    .option('--json', 'Print the complete response as JSON')
+    .action(async (opts: ProjectOptions & { cursor?: string }) => {
+      const args = compactRecord([
+        ['project_id', opts.project ? resolveTaskProject(opts.project) : undefined],
+        ['cursor', opts.cursor],
+      ]);
+      await runTaskTool('tasks_waiting', args, opts.json, printWaiting);
+    });
+
+  tasks
+    .command('answer <task-id>')
+    .description('Answer something that is waiting for you: --done when you did it, --cannot when you can\'t or won\'t')
+    .option('-p, --project <project>', 'Project slug or ID; defaults to the linked project')
+    .option('--done', 'You did it')
+    .option('--cannot', 'You can\'t or won\'t do it')
+    .option('--note <text>', 'A short note for the agent that asked; never a password or a key')
+    .option('--json', 'Print the complete response as JSON')
+    .action(async (taskId: string, opts: ProjectOptions & { done?: boolean; cannot?: boolean; note?: string }) => {
+      if (Boolean(opts.done) === Boolean(opts.cannot)) {
+        error('Say which: --done or --cannot.');
+        process.exitCode = 1;
+        return;
+      }
+      const args = compactRecord([
+        ['project_id', resolveTaskProject(opts.project)],
+        ['task_id', taskId],
+        ['answer', opts.done ? 'done' : 'cannot'],
+        ['note', opts.note],
+      ]);
+      await runTaskTool('tasks_update', args, opts.json, printTaskMutation);
+    });
+
+  tasks
     .command('create <title>')
     .description('Create a task without opening an editor')
     .option('-p, --project <project>', 'Project slug or ID; defaults to the linked project')
@@ -217,6 +281,9 @@ export function registerTasks(program: Command): void {
     .option('--area <area>', 'Subsystem area')
     .option('--parent <task-id>', 'Parent task ID')
     .option('--due-at <unix-ms>', 'Due time as a Unix timestamp in milliseconds')
+    .option('--waiting-on <who>', 'human or product_decision asks the person (shown under "Waiting for you"); external records an outside wait')
+    .option('--status-note <text>', 'Current state; with --waiting-on human, the numbered steps for the person, one per line')
+    .option('--author <name>', 'The asking agent\'s own name, shown to the person as who asked')
     .option('--json', 'Print the complete response as JSON')
     .action(async (title: string, opts: TaskWriteOptions) => {
       const args = compactRecord([
@@ -231,6 +298,9 @@ export function registerTasks(program: Command): void {
         ['area', opts.area],
         ['parent_id', opts.parent],
         ['due_at', numberOption(opts.dueAt)],
+        ['waiting_on', opts.waitingOn],
+        ['status_note', opts.statusNote],
+        ['author', opts.author],
       ]);
       await runTaskTool('tasks_create', args, opts.json, printTaskMutation);
     });
@@ -250,6 +320,8 @@ export function registerTasks(program: Command): void {
     .option('--parent <task-id>', 'New parent; pass an empty string to detach')
     .option('--due-at <unix-ms>', 'Due time as a Unix timestamp in milliseconds')
     .option('--status-note <text>', 'Overwrite the current status note')
+    .option('--waiting-on <who>', 'human or product_decision asks the person; external records an outside wait; an empty string clears it')
+    .option('--author <name>', 'The asking agent\'s own name, shown as who asked or who commented')
     .option('--health <health>', 'on_track, at_risk, or off_track')
     .option('--comment <text>', 'Append an evidence comment')
     .option('--resolution-note <text>', 'Resolution note when closing the task')
@@ -272,6 +344,8 @@ export function registerTasks(program: Command): void {
         ['parent_id', opts.parent],
         ['due_at', numberOption(opts.dueAt)],
         ['status_note', opts.statusNote],
+        ['waiting_on', opts.waitingOn],
+        ['author', opts.author],
         ['health', opts.health],
         ['comment', opts.comment],
         ['resolution_note', opts.resolutionNote],
@@ -280,7 +354,7 @@ export function registerTasks(program: Command): void {
         ['deployment_version', numberOption(opts.deploymentVersion)],
       ]);
       if (Object.keys(args).length === 2) {
-        error('No update supplied. Pass a field such as --status, --status-note, or --comment.');
+        error('No update supplied. Pass a field such as --status, --status-note, --waiting-on, or --comment.');
         process.exitCode = 1;
         return;
       }

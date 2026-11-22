@@ -2040,7 +2040,36 @@ interface SomewhereRuntimeConnectStripe {
   subscribers(opts?: { status?: string; limit?: number; cursor?: string | null } | null): Promise<SomewhereConnectStripeSubscribersResult>;
   disconnect(): Promise<{ ok: true }>;
 }
-interface SomewhereRuntimeConnect { readonly stripe: SomewhereRuntimeConnectStripe }
+// Google Calendar (a person's own calendar, events only; docs topic google-calendar)
+interface SomewhereGoogleCalendarEventInput {
+  id?: string;
+  title: string;
+  description?: string | null;
+  location?: string | null;
+  start: string;
+  end: string;
+  all_day?: boolean;
+  time_zone?: string | null;
+}
+interface SomewhereGoogleCalendarEvent {
+  id: string;
+  updated: string | null;
+}
+type SomewhereGoogleCalendarStatus =
+  | { connected: false }
+  | { connected: true; reconnect_needed: boolean; calendar: { name: string | null; time_zone: string | null }; connected_at: number | null };
+interface SomewhereGoogleCalendarWho { user_id?: string; userId?: string }
+interface SomewhereRuntimeConnectGoogleCalendar {
+  /** The app's own connect endpoint returns this: it starts and finishes the connection in the signed-in person's browser. */
+  connect(request: Request, opts?: { return_to?: string; returnTo?: string } | null): Promise<Response>;
+  /** user_id only inside a scheduled or background job; in a request, calls act for the signed-in caller. */
+  status(opts?: SomewhereGoogleCalendarWho | null): Promise<SomewhereGoogleCalendarStatus>;
+  createEvent(opts: SomewhereGoogleCalendarWho & { event: SomewhereGoogleCalendarEventInput }): Promise<SomewhereGoogleCalendarEvent>;
+  updateEvent(opts: SomewhereGoogleCalendarWho & { event_id: string; event: Partial<Omit<SomewhereGoogleCalendarEventInput, 'id'>> }): Promise<SomewhereGoogleCalendarEvent>;
+  deleteEvent(opts: SomewhereGoogleCalendarWho & { event_id: string }): Promise<{ deleted: boolean }>;
+  disconnect(opts?: SomewhereGoogleCalendarWho | null): Promise<{ disconnected: boolean; google_permissions_url: string }>;
+}
+interface SomewhereRuntimeConnect { readonly stripe: SomewhereRuntimeConnectStripe; readonly googleCalendar: SomewhereRuntimeConnectGoogleCalendar }
 
 // Billing (plan catalog + entitlements for the app's own users)
 interface SomewhereBillingPlanFeatureInput { feature: string; limit?: number | null }
@@ -4482,8 +4511,8 @@ var require_consumer_contract = __commonJS({
   "worker/containers/compile/consumer-contract.cjs"(exports2, module2) {
     "use strict";
     var CONSUMER_CONTRACT2 = Object.freeze({
-      version: 36,
-      digest: "7e06ccf06deecead4917de5d9d47a686804b73b855e8aa2c0b72400bd75ee0e1"
+      version: 39,
+      digest: "735f80e8c71b5c115e57aa84506faadeba2ca50196908ea26766c17c79cf0262"
     });
     var MEMBERSHIPS = "memberships: table({ id: id(), team_id: text(), member_id: text() }, { scope: owner(), client: { read: true } }),";
     var SHARES = "shares: table({ id: id(), grantee_id: text() }, { scope: owner(), client: { read: true, create: ['grantee_id'], delete: true }, unique: [['user_id', 'grantee_id']] }),";

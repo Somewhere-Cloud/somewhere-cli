@@ -141,7 +141,24 @@ function printWaiting(value: unknown): void {
     console.log(dim(`  Answer: ${cliInvocation()} tasks answer ${String(item.id)} -p ${String(item.project_id)} --done   (or --cannot, with --note "...")`));
     console.log('');
   }
-  if (isRecord(data) && typeof data.next_cursor === 'string') console.log(dim(`More apps to check: ${cliInvocation()} tasks waiting --cursor ${data.next_cursor}`));
+  // Answered and not yet picked up by the agent that asked: which answer, and the credential that gave it, as the platform recorded it.
+  const answered = isRecord(data) && Array.isArray(data.answered) ? data.answered.filter(isRecord) : [];
+  if (answered.length > 0) console.log(dim('Answered:'));
+  for (const item of answered) {
+    const by = isRecord(item.answered_by) ? item.answered_by : {};
+    const via = isRecord(by.via) ? by.via : {};
+    const kind = typeof via.kind === 'string' ? via.kind : 'unknown';
+    const who = kind === 'dashboard' ? (by.you === true ? 'you, in the dashboard' : 'someone on the team, in the dashboard')
+      : `${{ connector: 'connector', agent: 'connected agent', terminal: 'terminal', key: 'API key', app: 'the app' }[kind] ?? kind}${typeof via.name === 'string' ? ` ${via.name}` : ''}`;
+    const when = typeof by.at === 'string' ? timeAgo(by.at) : null;
+    console.log(`${teal(String(item.id))}  ${String(item.title ?? '')}`);
+    console.log(dim(`  ${by.answer === 'cannot' ? 'Marked "can\'t do this"' : 'Marked done'} by ${who}${when ? ` · ${when}` : ''}${typeof item.project_name === 'string' ? ` · ${item.project_name}` : ''}`));
+    if (typeof item.note === 'string' && item.note) console.log(`  ${item.note}`);
+  }
+  if (isRecord(data) && typeof data.next_cursor === 'string') {
+    const checked = typeof data.projects_checked === 'number' && typeof data.projects_total === 'number' ? `Checked ${data.projects_checked} of ${data.projects_total} apps. ` : '';
+    console.log(dim(`${checked}Show the rest: ${cliInvocation()} tasks waiting --cursor ${data.next_cursor}`));
+  }
 }
 
 function resolveTaskProject(project: string | undefined): string {

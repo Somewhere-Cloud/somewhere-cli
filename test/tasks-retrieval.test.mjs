@@ -62,7 +62,10 @@ test.after(()=>{hooks.deregister();delete globalThis.__tasksCall;delete globalTh
 
 test('waiting for you: the list is the platform’s, an answer is one call, and an ask carries who is waited on', async () => {
   const item = { id: 'tsk_9', project_id: 'proj-1', project_name: 'Bakery', title: 'Create the sign-in app', steps: '1. Open the page.\n2. Press New.', step_list: ['Open the page.', 'Press New.'], sentences: [], why: 'Only the owner can.', kind: 'human', asked_by: { name: 'build-agent', via: { kind: 'terminal', name: 'studio' } }, asked_at: new Date(Date.now() - 7200e3).toISOString() };
-  let output = await run(['tasks', 'waiting'], { ok: true, data: { items: [item], total: 1, more: true, next_cursor: '1' } });
+  const answered = [{ id: 'tsk_a1', project_id: 'proj-1', project_name: 'Bakery', title: 'Approve the charge', answer: 'done', note: 'Paid.', answered_by: { answer: 'done', via: { kind: 'connector', name: 'Claude' }, at: new Date(Date.now() - 3600e3).toISOString(), you: true } },
+    { id: 'tsk_a2', project_id: 'proj-1', project_name: 'Bakery', title: 'Upload a logo', answer: 'cannot', note: null, answered_by: { answer: 'cannot', via: { kind: 'dashboard', name: null }, at: null, you: true } }];
+  let output = await run(['tasks', 'waiting'], { ok: true, data: { items: [item], answered, total: 1, more: true, next_cursor: '1', projects_checked: 25, projects_total: 60 } });
+  for (const words of ['Answered:', 'tsk_a1', 'Marked done by connector Claude', 'Paid.', 'Marked "can\'t do this" by you, in the dashboard', 'Checked 25 of 60 apps. Show the rest:']) assert.ok(output.includes(words), words + '\n' + output);
   assert.deepEqual(calls.at(-1), { name: 'tasks_waiting', args: {} });
   for (const words of ['tsk_9', 'Create the sign-in app', 'build-agent via studio', 'Bakery', '1. Open the page.', '2. Press New.', 'Why: Only the owner can.', 'tasks answer tsk_9 -p proj-1 --done', 'tasks waiting --cursor 1']) assert.ok(output.includes(words), words + '\n' + output);
   output = await run(['tasks', 'waiting', '--project', 'proj-1', '--cursor', '2'], { ok: true, data: { items: [], total: 0, more: false, next_cursor: null } });

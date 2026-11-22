@@ -44,7 +44,7 @@ import {
   type InitCatalog,
   type InitSelection,
 } from '../lib/init-features.js';
-import { formatNextActions, nextActions, type NextActionContext } from '../lib/next-actions.js';
+import { formatNextActions, nextActions, shellQuote, type NextActionContext } from '../lib/next-actions.js';
 import { bold, dim, error, info, printJson, printJsonLine, success, teal, warn } from '../lib/output.js';
 
 interface InitOptions {
@@ -74,6 +74,8 @@ interface LinkProject {
   name: string;
   subdomain: string;
   slug?: string;
+  active_release_id?: string | null;
+  has_promoted?: boolean;
 }
 
 export function registerInit(program: Command) {
@@ -82,7 +84,7 @@ export function registerInit(program: Command) {
     .description('Write a starter app with a generated AGENTS.md guide')
     .option('--name <name>', 'Project name (skip prompt); sign-in and invitation emails show it')
     .option('--subdomain <slug>', 'Subdomain for the new project; default: derived from --name')
-    .option('--link', 'Scaffold an empty directory and link an existing project; non-empty directories are link-only')
+    .option('--link', 'Link local source or scaffold an unpublished project')
     .option('--project <ref>', 'Existing project ID, name, slug, or subdomain (requires --link)')
     .option('--bare', 'Create and link only: no starter source or dependencies (AGENTS.md/CLAUDE.md are still added when absent)')
     .option('--template <name>', 'Starter to write: auth (default), minimal (auth route, no sign-in UI), or bare (link only)', 'auth')
@@ -104,6 +106,7 @@ export function registerInit(program: Command) {
         + 'Init installs React, the SDK and editor types. The platform builds your source when you deploy.\n'
         + 'TypeScript is fetched when first needed. Vite and Playwright are installed only if you choose to use them.\n'
         + `New starters and --bare also install ${skillNames(BUNDLED_SKILLS_PACK).length} agent skills in .agents/skills, pinned by skills-lock.json.\n`
+        + `\nFor a live app, run \`${cliInvocation()} pull <app>\` to get its source.\n`
         + '\nA directory that already holds an app (package.json, index.html, src/, …) is\n'
         + 'linked and left untouched. A directory holding only other files (notes, a stray\n'
         + 'file) is refused before anything is created. Use --bare only to bring your own\n'
@@ -512,6 +515,9 @@ export async function linkExisting(
   if (!projectId) return;
 
   const project = result.projects.find((p) => p.id === projectId)!;
+  if (scaffold && (project.active_release_id !== null || project.has_promoted === true)) {
+    throw new Error(`Run \`${cliInvocation()} pull ${shellQuote(project.id)}\` to get this app’s source before working on it.`);
+  }
   const appUrl = await getAuthoritativeAppUrl(client, project.id).catch(() => null);
   await scaffold?.(project);
   const recordedCli = loadProjectConfig(dir)?.cli_version;

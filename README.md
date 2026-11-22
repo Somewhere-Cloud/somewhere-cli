@@ -94,7 +94,7 @@ For optional after-edit checking, explicitly run `somewhere hooks install --host
 | `somewhere logout` | Clear stored credentials |
 | `somewhere whoami` | Show current user and project count |
 | `somewhere init` | Write a starter; signed-in runs also create and link a project |
-| `somewhere init --link --project <id> --template auth` | Scaffold an empty directory and link an existing project; non-empty directories are link-only |
+| `somewhere init --link --project <id>` | Link a folder that already holds the app’s source, or scaffold an unpublished project in an empty folder |
 | `somewhere projects` | List all projects with status |
 | `somewhere project create <name>` | Create a new project |
 | `somewhere project view [name]` | Show project details |
@@ -109,7 +109,7 @@ For optional after-edit checking, explicitly run `somewhere hooks install --host
 | `somewhere git connect [owner/repo]` | Install/authorize the GitHub App if needed, deploy repository HEAD, then deploy every push |
 | `somewhere git status` | Show connected repo, commit, deploy status, logs link, and live URL |
 | `somewhere git disconnect` | Stop push-to-deploy; the currently deployed site stays live |
-| `somewhere pull` | Download a project's live deployed source + scaffold tsconfig/package.json for local typechecking |
+| `somewhere pull <app>` | Download the live source of an existing app and link the folder before editing |
 | `somewhere typecheck` | Checks the project with `tsc --noEmit` and reports advisory platform source warnings with a suggested fix. Install the project dependencies first. If TypeScript is absent, the CLI tells you before fetching it through npm. |
 | `somewhere logs` | Show recent logs |
 | `somewhere logs --follow` | Stream logs in real-time |

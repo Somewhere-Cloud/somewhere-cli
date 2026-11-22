@@ -256,7 +256,7 @@ test('--temporary while logged in and unlinked takes the temporary path, no link
   assert.match(first.stdout, /Live URL:/);
   assert.match(first.stdout, /Open https:\/\/somewhere\.cloud\/claim/);
   assert.match(first.stdout, /Expires in about 3 hours/);
-  assert.match(first.stdout, /somewhere init --link --project proj_e2e_1/);
+  assert.match(first.stdout, /somewhere pull proj_e2e_1/);
   assert.equal(tempCreateCalls, beforeTempCreate + 1, 'one temporary session minted');
   assert.equal(projectsCalls, beforeProjects + 1, 'the throwaway project was auto-created');
 

@@ -1,13 +1,25 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import test from 'node:test';
+import { Command } from 'commander';
 
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
 
-test('CLI presents preview vocabulary and has no --draft alias', () => {
+function assertNoDraftOption(command) {
+  assert.ok(!command.options.some(option => option.long === '--draft'),
+    `${command.name()} registers --draft`);
+  for (const child of command.commands) assertNoDraftOption(child);
+}
+
+test('the vocabulary check catches a combined short and long draft flag', () => {
+  const program = new Command();
+  program.command('project').command('create <name>').option('-d, --draft');
+  assert.throws(() => assertNoDraftOption(program), /create registers --draft/);
+});
+
+test('CLI presents preview vocabulary and has no --draft alias', async () => {
   const promote = read('src/commands/promote.ts');
   const dev = read('src/commands/dev.ts');
-  const project = read('src/commands/project.ts');
 
   assert.match(promote, /command\('promote <preview_session_id> <preview_id>'\)/);
   assert.match(promote, /preview_session_id: draftId/);
@@ -20,8 +32,20 @@ test('CLI presents preview vocabulary and has no --draft alias', () => {
   assert.match(dev, /res\.preview_session_id \?\? res\.draft_id/);
   assert.match(dev, /res\.preview_id \?\? res\.candidate_release_id/);
 
-  assert.match(project, /option\('--preview', 'Create without deploying to production'\)/);
-  assert.doesNotMatch(project, /'--draft'/);
+  const program = new Command();
+  const commands = new URL('../dist/commands/', import.meta.url);
+  for (const file of readdirSync(commands).filter(file => file.endsWith('.js'))) {
+    const module = await import(new URL(file, commands));
+    for (const [name, register] of Object.entries(module)) {
+      if (!name.startsWith('register') || typeof register !== 'function') continue;
+      register(program);
+    }
+  }
+  assert.ok(program.commands.some(command => command.name() === 'preview'));
+  const create = program.commands.find(command => command.name() === 'project')
+    ?.commands.find(command => command.name() === 'create');
+  assert.ok(create?.options.some(option => option.long === '--preview' && option.hidden));
+  assertNoDraftOption(program);
 });
 
 test('hosted preview remains separate from frontend dev; no local-runtime aliases survive', () => {

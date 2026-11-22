@@ -3708,6 +3708,7 @@ interface SomewhereTaskSettings {
 interface SomewhereTaskListOptions {
   status?: SomewhereTaskStatus;
   assignee?: string;
+  label?: string;
   area?: string;
   parent_id?: string | null;
   q?: string;
@@ -4471,8 +4472,8 @@ var require_consumer_contract = __commonJS({
   "worker/containers/compile/consumer-contract.cjs"(exports2, module2) {
     "use strict";
     var CONSUMER_CONTRACT2 = Object.freeze({
-      version: 30,
-      digest: "6b27b36b315bece1e2cd83950720930286ed19b8858b7e8cd8f5f5bf7566797b"
+      version: 31,
+      digest: "9c52a6c81f1c2f2940a76460cb0174676d947ac657758317678ccdcc343d11b4"
     });
     var MEMBERSHIPS = "memberships: table({ id: id(), team_id: text(), member_id: text() }, { scope: owner(), client: { read: true } }),";
     var SHARES = "shares: table({ id: id(), grantee_id: text() }, { scope: owner(), client: { read: true, create: ['grantee_id'], delete: true }, unique: [['user_id', 'grantee_id']] }),";

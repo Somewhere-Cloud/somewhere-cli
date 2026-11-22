@@ -76,7 +76,7 @@ test('bare docs prints the grouped topic index and how to open, never the manual
     const result = await run(['docs'], { SOMEWHERE_DOCS_BASE: base });
     assert.equal(result.status, 0, result.stderr);
     assert.deepEqual(requests, ['/docs-manifest.json'], 'the full manual (/docs.txt) is not fetched');
-    assert.match(result.stdout.slice(0, 1100), /Run somewhere init first.*AGENTS\.md/);
+    assert.match(result.stdout.slice(0, 1100), /Run somewhere init --name my-app.*AGENTS\.md/);
     assert.match(result.stdout.slice(0, 1100), /Own rows \| owner\(\)/);
     assert.match(result.stdout.slice(0, 1100), /Team: owner invites members.*group\(\).*sw\.groups/);
     assert.match(result.stdout.slice(0, 1100), /Owner\/staff record.*parent\(\)/);

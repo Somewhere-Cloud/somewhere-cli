@@ -32,9 +32,9 @@ async function run(args,response) {
   return lines.join('\n');
 }
 test('task commands preserve explicit pagination and every retrieval option',async()=>{
-  const output=await run(['tasks','list','--project','project','--type','decision','--query','vision','--cursor','opaque','--limit','3'],
+  const output=await run(['tasks','list','--project','project','--type','decision','--query','vision','--assignee','founder','--label','needs-you','--cursor','opaque','--limit','3'],
     {ok:true,data:[{id:'tsk_1',title:'One',status:'open',priority:'high',updated_at:1,omitted:{description:{json_chars:9000}}}],page:{total:30,count:1,has_more:true,next_cursor:'next',order:'created_at DESC, id DESC',consistency:'ordered membership'}});
-  assert.deepEqual(calls.at(-1),{name:'tasks_list',args:{project_id:'project',type:'decision',q:'vision',limit:3,cursor:'opaque'}});
+  assert.deepEqual(calls.at(-1),{name:'tasks_list',args:{project_id:'project',type:'decision',assignee:'founder',label:'needs-you',q:'vision',limit:3,cursor:'opaque'}});
   assert.match(output,/Showing 1 of 30/); assert.match(output,/--cursor 'next'/); assert.match(output,/Some fields are partial/);
   assert.match(output,/created_at DESC, id DESC/);
   await run(['tasks','get','tsk_1','--project','project','--view','history','--kind','activity','--cursor','history-next','--limit','5'],{ok:true,data:{page:{next_cursor:'later'}}});

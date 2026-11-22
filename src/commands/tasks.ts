@@ -20,6 +20,7 @@ interface TaskListOptions extends ProjectOptions {
   status?: string;
   type?: string;
   assignee?: string;
+  label?: string;
   area?: string;
   parent?: string;
   query?: string;
@@ -133,6 +134,7 @@ export function registerTasks(program: Command): void {
     .option('--status <status>', 'Filter by status')
     .option('--type <type>', 'Filter by type, or a comma-separated list (e.g. decision, directive)')
     .option('--assignee <assignee>', 'Filter by assignee')
+    .option('--label <label>', 'Match an exact label')
     .option('--area <area>', 'Filter by area')
     .option('--parent <task-id>', 'Filter by parent task; use "null" for top-level tasks')
     .option('-q, --query <text>', 'Search task titles and descriptions')
@@ -151,6 +153,7 @@ export function registerTasks(program: Command): void {
         ['status', opts.status],
         ['type', opts.type],
         ['assignee', opts.assignee],
+        ['label', opts.label],
         ['area', opts.area],
         ['parent_id', opts.parent],
         ['q', opts.query],
@@ -170,6 +173,7 @@ export function registerTasks(program: Command): void {
         if (isRecord(value) && isRecord(value.page)) {
           const page = value.page;
           console.log(dim(`Showing ${page.count} of ${page.total}. Order: ${page.order ?? 'unspecified'}`));
+          if (page.candidate_note) console.log(dim(String(page.candidate_note)));
           if (page.consistency) console.log(dim(String(page.consistency)));
           if (page.next_cursor) console.log(`Next page: repeat this command's filters with --cursor '${page.next_cursor}'`);
         }

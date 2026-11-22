@@ -351,7 +351,7 @@ export function renderDocsIndex(pages: PublicDocsPage[], groups: PublicDocsGroup
   if (rest.length) blocks.push({ title: groups.length ? 'Other topics' : 'Topics', pages: rest });
   const width = Math.max(0, ...pages.map(({ id }) => id.length));
   const lines = ['Platform docs — no login needed.',
-    `Run ${cliInvocation()} init first, then read generated AGENTS.md: call shapes and access patterns for a typical app; docs are for exceptions.`,
+    `Run ${cliInvocation()} init --name my-app, then read generated AGENTS.md: call shapes and access patterns for a typical app; docs are for exceptions.`,
     '',
     'Requirement | Declaration (complete examples in generated AGENTS.md)',
     'Own rows | owner()',

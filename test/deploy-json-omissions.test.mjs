@@ -50,6 +50,8 @@ test('--json names every local omission on stderr and leaves stdout as the deplo
   const secret = 'FAKE_PRIVATE_KEY_MATERIAL_do_not_print';
   const result = await run(['deploy', '--dry-run', '--json'], {
     'index.html': '<html><body>hi</body></html>\n',
+    '.t_start': 'local timer',
+    '.t_end': 'local timer',
     'NOTES.md': 'private planning notes FAKE_NOTE_TEXT\n',
     'api/hello.test.ts': 'export {};\n',
     'id_rsa': secret,
@@ -65,7 +67,8 @@ test('--json names every local omission on stderr and leaves stdout as the deplo
     'never uploaded: id_rsa',
     'not uploaded: public/linked.txt',
   ]);
-  assert.doesNotMatch(result.stderr, /FAKE_PRIVATE_KEY_MATERIAL|FAKE_NOTE_TEXT/);
+  assert.equal(result.stderr.match(/Deploy always leaves dotfiles and dot-directories out, except \.well-known\./g)?.length, 1);
+  assert.doesNotMatch(result.stderr, /FAKE_PRIVATE_KEY_MATERIAL|FAKE_NOTE_TEXT|\.t_start|\.t_end/);
 });
 
 test('--json with nothing left out prints nothing extra on stderr', async () => {

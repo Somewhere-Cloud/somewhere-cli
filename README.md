@@ -116,7 +116,7 @@ For optional after-edit checking, explicitly run `somewhere hooks install --host
 | `somewhere logs --level error` | Filter by level |
 | `somewhere run <script.js>` | Run a one-off script once against the project's live bindings (`sw.db`/`sw.fs`/`sw.ai`…) and print its return value + logs — no deploy |
 | `somewhere errors` | Show the most recent exceptions (endpoint, status, error, time) — the curated error view |
-| `somewhere rollback` | Revert production to the previous deployed version |
+| `somewhere rollback --yes` | Revert production to the previous deployed version |
 | `somewhere env list` | Show environment variables |
 | `somewhere env set KEY --stdin` | Read an env value from stdin |
 | `somewhere env delete KEY` | Delete an env var |
@@ -200,7 +200,7 @@ deploys but does not undeploy the current site.
 | `--yes` | Skip the `--force` confirmation prompt |
 
 `somewhere deploy -m "Adjust the heading"` gives the version a note.
-`somewhere promote <session> <preview> -m "Ready to share"` does the same for promotion.
+`somewhere promote <session> <preview> --yes -m "Ready to share"` does the same for promotion.
 Patches use the declared `message` field through `somewhere call project_patch`.
 `somewhere call project_deploys` shows stored notes as JSON data labeled `user_supplied_note`.
 

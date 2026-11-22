@@ -197,7 +197,7 @@ export function registerPromote(program: Command) {
         // with actionable -y/--yes guidance rather than a mute wedge.
         if (!process.stdin.isTTY) {
           const message =
-            `Refusing to promote without confirmation in a non-interactive shell. Pass -y/--yes to promote intentionally (e.g. \`${cliInvocation()} promote <preview_session_id> <preview_id> --yes\`).`;
+            `To promote in a non-interactive shell, add --yes.`;
           if (opts.json) {
             printJsonError('CONFIRMATION_REQUIRED', message);
           } else {

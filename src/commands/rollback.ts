@@ -1,5 +1,4 @@
 import { cliInvocation } from '../lib/cli-invocation.js';
-import { shellQuote } from '../lib/next-actions.js';
 import { Command } from 'commander';
 import ora from '../lib/spinner.js';
 import prompts from 'prompts';
@@ -61,7 +60,7 @@ export function registerRollback(program: Command) {
   program
     .command('rollback [project]')
     .description(
-      `Revert production to the previous deployed version (for any earlier version: \`${cliInvocation()} restore <version>\`). Use this when a ` +
+      `Revert production to the previous deployed version (for any earlier version: \`${cliInvocation()} restore <version> --yes\`). Use this when a ` +
         'promote shipped a bad build — it restores the version that was live ' +
         'before, including its functions. By default this changes code without restoring data. (Requires a previous production ' +
         'version to return to.)',
@@ -99,9 +98,7 @@ export function registerRollback(program: Command) {
         // keystroke, so `prompts` hangs. Match deploy's --force guard — exit
         // with actionable -y/--yes guidance rather than a mute wedge.
         if (!process.stdin.isTTY) {
-          const target = chosen.kind === 'ref' ? ` --project ${shellQuote(chosen.ref)}` : '';
-          const json = opts.json ? ' --json' : '';
-          const message = `Refusing to roll back without confirmation in a non-interactive shell. Run \`${cliInvocation()} rollback${target} --yes${json}\` to roll back.`;
+          const message = `To roll back in a non-interactive shell, add --yes.`;
           if (opts.json) {
             printJsonError('CONFIRMATION_REQUIRED', message);
           } else {

@@ -71,7 +71,7 @@ test('promote without --yes fails fast in a non-interactive shell', async () => 
 
   assert.equal(result.status, 1, `stdout:\n${result.stdout}\nstderr:\n${result.stderr}`);
   assert.match(result.stderr, /non-interactive shell/);
-  assert.match(result.stderr, /--yes/);
+  assert.match(result.stderr, /add --yes\b/);
   // Must not masquerade as an ordinary user abort.
   assert.doesNotMatch(result.stderr, /^Aborted\.$/m);
 });
@@ -86,7 +86,7 @@ test('promote --json without --yes emits a CONFIRMATION_REQUIRED error', async (
   assert.equal(result.status, 1, `stdout:\n${result.stdout}\nstderr:\n${result.stderr}`);
   const payload = JSON.parse(result.stdout.trim());
   assert.equal(payload.error, 'CONFIRMATION_REQUIRED');
-  assert.match(payload.message, /--yes/);
+  assert.match(payload.message, /add --yes\b/);
 });
 
 test('promote --yes is unaffected by the non-interactive guard (still reaches the API)', async () => {
@@ -108,7 +108,7 @@ test('rollback without --yes fails fast in a non-interactive shell', async () =>
 
   assert.equal(result.status, 1, `stdout:\n${result.stdout}\nstderr:\n${result.stderr}`);
   assert.match(result.stderr, /non-interactive shell/);
-  assert.match(result.stderr, /--yes/);
+  assert.match(result.stderr, /add --yes\b/);
   assert.doesNotMatch(result.stderr, /^Aborted\.$/m);
 });
 
@@ -119,7 +119,7 @@ test('rollback --json without --yes emits a CONFIRMATION_REQUIRED error', async 
   assert.equal(result.status, 1, `stdout:\n${result.stdout}\nstderr:\n${result.stderr}`);
   const payload = JSON.parse(result.stdout.trim());
   assert.equal(payload.error, 'CONFIRMATION_REQUIRED');
-  assert.match(payload.message, /--yes/);
+  assert.match(payload.message, /add --yes\b/);
 });
 
 test('rollback --yes is unaffected by the non-interactive guard (still reaches the API)', async () => {
@@ -128,6 +128,16 @@ test('rollback --yes is unaffected by the non-interactive guard (still reaches t
 
   assert.equal(result.status, 1, `stdout:\n${result.stdout}\nstderr:\n${result.stderr}`);
   assert.doesNotMatch(result.stderr, /non-interactive shell/);
+});
+
+test('restore without --yes fails fast and names the flag', async () => {
+  const { env, cwd } = setup('sw-noninteractive-restore');
+  const result = await run(['restore', '3', '--json'], { cwd, env });
+
+  assert.equal(result.status, 1);
+  const payload = JSON.parse(result.stdout.trim());
+  assert.equal(payload.error, 'CONFIRMATION_REQUIRED');
+  assert.match(payload.message, /add --yes\b/);
 });
 
 // init prompts for a project name, a subdomain, an overwrite confirmation and

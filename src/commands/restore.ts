@@ -16,10 +16,10 @@ export function registerRestore(program: Command) {
   program
     .command('restore <version>')
     .description(
-      `Make an earlier deployed version live again, by number (e.g. \`${cliInvocation()} restore 3\`). ` +
+      `Make an earlier deployed version live again, by number (e.g. \`${cliInvocation()} restore 3 --yes\`). ` +
         'The platform puts that version\'s build back in production, with its functions; nothing is re-uploaded and this folder is not changed. ' +
         'Restoring by number leaves the database schema and data unchanged. ' +
-        `\`${cliInvocation()} rollback\` is the shortcut for the previous version. Afterwards \`${cliInvocation()} pull\` brings this folder to the restored version.`,
+        `\`${cliInvocation()} rollback --yes\` is the shortcut for the previous version. Afterwards \`${cliInvocation()} pull\` brings this folder to the restored version.`,
     )
     .option('--project <ref>', 'Project ID, name, slug, or subdomain (defaults to the linked project)')
     .option('-y, --yes', 'Skip the confirmation prompt')
@@ -44,7 +44,7 @@ export function registerRestore(program: Command) {
 
       if (!opts.yes) {
         if (!process.stdin.isTTY) {
-          fail('CONFIRMATION_REQUIRED', `Refusing to restore without confirmation in a non-interactive shell. Pass -y/--yes to restore intentionally (e.g. \`${cliInvocation()} restore ${version} --yes\`).`);
+          fail('CONFIRMATION_REQUIRED', `To restore in a non-interactive shell, add --yes.`);
         }
         const { ok } = await prompts({
           type: 'confirm', name: 'ok', initial: true,

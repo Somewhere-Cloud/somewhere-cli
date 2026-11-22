@@ -3,6 +3,7 @@
 ## 0.38.142
 
 - Use `somewhere tasks list --label <label>` to match an exact task label.
+- Label the llms docs topic as the platform overview. The full manual opens with `somewhere docs --full`.
 
 ## 0.38.141
 

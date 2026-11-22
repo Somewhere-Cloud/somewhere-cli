@@ -1,11 +1,12 @@
 # Changelog
 
-## Unreleased
+## 0.38.145
 
 - `somewhere tasks waiting` lists what is waiting for you across your projects: what agents have asked you to do, with the steps, the reason, who asked and when. `--project` reads one project; `--cursor` continues. It also lists what was answered and by which credential.
 - `somewhere tasks answer <task-id> --done` (or `--cannot`, or `--not-needed`), with `--note`, answers one.
 - `somewhere tasks create --supersedes <task-id>` replaces an earlier ask in one command; `tasks update --superseded-by <task-id>` marks one replaced. A replaced ask leaves the waiting list at once.
 - `somewhere tasks create` and `tasks update` take `--waiting-on` and `--author`, and `tasks create` takes `--status-note`, so an agent can ask the person for something in one command.
+- Matches platform consumer contract 39, so deploys no longer warn that the CLI contract differs from the platform.
 
 ## 0.38.144
 

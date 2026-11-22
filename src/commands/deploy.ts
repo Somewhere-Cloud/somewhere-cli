@@ -701,8 +701,8 @@ export function registerDeploy(program: Command) {
         process.exit(1);
       }
       if (opts.listUnpublished) {
-        const { excluded, sensitive, skipped } = collectFiles(targetDir, { include: opts.include ?? [] });
-        console.error(DOTFILE_NOTICE);
+        const { excluded, sensitive, skipped, dotfilesLeftOut } = collectFiles(targetDir, { include: opts.include ?? [] });
+        if (dotfilesLeftOut) console.error(DOTFILE_NOTICE);
         if (opts.json) printJson({ excluded, sensitive, skipped });
         else {
           if (excluded.length) printExcludedFiles(excluded, targetDir, { list: true });
@@ -734,7 +734,7 @@ export function registerDeploy(program: Command) {
       const collectionEndedAt = performance.now();
       const collectionMs = collectionEndedAt - collectionStartedAt;
       const { files, binaryFiles, functions, skipped, excluded, sensitive } = collected;
-      console.error(DOTFILE_NOTICE);
+      if (collected.dotfilesLeftOut) console.error(DOTFILE_NOTICE);
       // A credentials file the source names: refuse before any request, with
       // nothing sent (the deploy API refuses these paths too, after upload).
       const sensitiveRefusal = sensitiveReferenceRefusal(collected);

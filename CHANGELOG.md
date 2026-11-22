@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.38.144
+
+- Matches platform consumer contract 36, so deploys no longer warn that the CLI contract differs from the platform.
+- `somewhere deploy` states the dotfile rule only when it leaves a dotfile out; `--json` with nothing left out keeps stderr quiet.
+- `somewhere typecheck` no longer fails on `somewhere:api` imports; it says once that they are checked at deploy, where the client is generated.
+
 ## 0.38.143
 
 - Include the project name in the CLI docs starter command.

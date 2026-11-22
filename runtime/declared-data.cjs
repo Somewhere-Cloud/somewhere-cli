@@ -1276,8 +1276,17 @@ type SomewhereDbAggregateOptionsFor<T extends string> = SomewhereDbAggregateOpti
   max?: __SomewhereDeclared<T, 'scalar', string> | null;
   groupBy?: readonly __SomewhereDeclared<T, 'scalar', string>[] | null;
 };
-type SomewhereDbAggregateRow<T extends string> = T extends keyof SomewhereDeclaredTables
-  ? Record<string, number | string | boolean | null>
+type SomewhereDbGroupBy<T extends string> = SomewhereDbAggregateOptionsFor<T>['groupBy'];
+// A literal list names the keys present in each row. Dynamic arrays can
+// select any subset, so their rows retain the generic scalar index type.
+type __SomewhereDbGroupColumn<T extends string, K extends string> = K extends SomewhereDbColumn<T>
+  ? Pick<SomewhereDbRow<T>, K>
+  : unknown;
+type __SomewhereDbGroupColumns<T extends string, G> = G extends readonly [infer K extends string, ...infer Rest]
+  ? __SomewhereDbGroupColumn<T, K> & __SomewhereDbGroupColumns<T, Rest>
+  : unknown;
+type SomewhereDbAggregateRow<T extends string, G> = T extends keyof SomewhereDeclaredTables
+  ? Record<string, number | string | boolean | null> & __SomewhereDbGroupColumns<T, G>
   : Record<string, unknown>;
 interface SomewhereDbAggregateResult<Row = Record<string, unknown>> {
   // Always an array of group rows (exactly one when ungrouped): grouped columns plus composed result keys.
@@ -1327,14 +1336,14 @@ interface SomewhereDbScopeApi {
   list(): Promise<SomewhereDbScopeEntry[]>;
 }
 interface SomewhereServerDb {
-  aggregate<T extends SomewhereDbTable>(table: T, options: SomewhereDbAggregateOptionsFor<T>): Promise<SomewhereDbAggregateResult<SomewhereDbAggregateRow<T>>>;
+  aggregate<T extends SomewhereDbTable, const G extends SomewhereDbGroupBy<T> = SomewhereDbGroupBy<T>>(table: T, options: SomewhereDbAggregateOptionsFor<T> & { groupBy?: G }): Promise<SomewhereDbAggregateResult<SomewhereDbAggregateRow<T, G>>>;
 }
 interface SomewhereCallerDb {
   /** @deprecated Replaced by sw.rooms.live(name, sw.db.from(...)); deploy refuses sw.db.live. */
   live(name: 'sw.db.live was replaced by sw.rooms.live(name, sw.db.from(...))', read: never): never;
   query(sql: string, params?: readonly unknown[] | null, options?: SomewhereDbRawCallerOptions | null): Promise<SomewhereDbResult>;
   batch(statements: readonly SomewhereRawDbStatement[], options?: SomewhereDbRawCallerOptions | null): Promise<SomewhereRawBatchResult[]>;
-  aggregate<T extends SomewhereDbTable>(table: T, options: SomewhereDbAggregateOptionsFor<T> & { asServer?: true }): Promise<SomewhereDbAggregateResult<SomewhereDbAggregateRow<T>>>;
+  aggregate<T extends SomewhereDbTable, const G extends SomewhereDbGroupBy<T> = SomewhereDbGroupBy<T>>(table: T, options: SomewhereDbAggregateOptionsFor<T> & { asServer?: true } & { groupBy?: G }): Promise<SomewhereDbAggregateResult<SomewhereDbAggregateRow<T, G>>>;
   tables(): Promise<string[]>;
   readonly scope: SomewhereDbScopeApi;
 }
@@ -3251,6 +3260,7 @@ interface SomewhereEmailBounce {
 }
 interface SomewhereEmailTestInboxMessage {
   id: string;
+  headers?: { 'Message-ID': string; 'In-Reply-To'?: string; References?: string };
   to: string;
   subject: string;
   html: string | null;
@@ -3708,6 +3718,7 @@ interface SomewhereTaskSettings {
 interface SomewhereTaskListOptions {
   status?: SomewhereTaskStatus;
   assignee?: string;
+  label?: string;
   area?: string;
   parent_id?: string | null;
   q?: string;
@@ -4471,8 +4482,8 @@ var require_consumer_contract = __commonJS({
   "worker/containers/compile/consumer-contract.cjs"(exports2, module2) {
     "use strict";
     var CONSUMER_CONTRACT2 = Object.freeze({
-      version: 30,
-      digest: "6b27b36b315bece1e2cd83950720930286ed19b8858b7e8cd8f5f5bf7566797b"
+      version: 36,
+      digest: "7e06ccf06deecead4917de5d9d47a686804b73b855e8aa2c0b72400bd75ee0e1"
     });
     var MEMBERSHIPS = "memberships: table({ id: id(), team_id: text(), member_id: text() }, { scope: owner(), client: { read: true } }),";
     var SHARES = "shares: table({ id: id(), grantee_id: text() }, { scope: owner(), client: { read: true, create: ['grantee_id'], delete: true }, unique: [['user_id', 'grantee_id']] }),";

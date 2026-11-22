@@ -237,6 +237,24 @@ test('runTypecheck treats a tree with only unresolved imports as ok', async () =
   assert.equal(r.ok, true, JSON.stringify(r.errors));
 });
 
+test('typecheck defers generated API imports to deploy and prints one notice', async (t) => {
+  const dir = fixture({
+    'api/echo.ts': `export const typed = 'somewhere:v1';
+export type Contract = { input: { text: string }; output: { text: string } };
+export default async (request: Request) => Response.json(await request.json());
+`,
+    'src/main.ts': "import { api } from 'somewhere:api'; void api;\n",
+    'src/other.ts': "import { api } from 'somewhere:api'; void api;\n",
+  });
+  const stderr = [];
+  t.mock.method(process.stderr, 'write', (chunk) => { stderr.push(String(chunk)); return true; });
+  const local = await runTypecheck(dir);
+  assert.equal(local.ok, true, JSON.stringify(local.errors));
+  assert.deepEqual(stderr.filter(line => line.includes('somewhere:api')), [
+    'The somewhere:api import is checked at deploy, where its client is generated.\n',
+  ]);
+});
+
 test('runTypecheck accepts a fresh Vite-shaped scaffold', async () => {
   const dir = fixture({
     'package.json': JSON.stringify({

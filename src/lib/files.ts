@@ -97,6 +97,8 @@ export function isBinaryPath(p: string): boolean {
 }
 
 export interface CollectedFiles {
+  /** True when the walk left out at least one dotfile or dot-directory (other than .well-known). */
+  dotfilesLeftOut: boolean;
   files: Record<string, string>;
   binaryFiles: Record<string, string>;
   functions: Record<string, string>;
@@ -139,7 +141,7 @@ export interface CollectOptions {
 /** Walk a directory tree and bucket every file into static / binary / function,
  *  applying the same path remapping the deploy command uses. */
 export function collectFiles(baseDir: string, options: CollectOptions = {}): CollectedFiles {
-  const out: CollectedFiles = { files: {}, binaryFiles: {}, functions: {}, skipped: [], oversize: [], notes: [], excluded: [], sensitive: [], published: [] };
+  const out: CollectedFiles = { dotfilesLeftOut: false, files: {}, binaryFiles: {}, functions: {}, skipped: [], oversize: [], notes: [], excluded: [], sensitive: [], published: [] };
   const ignore = loadDeployIgnore(baseDir);
   const candidates: string[] = [];
   const sizes = new Map<string, number>();
@@ -261,6 +263,7 @@ function walk(
   for (const entry of readdirSync(currentDir, { withFileTypes: true })) {
     const fullPath = join(currentDir, entry.name);
     const relPath = toDeployPath(relative(baseDir, fullPath));
+    if (!IGNORE.has(entry.name) && entry.name.startsWith('.') && entry.name !== '.well-known') out.dotfilesLeftOut = true;
     if (
       IGNORE.has(entry.name) ||
       (entry.name.startsWith('.') && entry.name !== '.well-known') ||

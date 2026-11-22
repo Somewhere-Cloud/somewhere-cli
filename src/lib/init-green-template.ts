@@ -23,7 +23,8 @@ const packageJson = (appName: string) => `{
   "devDependencies": {
     "@types/react": "19.2.2",
     "@types/react-dom": "19.2.2",
-    "typescript": "${TYPECHECK_TYPESCRIPT_VERSION}"
+    "typescript": "${TYPECHECK_TYPESCRIPT_VERSION}",
+    "vite": "7.2.2"
   },
   "allowScripts": {
     "esbuild": true

@@ -133,6 +133,7 @@ test('minimal starter is a small typed frontend, function, and schema', () => {
     '@types/react-dom': '19.2.2',
     // Installed by init, so a deploy's type check never fetches TypeScript with npx.
     typescript: '5.9.3',
+    vite: '7.2.2',
   });
   assert.deepEqual(pkg.somewhere, { cli_version: CLI_PACKAGE_VERSION, project_name: 'somewhere-starter' });
   assert.equal(

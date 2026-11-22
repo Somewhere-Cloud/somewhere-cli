@@ -175,6 +175,7 @@ test('every combination separates types, services, hooks, pages and presentation
     assert.equal(pkg.dependencies['react-dom'], '19.2.7');
     assert.equal(pkg.optionalDependencies, undefined);
     assert.equal(pkg.dependencies['@somewhere-cloud/sdk'], '0.14.2', 'the SDK release whose sign-in lockout answer keeps retry_after_ms and sends Retry-After');
+    assert.equal(pkg.devDependencies.vite, '7.2.2');
     assert.equal(pkg.scripts.build, undefined);
   }
 });

@@ -68,8 +68,8 @@ the project. The pinned version runs from npm’s cache when needed. `somewhere
 upgrade` moves the pin. Type checking uses the pinned compiler through npm
 when no compiler is installed in the project.
 
-`init` installs React, the SDK, TypeScript, and editor types. For a local Vite server, use
-`npm install -D --save-exact vite@7.2.2` for `somewhere dev`.
+`init` installs React, the SDK, TypeScript, editor types, and Vite. Once you deploy
+the starter, run `somewhere dev` for local frontend hot reload.
 Save each journey you want re-checked after every deploy as `checks/<plain-name>.json`;
 the platform runs them in its browser after each deploy and `somewhere test` runs them now
 (nothing to install). A Playwright script or spec runs locally with

@@ -47,6 +47,14 @@ test('task commands preserve explicit pagination and every retrieval option',asy
   assert.equal(calls.at(-1).args.view,'full');
   assert.equal(calls.length,5,'one tool call per command; no automatic page draining');
 });
+test('label-only lists print the partial-results warning from the API',async()=>{
+  const page={total:0,count:0,partial:true,candidate_note:'Partial results. Add an assignee.'};
+  const output=await run(['tasks','list','--label','needs-you','--project','project'],{ok:true,data:[],page});
+  assert.deepEqual(calls.at(-1),{name:'tasks_list',args:{project_id:'project',label:'needs-you'}});
+  assert.match(output,/Partial results\. Add an assignee\./);
+  const json=await run(['tasks','list','--label','needs-you','--project','project','--json'],{ok:true,data:[],page});
+  assert.equal(JSON.parse(json).page.partial,true);
+});
 test('delete, restore and deleted call the task tools with the reason and project',async()=>{
   let output=await run(['tasks','delete','tsk_1','--project','project','--reason','Duplicate'],{ok:true,data:{id:'tsk_1',deleted:true,purge_at:0}});
   assert.deepEqual(calls.at(-1),{name:'tasks_delete',args:{project_id:'project',task_id:'tsk_1',reason:'Duplicate'}});

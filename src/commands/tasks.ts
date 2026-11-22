@@ -173,7 +173,7 @@ export function registerTasks(program: Command): void {
         if (isRecord(value) && isRecord(value.page)) {
           const page = value.page;
           console.log(dim(`Showing ${page.count} of ${page.total}. Order: ${page.order ?? 'unspecified'}`));
-          if (page.candidate_note) console.log(dim(String(page.candidate_note)));
+          if (typeof page.candidate_note === 'string') console.log(page.candidate_note);
           if (page.consistency) console.log(dim(String(page.consistency)));
           if (page.next_cursor) console.log(`Next page: repeat this command's filters with --cursor '${page.next_cursor}'`);
         }

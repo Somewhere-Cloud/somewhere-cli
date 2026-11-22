@@ -70,6 +70,8 @@ export function resolveTargetDir(dir?: string, cwd = process.cwd()): string {
   return dir ? resolve(cwd, dir) : cwd;
 }
 
+const DOTFILE_NOTICE = 'Deploy always leaves dotfiles and dot-directories out, except .well-known.';
+
 // `--prebuilt` (alias `--allow-bundled`) opts the deploy out of the
 // raw-source contract: the worker's bundled-deploy guard keeps pre-built /
 // bundled output as-is instead of rejecting it. We surface it as
@@ -683,7 +685,7 @@ export function registerDeploy(program: Command) {
     // `somewhere deploy && somewhere test`.
     .addOption(new Option('--test', 'After a successful deploy, run somewhere test once against the new release').hideHelp())
     .option('-m, --message <text>', 'Add a note for this version')
-    .option('--json', 'Print the deploy result and its uploaded file list as JSON on stdout. Stderr lists files left out locally by path and reason.')
+    .option('--json', 'Print the deploy result and its uploaded file list as JSON on stdout. Stderr reports files left out locally and the dotfile rule.')
     .option('--list-unpublished', 'List the local files deploy would keep on your machine, then exit')
     .option('--allow-type-errors', 'Upload even when the local TypeScript check fails')
     .option('--timing', 'Print deploy details and timings')
@@ -700,6 +702,7 @@ export function registerDeploy(program: Command) {
       }
       if (opts.listUnpublished) {
         const { excluded, sensitive, skipped } = collectFiles(targetDir, { include: opts.include ?? [] });
+        console.error(DOTFILE_NOTICE);
         if (opts.json) printJson({ excluded, sensitive, skipped });
         else {
           if (excluded.length) printExcludedFiles(excluded, targetDir, { list: true });
@@ -731,6 +734,7 @@ export function registerDeploy(program: Command) {
       const collectionEndedAt = performance.now();
       const collectionMs = collectionEndedAt - collectionStartedAt;
       const { files, binaryFiles, functions, skipped, excluded, sensitive } = collected;
+      console.error(DOTFILE_NOTICE);
       // A credentials file the source names: refuse before any request, with
       // nothing sent (the deploy API refuses these paths too, after upload).
       const sensitiveRefusal = sensitiveReferenceRefusal(collected);

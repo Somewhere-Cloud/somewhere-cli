@@ -57,6 +57,8 @@ interface TaskWriteOptions extends ProjectOptions {
   statusNote?: string;
   waitingOn?: string;
   author?: string;
+  supersedes?: string;
+  supersededBy?: string;
   health?: string;
   comment?: string;
   resolutionNote?: string;
@@ -137,8 +139,9 @@ function printWaiting(value: unknown): void {
     for (const line of lines) console.log(`  ${line}`);
     steps.forEach((step, at) => console.log(`  ${at + 1}. ${step}`));
     if (steps.length === 0 && lines.length === 0 && typeof item.steps === 'string') console.log(`  ${item.steps.split('\n').join('\n  ')}`);
+    if (typeof item.replaces === 'string' && item.replaces) console.log(dim(`  Replaces an earlier request: ${item.replaces}`));
     if (typeof item.why === 'string' && item.why) console.log(dim(`  Why: ${item.why}`));
-    console.log(dim(`  Answer: ${cliInvocation()} tasks answer ${String(item.id)} -p ${String(item.project_id)} --done   (or --cannot, with --note "...")`));
+    console.log(dim(`  Answer: ${cliInvocation()} tasks answer ${String(item.id)} -p ${String(item.project_id)} --done   (or --cannot, or --not-needed, with --note "...")`));
     console.log('');
   }
   // Answered and not yet picked up by the agent that asked: which answer, and the credential that gave it, as the platform recorded it.
@@ -152,7 +155,7 @@ function printWaiting(value: unknown): void {
       : `${{ connector: 'connector', agent: 'connected agent', terminal: 'terminal', key: 'API key', app: 'the app' }[kind] ?? kind}${typeof via.name === 'string' ? ` ${via.name}` : ''}`;
     const when = typeof by.at === 'string' ? timeAgo(by.at) : null;
     console.log(`${teal(String(item.id))}  ${String(item.title ?? '')}`);
-    console.log(dim(`  ${by.answer === 'cannot' ? 'Marked "can\'t do this"' : 'Marked done'} by ${who}${when ? ` · ${when}` : ''}${typeof item.project_name === 'string' ? ` · ${item.project_name}` : ''}`));
+    console.log(dim(`  ${by.answer === 'cannot' ? 'Marked "can\'t do this"' : by.answer === 'not_needed' ? 'Marked as no longer needed' : 'Marked done'} by ${who}${when ? ` · ${when}` : ''}${typeof item.project_name === 'string' ? ` · ${item.project_name}` : ''}`));
     if (typeof item.note === 'string' && item.note) console.log(`  ${item.note}`);
   }
   if (isRecord(data) && typeof data.next_cursor === 'string') {
@@ -266,22 +269,23 @@ export function registerTasks(program: Command): void {
 
   tasks
     .command('answer <task-id>')
-    .description('Answer something that is waiting for you: --done when you did it, --cannot when you can\'t or won\'t')
+    .description('Answer something that is waiting for you: --done when you did it, --cannot when you can\'t or won\'t, --not-needed when it is no longer needed')
     .option('-p, --project <project>', 'Project slug or ID; defaults to the linked project')
     .option('--done', 'You did it')
     .option('--cannot', 'You can\'t or won\'t do it')
+    .option('--not-needed', 'It is no longer needed')
     .option('--note <text>', 'A short note for the agent that asked; never a password or a key')
     .option('--json', 'Print the complete response as JSON')
-    .action(async (taskId: string, opts: ProjectOptions & { done?: boolean; cannot?: boolean; note?: string }) => {
-      if (Boolean(opts.done) === Boolean(opts.cannot)) {
-        error('Say which: --done or --cannot.');
+    .action(async (taskId: string, opts: ProjectOptions & { done?: boolean; cannot?: boolean; notNeeded?: boolean; note?: string }) => {
+      if ([opts.done, opts.cannot, opts.notNeeded].filter(Boolean).length !== 1) {
+        error('Say which one: --done, --cannot or --not-needed.');
         process.exitCode = 1;
         return;
       }
       const args = compactRecord([
         ['project_id', resolveTaskProject(opts.project)],
         ['task_id', taskId],
-        ['answer', opts.done ? 'done' : 'cannot'],
+        ['answer', opts.done ? 'done' : opts.cannot ? 'cannot' : 'not_needed'],
         ['note', opts.note],
       ]);
       await runTaskTool('tasks_update', args, opts.json, printTaskMutation);
@@ -303,6 +307,7 @@ export function registerTasks(program: Command): void {
     .option('--waiting-on <who>', 'human or product_decision asks the person (shown under "Waiting for you"); external records an outside wait')
     .option('--status-note <text>', 'Current state; with --waiting-on human, the numbered steps for the person, one per line')
     .option('--author <name>', 'The asking agent\'s own name, shown to the person as who asked')
+    .option('--supersedes <task-id>', 'An earlier task this one replaces; the earlier one leaves the person\'s waiting list at once')
     .option('--json', 'Print the complete response as JSON')
     .action(async (title: string, opts: TaskWriteOptions) => {
       const args = compactRecord([
@@ -320,6 +325,7 @@ export function registerTasks(program: Command): void {
         ['waiting_on', opts.waitingOn],
         ['status_note', opts.statusNote],
         ['author', opts.author],
+        ['supersedes', opts.supersedes],
       ]);
       await runTaskTool('tasks_create', args, opts.json, printTaskMutation);
     });
@@ -339,7 +345,8 @@ export function registerTasks(program: Command): void {
     .option('--parent <task-id>', 'New parent; pass an empty string to detach')
     .option('--due-at <unix-ms>', 'Due time as a Unix timestamp in milliseconds')
     .option('--status-note <text>', 'Overwrite the current status note')
-    .option('--waiting-on <who>', 'human or product_decision asks the person; external records an outside wait; an empty string clears it')
+    .option('--waiting-on <who>', 'human or product_decision asks the person; external records an outside wait; an empty string clears it (withdraws an ask)')
+    .option('--superseded-by <task-id>', 'The task that replaces this one; a replaced ask leaves the person\'s waiting list at once')
     .option('--author <name>', 'The asking agent\'s own name, shown as who asked or who commented')
     .option('--health <health>', 'on_track, at_risk, or off_track')
     .option('--comment <text>', 'Append an evidence comment')
@@ -364,6 +371,7 @@ export function registerTasks(program: Command): void {
         ['due_at', numberOption(opts.dueAt)],
         ['status_note', opts.statusNote],
         ['waiting_on', opts.waitingOn],
+        ['superseded_by', opts.supersededBy],
         ['author', opts.author],
         ['health', opts.health],
         ['comment', opts.comment],

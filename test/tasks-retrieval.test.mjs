@@ -80,6 +80,14 @@ test('waiting for you: the list is the platform’s, an answer is one call, and 
   assert.equal(calls.length, before, 'an answer that says neither or both is not sent');
   await run(['tasks', 'create', 'Add the bank details', '--project', 'proj-1', '--waiting-on', 'human', '--status-note', '1. Open Stripe.\n2. Add the account.', '--author', 'build-agent'], { ok: true, data: { id: 'tsk_10' } });
   assert.deepEqual(calls.at(-1), { name: 'tasks_create', args: { project_id: 'proj-1', title: 'Add the bank details', waiting_on: 'human', status_note: '1. Open Stripe.\n2. Add the account.', author: 'build-agent' } });
+  await run(['tasks', 'answer', 'tsk_9', '--project', 'proj-1', '--not-needed', '--note', 'We changed the design.'], { ok: true, data: { id: 'tsk_9' } });
+  assert.deepEqual(calls.at(-1).args, { project_id: 'proj-1', task_id: 'tsk_9', answer: 'not_needed', note: 'We changed the design.' });
+  await run(['tasks', 'create', 'Add the bank details in Square', '--project', 'proj-1', '--waiting-on', 'human', '--supersedes', 'tsk_10'], { ok: true, data: { id: 'tsk_11' } });
+  assert.deepEqual(calls.at(-1).args, { project_id: 'proj-1', title: 'Add the bank details in Square', waiting_on: 'human', supersedes: 'tsk_10' });
+  await run(['tasks', 'update', 'tsk_10', '--project', 'proj-1', '--superseded-by', 'tsk_11'], { ok: true, data: { id: 'tsk_10' } });
+  assert.deepEqual(calls.at(-1).args, { project_id: 'proj-1', task_id: 'tsk_10', superseded_by: 'tsk_11' });
+  output = await run(['tasks', 'waiting'], { ok: true, data: { items: [{ ...item, replaces: 'The first request' }], answered: [], total: 1, more: false, next_cursor: null } });
+  assert.ok(output.includes('Replaces an earlier request: The first request') && output.includes('--not-needed'), output);
   await run(['tasks', 'update', 'tsk_10', '--project', 'proj-1', '--waiting-on', 'product_decision', '--author', 'build-agent'], { ok: true, data: { id: 'tsk_10' } });
   assert.deepEqual(calls.at(-1), { name: 'tasks_update', args: { project_id: 'proj-1', task_id: 'tsk_10', waiting_on: 'product_decision', author: 'build-agent' } });
 });

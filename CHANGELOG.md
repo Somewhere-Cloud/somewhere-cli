@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.38.142
+
+- Use `somewhere tasks list --label <label>` to match an exact task label.
+
 ## 0.38.141
 
 - Typecheck keeps the compiler result and exit code when its advisory source scan fails, and reports the source failure in text and JSON.

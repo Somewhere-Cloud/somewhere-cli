@@ -41,6 +41,10 @@ export interface TypeError {
  */
 const UNRESOLVED_DEP_CODES = new Set(['TS2307', 'TS7016', 'TS2306', 'TS2875']);
 
+function isGeneratedApiImport(e: TypeError): boolean {
+  return e.code === 'TS2307' && /^Cannot find module ['"]somewhere:api['"]/.test(e.message);
+}
+
 /** A bare npm specifier that resolves on deploy. A relative or absolute import
  *  ('./x', '../x', '/x') names a project file: when it is missing, the deploy
  *  is missing it too, so that diagnostic is a real error and is kept. */
@@ -48,6 +52,7 @@ function isUnresolvedBareImport(e: TypeError): boolean {
   if (!UNRESOLVED_DEP_CODES.has(e.code)) return false;
   const specifier = /['"]([^'"]+)['"]/.exec(e.message)?.[1];
   if (specifier === undefined) return true;
+  if (specifier === 'somewhere:api') return isGeneratedApiImport(e);
   if (/^somewhere(?::data|:files|\/db)$/.test(specifier)) return false;
   return !/^(?:\.{1,2}(?:[\\/]|$)|[\\/]|[A-Za-z]:[\\/])/.test(specifier);
 }
@@ -502,6 +507,9 @@ async function runTypecheckWith(
   // Drop locally-unresolvable bare-import diagnostics (they resolve on
   // deploy via esm.sh) so they don't bury the real bugs. Undefined symbols
   // (TS2304) survive the filter.
+  if (allErrors.some(isGeneratedApiImport)) {
+    process.stderr.write('The somewhere:api import is checked at deploy, where its client is generated.\n');
+  }
   const errors = allErrors.filter((e) => !isUnresolvedBareImport(e));
   // tsc exits non-zero whenever it emits diagnostics. If it failed but we
   // parsed NONE (a config/crash failure, not type errors), don't claim

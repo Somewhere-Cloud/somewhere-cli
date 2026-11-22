@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.38.144
+
+- `somewhere typecheck` no longer fails on `somewhere:api` imports; it says once that they are checked at deploy, where the client is generated.
+
 ## 0.38.143
 
 - Include the project name in the CLI docs starter command.

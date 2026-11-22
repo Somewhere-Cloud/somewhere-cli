@@ -255,11 +255,13 @@ export function registerTasks(program: Command): void {
     .option('--cursor <cursor>', 'next_cursor from the previous answer: the next 25 projects')
     .option('--json', 'Print the complete response as JSON')
     .action(async (opts: ProjectOptions & { cursor?: string }) => {
+      // The platform's own read of what waits on the signed-in person: the waiting mode of tasks_list.
       const args = compactRecord([
+        ['waiting', 'me'],
         ['project_id', opts.project ? resolveTaskProject(opts.project) : undefined],
         ['cursor', opts.cursor],
       ]);
-      await runTaskTool('tasks_waiting', args, opts.json, printWaiting);
+      await runTaskTool('tasks_list', args, opts.json, printWaiting);
     });
 
   tasks

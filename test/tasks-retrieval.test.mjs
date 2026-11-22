@@ -66,10 +66,10 @@ test('waiting for you: the list is the platform’s, an answer is one call, and 
     { id: 'tsk_a2', project_id: 'proj-1', project_name: 'Bakery', title: 'Upload a logo', answer: 'cannot', note: null, answered_by: { answer: 'cannot', via: { kind: 'dashboard', name: null }, at: null, you: true } }];
   let output = await run(['tasks', 'waiting'], { ok: true, data: { items: [item], answered, total: 1, more: true, next_cursor: '1', projects_checked: 25, projects_total: 60 } });
   for (const words of ['Answered:', 'tsk_a1', 'Marked done by connector Claude', 'Paid.', 'Marked "can\'t do this" by you, in the dashboard', 'Checked 25 of 60 apps. Show the rest:']) assert.ok(output.includes(words), words + '\n' + output);
-  assert.deepEqual(calls.at(-1), { name: 'tasks_waiting', args: {} });
+  assert.deepEqual(calls.at(-1), { name: 'tasks_list', args: { waiting: 'me' } });
   for (const words of ['tsk_9', 'Create the sign-in app', 'build-agent via studio', 'Bakery', '1. Open the page.', '2. Press New.', 'Why: Only the owner can.', 'tasks answer tsk_9 -p proj-1 --done', 'tasks waiting --cursor 1']) assert.ok(output.includes(words), words + '\n' + output);
   output = await run(['tasks', 'waiting', '--project', 'proj-1', '--cursor', '2'], { ok: true, data: { items: [], total: 0, more: false, next_cursor: null } });
-  assert.deepEqual(calls.at(-1), { name: 'tasks_waiting', args: { project_id: 'proj-1', cursor: '2' } });
+  assert.deepEqual(calls.at(-1), { name: 'tasks_list', args: { waiting: 'me', project_id: 'proj-1', cursor: '2' } });
   assert.match(output, /Nothing is waiting for you\./);
   await run(['tasks', 'answer', 'tsk_9', '--project', 'proj-1', '--done', '--note', 'It is called Bakery sign-in.'], { ok: true, data: { id: 'tsk_9', title: 'Create the sign-in app', status: 'open' } });
   assert.deepEqual(calls.at(-1), { name: 'tasks_update', args: { project_id: 'proj-1', task_id: 'tsk_9', answer: 'done', note: 'It is called Bakery sign-in.' } });

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.38.143
+
+- Include the project name in the CLI docs starter command.
+
 ## 0.38.142
 
 - Use `somewhere tasks list --label <label>` to match an exact task label.

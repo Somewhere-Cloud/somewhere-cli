@@ -39,7 +39,7 @@ const TOPICS: Record<string, { path: string; blurb: string }> = {
   },
   llms: {
     path: '/llms.txt',
-    blurb: 'Everything in one document (very large)',
+    blurb: 'Platform overview and links to the full reference',
   },
 };
 

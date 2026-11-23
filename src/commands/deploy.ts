@@ -422,7 +422,7 @@ export function formatSignedInUnlinkedExplanation(): string {
     '',
     'Next steps:',
     `  New project: run \`${cliInvocation()} init --bare --name <name>\` (creates it in your account and links this folder; adds .somewhere.json, AGENTS.md/CLAUDE.md and agent skills, no app source), then \`${cliInvocation()} deploy\`.`,
-    `  Existing project: run \`${cliInvocation()} init --link --project <name-or-id>\` (list yours with \`${cliInvocation()} projects\`), or deploy once with \`${cliInvocation()} deploy --project <name-or-id>\`.`,
+    `  Existing app: run \`${cliInvocation()} pull <app>\` in a fresh folder before editing (list yours with \`${cliInvocation()} projects\`).`,
   ].join('\n');
 }
 
@@ -487,20 +487,19 @@ export function formatLinkedProjectMismatchExplanation(linkedProjectId: string, 
     '',
     'Next steps:',
     `  Deploy this folder to its linked project: run \`${cliInvocation()} deploy\` (no --project).`,
-    `  Move this folder to ${ref} deliberately: delete this folder's .somewhere.json, then run \`${cliInvocation()} init --link --project ${ref}\`, \`${cliInvocation()} pull\`, re-apply your changes, and \`${cliInvocation()} deploy\`.`,
+    `  Work on ${ref}: run \`${cliInvocation()} pull ${shellQuote(ref)} --out <fresh-folder>\`, re-apply your changes there, then run \`${cliInvocation()} deploy\`.`,
     `  Deploy a copy elsewhere: copy the files into an unlinked folder and run \`${cliInvocation()} deploy --project ${ref}\` there.`,
   ].join('\n');
 }
 
 /** BASE_REQUIRED for an explicit --project target whose live release could not
- *  be read first (or a legacy project with no release). `somewhere pull` alone
- *  cannot record a base in an unlinked folder, so the steps must terminate. */
+ *  be read first. Pulling into a fresh folder records the base of the downloaded source. */
 export function formatExplicitProjectBaseRequiredExplanation(ref: string): string {
   return [
     `The live version of project ${ref} could not be read before deploying, and this folder has no record of which published version its files came from, so the deploy was NOT applied.`,
     '',
     'Next steps:',
-    `  Link and pull first: \`${cliInvocation()} init --link --project ${ref}\`, then \`${cliInvocation()} pull\`, re-apply your changes, then \`${cliInvocation()} deploy\`.`,
+    `  Start with \`${cliInvocation()} pull ${shellQuote(ref)} --out <fresh-folder>\`, re-apply your changes there, then run \`${cliInvocation()} deploy\`.`,
     `  Or replace the live release deliberately: \`${cliInvocation()} deploy --project ${ref} --force --yes\`.`,
   ].join('\n');
 }
@@ -631,7 +630,7 @@ export function registerDeploy(program: Command) {
       + 'Signed in, deploy never creates one on its own:\n'
       + `  ${cliInvocation()} init --bare --name <name>   create a project in your account and link this folder\n`
       + `  ${cliInvocation()} deploy                       then deploy it\n`
-      + `Existing project: \`${cliInvocation()} init --link --project <ref>\` (see \`${cliInvocation()} projects\`), or \`--project <ref>\` here.\n`)
+      + `Existing app: \`${cliInvocation()} pull <app>\` downloads the live source and links your folder.\n`)
     .option(
       '--project <ref>',
       `Existing project to deploy to — accepts the project UUID, slug, or subdomain (all three resolve server-side). To create one, run \`${cliInvocation()} init --bare --name <name>\``,
@@ -1649,7 +1648,7 @@ export function registerDeploy(program: Command) {
           if (tempSession.handoffReady) {
             info(`Open ${link} and select "Save and connect agent" to work on the saved apps and create new ones. You can choose to include your other apps.`);
           } else if (besideRealLogin) {
-            info(`Open ${link} to save the app to your account, then run \`${cliInvocation()} init --link --project ${projectId}\` in an unlinked folder to work on it.`);
+            info(`Open ${link} to save the app to your account, then run \`${cliInvocation()} pull ${shellQuote(projectId)}\` in a fresh folder to work on it.`);
           } else {
             info(`Open ${link} to save the app to your account, then run \`${cliInvocation()} login\` to connect this terminal.`);
           }

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { spawn } from 'node:child_process';
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -626,6 +626,7 @@ test('init --link --project links an exact existing project non-interactively', 
   writeConfig(HOME);
   const project = {
     id: 'proj_link_exact',
+    active_release_id: null,
     name: 'Existing App',
     slug: 'existing-app',
     subdomain: 'existing-app',
@@ -650,6 +651,54 @@ test('init --link --project links an exact existing project non-interactively', 
       { project_id: project.id, name: project.name, subdomain: project.subdomain },
     );
     assert.equal(JSON.parse(readFileSync(join(cwd, 'package.json'), 'utf8')).somewhere.cli_version, CLI_PACKAGE_VERSION);
+  });
+});
+
+test('init --link refuses to scaffold a live project and leaves existing app files alone', async () => {
+  const home = mkdtempSync(join(tmpdir(), 'sw-init-live-link-home-'));
+  writeConfig(home);
+  const project = {
+    id: 'proj_link_live',
+    name: 'Live App',
+    slug: 'live-app',
+    subdomain: 'live-app',
+    active_release_id: 'release_live',
+  };
+  await withServer((req, res) => {
+    if (req.method === 'GET' && req.url === '/v1/projects') {
+      return sendJson(res, 200, { ok: true, data: { projects: [project] } });
+    }
+    return sendJson(res, 404, { ok: false, error: 'NOT_FOUND' });
+  }, async (apiUrl) => {
+    const env = { HOME: home, USERPROFILE: home, SOMEWHERE_API_URL: apiUrl, PATH: starterInstallPath() };
+    for (const command of [['init', '--link'], ['link']]) {
+      const empty = mkdtempSync(join(tmpdir(), 'sw-init-live-link-'));
+      const result = await run([...command, '--project', 'live-app', '--json'], { cwd: empty, env });
+      assert.equal(result.status, 1, 'a live project cannot be linked with a new starter');
+      assert.match(result.stdout + result.stderr, /somewhere pull proj_link_live/);
+      assert.deepEqual(readdirSync(empty), [], 'refusal writes neither source nor link metadata');
+    }
+
+    // The real list's shape (2026-11-22): has_promoted, and no active_release_id at all.
+    project.active_release_id = undefined; project.has_promoted = true;
+    const realLive = mkdtempSync(join(tmpdir(), 'sw-init-live-real-'));
+    const refused = await run(['init', '--link', '--project', 'live-app', '--json'], { cwd: realLive, env });
+    assert.equal(refused.status, 1, 'has_promoted alone marks a live app');
+    assert.match(refused.stdout + refused.stderr, /somewhere pull proj_link_live/);
+    assert.deepEqual(readdirSync(realLive), []);
+    project.has_promoted = false;
+    const unpublished = mkdtempSync(join(tmpdir(), 'sw-init-unpublished-'));
+    const scaffolded = await run(['init', '--link', '--project', 'live-app', '--json'], { cwd: unpublished, env });
+    assert.equal(scaffolded.status, 0, 'an unpublished app (no active_release_id field, has_promoted false) is still scaffolded: ' + scaffolded.stderr);
+    assert.ok(existsSync(join(unpublished, '.somewhere.json')));
+    project.has_promoted = undefined; project.active_release_id = 'release_live';
+
+    const existing = mkdtempSync(join(tmpdir(), 'sw-init-live-source-'));
+    writeFileSync(join(existing, 'index.html'), '<h1>Existing source</h1>');
+    const result = await run(['init', '--link', '--project', 'live-app', '--json'], { cwd: existing, env });
+    assert.equal(result.status, 0);
+    assert.equal(readFileSync(join(existing, 'index.html'), 'utf8'), '<h1>Existing source</h1>');
+    assert.equal(JSON.parse(readFileSync(join(existing, '.somewhere.json'), 'utf8')).project_id, project.id);
   });
 });
 

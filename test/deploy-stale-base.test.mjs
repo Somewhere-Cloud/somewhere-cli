@@ -1348,7 +1348,7 @@ test('explicit --project whose live pointer cannot be read: the server decides, 
     assert.equal(result.status, 1, `stdout:\n${result.stdout}\nstderr:\n${result.stderr}`);
     assert.equal(server.bodies.length, 1);
     assert.equal('base_release_id' in server.bodies[0], false, 'no base is invented when the live pointer is unknown');
-    assert.match(result.stderr, /somewhere init --link --project explicit-site/);
+    assert.match(result.stderr, /somewhere pull explicit-site --out <fresh-folder>/);
     assert.match(result.stderr, /somewhere pull/);
     assert.match(result.stderr, /--force --yes/);
   });

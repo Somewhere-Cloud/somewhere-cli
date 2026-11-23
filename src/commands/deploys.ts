@@ -14,6 +14,7 @@ interface DeployHistory {
     at?: string;
     message?: string;
     is_live: boolean;
+    deployed_by?: { kind?: string; name?: string } | null;
     restore?: { body: { project_id: string; version: number } };
   }>;
 }
@@ -56,7 +57,8 @@ export function registerDeploys(program: Command): void {
           const note = entry.status === 'success' && entry.message ? formatUserSuppliedNote(entry.message) : '';
           const restore = entry.restore?.body;
           const command = restore ? `${cliInvocation()} restore ${restore.version} --project ${shellQuote(restore.project_id)} --yes` : '';
-          console.log([version, entry.promoted_at ?? entry.at ?? '—', state, note, command].filter(Boolean).join('  '));
+          const platform = entry.deployed_by?.kind === 'platform' ? entry.deployed_by.name : undefined;
+          console.log([version, entry.promoted_at ?? entry.at ?? '—', state, platform, note, command].filter(Boolean).join('  '));
         }
       } catch (err) {
         historyError(err, options.json);

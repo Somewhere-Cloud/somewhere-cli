@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.38.146
+
+- `somewhere init --link --project <app>` in an empty folder, for an app that already has a live release, now stops before writing any file and says to run `somewhere pull <app>` first. This keeps a later deploy from replacing a live app with the blank starter.
+- `somewhere deploy` and `somewhere deploys` messages about an existing app now say `somewhere pull <app>` instead of `init --link`.
+
 ## 0.38.145
 
 - `somewhere tasks waiting` lists what is waiting for you across your projects: what agents have asked you to do, with the steps, the reason, who asked and when. `--project` reads one project; `--cursor` continues. It also lists what was answered and by which credential.

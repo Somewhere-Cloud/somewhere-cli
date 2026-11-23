@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.38.147
+
+- `somewhere git connect` returns the browser to https://somewhere.cloud/app.
+- `somewhere git deploy` and `somewhere git status` print `Logs: somewhere logs <project>`. They used to link a dashboard logs tab, which is gone. In `--json`, `logs_command` replaces `logs_url`.
+
 ## 0.38.146
 
 - `somewhere init --link --project <app>` in an empty folder, for an app that already has a live release, now stops before writing any file and says to run `somewhere pull <app>` first. This keeps a later deploy from replacing a live app with the blank starter.

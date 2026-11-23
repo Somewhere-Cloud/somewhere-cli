@@ -50,7 +50,7 @@ interface RepoChoice {
   repo: GitHubRepo;
 }
 
-const DASHBOARD = 'https://somewhere.cloud/dashboard';
+const DASHBOARD = 'https://somewhere.cloud/app';
 const INSTALL_TIMEOUT_MS = 5 * 60_000;
 const DEPLOY_POLL_MS = 1500;
 
@@ -204,10 +204,10 @@ async function waitForDeploy(
   throw new Error(`The wait ended before deploy of ${commitSha.slice(0, 7)} finished. Check the project logs.`);
 }
 
-function urls(projectId: string, servingUrl: string | null): { live_url: string | null; logs_url: string } {
+function urls(projectId: string, servingUrl: string | null): { live_url: string | null; logs_command: string } {
   return {
     live_url: servingUrl,
-    logs_url: `${DASHBOARD}/projects/${encodeURIComponent(projectId)}?tab=logs`,
+    logs_command: `${cliInvocation()} logs ${projectId}`,
   };
 }
 
@@ -261,7 +261,7 @@ export function registerGit(program: Command) {
         } else {
           success(`Deployed ${connection.repo}@${commitSha.slice(0, 7)}`);
           info(`Status: ${connection.last_status}`);
-          info(`Logs: ${dim(links.logs_url)}`);
+          info(`Logs: ${dim(links.logs_command)}`);
           if (links.live_url) info(`Live: ${teal(links.live_url)}`);
         }
       } catch (err) {
@@ -296,7 +296,7 @@ export function registerGit(program: Command) {
           info(`Commit: ${connection.last_commit_sha ? `${connection.last_commit_sha.slice(0, 7)}${connection.last_commit_message ? ` · ${connection.last_commit_message}` : ''}` : 'none yet'}`);
           info(`Status: ${connection.last_status || 'waiting for first deploy'}`);
           if (connection.last_error) info(`Error: ${connection.last_error}`);
-          info(`Logs: ${dim(links.logs_url)}`);
+          info(`Logs: ${dim(links.logs_command)}`);
           if (links.live_url) info(`Live: ${teal(links.live_url)}`);
           console.log('');
         }

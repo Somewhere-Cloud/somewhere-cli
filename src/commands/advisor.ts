@@ -99,6 +99,9 @@ export function registerAdvisor(program: Command): void {
         process.stderr.write(`${contextNotice(context)}\n`);
         // A signed-in question about the linked app (or --project) lets the Advisor read that app's
         // overview with this sign-in. Anonymous and temporary sessions never send it.
+        if (typeof opts.project === 'string' && !permanentCredential) {
+          throw new Error('Asking about an app needs a sign-in: run `somewhere login`, then ask again. Without --project the question is asked anonymously.');
+        }
         const projectRef = !permanentCredential || opts.project === false ? undefined
           : typeof opts.project === 'string' && opts.project.trim() ? opts.project.trim()
           : loadProjectConfig()?.project_id;

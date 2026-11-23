@@ -129,9 +129,16 @@ test('Advisor transports only explicitly selected file context and, signed in, t
       result = await command(['--no-project'], authenticated);
       assert.equal(result.code, 0, result.err);
       assert.equal(bodies.at(-1).body.project_id, undefined, '--no-project sends no app');
+      const beforeProject = bodies.length;
       result = await command(['--project', 'other-app'], authenticated);
-      assert.equal(result.code, 0, result.err);
-      assert.equal(bodies.at(-1).body.project_id, authenticated ? 'other-app' : undefined);
+      if (authenticated) {
+        assert.equal(result.code, 0, result.err);
+        assert.equal(bodies.at(-1).body.project_id, 'other-app');
+      } else {
+        assert.equal(result.code, 1, 'an explicit --project without a sign-in stops');
+        assert.match(result.err + result.out, /needs a sign-in: run `somewhere login`/);
+        assert.equal(bodies.length, beforeProject, 'nothing is sent');
+      }
       result = await command(['--file', excerpt], authenticated);
       assert.equal(result.code, 0, result.err);
       assert.match(result.err, /explicitly selected file/);

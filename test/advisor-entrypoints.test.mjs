@@ -75,7 +75,7 @@ test('account and advisor commands perform no synthetic health preflight', async
 });
 
 
-test('Advisor transports only explicitly selected file context and, signed in, the linked app as project_id; never the global last run', async () => {
+test('Advisor transports only explicitly selected file context, never the global last run', async () => {
   const app = mkdtempSync(join(tmpdir(), 'advisor-explicit-app-'));
   const config = mkdtempSync(join(tmpdir(), 'advisor-explicit-config-'));
   const bodies = [];
@@ -117,29 +117,14 @@ test('Advisor transports only explicitly selected file context and, signed in, t
   };
   try {
     for (const authenticated of [true, false]) {
-      let result = await command([], authenticated);
+      // App context and follow-ups are covered in advisor-app-context.test.mjs; here the folder's link is skipped.
+      let result = await command(['--no-project'], authenticated);
       assert.equal(result.code, 0, result.err);
       assert.match(result.err, /context not attached/);
       assert.equal(bodies.at(-1).body.context, undefined);
       assert.equal(bodies.at(-1).path, authenticated ? '/mcp' : '/advisor');
       assert.equal(bodies.at(-1).auth, authenticated ? 'Bearer smt_fixture_only' : undefined);
-      // Signed in, the linked app is named as project_id (the server reads it with this sign-in); never in context.
-      assert.equal(bodies.at(-1).body.project_id, authenticated ? 'unrelated-linked-project' : undefined);
-      if (authenticated) assert.match(result.err, /reads the overview of app unrelated-linked-project/);
-      result = await command(['--no-project'], authenticated);
-      assert.equal(result.code, 0, result.err);
-      assert.equal(bodies.at(-1).body.project_id, undefined, '--no-project sends no app');
-      const beforeProject = bodies.length;
-      result = await command(['--project', 'other-app'], authenticated);
-      if (authenticated) {
-        assert.equal(result.code, 0, result.err);
-        assert.equal(bodies.at(-1).body.project_id, 'other-app');
-      } else {
-        assert.equal(result.code, 1, 'an explicit --project without a sign-in stops');
-        assert.match(result.err + result.out, /needs a sign-in: run `somewhere login`/);
-        assert.equal(bodies.length, beforeProject, 'nothing is sent');
-      }
-      result = await command(['--file', excerpt], authenticated);
+      result = await command(['--file', excerpt, '--no-project'], authenticated);
       assert.equal(result.code, 0, result.err);
       assert.match(result.err, /explicitly selected file/);
       const context = bodies.at(-1).body.context;
@@ -150,7 +135,7 @@ test('Advisor transports only explicitly selected file context and, signed in, t
       assert.match(context.file.content, /MESSAGE=\[REDACTED\]/);
       assert(!context.file.content.includes('fixture-secret'));
       assert(!context.file.content.includes('private-value'));
-      result = await command(['--file', excerpt, '--no-context'], authenticated);
+      result = await command(['--file', excerpt, '--no-context', '--no-project'], authenticated);
       assert.equal(result.code, 0, result.err);
       assert.equal(bodies.at(-1).body.context, undefined);
       result = await command(['--async'], authenticated);
@@ -166,10 +151,8 @@ test('Advisor transports only explicitly selected file context and, signed in, t
       assert.equal(bodies.length, count, 'durable file refusal precedes networking');
     }
     for (const request of bodies) {
-      const { project_id: projectId, ...rest } = request.body ?? {};
-      const serialized = JSON.stringify(rest);
-      assert(!serialized.includes('unrelated-linked-project'), 'the linked app travels only as project_id');
-      if (request.path !== '/mcp') assert.equal(projectId, undefined, 'anonymous and durable requests never send an app');
+      const serialized = JSON.stringify(request.body);
+      assert(!serialized.includes('unrelated-linked-project'), 'with --no-project and on the anonymous and durable paths, no app is sent');
       assert(!serialized.includes('unrelated-command'));
       assert(!serialized.includes('unrelated-output'));
       assert(!serialized.includes('unrelated-error'));

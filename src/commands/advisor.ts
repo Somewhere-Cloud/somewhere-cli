@@ -2,7 +2,9 @@ import {callAdvisorRun,consumeAdvisorRun} from '../lib/advisor-runs.js';
 import { Command } from 'commander';
 import { error, printJson } from '../lib/output.js';
 import { callPlatformHelpTool } from '../lib/platform-tools.js';
-import { loadConfig, loadProjectConfig } from '../lib/config.js';
+import { getToken, loadConfig, loadProjectConfig } from '../lib/config.js';
+import { ApiClient } from '../lib/client.js';
+import { clearAdvisorTurns, gatherAdvisorApp, loadAdvisorTurns, saveAdvisorTurn } from '../lib/advisor-app.js';
 import { fetchWithProxy } from '../lib/http.js';
 import {
   buildAdvisorContext,
@@ -80,7 +82,8 @@ export function registerAdvisor(program: Command): void {
     .option('--no-context', 'Do not attach the explicitly selected file')
     .option('--project <ref>', "The app the question is about; the Advisor reads that app's overview with your sign-in (default: the app linked in this folder)")
     .option('--no-project', "Do not send this folder's linked app")
-    .action(async (question: string, opts: { json?: boolean; file?: string; context?: boolean; async?:boolean;resume?:string;status?:string;cancel?:string; project?: string | false }) => {
+    .option('--new', 'Start a new conversation in this folder (forget the earlier questions)')
+    .action(async (question: string, opts: { json?: boolean; file?: string; context?: boolean; async?:boolean;resume?:string;status?:string;cancel?:string; project?: string | false; new?: boolean }) => {
       try {
         if(opts.async||opts.resume||opts.status||opts.cancel){
           if([opts.resume,opts.status,opts.cancel].filter(Boolean).length>1)throw new Error('Use one resume, status or cancel operation.');
@@ -105,18 +108,28 @@ export function registerAdvisor(program: Command): void {
         const projectRef = !permanentCredential || opts.project === false ? undefined
           : typeof opts.project === 'string' && opts.project.trim() ? opts.project.trim()
           : loadProjectConfig()?.project_id;
-        if (projectRef) process.stderr.write(`Advisor reads the overview of app ${projectRef} with your sign-in (--no-project skips it).\n`);
+        // The CLI reads the app with the user's own sign-in and sends it; the Advisor fetches nothing and keeps nothing.
+        // Follow-ups live in the linked folder only, and only for the app that folder is linked to.
+        const linked = loadProjectConfig()?.project_id;
+        const app = projectRef ? await gatherAdvisorApp(new ApiClient(getToken()), projectRef) : null;
+        const account = config?.user?.email ?? null;
+        const folderKeeps = Boolean(app && account && linked && (linked === projectRef || linked === app.projectId));
+        if (opts.new && folderKeeps) clearAdvisorTurns(process.cwd());
+        const earlier = folderKeeps && app && account ? loadAdvisorTurns(process.cwd(), app.projectId, account) : [];
+        if (app) process.stderr.write(`Sent the overview and last deploy of app ${projectRef}, read with your sign-in${earlier.length ? `, and ${earlier.length} earlier question${earlier.length === 1 ? '' : 's'} from this folder` : ''} (--no-project skips the app, --new forgets the earlier questions).\n`);
+        const sentContext = app ? { ...(context ?? {}), app: app.text, ...(earlier.length ? { earlier: earlier.map(({ question, answer }) => ({ question, answer })) } : {}) } : context;
         // Only permanent credentials authorize the authenticated MCP path.
         // Temporary deploy credentials use the public advisor's IP gate, while
         // an expired or rejected permanent credential still fails closed here.
         let answer = permanentCredential
           ? await callPlatformHelpTool('advisor', {
             question,
-            ...(projectRef ? { project_id: projectRef } : {}),
-            ...(context ? { context } : {}),
+            ...(app ? { project_id: app.projectId } : {}),
+            ...(sentContext ? { context: sentContext } : {}),
           })
           : await callAnonymousAdvisor(question, context);
         if(permanentCredential){const run=await consumeAdvisorRun(answer,message=>process.stderr.write(message+'\n'));if(run){if(run.incomplete)process.exitCode=1;answer=run.answer??JSON.stringify(run);}}
+        if (folderKeeps && app && account && !/^\s*\{\s*"ok"\s*:\s*false/.test(answer)) saveAdvisorTurn(process.cwd(), app.projectId, account, earlier, { question, answer, at: Date.now() });
         if (opts.json) {
           printJson({ question, answer });
         } else {

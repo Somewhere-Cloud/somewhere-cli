@@ -515,7 +515,9 @@ export async function linkExisting(
   if (!projectId) return;
 
   const project = result.projects.find((p) => p.id === projectId)!;
-  if (scaffold && (project.active_release_id !== null || project.has_promoted === true)) {
+  // GET /v1/projects reports a live app as has_promoted: true and does not send active_release_id; a missing field is
+  // not a live release (an unpublished app may still be scaffolded here).
+  if (scaffold && (project.has_promoted === true || (project.active_release_id ?? null) !== null)) {
     throw new Error(`Run \`${cliInvocation()} pull ${shellQuote(project.id)}\` to get this app’s source before working on it.`);
   }
   const appUrl = await getAuthoritativeAppUrl(client, project.id).catch(() => null);

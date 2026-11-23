@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.38.148
+
+- `somewhere advisor` in a folder linked to an app, while signed in, sends the app's overview and its last deploy (after a failed deploy, the failure's file, line and message), read with your own sign-in, and says so in one line. `--no-context` sends the question alone.
+- Follow-up questions in that folder carry the last three questions and answers for 30 minutes, kept in `.somewhere/advisor-conversation.json`; `--new` starts over.
+
 ## 0.38.147
 
 - `somewhere git connect` returns the browser to https://somewhere.cloud/app.

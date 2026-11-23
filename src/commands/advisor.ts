@@ -2,7 +2,7 @@ import {callAdvisorRun,consumeAdvisorRun} from '../lib/advisor-runs.js';
 import { Command } from 'commander';
 import { error, printJson } from '../lib/output.js';
 import { callPlatformHelpTool } from '../lib/platform-tools.js';
-import { loadConfig } from '../lib/config.js';
+import { loadConfig, loadProjectConfig } from '../lib/config.js';
 import { fetchWithProxy } from '../lib/http.js';
 import {
   buildAdvisorContext,
@@ -78,7 +78,9 @@ export function registerAdvisor(program: Command): void {
     .option('--json', 'Print the advisor response in a JSON envelope')
     .option('--file <path>', 'Attach a trimmed, redacted local file as context')
     .option('--no-context', 'Do not attach the explicitly selected file')
-    .action(async (question: string, opts: { json?: boolean; file?: string; context?: boolean; async?:boolean;resume?:string;status?:string;cancel?:string }) => {
+    .option('--project <ref>', "The app the question is about; the Advisor reads that app's overview with your sign-in (default: the app linked in this folder)")
+    .option('--no-project', "Do not send this folder's linked app")
+    .action(async (question: string, opts: { json?: boolean; file?: string; context?: boolean; async?:boolean;resume?:string;status?:string;cancel?:string; project?: string | false }) => {
       try {
         if(opts.async||opts.resume||opts.status||opts.cancel){
           if([opts.resume,opts.status,opts.cancel].filter(Boolean).length>1)throw new Error('Use one resume, status or cancel operation.');
@@ -95,12 +97,19 @@ export function registerAdvisor(program: Command): void {
         const localContext = opts.context === false ? undefined : buildAdvisorContext(opts.file);
         const context = permanentCredential ? localContext : anonymousAdvisorContext(localContext);
         process.stderr.write(`${contextNotice(context)}\n`);
+        // A signed-in question about the linked app (or --project) lets the Advisor read that app's
+        // overview with this sign-in. Anonymous and temporary sessions never send it.
+        const projectRef = !permanentCredential || opts.project === false ? undefined
+          : typeof opts.project === 'string' && opts.project.trim() ? opts.project.trim()
+          : loadProjectConfig()?.project_id;
+        if (projectRef) process.stderr.write(`Advisor reads the overview of app ${projectRef} with your sign-in (--no-project skips it).\n`);
         // Only permanent credentials authorize the authenticated MCP path.
         // Temporary deploy credentials use the public advisor's IP gate, while
         // an expired or rejected permanent credential still fails closed here.
         let answer = permanentCredential
           ? await callPlatformHelpTool('advisor', {
             question,
+            ...(projectRef ? { project_id: projectRef } : {}),
             ...(context ? { context } : {}),
           })
           : await callAnonymousAdvisor(question, context);

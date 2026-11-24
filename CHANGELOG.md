@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.38.158
+
+- Docs summaries show how much of the topic you received and give commands for the remaining sections, the whole topic, and search. The same summary goes to a terminal, pipe or file. Use `somewhere docs <topic> --full` when you need the complete topic.
+
 ## 0.38.157
 
 - Generated starter guides show how to import large CSV files in background jobs using batched writes.

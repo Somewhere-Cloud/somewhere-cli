@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.38.155
+
+- Search the installed Markdown topic files locally. `somewhere docs` summaries show how to read the full topic or a section.
+- New starters use TypeScript 5.6.3, the deployment checker version.
+- Use `expectRefused()` on an `openTestApp` session to check that another user cannot access a row.
+- Project deletion instructions name the `--confirm-code` option.
+
 ## 0.38.154
 
 - `somewhere typecheck` recognizes `deleteWhere` in access rules for team tables.

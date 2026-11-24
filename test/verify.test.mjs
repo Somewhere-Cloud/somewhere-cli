@@ -493,7 +493,7 @@ test('verify URL keeps linked ownership only for authenticated matching origins'
 
     rmSync(join(app, '.somewhere.json'));
     result = await run(['--url', 'https://linked.somewhere.site', '--flow', 'flow.json']);
-    assert.equal(result.status, 1);
+    assert.equal(result.status, 2);
     assert.match(result.stdout, /BROWSER_ORIGIN_NOT_AUTHORIZED/);
     assert.equal(requests.at(-1).body.project_id, undefined);
     writeFileSync(join(app, '.somewhere.json'), JSON.stringify({ project_id: 'linked', name: 'linked', subdomain: 'linked' }));
@@ -504,7 +504,7 @@ test('verify URL keeps linked ownership only for authenticated matching origins'
 
     const beforeDenied = requests.length;
     result = await run(['--url', 'https://third-party.example', '--flow', 'flow.json']);
-    assert.equal(result.status, 1);
+    assert.equal(result.status, 2);
     assert.match(result.stdout, /BROWSER_ORIGIN_NOT_AUTHORIZED, HTTP 403/);
     assert.match(result.stdout, /--project <your-project-id>/);
     assert.equal(requests.length, beforeDenied + 2);
@@ -518,7 +518,7 @@ test('verify URL keeps linked ownership only for authenticated matching origins'
     assert.equal(requests.at(-1).kind, 'lookup');
 
     result = await run(['--project', 'linked', '--url', 'https://other.somewhere.site', '--flow', 'flow.json']);
-    assert.equal(result.status, 1);
+    assert.equal(result.status, 2);
     assert.match(result.stdout, /not routed to this project/);
     assert.equal(requests.at(-1).body.project_id, 'linked');
 
@@ -626,6 +626,7 @@ test('verify --path selects an app path and rejects URL escapes without changing
     assert.equal(summary.status, 0, summary.stdout + summary.stderr);
     assert.deepEqual(Object.keys(JSON.parse(summary.stdout)).slice(0, 2), ['passed', 'mode']);
     assert.equal(JSON.parse(summary.stdout).passed, true);
+    assert.equal(JSON.parse(summary.stdout).outcome, 'passed');
     assert.equal(JSON.parse(readFileSync(reportPath, 'utf8')).passed, true);
     assert.equal(statSync(reportPath).mode & 0o777, 0o600);
     requests.length = 0;

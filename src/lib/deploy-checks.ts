@@ -1,5 +1,6 @@
 import { cliInvocation } from './cli-invocation.js';
 import type { ApiClient } from './client.js';
+import { checkSummaryExitCode, summarizeChecks, type CheckSummary } from './check-summary.js';
 
 /**
  * After a live deploy the platform runs its access check in the background and
@@ -7,12 +8,25 @@ import type { ApiClient } from './client.js';
  * A deploy never waits on it (it warns, never blocks; architect 2026-11-20): it prints one line saying the check is
  * running and how to read it. `somewhere test` reads the stored result, waiting only while that run is still going.
  */
-export interface CheckLine { name: string; as?: string; method?: string; path?: string; status?: number; expected?: string; pass: boolean }
+export interface CheckLine {
+  name: string;
+  as?: string;
+  method?: string;
+  path?: string;
+  status?: number;
+  expected?: string;
+  pass: boolean;
+  outcome?: CheckSummary['outcome'];
+  detail?: string;
+  request?: { method: string; url: string; body?: unknown };
+  responses?: Array<{ status: number; request_id?: string; observed: string; request?: CheckLine['request'] }>;
+}
+interface Finding { kind: string; table?: string; via?: string; status?: number; request_id?: string; left_behind?: string }
 
 export interface AccessCheck {
   status: 'pending' | 'checked' | 'unavailable' | string;
   sentence: string | null;
-  findings?: unknown[];
+  findings?: Finding[];
   checks?: CheckLine[];
   passed?: boolean;
   checked_at?: string | null;
@@ -84,20 +98,86 @@ export async function runChecksNow(
   return awaitDeployChecks(client, { read: started?.read }, { waitMs: TEST_CHECKS_WAIT_MS, ...opts });
 }
 
-/** One PASS/FAIL line per check, failures first, then the sentence. */
-export function formatChecksReport(check: AccessCheck | null): string[] {
-  if (!check || check.status === 'pending') {
-    return [`The checks did not finish within ${TEST_CHECKS_WAIT_MS / 1000} s; \`${cliInvocation()} call project_deploy_log '{}'\` shows the result when they do.`];
-  }
-  const lines = Array.isArray(check.checks) ? check.checks : [];
+function lineOutcome(line: CheckLine): CheckSummary['outcome'] {
+  if (line.outcome) return line.outcome;
+  if (line.pass) return 'passed';
+  // Stored results from an older check engine contain one attempt only.
+  return line.as === 'stranger' || line.as === 'signed_out' && line.method !== 'flow' ? 'could_not_check' : 'failed';
+}
+
+const cleanupFindings = (check: AccessCheck | null) => (check?.findings ?? []).filter((f) => f.kind === 'cleanup');
+const functionWarnings = (check: AccessCheck | null) => (check?.findings ?? []).filter((finding) =>
+  finding.kind === 'function_http_error' || finding.kind === 'crash' && Boolean(finding.request_id));
+
+export function deployChecksSummary(check: AccessCheck | null): CheckSummary {
+  const lines = check?.checks ?? [];
+  const counts = { passed: 0, failed: 0, could_not_check: cleanupFindings(check).length, warnings: functionWarnings(check).length };
+  for (const line of lines) counts[lineOutcome(line)]++;
+  if (check?.status !== 'checked' || !lines.length || check.passed === false && !counts.failed && !counts.could_not_check
+      && (!check.findings?.length || check.findings.some((finding) => finding.kind !== 'crash'))) counts.could_not_check++;
+  return summarizeChecks(counts);
+}
+
+export function checksJsonReport(check: AccessCheck | null) {
+  const summary = deployChecksSummary(check);
+  const checked = check?.checks ?? [];
+  const confirmedAccessFailure = checked.some((line) => line.outcome === 'failed' && (line.as === 'stranger' || line.as === 'signed_out') && line.method !== 'flow');
+  const findings = (check?.findings ?? []).filter((item) =>
+    (item.kind !== 'crash' || Boolean(item.request_id))
+    && (item.kind !== 'read' && item.kind !== 'write' || confirmedAccessFailure));
+  return {
+    ...check, checks: checked.map((line) => ({ ...line, pass: lineOutcome(line) === 'passed', outcome: lineOutcome(line) })),
+    findings, sentence: findings.length !== (check?.findings?.length ?? 0) ? null : check?.sentence ?? null,
+    passed: summary.outcome === 'passed', ...summary,
+  };
+}
+
+function resultEvidence(line: CheckLine): string[] {
+  const request = line.request ?? { method: line.method, url: line.path };
+  const responses = line.responses?.length ? line.responses : [{ status: line.status, observed: line.detail }];
   return [
-    ...lines.filter((line) => !line.pass).map((line) => `FAIL ${line.name}`),
-    ...lines.filter((line) => line.pass).map((line) => `PASS ${line.name}`),
-    ...(check.sentence ? [check.sentence] : []),
+    `  Did: ${request.method ?? 'check'} ${request.url ?? line.name} as ${line.as ?? 'the test actor'}`,
+    ...(line.expected ? [`  Expected: ${line.expected}`] : []),
+    ...responses.map((r, i) => `  Response ${i + 1}: ${r.status ? `HTTP ${r.status}` : 'no HTTP status'}${r.observed ? ` — ${r.observed}` : ''}${'request_id' in r && r.request_id ? ` (request ID ${r.request_id})` : ''}`),
+    `  Reproduce: ${JSON.stringify(request)}`,
+    ...responses.flatMap((r) => 'request' in r && r.request ? [`  Confirmation request: ${JSON.stringify(r.request)}`] : []),
   ];
 }
 
-/** Exit 0 only for a finished record that passed. */
+export function formatChecksReport(check: AccessCheck | null): string[] {
+  const summary = deployChecksSummary(check);
+  const lines: string[] = [];
+  if (!check || check.status === 'pending') {
+    lines.push(`Could not check: the run did not finish within ${TEST_CHECKS_WAIT_MS / 1000} s.`);
+  } else if (check.status !== 'checked') {
+    lines.push(`Could not check: ${check.sentence ?? 'The check run is unavailable.'}`);
+  } else {
+    const checks = check.checks ?? [];
+    for (const line of checks.filter((item) => lineOutcome(item) !== 'passed')) {
+      const label = lineOutcome(line) === 'failed' ? 'FAIL' : 'Could not check';
+      lines.push(`${label} ${line.name}`, ...resultEvidence(line));
+      if (line.detail && line.responses?.length) lines.push(`  ${line.detail}`);
+      if (!line.outcome && label === 'Could not check') lines.push(`  Run ${cliInvocation()} test --again to confirm this access check.`);
+    }
+    for (const line of checks.filter((item) => lineOutcome(item) === 'passed')) lines.push(`PASS ${line.name}`);
+    for (const finding of functionWarnings(check)) {
+      if (finding.kind === 'crash') {
+        lines.push(`Warning: A server function crashed: ${finding.via} (request ID ${finding.request_id}).`);
+      } else {
+        const receipt = [finding.status ? `HTTP ${finding.status}` : '', finding.request_id ? `request ID ${finding.request_id}` : ''].filter(Boolean).join(', ');
+        lines.push(`Warning: ${finding.via} returned 5xx; no error record found yet${receipt ? ` (${receipt})` : ''}.`);
+      }
+    }
+    for (const finding of cleanupFindings(check)) {
+      const receipt = [finding.status ? `HTTP ${finding.status}` : '', finding.request_id ? `request ID ${finding.request_id}` : ''].filter(Boolean).join(', ');
+      lines.push(`Could not check cleanup: ${finding.left_behind ?? (finding.table ? `A test row in ${finding.table} may remain.` : `Check whether any ${finding.via ?? 'test data'} remain.`)}${receipt ? ` (${receipt})` : ''}`);
+    }
+    if (!checks.length) lines.push('Could not check: no named checks ran.');
+    if (summary.counts.could_not_check && !lines.some((line) => line.startsWith('Could not check'))) lines.push(`Could not check: run ${cliInvocation()} test --again to get named results.`);
+  }
+  return [...lines, JSON.stringify(summary)];
+}
+
 export function checksExitCode(check: AccessCheck | null): number {
-  return check?.passed === true ? 0 : 1;
+  return checkSummaryExitCode(deployChecksSummary(check));
 }

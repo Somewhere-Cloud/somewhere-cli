@@ -4,12 +4,13 @@ import { getToken, loadProjectConfig } from '../lib/config.js';
 import { prepareRunner, runTests } from '../lib/test-run.js';
 import { mark, markProcessStart } from '../lib/test-timeline.js';
 import { referenceCheckNote } from '../lib/reference-check-note.js';
-import { checksExitCode, formatChecksReport, runChecksNow } from '../lib/deploy-checks.js';
+import { checksJsonReport, deployChecksSummary, formatChecksReport, runChecksNow, type AccessCheck } from '../lib/deploy-checks.js';
+import { checkSummaryExitCode } from '../lib/check-summary.js';
 import { describeScriptResults, hasSpecFiles, isScript, lastFailedScripts, listScripts, recordScriptResults, runScripts } from '../lib/test-scripts.js';
 
 export function registerTest(program: Command): void {
   program.command('test [files...]')
-    .description('Run the live release\'s checks now in Somewhere\'s browser: your saved checks/*.json journeys, the stranger and signed-out access probes and a page crawl (the same check that runs after every deploy). Exits 1 when one fails. With a file, runs that tests/*.mjs or *.cjs script; a project with tests/**/*.spec.ts runs its Playwright specs (--preview: this folder\'s open preview)')
+    .description('Read the live release\'s latest checks, run in Somewhere\'s browser: your saved checks/*.json journeys, the stranger and signed-out access probes and a page crawl (the same check that runs after every deploy). Exits 0 when they pass, 1 for a named failure, or 2 when a check or cleanup could not finish. With a file, runs that tests/*.mjs or *.cjs script; a project with tests/**/*.spec.ts runs its Playwright specs (--preview: this folder\'s open preview)')
     .option('--preview', 'Test this folder\'s open preview (its own users, data copy and captured mail), pinned to the version saved when the run starts. Production is never touched.')
     .option('--workers <count>', 'Parallel workers', '5')
     .option('--again', 'Start a fresh run of the checks on the live release instead of reading the result of the last deploy\'s run')
@@ -20,7 +21,7 @@ export function registerTest(program: Command): void {
     .option('--phone', 'Run every test again in a 390x844 phone viewport ([phone] in results)')
     .option('--json', 'Print structured results')
     .option('--verbose', 'Also print where the full result file is when everything passed')
-    .addHelpText('after', '\nSave each journey you want re-checked after every deploy as checks/<plain-name>.json; the platform runs them in its browser after each deploy and `somewhere test` runs them now.\n')
+    .addHelpText('after', '\nSave each journey you want re-checked after every deploy as checks/<plain-name>.json; the platform runs them in its browser after each deploy and `somewhere test` reads the latest result. Use --again for a fresh run. The last line of a platform run is JSON with outcome and counts.\n')
     .action(async (files: string[], opts: { workers: string; again?: boolean; failed?: boolean; failFast?: boolean; grep?: string; url?: string; json?: boolean; phone?: boolean; preview?: boolean; verbose?: boolean }) => {
       markProcessStart('cli');
       mark('cli:action');
@@ -33,11 +34,17 @@ export function registerTest(program: Command): void {
       if (!files.length && !opts.preview && !opts.failed && !hasSpecFiles(root)) {
         const unsupported = [opts.phone && '--phone', opts.grep && '--grep', opts.workers !== '5' && '--workers', opts.failFast && '--fail-fast'].filter(Boolean);
         if (unsupported.length) throw new Error(`${unsupported.join(', ')} apply to Playwright specs and scripts; the platform runs checks/*.json as saved.`);
-        const check = await runChecksNow(new ApiClient(getToken()), projectId, { again: opts.again === true });
+        let check: AccessCheck | null;
+        try {
+          check = await runChecksNow(new ApiClient(getToken()), projectId, { again: opts.again === true });
+        } catch (cause) {
+          check = { status: 'unavailable', sentence: cause instanceof Error ? cause.message : 'The platform could not start the checks.' };
+        }
         mark('cli:exit');
-        if (opts.json) process.stdout.write(JSON.stringify(check, null, 2) + '\n');
+        const summary = deployChecksSummary(check);
+        if (opts.json) process.stdout.write(JSON.stringify(checksJsonReport(check)) + '\n');
         else process.stdout.write(formatChecksReport(check).join('\n') + '\n');
-        process.exitCode = checksExitCode(check);
+        process.exitCode = checkSummaryExitCode(summary);
         return;
       }
       // The last deploy's background reference check: one line when it is not clean, printed as soon as it is read.

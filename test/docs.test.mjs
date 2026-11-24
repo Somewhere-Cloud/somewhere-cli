@@ -682,8 +682,9 @@ test('docs pull writes every topic explicitly and docs warns when the copy ages'
 });
 
 test('docs --search calls the public search endpoint and prints section text', async () => {
+  const requests = [];
   const server = createServer((req, res) => {
-    assert.equal(req.url, '/docs-search.json?q=owner+rows');
+    requests.push(req.url);
     assert.equal(req.headers.authorization, undefined);
     res.setHeader('content-type', 'application/json');
     res.end(JSON.stringify({ version: MANIFEST.sourceHash, total: 1, results: [{
@@ -700,7 +701,43 @@ test('docs --search calls the public search endpoint and prints section text', a
     assert.match(result.stdout, /declared-data › owners +Owner-scoped rows/);
     assert.match(result.stdout, /scope: owner\(\)/);
     assert.match(result.stdout, /somewhere docs declared-data --section owners/);
+    const broad = await run(['docs', '--search', 'owner rows', '--include-api', '--json'], {
+      SOMEWHERE_DOCS_BASE: `http://127.0.0.1:${server.address().port}`, CI: '1',
+    });
+    assert.equal(broad.status, 0, broad.stderr);
+    assert.equal(JSON.parse(broad.stdout).results[0].complete, true);
+    assert.deepEqual(requests, ['/docs-search.json?q=owner+rows', '/docs-search.json?q=owner+rows&include_api=true']);
   } finally {
     await new Promise((resolve) => server.close(resolve));
+  }
+});
+
+test('docs recipe and example list or read whole published artifacts without credentials', async () => {
+  const server = createServer((req, res) => {
+    const url = new URL(req.url, 'http://localhost');
+    const view = url.searchParams.get('view');
+    const slug = url.searchParams.get('slug');
+    assert.ok(view === 'recipe' || view === 'example');
+    assert.equal(url.pathname, `/docs/${view}.txt`);
+    assert.equal(req.headers.authorization, undefined);
+    res.setHeader('content-type', 'application/json');
+    res.end(JSON.stringify({
+      topic: slug ?? view, view, complete: true, version: MANIFEST.sourceHash,
+      text: slug ? `# ${slug}\n\nA whole walkthrough.\n` : `Available ${view} slugs.\n`,
+    }));
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  const env = { SOMEWHERE_DOCS_BASE: `http://127.0.0.1:${server.address().port}`, CI: '1' };
+  try {
+    assert.equal((await run(['docs', 'example'], env)).stdout, 'Available example slugs.\n');
+    for (const tty of [true, false]) {
+      const result = await run(['docs', 'recipe', 'csv-import', '--json'], env, { tty });
+      assert.equal(result.status, 0, result.stderr);
+      assert.deepEqual(JSON.parse(result.stdout), {
+        topic: 'csv-import', view: 'recipe', complete: true, content: '# csv-import\n\nA whole walkthrough.\n',
+      });
+    }
+  } finally {
+    await new Promise(resolve => server.close(resolve));
   }
 });

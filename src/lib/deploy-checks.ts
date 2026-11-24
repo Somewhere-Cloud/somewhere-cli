@@ -30,6 +30,14 @@ export interface AccessCheck {
   checks?: CheckLine[];
   passed?: boolean;
   checked_at?: string | null;
+  routes_checked?: number;
+  routes_discovered?: number | null;
+  not_checked?: {
+    routes_without_read_check: string[] | null;
+    routes_without_write_check: string[] | null;
+    schedules_not_run: string[] | null;
+    other: string[];
+  };
 }
 
 export interface DeployChecks {
@@ -128,7 +136,7 @@ export function checksJsonReport(check: AccessCheck | null) {
   return {
     ...check, checks: checked.map((line) => ({ ...line, pass: lineOutcome(line) === 'passed', outcome: lineOutcome(line) })),
     findings, sentence: findings.length !== (check?.findings?.length ?? 0) ? null : check?.sentence ?? null,
-    passed: summary.outcome === 'passed', ...summary,
+    passed: summary.outcome === 'passed', ...summary, not_checked: check?.not_checked ?? null,
   };
 }
 
@@ -159,7 +167,12 @@ export function formatChecksReport(check: AccessCheck | null): string[] {
       if (line.detail && line.responses?.length) lines.push(`  ${line.detail}`);
       if (!line.outcome && label === 'Could not check') lines.push(`  Run ${cliInvocation()} test --again to confirm this access check.`);
     }
-    for (const line of checks.filter((item) => lineOutcome(item) === 'passed')) lines.push(`PASS ${line.name}`);
+    for (const line of checks.filter((item) => lineOutcome(item) === 'passed')) {
+      const observation = line.responses?.[0]?.observed || line.detail || 'The stored result has no observation.';
+      const label = check.not_checked ? line.name : `${line.method === 'flow' ? 'Browser flow' : line.method ?? 'Check'} ${line.path ?? '(surface unavailable)'}`;
+      const status = line.status ? ` (HTTP ${line.status})` : '';
+      lines.push(`PASS ${label}${status} — ${observation}`);
+    }
     for (const finding of functionWarnings(check)) {
       if (finding.kind === 'crash') {
         lines.push(`Warning: A server function crashed: ${finding.via} (request ID ${finding.request_id}).`);
@@ -175,7 +188,23 @@ export function formatChecksReport(check: AccessCheck | null): string[] {
     if (!checks.length) lines.push('Could not check: no named checks ran.');
     if (summary.counts.could_not_check && !lines.some((line) => line.startsWith('Could not check'))) lines.push(`Could not check: run ${cliInvocation()} test --again to get named results.`);
   }
-  return [...lines, JSON.stringify(summary)];
+  const coverage = check?.not_checked ?? null;
+  if (coverage) {
+    if (typeof check?.routes_discovered === 'number') lines.push(`${check.routes_checked ?? 0} of ${check.routes_discovered} app routes had a completed read check.`);
+    const { routes_without_read_check: reads, routes_without_write_check: writes, schedules_not_run: schedules, other } = coverage;
+    if (reads === null || writes === null) lines.push('App route coverage could not be listed.');
+    if (reads?.length) lines.push(`${reads.length} ${reads.length === 1 ? 'route' : 'routes'} without a read check (${reads.join(', ')}).`);
+    if (writes?.length) lines.push(`${writes.length} ${writes.length === 1 ? 'route' : 'routes'} without a write check (${writes.join(', ')}).`);
+    if (schedules === null) lines.push('Registered schedules could not be listed.');
+    if (schedules?.length) lines.push(`${schedules.length} registered ${schedules.length === 1 ? 'schedule' : 'schedules'} did not run (${schedules.join(', ')}).`);
+    if (other.length) lines.push(`Other checks skipped or out of scope: ${other.join(', ')}.`);
+  } else {
+    lines.push('Coverage details are unavailable for this run.');
+  }
+  return [...lines, JSON.stringify({
+    ...summary, not_checked: coverage,
+    ...(coverage ? { routes_checked: check?.routes_checked, routes_discovered: check?.routes_discovered } : {}),
+  })];
 }
 
 export function checksExitCode(check: AccessCheck | null): number {

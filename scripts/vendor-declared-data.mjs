@@ -31,7 +31,7 @@ export { SCHEMA_DECLARATION } from './worker/containers/compile/schema-types.cjs
 export { ENDPOINT_DECLARATION, RUNTIME_CONTEXT_DECLARATION } from './worker/containers/compile/runtime-types.cjs';
 export { CLIENT_FILE as FILES_DECLARATION_FILE } from './worker/containers/compile/typed-files.cjs';
 export * as checkerContract from './worker/containers/compile/checker-contract.cjs';
-export { referenceCheckDeclarations, isRuntimeEndpointGlobal } from './worker/src/utils/reference-check-inputs.ts';
+export { referenceCheckDeclarations, isPlainPageScript, isRuntimeEndpointGlobal } from './worker/src/utils/reference-check-inputs.ts';
 export { CONSUMER_CONTRACT, consumerContractComponents, consumerContractFingerprint, consumerContractVerdict, parseConsumerContractHeader } from './worker/containers/compile/consumer-contract.cjs';
 export function generateFromFiles(files) {
   const authority = clientAuthorityFromSource(files);
@@ -65,8 +65,13 @@ const digest = text => createHash('sha256').update(text).digest('hex');
 const inputs = Object.fromEntries(Object.keys(result.metafile.inputs)
   .filter(path => path !== 'declared-data-vendor-entry.js')
   .sort().map(path => [relative(root, resolve(root, path)), digest(readFileSync(resolve(root, path)))]));
-const manifest = JSON.stringify({ esbuild: esbuild.version, source_files: inputs, sha256: digest(output) }, null, 2) + '\n';
 const dest = join(import.meta.dirname, '..', 'runtime');
+const manifestPath = join(dest, 'DECLARED-DATA-VENDOR.json');
+const sourceCommit = mode === '--check'
+  ? JSON.parse(readFileSync(manifestPath, 'utf8')).source_commit
+  : platformCommit(root, Object.keys(inputs));
+if (!/^[0-9a-f]{40}$/.test(sourceCommit)) throw new Error('Regenerate the checker with a pinned platform source commit.');
+const manifest = JSON.stringify({ source_commit: sourceCommit, esbuild: esbuild.version, source_files: inputs, sha256: digest(output) }, null, 2) + '\n';
 
 for (const [name, content] of [['declared-data.cjs', output], ['DECLARED-DATA-VENDOR.json', manifest]]) {
   if (mode === '--check') {
@@ -76,4 +81,4 @@ for (const [name, content] of [['declared-data.cjs', output], ['DECLARED-DATA-VE
 console.log(`Declared data ${mode === '--check' ? 'parity verified' : 'vendored'}: ${digest(output)}`);
 if (mode === '--check') assertPublicPackage(join(import.meta.dirname, '..'));
 
-if (mode !== '--check') { platformCommit(root, Object.keys(inputs)); writePlatformSource(join(import.meta.dirname, '..')); }
+if (mode !== '--check') writePlatformSource(join(import.meta.dirname, '..'));

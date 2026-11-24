@@ -1,6 +1,6 @@
 import { cliInvocation } from '../lib/cli-invocation.js';
 import { roleMethodHints } from '../lib/role-method-hints.js';
-import { Command } from 'commander';
+import { Command, Option } from 'commander';
 import chokidar from 'chokidar';
 import { existsSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
@@ -21,17 +21,14 @@ export function registerTypecheck(program: Command) {
   program
     .command('typecheck [dir]')
     .description(
-      'Check TypeScript and report advisory Somewhere source warnings. ' +
-        `Reports TypeScript errors with file:line before deploy and exits 1 when there are any; \`${cliInvocation()} deploy\` stops on type errors. ` +
-        `Requires a local tsconfig.json; add one for a new app, or run \`${cliInvocation()} pull\` for an existing deployed app. ` +
-        'It never installs the project\'s dependencies: if the project has missing dependencies, it says so and stops; run npm install first. ' +
-        'Without TypeScript in the project it fetches TypeScript with npx (network; npm caches it) and says so on stderr. Every run stops after SOMEWHERE_TYPECHECK_TIMEOUT_MS (default 300000). ' +
-        'With --deploy, runs the deploy\'s advisory reference check instead (the files a deploy uploads, its generated types, ' +
-        `options and TypeScript ${DEPLOY_CHECK_TYPESCRIPT_VERSION}) against the packages installed here; no tsconfig.json needed. ` +
-        'It reports a narrower set than the default project check, which stays the stricter of the two.',
+      `Check the deployable source with the platform's TypeScript ${DEPLOY_CHECK_TYPESCRIPT_VERSION}, generated types and checker settings. ` +
+        'Reports file and line for deploy-check type findings and exits 1 when there are findings. ' +
+        'Install the project dependencies first. The CLI fetches the pinned TypeScript with npx if needed. ' +
+        'Use --project to check the full project with its own tsconfig.json and compiler.',
     )
     .option('--json', 'Print typecheck and platform source findings as JSON')
-    .option('--deploy', "Run the deploy's reference check: the undefined-name and type findings a deploy reports. Fetches TypeScript " + DEPLOY_CHECK_TYPESCRIPT_VERSION + " through npx unless the project has exactly that version")
+    .option('--deploy', 'Run the deploy reference check and return its findings')
+    .addOption(new Option('--project', 'Run the full project TypeScript check using tsconfig.json').conflicts('deploy'))
     .option('--hook <host>', `With --deploy: run as an agent after-edit hook (${AGENT_HOSTS.join(', ')}), reading the host's event on stdin. Installed by \`${cliInvocation()} hooks install\``)
     .option('--watch', 'Keep running and re-check after each save while this command is open. It is not installed into your editor or agent; start it yourself. Never deploys or touches live data')
     .action(async (dirArg: string | undefined, opts) => {
@@ -69,7 +66,7 @@ export function registerTypecheck(program: Command) {
         process.exit(result.ok ? 0 : 1);
       }
 
-      if (!existsSync(join(dir, 'tsconfig.json'))) {
+      if (opts.project && !existsSync(join(dir, 'tsconfig.json'))) {
         if (opts.json) {
           printJson({
             ok: false,
@@ -87,26 +84,37 @@ export function registerTypecheck(program: Command) {
       // Read-only: a project whose dependencies are missing is
       // not checked (tsc would report the missing tree as code errors), and the
       // command never installs them itself.
+      const deployVia = deployCheckTsc(dir).command === process.execPath ? 'project' : 'npx';
+      const via = opts.project ? typecheckCompilerSource(dir) : deployVia;
       const notInstalled = (): TypecheckResult | null => {
         const missing = missingProjectDependencies(dir);
         return missing.length
-          ? { ok: false, errors: [], via: typecheckCompilerSource(dir), raw: '', spawnError: missingTypecheckDependenciesMessage() }
+          ? { ok: false, errors: [], via, raw: '', spawnError: missingTypecheckDependenciesMessage() }
           : null;
       };
       // Fetching TypeScript with npx is a network step: say so (on stderr)
       // right before a check that will fetch it.
       let announced = false;
       const announceFetch = () => {
-        if (announced || typecheckCompilerSource(dir) !== 'npx') return;
+        if (announced || via !== 'npx') return;
         announced = true;
-        announceNpxTypeScriptFetch(TYPECHECK_TYPESCRIPT_VERSION);
+        if (opts.project) announceNpxTypeScriptFetch(TYPECHECK_TYPESCRIPT_VERSION);
+        else announceDeployCheckFetch(dir);
       };
 
       const check = async () => {
         const refused = notInstalled();
         if (!refused) announceFetch();
         const spinner = opts.json || refused || opts.watch ? null : ora('Typechecking (tsc --noEmit)...').start();
-        const result = refused ?? await runTypecheck(dir);
+        const deployResult = refused || opts.project ? undefined : await runDeployCheck(dir);
+        const result = deployResult ? {
+          ok: deployResult.ok,
+          errors: deployResult.findings,
+          via,
+          raw: deployResult.error ?? '',
+          spawnError: deployResult.error,
+          typescript: deployResult.typescript,
+        } : refused ?? await runTypecheck(dir);
         spinner?.stop();
         const sourceLint = await lintProject(dir).catch((failure: unknown) => ({
           ok: false as const,
@@ -114,7 +122,8 @@ export function registerTypecheck(program: Command) {
         }));
         if (opts.json) printJson({ ...result, sourceLint });
         else {
-          reportTypecheck(result);
+          if (deployResult) reportDeployCheck(deployResult, 'Typecheck');
+          else reportTypecheck(result);
           if ('error' in sourceLint) warn(`Source lint failed: ${sourceLint.error}`);
           else printLintFindings(sourceLint);
         }
@@ -174,20 +183,20 @@ export function reportTypecheck(result: TypecheckResult): void {
 }
 
 /** Print the deploy reference check's verdict. */
-export function reportDeployCheck(result: DeployCheckResult): void {
+export function reportDeployCheck(result: DeployCheckResult, label = 'Deploy check'): void {
   if (result.error) {
     error(`Could not run the deploy check (TypeScript ${result.typescript}): ${result.error}`);
     return;
   }
   if (result.ok) {
-    success(`Deploy check clean ${dim(`(${result.checkedFiles} file${result.checkedFiles === 1 ? '' : 's'}, TypeScript ${result.typescript})`)}.`);
+    success(`${label} clean ${dim(`(${result.checkedFiles} file${result.checkedFiles === 1 ? '' : 's'}, TypeScript ${result.typescript})`)}.`);
     return;
   }
   const references = result.findings.filter((f) => f.kind === 'reference').length;
   const n = result.findings.length;
   error(
     `${bold(String(n))} deploy finding${n === 1 ? '' : 's'} ${dim(`(TypeScript ${result.typescript})`)} — ` +
-      `a deploy reports these as warnings${references ? `; ${references} undefined name${references === 1 ? '' : 's'} will fail at runtime` : ''}.`,
+      `fix these before running \`${cliInvocation()} deploy-check\`${references ? `. Found ${references} undefined name${references === 1 ? '' : 's'}` : ''}.`,
   );
   console.log('');
   for (const f of result.findings) {

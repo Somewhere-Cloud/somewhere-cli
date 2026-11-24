@@ -52,6 +52,7 @@ interface CheckerContract {
 interface ReferenceCheckVendor {
   checkerContract: CheckerContract;
   referenceCheckDeclarations(graphFiles: Record<string, string>): Record<string, string>;
+  isPlainPageScript(file: string, functions: Record<string, string> | undefined): boolean;
   isRuntimeEndpointGlobal(
     diag: { file?: string; line?: number; column?: number; message: string },
     functions: Record<string, string> | undefined,
@@ -178,7 +179,7 @@ export function parseDeployOutput(
     }
     if (contract.isIgnoredDiagnostic(code)) continue;
     const kind = contract.classifyDiagnostic(code);
-    if (!kind) continue;
+    if (!kind || (kind === 'type' && vendor.isPlainPageScript(file, functions))) continue;
     const finding = { kind, code, file, line: Number(lineText), column: Number(columnText), message };
     if (vendor.isRuntimeEndpointGlobal(finding, functions)) continue;
     findings.push(finding);

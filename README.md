@@ -110,7 +110,7 @@ For optional after-edit checking, explicitly run `somewhere hooks install --host
 | `somewhere git status` | Show connected repo, commit, deploy status, logs link, and live URL |
 | `somewhere git disconnect` | Stop push-to-deploy; the currently deployed site stays live |
 | `somewhere pull <app>` | Download the live source of an existing app and link the folder before editing |
-| `somewhere typecheck` | Checks the project with `tsc --noEmit` and reports advisory platform source warnings with a suggested fix. Install the project dependencies first. If TypeScript is absent, the CLI tells you before fetching it through npm. |
+| `somewhere typecheck` | Checks deployable source with the platform's TypeScript version, generated types and checker settings. Install project dependencies first. Use `--project` for the full project check with your own TypeScript and tsconfig.json. |
 | `somewhere logs` | Show recent logs |
 | `somewhere logs --follow` | Stream logs in real-time |
 | `somewhere logs --level error` | Filter by level |

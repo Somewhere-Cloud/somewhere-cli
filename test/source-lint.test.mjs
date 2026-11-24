@@ -89,7 +89,7 @@ test('unreadable advisory source preserves the compiler verdict in text and JSON
   const unreadable = join(dir, 'unreadable');
   chmodSync(unreadable, 0o000);
   try {
-    const run = (...args) => spawnSync(process.execPath, [join(root, 'dist/index.js'), 'typecheck', dir, ...args], {
+    const run = (...args) => spawnSync(process.execPath, [join(root, 'dist/index.js'), 'typecheck', '--project', dir, ...args], {
       encoding: 'utf8',
       env: { ...process.env, SOMEWHERE_CONFIG_DIR: config },
       timeout: 10_000,

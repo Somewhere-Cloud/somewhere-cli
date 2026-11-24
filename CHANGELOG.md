@@ -3,6 +3,8 @@
 ## 0.38.149
 
 - The local browser and Playwright test fixtures wait for an app's SDK session check after navigation.
+- `somewhere typecheck` now checks the source and functions sent to deploy, using the platform's TypeScript version, generated types and checker settings. Use `somewhere typecheck --project` for the full local project check.
+- A server read with an empty `columns` array now has the same row type as a read that omits `columns`.
 
 ## 0.38.148
 

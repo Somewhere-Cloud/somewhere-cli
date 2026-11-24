@@ -385,7 +385,7 @@ export function renderDocsIndex(pages: PublicDocsPage[], groups: PublicDocsGroup
   for (const [name, entry] of Object.entries(TOPICS)) lines.push(`  ${name.padEnd(10)} ${entry.blurb}`);
   lines.push(
     '',
-    `Open a topic:     ${cliInvocation()} docs <topic>                 (full when piped or redirected)`,
+    `Open a topic:     ${cliInvocation()} docs <topic>                `,
     `Open a section:   ${cliInvocation()} docs <topic> --section <id>`,
     `Whole topic:      ${cliInvocation()} docs <topic> --full`,
     `Search all docs:  ${cliInvocation()} docs --search "<words>"`,
@@ -469,8 +469,36 @@ export async function writeResponseBodyToStdout(res: Pick<Response, 'body'>): Pr
 }
 
 function topicSummary(content: string, topic: string, full: number): string {
+  if (hasViewNotice(content)) return withNewline(content);
   const command = `${cliInvocation()} docs ${commandArg(topic)}`;
   return `${content.trimEnd()}\n\nFull topic (${full} characters): ${command} --full\n`;
+}
+
+/** The published topic renderer also supplies the CLI text used by the MCP tool.
+ * Older platforms serve plain Markdown at this path, so keep the manifest fallback. */
+async function fetchPublishedDocsView(topic: string, view: DocsView): Promise<{
+  topic: string; content: string; view: string; complete: boolean; version?: string;
+} | null> {
+  if (!/^[a-z0-9_.-]+$/i.test(topic)) return null;
+  const params = new URLSearchParams({ view: view.kind === 'default' ? 'summary' : view.kind });
+  if (view.kind === 'section') params.set('section', view.id);
+  const response = await fetch(`${DOCS_BASE}/docs/${encodeURIComponent(topic.toLowerCase())}.txt?${params}`);
+  if (!response.ok || !response.headers.get('content-type')?.includes('application/json')) return null;
+  const value: unknown = await response.json();
+  if (!value || typeof value !== 'object') return null;
+  const result = value as Record<string, unknown>;
+  if (typeof result.topic !== 'string' || typeof result.text !== 'string'
+    || typeof result.view !== 'string' || typeof result.complete !== 'boolean'
+    || /(?:^|\n)No section "/.test(result.text)) return null;
+  return { topic: result.topic, content: result.text, view: result.view, complete: result.complete, version: docsVersion(result.version) };
+}
+
+function hasViewNotice(content: string): boolean {
+  return /^Showing (?:the whole topic \(|[^\n]+ of this topic \()/m.test(content);
+}
+
+function displayDocs(content: string): string {
+  return withNewline(hasViewNotice(content) ? content.replace(/^\[docs\][^\n]*\n/, '') : content);
 }
 
 export function registerDocs(program: Command) {
@@ -483,7 +511,7 @@ export function registerDocs(program: Command) {
         + `. Example manual topic: \`${cliInvocation()} docs sw.db\`.`,
     )
     .option('--list', `List available topics (the same index bare \`${cliInvocation()} docs\` prints)`)
-    .option('--full', 'Print the complete topic in a terminal; with no topic, the full manual')
+    .option('--full', 'Print the complete topic; with no topic, print the full manual')
     .option('--search <words>', 'Search matching sections across all live docs topics')
     .option('--section <id>', 'Print one section of a topic (ids are listed in the summary)')
     .option('--json', 'Print the selected document in a JSON envelope')
@@ -491,7 +519,8 @@ export function registerDocs(program: Command) {
       + `  ${cliInvocation()} docs                         # topic index\n`
       + `  ${cliInvocation()} docs --search "magic link"   # matching sections across every topic\n`
       + `  ${cliInvocation()} docs pull                    # download Markdown into .somewhere/docs/\n`
-      + `  ${cliInvocation()} docs sw.auth                 # full when piped or redirected\n`
+      + `  ${cliInvocation()} docs sw.auth                 # topic summary when the whole topic is long\n`
+      + `  ${cliInvocation()} docs sw.auth --full          # complete topic for a terminal, pipe or file\n`
       + `  ${cliInvocation()} docs sw.auth setRoles        # search within this topic\n`
       + `  ${cliInvocation()} docs sw.auth --section <id>  # one section\n`
       + `  ${cliInvocation()} docs --full                  # the whole manual (very large)\n`
@@ -575,7 +604,7 @@ export function registerDocs(program: Command) {
       }
       const view: DocsView = opts.section !== undefined
         ? { kind: 'section', id: opts.section }
-        : opts.full || (topic !== undefined && !process.stdout.isTTY) ? { kind: 'full' } : { kind: 'default' };
+        : opts.full ? { kind: 'full' } : { kind: 'default' };
       if (opts.list || (topic === undefined && view.kind === 'default')) {
         try {
           const { pages, groups, version } = await fetchPublicManifestWithGroups();
@@ -645,10 +674,12 @@ export function registerDocs(program: Command) {
                 || (view.kind === 'section' && (status.view !== 'section' || /(?:^|\n)No section "/.test(content)))) {
               throw new Error('Authenticated docs did not return the requested view; trying the public index.');
             }
-            if (status.view === 'summary' && status.complete === false) content = topicSummary(content, resolvedTopic, Number(full));
+            if (status.view === 'summary' && status.complete === false) {
+              content = topicSummary(content, resolvedTopic, Number(full));
+            }
             await warnIfLocalDocsOlder();
             if (opts.json) printJson({ topic: requestedTopic, ...status, content });
-            else process.stdout.write(withNewline(content));
+            else process.stdout.write(displayDocs(content));
             return;
           } catch (e) {
             authenticatedFailure = e instanceof Error ? e.message : String(e);
@@ -656,6 +687,14 @@ export function registerDocs(program: Command) {
         }
 
         try {
+          const published = await fetchPublishedDocsView(resolvedTopic, view).catch(() => null);
+          if (published) {
+            await warnIfLocalDocsOlder(published.version);
+            const { topic, content, view, complete } = published;
+            if (opts.json) printJson({ topic, url: DOCS_BASE + PUBLIC_MANIFEST_PATH, source: 'public', view, complete, content });
+            else process.stdout.write(displayDocs(content));
+            return;
+          }
           const { pages, aliases, version } = await fetchPublicManifestWithGroups();
           await warnIfLocalDocsOlder(version);
           const page = findPublicDocsPage(pages, aliases, resolvedTopic);
@@ -670,13 +709,12 @@ export function registerDocs(program: Command) {
                 topic: page.id,
                 url: DOCS_BASE + PUBLIC_MANIFEST_PATH,
                 source: 'public',
-                ...(page.summary || page.summary_complete !== undefined || view.kind !== 'default'
-                  ? { view: rendered.view, complete: rendered.complete }
-                  : {}),
+                view: rendered.view,
+                complete: rendered.complete,
                 content: rendered.content,
               });
             } else {
-              process.stdout.write(rendered.content);
+              process.stdout.write(displayDocs(rendered.content));
             }
             return;
           }

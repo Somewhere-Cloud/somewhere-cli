@@ -321,7 +321,11 @@ test('manifest parsing requires actual page bodies', () => {
 test('a manifest page without a body fails precisely instead of substituting another topic', async () => {
   const home = emptyCredentialHome();
   const server = createServer((req, res) => {
-    assert.equal(req.url, '/docs-manifest.json');
+    if (req.url !== '/docs-manifest.json') {
+      res.writeHead(404);
+      res.end();
+      return;
+    }
     res.setHeader('Content-Type', 'application/json');
     res.end(JSON.stringify({
       pages: [{ id: 'auth-client', title: 'Auth on the client', section: 'data-identity' }],
@@ -346,7 +350,45 @@ test('a manifest page without a body fails precisely instead of substituting ano
   }
 });
 
-test('terminal docs summarize and pipes and --full return the full topic', async () => {
+test('published topic views share plain progress text and allow a summary on captured stdout', async () => {
+  const requests = [];
+  const server = createServer((req, res) => {
+    requests.push(req.url);
+    const view = new URL(req.url, 'http://localhost').searchParams.get('view');
+    const complete = view === 'full';
+    const notice = complete ? 'Showing the whole topic (30,000 characters).'
+      : 'Showing 1 of 2 sections in full, 40% of this topic (12,000 of 30,000 characters).';
+    const text = `[docs] topic=sw.db view=${view} complete=${complete}\n${notice}\n\n# Database\n`;
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ topic: 'sw.db', text, complete, view, version: MANIFEST.sourceHash }));
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const env = {
+      SOMEWHERE_CONFIG_DIR: emptyCredentialHome(),
+      SOMEWHERE_DOCS_BASE: `http://127.0.0.1:${server.address().port}`,
+      CI: '1',
+    };
+    const summary = await run(['docs', 'sw.db'], env);
+    assert.equal(summary.status, 0, summary.stderr);
+    assert.match(summary.stdout, /^Showing 1 of 2 sections in full, 40%/);
+    const full = await run(['docs', 'sw.db', '--full'], env);
+    assert.equal(full.status, 0, full.stderr);
+    assert.match(full.stdout, /^Showing the whole topic/);
+    const section = await run(['docs', 'sw.db', '--section', 'reads', '--json'], env);
+    assert.equal(section.status, 0, section.stderr);
+    assert.equal(JSON.parse(section.stdout).view, 'section');
+    assert.deepEqual(requests, [
+      '/docs/sw.db.txt?view=summary',
+      '/docs/sw.db.txt?view=full',
+      '/docs/sw.db.txt?view=section&section=reads',
+    ]);
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+  }
+});
+
+test('default docs summarize for terminals and captured stdout; --full returns the full topic', async () => {
   const home = emptyCredentialHome();
   const env = (base) => ({
     HOME: home,
@@ -364,7 +406,7 @@ test('terminal docs summarize and pipes and --full return the full topic', async
 
     const piped = await run(['docs', 'sw.data'], env(base));
     assert.equal(piped.status, 0, piped.stderr);
-    assert.equal(piped.stdout, `# Data\n\n${SECTIONED_BODY}`);
+    assert.equal(piped.stdout, summary.stdout);
 
     const full = await run(['docs', 'sw.data', '--full', '--json'], env(base));
     assert.equal(full.status, 0, full.stderr);

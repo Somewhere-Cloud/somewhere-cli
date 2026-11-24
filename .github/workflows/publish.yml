@@ -6,18 +6,18 @@
 #      expected_version = the package.json version:
 #        gh workflow run publish.yml -R Somewhere-Cloud/somewhere-cli --ref master \
 #          -f source_sha=<40-hex master commit> -f expected_version=<x.y.z>
-#   3. The run pins the exact commit, builds, and publishes with provenance.
-#      A separate job verifies the artifact served by npm. Registry propagation
-#      can take over an hour. If it fails, re-run the failed verification job
-#      before considering another publication. Customers pick up
-#      the version through somewhere update.
+#   3. The run pins the exact commit, builds, and publishes with provenance
+#      under release-candidate. It verifies the public tarball and provenance
+#      before promoting the version to latest. If promotion fails, check the
+#      registry and re-run the failed job while the source is still current.
+#      A separate job verifies latest and the artifact served by npm. If it
+#      fails, re-run the failed verification job before publishing again.
 #
 # npm authentication: trusted publishing only. npmjs.com trusts the GitHub
 # Actions OIDC token for owner Somewhere-Cloud, repository somewhere-cli,
-# workflow filename publish.yml, no environment (configured on the package's
-# Settings -> Publishing access page). There is no npm token secret anywhere in
-# this workflow; a run without a configured trusted publisher fails at
-# npm publish with E404/E403 instead of using a stale credential.
+# workflow filename publish.yml, no environment. Enable both npm publish and
+# Allow npm dist-tag in the package's trusted publisher settings.
+# A run without a configured trusted publisher fails at npm publish.
 name: Publish to npm
 
 on:
@@ -81,8 +81,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      # Trusted publishing needs npm >= 11.5.1; pin so the runner's bundled npm never decides.
-      - run: npm install -g npm@11.19.0
+      # OIDC dist-tag writes need npm >= 11.21.0.
+      - run: npm install -g npm@11.21.3
       - name: Pin automatic expected version
         id: candidate
         env:
@@ -90,8 +90,8 @@ jobs:
           EXPECTED_VERSION: ${{ steps.trigger.outputs.version }}
         run: |
           node --input-type=module -e 'import fs from "node:fs"; import { validateCandidate } from "./scripts/publish-release.mjs"; const version = process.env.EXPECTED_VERSION || JSON.parse(fs.readFileSync("package.json", "utf8")).version; validateCandidate(process.env.SOURCE_SHA, version); fs.appendFileSync(process.env.GITHUB_OUTPUT, `version=${version}\n`);'
-      # mode=release: version absent from npm. mode=in-sync: this exact source is
-      # already published, so the run verifies the registry and publishes nothing.
+      # mode=release: version absent from npm. mode=in-sync: the matching version
+      # already exists and can resume promotion without another upload.
       # mode=drift: the version exists from different release inputs; the check fails.
       - name: Check identity before gates
         id: before
@@ -123,18 +123,26 @@ jobs:
         env:
           EXPECTED_VERSION: ${{ steps.candidate.outputs.version }}
         run: |
-          echo "::notice::@somewhere-cloud/cli@$EXPECTED_VERSION is already published from this exact source; verifying the registry, publishing nothing."
-          echo "Already published: @somewhere-cloud/cli@$EXPECTED_VERSION from this source. Verification only." >> "$GITHUB_STEP_SUMMARY"
-      - name: Publish once with provenance (npm trusted publishing, no token)
+          echo "::notice::@somewhere-cloud/cli@$EXPECTED_VERSION is already published. Checking its promotion to latest."
+          echo "Already published: @somewhere-cloud/cli@$EXPECTED_VERSION. Checking its promotion to latest." >> "$GITHUB_STEP_SUMMARY"
+      - name: Require OIDC for npm writes
+        run: |
+          if [ -n "${NODE_AUTH_TOKEN:-}" ] || [ -n "${NPM_TOKEN:-}" ]; then echo "an npm token is set; this publisher authenticates only through OIDC" >&2; exit 1; fi
+      - name: Publish release candidate with provenance
         id: publication
         if: steps.final.outputs.mode == 'release'
         env:
           TARBALL: ${{ steps.artifact.outputs.tarball }}
           EXPECTED_VERSION: ${{ steps.candidate.outputs.version }}
         run: |
-          if [ -n "${NODE_AUTH_TOKEN:-}" ] || [ -n "${NPM_TOKEN:-}" ]; then echo "an npm token is set; this publisher authenticates only through OIDC" >&2; exit 1; fi
           if npm view "@somewhere-cloud/cli@$EXPECTED_VERSION" version >/dev/null 2>&1; then echo "@somewhere-cloud/cli@$EXPECTED_VERSION already exists on npm" >&2; exit 1; fi
-          npm publish --provenance --access public "$TARBALL"
+          npm publish --provenance --access public --tag release-candidate "$TARBALL"
+      - name: Verify the public candidate and promote it to latest
+        timeout-minutes: 16
+        env:
+          PUBLISHED_SOURCE: ${{ steps.final.outputs.published_head }}
+          EXPECTED_VERSION: ${{ steps.candidate.outputs.version }}
+        run: node scripts/publish-release.mjs promote "$PUBLISHED_SOURCE" "$EXPECTED_VERSION"
 
   verify:
     name: Verify the published npm artifact
@@ -151,7 +159,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: npm install -g npm@11.19.0
+      - run: npm install -g npm@11.21.3
       - run: npm ci
       - run: npm run build
       - name: Verify npm latest, source commit, SHA-512 integrity and signed provenance

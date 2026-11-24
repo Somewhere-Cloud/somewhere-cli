@@ -177,7 +177,7 @@ test('somewhere test with no file runs the platform checks with no local browser
     assert.equal(failing.status, 1, failing.stderr);
     assert.match(failing.stdout, /^FAIL Your check "add a note" on a phone$/m);
     assert.deepEqual(JSON.parse(failing.stdout.trim().split('\n').at(-1)),
-      { outcome: 'failed', counts: { passed: 1, failed: 1, could_not_check: 0, warnings: 0 } });
+      { outcome: 'failed', counts: { passed: 1, failed: 1, could_not_check: 0, warnings: 0 }, not_checked: null });
     assert.doesNotMatch(failing.stdout + failing.stderr, /must not run|Playwright/);
     assert.deepEqual(requests.slice(0, 1), ['GET /v1/deploy/log'], 'it reads the last deploy\'s stored result first');
     const json = await run(['--json']);
@@ -186,8 +186,29 @@ test('somewhere test with no file runs the platform checks with no local browser
     passed = true;
     const passing = await run([]);
     assert.equal(passing.status, 0, passing.stderr);
-    assert.match(passing.stdout, /^PASS Your check "add a note" on a phone$/m);
+    assert.match(passing.stdout, /^PASS Browser flow .* — The stored result has no observation.$/m);
     assert.equal(JSON.parse(passing.stdout.trim().split('\n').at(-1)).outcome, 'passed');
+
+    const coverage = { routes_without_read_check: ['/api/items/:id'], routes_without_write_check: ['/api/items/:id'],
+      schedules_not_run: ['daily-digest'], other: ['Function input boundaries'] };
+    custom = { status: 'checked', passed: true, routes_checked: 0, routes_discovered: 1, not_checked: coverage, checks: [{
+      name: "POST /__sw/data (built-in data endpoint), update a test person's items row as a stranger",
+      as: 'stranger', method: 'POST', path: '/__sw/data', status: 404, pass: true, outcome: 'passed',
+      responses: [{ status: 404, observed: 'Access refused. The owner still sees the same row.' }],
+    }] };
+    const scoped = await run([]);
+    assert.equal(scoped.status, 0);
+    assert.match(scoped.stdout, /^PASS POST \/__sw\/data \(built-in data endpoint\).*HTTP 404.*Access refused\. The owner still sees the same row\.$/m);
+    assert.match(scoped.stdout, /^0 of 1 app routes had a completed read check\.$/m);
+    assert.match(scoped.stdout, /^1 route without a write check \(\/api\/items\/:id\)\.$/m);
+    assert.match(scoped.stdout, /^1 registered schedule did not run \(daily-digest\)\.$/m);
+    assert.deepEqual(JSON.parse(scoped.stdout.trim().split('\n').at(-1)), {
+      outcome: 'passed', counts: { passed: 1, failed: 0, could_not_check: 0, warnings: 0 },
+      not_checked: coverage, routes_checked: 0, routes_discovered: 1,
+    });
+    const scopedJson = await run(['--json']);
+    assert.equal(scopedJson.status, 0);
+    assert.deepEqual(JSON.parse(scopedJson.stdout).not_checked, coverage);
 
     custom = { status: 'checked', passed: false, checks: [], sentence: 'Warning: A server function crashed: GET /favicon.ico. A test row could not be removed after the check.',
       findings: [{ kind: 'crash', via: 'GET /favicon.ico' }, { kind: 'cleanup', table: 'bookings', left_behind: 'Test row bookings / test-42 may remain.' }] };

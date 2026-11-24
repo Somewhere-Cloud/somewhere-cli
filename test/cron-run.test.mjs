@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
@@ -7,6 +8,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+const fixtureToken = `smt_${randomUUID()}`;
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 const distIndex = join(repoRoot, 'dist', 'index.js');
 
@@ -14,7 +16,7 @@ function credentialHome(prefix) {
   const home = mkdtempSync(join(tmpdir(), prefix));
   mkdirSync(join(home, '.somewhere'), { recursive: true });
   writeFileSync(join(home, '.somewhere', 'config.json'), JSON.stringify({
-    token: 'smt_cron_run_test',
+    token: fixtureToken,
     user: { email: 'cron@example.com', username: 'cron' },
   }) + '\n');
   return home;
@@ -48,7 +50,7 @@ function fixtureServer(callTool) {
     req.on('end', () => {
       const jobId = req.method === 'GET' && /^\/v1\/jobs\/([^/]+)$/.exec(req.url)?.[1];
       if (jobId) {
-        assert.equal(req.headers.authorization, 'Bearer smt_cron_run_test');
+        assert.equal(req.headers.authorization, `Bearer ${fixtureToken}`);
         const result = callTool({ name: 'job_get', arguments: { job_id: decodeURIComponent(jobId) } }, res);
         sendJson(res, JSON.parse(result.content[0].text));
         return;

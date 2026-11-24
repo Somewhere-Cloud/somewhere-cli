@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
@@ -154,7 +155,7 @@ test('Playwright data uses prepared cookies and the linked contract from a regul
   process.env.SW_TEST_TARGET = JSON.stringify({ projectId: 'fixture', origin, contractDigest: digest });
   const expiry = Date.now() + 60_000;
   const storageState = buildStorageState(origin, new URL(origin).hostname, {
-    access_token: session, refresh_token: 'fixture-refresh', expires_in: 60,
+    access_token: session, refresh_token: randomUUID(), expires_in: 60,
     user: { id: 'alice', email: 'alice@example.test', test: true },
   }, { accessExpiresAt: expiry, sessionExpiresAt: expiry });
   const statePath = join(root, 'alice.state.json');

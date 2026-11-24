@@ -3,6 +3,7 @@ import { operationLabel } from './repro-packet.js';
 import type { ApiResponse } from '../types.js';
 import { fetchWithProxy as undiciFetch } from './http.js';
 import { loadConfig, updateTokens } from './config.js';
+import { retryAfterMs } from './poll-delay.js';
 
 /** The /v1 API host. Override for staging/tests via SOMEWHERE_API_URL
  *  (mirrors SOMEWHERE_RUNNER_URL below); the value should include the /v1
@@ -88,7 +89,7 @@ export class ApiClient {
     query?: Record<string, string | number | undefined>,
     /** refresh: false checks THIS client's key only. The refresh path renews the
      *  stored login, which is a different credential from one being verified. */
-    opts?: { timeoutMs?: number; baseUrl?: string; refresh?: false; signal?: AbortSignal },
+    opts?: { timeoutMs?: number; baseUrl?: string; refresh?: false; signal?: AbortSignal; onRetryAfter?: (ms: number) => void },
   ): Promise<T> {
     try {
       return await this.request<T>(method, path, body, query, opts);
@@ -269,7 +270,7 @@ export class ApiClient {
     body?: unknown,
     query?: Record<string, string | number | undefined>,
     /** signal: the caller may also abandon the request (it then fails like a timeout). */
-    opts?: { timeoutMs?: number; baseUrl?: string; signal?: AbortSignal },
+    opts?: { timeoutMs?: number; baseUrl?: string; signal?: AbortSignal; onRetryAfter?: (ms: number) => void },
   ): Promise<T> {
     let url = `${opts?.baseUrl ?? API_BASE_URL}${path}`;
     if (query) {
@@ -358,9 +359,12 @@ export class ApiClient {
     // logs. Read them BEFORE anything can throw, so a failure the CLI cannot
     // classify still hands the developer something we can look up
     // ( — the sole artefact of one 503 was the word "Unknown").
+    const retryAfter = retryAfterMs(res.headers.get('retry-after'));
+    if (retryAfter !== undefined) opts?.onRetryAfter?.(retryAfter);
     const meta: CliApiErrorMeta = {
       requestId: res.headers.get('x-request-id') ?? undefined,
       traceId: res.headers.get('x-trace-id') ?? undefined,
+      retryAfterMs: retryAfter,
     };
     let text: string;
     try {
@@ -418,7 +422,7 @@ export class ApiClient {
     // stopped anyway.
     if (typeof retry === 'boolean') meta.retry = retry;
     if (typeof retry_after_ms === 'number' && Number.isFinite(retry_after_ms)) {
-      meta.retryAfterMs = retry_after_ms;
+      meta.retryAfterMs = Math.max(retryAfter ?? 0, retry_after_ms);
     }
     if (res.status === 503 && error === 'EXEC_CONTROL_PUBLICATION_PENDING') {
       const retryAfter = res.headers.get('retry-after')?.trim();

@@ -5,6 +5,7 @@ import type { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/cl
 import type { CallToolResult, Tool } from '@modelcontextprotocol/sdk/types.js';
 import type { FetchLike } from '@modelcontextprotocol/sdk/shared/transport.js';
 import { fetchWithProxy } from './http.js';
+import { retryAfterMs } from './poll-delay.js';
 import { ApiClient, CliApiError, typedServerError } from './client.js';
 import { getToken, loadConfig } from './config.js';
 import { safeInvalid, type InvalidDetail } from './vendor/repro-guidance.js';
@@ -17,6 +18,7 @@ let isSdkAuthError: (err: unknown) => boolean = () => false;
 export interface PlatformToolCallOptions {
   allTools?: boolean;
   signal?: AbortSignal;
+  onRetryAfter?: (ms: number) => void;
 }
 
 /** The typed fields of an ordered-edit refusal (project_patch / fs_replace `edits`,
@@ -163,7 +165,11 @@ export async function createPlatformMcpTransport(
       const signal = options.signal && request?.signal
         ? AbortSignal.any([options.signal, request.signal])
         : options.signal ?? request?.signal;
-      return fetchWithProxy(url, { ...request, signal }, 600_000);
+      return fetchWithProxy(url, { ...request, signal }, 600_000).then((response) => {
+        const retryAfter = retryAfterMs(response.headers.get('retry-after'));
+        if (retryAfter !== undefined) options.onRetryAfter?.(retryAfter);
+        return response;
+      });
     }) as FetchLike,
     requestInit: {
       headers: {

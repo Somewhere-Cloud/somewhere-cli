@@ -56,9 +56,10 @@ export async function mintPreviewCredential(client: ApiClient, projectId: string
 }
 
 /** A client that carries ONLY the preview credential: no stored-login refresh, no fallback. */
-export function previewToolClient(credential: string): { call<T>(method: string, path: string, body?: unknown, query?: Record<string, string | number | undefined>): Promise<T> } {
+export function previewToolClient(credential: string) {
   const client = new ApiClient(credential);
-  return { call: <T>(method: string, path: string, body?: unknown, query?: Record<string, string | number | undefined>) => client.call<T>(method, path, body, query, { refresh: false }) };
+  return { call: <T>(method: string, path: string, body?: unknown, query?: Record<string, string | number | undefined>,
+    opts?: { onRetryAfter?: (ms: number) => void }) => client.call<T>(method, path, body, query, { ...opts, refresh: false }) };
 }
 
 /** True when the platform refused the credential itself (closed, promoted, expired or revoked preview). */

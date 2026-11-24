@@ -2,7 +2,9 @@ import { cliInvocation } from './cli-invocation.js';
 // Preview jobs from the CLI: `somewhere preview run-job` and `somewhere cron run --preview`.
 // Every call about the preview's own jobs carries ONLY that preview's tool credential (lib/preview-credential.ts); your
 // own sign-in is used for nothing but minting it, and a production job read never sees a preview job.
-import { ApiClient } from './client.js';
+import { setTimeout as sleep } from 'node:timers/promises';
+import { ApiClient, CliApiError } from './client.js';
+import { interactivePollDelay } from './poll-delay.js';
 import { getToken, loadProjectConfig } from './config.js';
 import { loadPreviewCredential, mintPreviewCredential, previewToolClient } from './preview-credential.js';
 import { loadPreviewRecord } from './preview-record.js';
@@ -33,13 +35,29 @@ export interface PreviewJob {
 const TERMINAL = new Set(['complete', 'failed', 'cancelled', 'indeterminate']);
 
 /** Waits for a preview job to finish, reading it through the preview's own credential. */
-export async function waitForPreviewJob(credential: string, jobId: string, timeoutSeconds: number): Promise<{ job: PreviewJob; timedOut: boolean }> {
+export async function waitForPreviewJob(credential: string, jobId: string, timeoutSeconds: number, firstDelayMs = 0): Promise<{ job: PreviewJob; timedOut: boolean }> {
   const client = previewToolClient(credential);
   const deadline = Date.now() + timeoutSeconds * 1000;
-  for (;;) {
-    const job = await client.call<PreviewJob>('GET', `/preview-tools/jobs/${encodeURIComponent(jobId)}`);
-    if (TERMINAL.has(job.status)) return { job, timedOut: false };
-    if (Date.now() >= deadline) return { job, timedOut: true };
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+  let job: PreviewJob | undefined;
+  let delay = firstDelayMs;
+  for (let attempt = 0; ; attempt++) {
+    const remaining = deadline - Date.now();
+    if (delay >= remaining) {
+      if (remaining > 0) await sleep(remaining);
+      if (job) return { job, timedOut: true };
+      throw new Error('The wait expired before the platform returned the preview job status.');
+    }
+    if (delay) await sleep(delay);
+    let retryAfter = 0;
+    try {
+      job = await client.call<PreviewJob>('GET', `/preview-tools/jobs/${encodeURIComponent(jobId)}`, undefined, undefined, {
+        onRetryAfter: (ms) => { retryAfter = ms; },
+      });
+      if (TERMINAL.has(job.status)) return { job, timedOut: false };
+    } catch (error) {
+      if (!(error instanceof CliApiError) || error.meta.retryAfterMs === undefined) throw error;
+      retryAfter = Math.max(retryAfter, error.meta.retryAfterMs);
+    }
+    delay = Math.max(interactivePollDelay(attempt), retryAfter);
   }
 }

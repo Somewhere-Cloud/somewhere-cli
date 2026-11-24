@@ -201,7 +201,7 @@ test('somewhere test with no file runs the platform checks with no local browser
     assert.match(scoped.stdout, /^PASS POST \/__sw\/data \(built-in data endpoint\).*HTTP 404.*Access refused\. The owner still sees the same row\.$/m);
     assert.match(scoped.stdout, /^0 of 1 app routes had a completed read check\.$/m);
     assert.match(scoped.stdout, /^1 route without a write check \(\/api\/items\/:id\)\.$/m);
-    assert.match(scoped.stdout, /^1 registered schedule did not run \(daily-digest\)\.$/m);
+    assert.match(scoped.stdout, /^1 registered schedule did not run \(daily-digest\)\. Run one on your preview with .* cron run <name> --preview --wait\.$/m);
     assert.deepEqual(JSON.parse(scoped.stdout.trim().split('\n').at(-1)), {
       outcome: 'passed', counts: { passed: 1, failed: 0, could_not_check: 0, warnings: 0 },
       not_checked: coverage, routes_checked: 0, routes_discovered: 1,

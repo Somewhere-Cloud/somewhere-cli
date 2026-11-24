@@ -196,7 +196,7 @@ export function formatChecksReport(check: AccessCheck | null): string[] {
     if (reads?.length) lines.push(`${reads.length} ${reads.length === 1 ? 'route' : 'routes'} without a read check (${reads.join(', ')}).`);
     if (writes?.length) lines.push(`${writes.length} ${writes.length === 1 ? 'route' : 'routes'} without a write check (${writes.join(', ')}).`);
     if (schedules === null) lines.push('Registered schedules could not be listed.');
-    if (schedules?.length) lines.push(`${schedules.length} registered ${schedules.length === 1 ? 'schedule' : 'schedules'} did not run (${schedules.join(', ')}).`);
+    if (schedules?.length) lines.push(`${schedules.length} registered ${schedules.length === 1 ? 'schedule' : 'schedules'} did not run (${schedules.join(', ')}). Run one on your preview with ${cliInvocation()} cron run <name> --preview --wait.`);
     if (other.length) lines.push(`Other checks skipped or out of scope: ${other.join(', ')}.`);
   } else {
     lines.push('Coverage details are unavailable for this run.');

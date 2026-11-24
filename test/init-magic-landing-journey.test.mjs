@@ -212,8 +212,9 @@ async function openTab(search, respond) {
     load: () => within(async () => {
       // A fresh client per page load, as a full navigation would create.
       const nonce = `?load=${Math.random()}`;
-      const { auth } = await import(pathToFileURL(join(out, 'services-auth.mjs')).href + nonce);
+      const { getAuth } = await import(pathToFileURL(join(out, 'services-auth.mjs')).href + nonce);
       const { useMagicLinkLanding } = await import(pathToFileURL(join(out, 'magic-link.mjs')).href + nonce);
+      const auth = getAuth();
       globalThis.__journeyAuth = auth;
       // The app's SomewhereAuthProvider checks the session as the page starts.
       void auth.getUser().catch(() => {});

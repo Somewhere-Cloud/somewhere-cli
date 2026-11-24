@@ -1,8 +1,12 @@
 # Changelog
 
-## 0.38.158
+## 0.38.159
 
 - Docs summaries show how much of the topic you received and give commands for the remaining sections, the whole topic, and search. The same summary goes to a terminal, pipe or file. Use `somewhere docs <topic> --full` when you need the complete topic.
+
+## 0.38.158
+
+- `somewhere cron run <name> --wait` reports job completion sooner.
 
 ## 0.38.157
 

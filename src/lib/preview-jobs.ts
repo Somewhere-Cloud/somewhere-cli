@@ -4,7 +4,7 @@ import { cliInvocation } from './cli-invocation.js';
 // own sign-in is used for nothing but minting it, and a production job read never sees a preview job.
 import { setTimeout as sleep } from 'node:timers/promises';
 import { ApiClient, CliApiError } from './client.js';
-import { interactivePollDelay } from './poll-delay.js';
+import { jobPollDelay } from './poll-delay.js';
 import { getToken, loadProjectConfig } from './config.js';
 import { loadPreviewCredential, mintPreviewCredential, previewToolClient } from './preview-credential.js';
 import { loadPreviewRecord } from './preview-record.js';
@@ -35,12 +35,12 @@ export interface PreviewJob {
 const TERMINAL = new Set(['complete', 'failed', 'cancelled', 'indeterminate']);
 
 /** Waits for a preview job to finish, reading it through the preview's own credential. */
-export async function waitForPreviewJob(credential: string, jobId: string, timeoutSeconds: number, firstDelayMs = 0): Promise<{ job: PreviewJob; timedOut: boolean }> {
-  const client = previewToolClient(credential);
-  const deadline = Date.now() + timeoutSeconds * 1000;
+export async function waitForPreviewJob(client: ReturnType<typeof previewToolClient>, jobId: string, timeoutSeconds: number, firstDelayMs = 0): Promise<{ job: PreviewJob; timedOut: boolean }> {
+  const startedAt = Date.now();
+  const deadline = startedAt + timeoutSeconds * 1000;
   let job: PreviewJob | undefined;
   let delay = firstDelayMs;
-  for (let attempt = 0; ; attempt++) {
+  for (;;) {
     const remaining = deadline - Date.now();
     if (delay >= remaining) {
       if (remaining > 0) await sleep(remaining);
@@ -58,6 +58,6 @@ export async function waitForPreviewJob(credential: string, jobId: string, timeo
       if (!(error instanceof CliApiError) || error.meta.retryAfterMs === undefined) throw error;
       retryAfter = Math.max(retryAfter, error.meta.retryAfterMs);
     }
-    delay = Math.max(interactivePollDelay(attempt), retryAfter);
+    delay = Math.max(jobPollDelay(Date.now() - startedAt), retryAfter);
   }
 }

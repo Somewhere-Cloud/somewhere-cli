@@ -507,8 +507,11 @@ export function registerPreview(program: Command) {
         const timeout = opts.timeout === undefined ? 300 : Number(opts.timeout);
         if (!Number.isFinite(timeout) || timeout < 1 || timeout > 3600) throw new Error('--timeout must be a number of seconds from 1 to 3600. Nothing ran.');
         target = await previewToolTarget(opts);
-        const queued = await previewToolClient(target.credential).call<{ job_id: string; preview_session_id: string; preview_id: string; timeout_seconds: number }>(
-          'POST', '/preview-tools/run-job', { handler: handlerPath, ...(payload !== undefined ? { payload } : {}) });
+        const client = previewToolClient(target.credential);
+        let firstDelayMs = 0;
+        const queued = await client.call<{ job_id: string; preview_session_id: string; preview_id: string; timeout_seconds: number }>(
+          'POST', '/preview-tools/run-job', { handler: handlerPath, ...(payload !== undefined ? { payload } : {}) }, undefined,
+          { onRetryAfter: (ms) => { firstDelayMs = ms; } });
         if (opts.wait === false) {
           if (opts.json) { printJson(queued); return; }
           success(`Queued ${handlerPath} in preview ${queued.preview_session_id}: job ${queued.job_id} (not finished yet).`);
@@ -516,7 +519,7 @@ export function registerPreview(program: Command) {
           return;
         }
         if (!opts.json) console.log(dim(`Job ${queued.job_id} queued in preview ${queued.preview_session_id} (version ${queued.preview_id}); waiting up to ${timeout}s…`));
-        const { job, timedOut } = await waitForPreviewJob(target.credential, queued.job_id, timeout);
+        const { job, timedOut } = await waitForPreviewJob(client, queued.job_id, timeout, firstDelayMs);
         const succeeded = !timedOut && job.status === 'complete';
         if (!succeeded) process.exitCode = 1;
         if (opts.json) {

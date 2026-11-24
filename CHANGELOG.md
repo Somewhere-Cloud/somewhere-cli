@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.38.157
+
+- Generated starter guides show how to import large CSV files in background jobs using batched writes.
+
 ## 0.38.156
 
 - Piping a docs topic or redirecting it to a file prints the full topic. Use `somewhere docs --search "<words>"` to find matching sections or `somewhere docs pull` to download current Markdown into your project.

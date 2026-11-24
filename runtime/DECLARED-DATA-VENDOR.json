@@ -1,5 +1,5 @@
 {
-  "source_commit": "3fd5f988ec49589e943fca1f3471ad136a738444",
+  "source_commit": "a9b03532309404fb5db700ad613485b1924044dc",
   "esbuild": "0.24.0",
   "source_files": {
     "shared/app-model-catalog.ts": "c9a0119366beabb10157fcc9866f4d32b320b680f1c5717d837a5ca99875fa13",
@@ -9,13 +9,13 @@
     "shared/transient-read.ts": "2f22daebdc74fed6255a29df7deda0db307f9165c1d9988dba3ee872b2584ffd",
     "shared/types/placeholder-identity.ts": "089a46e2474a21193d3611eddd9c94b6bbe62441b3039ed80fc8499bada447ca",
     "worker/containers/compile/checker-contract.cjs": "c6d4ebc9ec058b3562655cc4f18dc1cea7e4492eb35b7f0fd0d87e974c26b492",
-    "worker/containers/compile/consumer-contract.cjs": "2255630f2db257db723570007542d6a5aebce0dd5efbe82117d3d7c8db485d2f",
+    "worker/containers/compile/consumer-contract.cjs": "d3d1b735edce04defe198fa806141987ca77a780140d22068a7ffbbff879eaa4",
     "worker/containers/compile/declared-data-contract.cjs": "ebdc7dbc12283a7218c28e0e912e736ac27a8e9d513b82c097ebff6df3c1dd91",
     "worker/containers/compile/generated-declarations-render.cjs": "7ffdb34645cc9eccac6eba39dc86b646a41c4de8a1a038d2b5b46f42df9f1157",
     "worker/containers/compile/generated-declarations.cjs": "6e9902e054c5c784fd9b3c3fafc1869e79954100a45014e1132247cd82833ec4",
     "worker/containers/compile/groups-types.cjs": "7c22b4bb96c9391005d434852600dc02bc8a6bbb99d78d2b8e3eb152f7b72c58",
     "worker/containers/compile/runtime-types.cjs": "a74ee2d726c395f2216528e070813293d08ee7340fbca63f94e015ede1ee6df1",
-    "worker/containers/compile/schema-types.cjs": "6bd92695cd275b0c6bc7dc79daaf3189fb275449321342c967a2030f287cfdfa",
+    "worker/containers/compile/schema-types.cjs": "806147ad7224356734020c62441123db16b50ef6456db974c573b226d517e6cc",
     "worker/containers/compile/typed-data.cjs": "1c8bec853fbee4ffd34c651076a4e1f4d8b18c0c2be5e99e31df7c9283207627",
     "worker/containers/compile/typed-files.cjs": "f2568567a53994575ede91f9a0839965e64f94eb92ae11315650189b6de0f79c",
     "worker/node_modules/entities/dist/decode-codepoint.js": "f09dbc23d35abbf96718dfdd04def3c1d3444495541d050c69a12706ee76dbb1",
@@ -54,7 +54,7 @@
     "worker/src/utils/db-schema-deploy/extract-schema-parents.ts": "623a0034c5196e7655574387493574ce59555d0a1cffd88ff696ce85b9f56228",
     "worker/src/utils/db-schema-deploy/extract-schema-relations.ts": "f5deac350ee915758f61d4be33711d23bad51ab20abcf153a463f0c90bfc3e27",
     "worker/src/utils/db-schema-deploy/extract-schema-roles.ts": "a5cc7524108c19121445ea2feb85c155067b790075eb823a5d5f8c2a12e92e78",
-    "worker/src/utils/db-schema-deploy/extract-schema-ts.ts": "6ece9f185e2de72b720c6c5fb942609701874ea3951b679b8c8dc7c92b10aba3",
+    "worker/src/utils/db-schema-deploy/extract-schema-ts.ts": "5f56bd9ea9a54a089705baf1e976ad0815e5d15841eb403f48f9666b462ddcea",
     "worker/src/utils/db-schema-deploy/schema-constants.ts": "9742bc649f494963af4ae2039a1d6062cc6dbe087285bdf470f6ee71d9f76aac",
     "worker/src/utils/db-schema-deploy/schema-ownership.ts": "e6c811a87bc657707be3518dfe547c6d97718ac073108b126eb7f791c9c08202",
     "worker/src/utils/dev-health-class.ts": "fd430f31b9c8469f3d90e118fd8c75d1836ebcf705c1f9e93915ffa53a4cb066",
@@ -74,5 +74,5 @@
     "worker/src/utils/telegram.ts": "9aaaa2597c366da1eeee9e2252e9b73e611ea97ed9558f7e07e694d9b393f053",
     "worker/src/utils/workers-ai-comparison.ts": "18b5d5ea96f817387a5ef49733ba611c99cbb14987143c28118b1c90f3b637d4"
   },
-  "sha256": "bc5bfcd5f4cb91e55691654bfe11f21a37a2efae763de4db56810c96c9c99425"
+  "sha256": "cf2d3dc90521be56b6fac77e5c524f62ce1b3f020b8d3d61a3a3acb8289db279"
 }

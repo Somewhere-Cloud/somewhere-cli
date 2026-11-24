@@ -329,6 +329,12 @@ MIT © Somewhere HQ, Inc.
 
 ## Test any Somewhere app
 
+Use the supported `@somewhere-cloud/cli/testing` import from Node or Playwright.
+`openTestApp()` opens the linked app, `app.users(3)` returns signed-in sessions,
+and `app.cleanup()` removes this test's fixtures. For a saved preview use
+`openTestApp({ preview: true })`. See [Testing your app](https://somewhere.cloud/docs/test)
+for the complete example.
+
 Add the CLI with `npm install --save-dev @somewhere-cloud/cli`, then import
 `createUser`, `signIn`, `UserSession`, `expectRefusal`, and `waitForApp` from
 `@somewhere-cloud/cli/testing` in Node tests. No starter is required.

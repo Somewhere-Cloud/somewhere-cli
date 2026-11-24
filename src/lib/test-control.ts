@@ -41,6 +41,7 @@ export interface TestControl {
   /** End anything the control itself holds open (the preview browser session). */
   close(): Promise<void>;
   /** Preview only: a managed test user through the preview's developer tool, and its removal by id. */
+  previewCookie?(): Promise<{ name: string; value: string; expiresAt: number }>;
   createManagedUser?(): Promise<ManagedUser>;
   deleteManagedUser?(id: string): Promise<string | null>;
 }
@@ -170,6 +171,10 @@ export function previewControl(tool: ToolClient, target: TestTarget, _root?: str
     async currentRelease() {
       try { return (await tool.call<PreviewTargetAnswer>('GET', '/preview-tools/target')).preview_id; }
       catch (error) { throw previewFailure(error, 'The preview could not be confirmed at the end of the run'); }
+    },
+    async previewCookie() {
+      const held = await pinned();
+      return { ...held.cookie, expiresAt: held.expires_at };
     },
     createManagedUser: () => createPreviewManagedUser(tool),
     deleteManagedUser: (id) => deletePreviewManagedUser(tool, id),

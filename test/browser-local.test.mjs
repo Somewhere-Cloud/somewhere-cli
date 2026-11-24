@@ -156,6 +156,32 @@ test('visible-only local outlines omit hidden controls and retain disabled annot
   }
 });
 
+test('local browser waits for auth before the first action', async (t) => {
+  if (!findBrowser()) {
+    t.skip('no browser installed on this machine');
+    return;
+  }
+  const fixture = await serveFixture(`<!doctype html><html data-sw-auth="checking">
+    <body><script>
+      setTimeout(() => {
+        document.body.innerHTML = '<button>Signed in</button>';
+        document.documentElement.setAttribute('data-sw-auth', 'signed-in');
+      }, 900);
+    </script></body></html>`);
+  try {
+    const report = await runLocalBrowser({
+      url: fixture.url,
+      actions: [{ expect: { selector: 'button', count: 1 } }],
+      viewport: { width: 1280, height: 800 },
+      timeoutMs: 10_000,
+    });
+    assert.equal(report.passed, true, JSON.stringify(report, null, 2));
+    assert.equal(report.steps[0]?.ok, true);
+  } finally {
+    await fixture.close();
+  }
+});
+
 test('local action sequence drives a form and treats an expected 401 as healthy', async (t) => {
   if (!findBrowser()) {
     t.skip('no browser installed on this machine');

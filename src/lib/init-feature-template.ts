@@ -194,7 +194,7 @@ export interface ProviderSignIn {
 
 const PROVIDER_SIGN_IN_HOOK = `import { useState } from 'react';
 import type { ProviderSignIn, SignInProvider } from '../../types/auth';
-import { auth, authErrorMessage } from '../services/auth';
+import { getAuth, authErrorMessage } from '../services/auth';
 
 // Social sign-in. The platform owns the OAuth clients: the SDK returns the
 // provider's URL, the browser goes there, and the provider sends it back to
@@ -202,6 +202,7 @@ import { auth, authErrorMessage } from '../services/auth';
 // The provider rides along as ?provider= so the callback exchanges the code
 // with the same provider (the platform appends &code= and &attempt= to it).
 function signInUrl(provider: SignInProvider, redirectUri: string): Promise<string> {
+  const auth = getAuth();
   if (provider === 'google') return auth.googleSignInUrl({ redirectUri });
   if (provider === 'github') return auth.githubSignInUrl({ redirectUri });
   return auth.discordSignInUrl({ redirectUri });
@@ -268,11 +269,14 @@ export function AuthCallbackPage() {
 }
 `;
 
-const AUTH_SERVICE = `import { AuthError, createSomewhereAuth } from '@somewhere-cloud/sdk/auth';
+const AUTH_SERVICE = `import { AuthError, createSomewhereAuth, type SomewhereAuth } from '@somewhere-cloud/sdk/auth';
 
 // The app's auth client (SDK). It talks to api/auth/[...path].ts. The session
 // is an httpOnly cookie the browser keeps; app code never handles a token.
-export const auth = createSomewhereAuth();
+let auth: SomewhereAuth | undefined;
+export function getAuth(): SomewhereAuth {
+  return auth ??= createSomewhereAuth();
+}
 
 export const PASSWORD_MIN_LENGTH = 8;
 
@@ -547,8 +551,7 @@ createRoot(document.getElementById('root')!).render(
 `;
 }
 
-// /fixtures is decided before the sign-in provider mounts: the provider checks
-// the session on mount, and a fixture preview must send no request at all.
+// The fixture branch renders without creating the app's auth client.
 function mainTsxWithFixtures(styles: string): string {
   return `import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -556,8 +559,7 @@ import { App } from './App';
 import { FIXTURES_PATH } from './fixtures/assistant';
 import { AssistantFixturesPage } from './pages/AssistantFixturesPage';
 ${styles}
-// /fixtures renders declared preview states from static data, outside the
-// sign-in provider, so it sends no request. Everything else is the app.
+// /fixtures renders preview states from static data without creating an auth client.
 const preview = window.location.pathname === FIXTURES_PATH;
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
@@ -3066,11 +3068,11 @@ function appTsx(): string {
     "import { AuthCallbackPage } from './pages/AuthCallbackPage';\nimport { HomePage } from './pages/HomePage';\nimport { DetailPage } from './pages/DetailPage';\nimport { MagicLinkPage } from './pages/MagicLinkPage';\nimport { ForgotPasswordPage, ResetPasswordPage } from './pages/PasswordResetPage';\n");
   out = replaceOnce(out, '  const session = useAuthState();\n\n',
     "  const pathname = usePathname();\n\n  // An emailed sign-in or invitation link lands here before a session exists.\n  if (pathname === '/auth/magic') return <MagicLinkPage />;\n  // Password reset works signed out; the reset email links to /reset-password.\n  if (pathname === '/forgot-password') return <ForgotPasswordPage />;\n  if (pathname === '/reset-password') return <ResetPasswordPage />;\n  // A social sign-in (src/config.ts SIGN_IN_PROVIDERS) returns here with ?code=.\n  if (pathname === '/auth/callback') return <AuthCallbackPage />;\n");
-  out = replaceOnce(out, '\n  // Connecting an MCP client', '\n  return <SomewhereAuthProvider client={auth}><SessionReady /></SomewhereAuthProvider>;\n}\n\nfunction SessionReady() {\n  const session = useAuthState();\n  const unconfirmed = useUnconfirmedSignOut();\n  return <div data-app-state={unconfirmed ? \'sign-out-unconfirmed\' : session.status}><SessionRoutes /></div>;\n}\n\n// Public pages can opt into session state by mounting this boundary.\nfunction SessionRoutes() {\n  const session = useAuthState();\n\n  // Connecting an MCP client');
-  out = "import { SomewhereAuthProvider } from '@somewhere-cloud/sdk/react';\nimport { auth } from './services/auth';\n" + out;
+  out = replaceOnce(out, '\n  // Connecting an MCP client', '\n  return <SomewhereAuthProvider client={getAuth()}><SessionReady /></SomewhereAuthProvider>;\n}\n\nfunction SessionReady() {\n  const session = useAuthState();\n  const unconfirmed = useUnconfirmedSignOut();\n  return <div data-app-state={unconfirmed ? \'sign-out-unconfirmed\' : session.status}><SessionRoutes /></div>;\n}\n\n// Public pages can opt into session state by mounting this boundary.\nfunction SessionRoutes() {\n  const session = useAuthState();\n\n  // Connecting an MCP client');
+  out = "import { SomewhereAuthProvider } from '@somewhere-cloud/sdk/react';\nimport { getAuth } from './services/auth';\n" + out;
   out = out.replace("import { useAuthState } from './auth/hooks';", "import { useAuthState, useUnconfirmedSignOut } from './auth/hooks';");
-  out = out.replace('return <MagicLinkPage />;', 'return <SomewhereAuthProvider client={auth}><MagicLinkPage /></SomewhereAuthProvider>;');
-  out = out.replace('return <AuthCallbackPage />;', 'return <SomewhereAuthProvider client={auth}><AuthCallbackPage /></SomewhereAuthProvider>;');
+  out = out.replace('return <MagicLinkPage />;', 'return <SomewhereAuthProvider client={getAuth()}><MagicLinkPage /></SomewhereAuthProvider>;');
+  out = out.replace('return <AuthCallbackPage />;', 'return <SomewhereAuthProvider client={getAuth()}><AuthCallbackPage /></SomewhereAuthProvider>;');
   return out;
 }
 

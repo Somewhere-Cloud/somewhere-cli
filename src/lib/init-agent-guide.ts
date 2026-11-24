@@ -217,5 +217,7 @@ ${SKILLS_POINTER}
 
 Build your app. Deploy the raw source and run its tests: \`npx @somewhere-cloud/cli deploy && npx @somewhere-cloud/cli test\`.
 
+For an app with sign-in, keep the starter's auth gate. Render private UI only after the session is confirmed. Keep the pending and retry views. In a browser test wait for the expected screen; if the SDK publishes \`data-sw-auth\` on \`<html>\`, first wait for the expected sign-in state there.
+
 ${AGENT_WORKFLOW}\n${PORTABILITY_POINTER}\n${MCP_POINTER}\n${PREVIEW_POINTER}\n`;
 export const INIT_CLAUDE_MD = 'Read AGENTS.md for project instructions.\n';

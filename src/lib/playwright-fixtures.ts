@@ -42,6 +42,32 @@ type RunnerTest = TestType<PlaywrightTestArgs & PlaywrightTestOptions & Fixtures
 let loaded: { test: RunnerTest; expect: typeof import('@playwright/test').expect } | undefined;
 const digests = new WeakMap<APIRequestContext, string | null>();
 
+/** Wait on SDK auth for fixture-owned navigations. Public pages have no marker. */
+function waitOnNavigation(page: Page): Page {
+  async function wait(options: { waitUntil?: 'load' | 'domcontentloaded' | 'networkidle' | 'commit' } | undefined) {
+    if (options?.waitUntil === 'commit') return;
+    const marker = page.locator('html[data-sw-auth]');
+    if (!(await marker.count())) return;
+    await page.locator('html[data-sw-auth="checking"]').waitFor({ state: 'detached', timeout: 5_000 });
+    if (await marker.getAttribute('data-sw-auth') === 'indeterminate') {
+      throw new Error('The app could not confirm its sign-in state.');
+    }
+  }
+  const goto = page.goto.bind(page);
+  page.goto = async (url, options) => {
+    const response = await goto(url, options);
+    await wait(options);
+    return response;
+  };
+  const reload = page.reload.bind(page);
+  page.reload = async (options) => {
+    const response = await reload(options);
+    await wait(options);
+    return response;
+  };
+  return page;
+}
+
 /** The run's target as the runner passed it (no credential is ever in it). */
 function runTarget(projectId: string): TestTarget | null {
   if (!process.env.SW_TEST_TARGET) return null;
@@ -79,6 +105,7 @@ function runner() {
       if (_preview) await _preview.prepareContext(context);
       await use(context);
     },
+    page: async ({ page }, use) => { await use(waitOnNavigation(page)); },
     _evidence: [async ({}, use, info) => {
       try { await use(); } finally {
         // Torn down after every other somewhere fixture and before Playwright writes error-context.md
@@ -137,7 +164,7 @@ function runner() {
           const context = openedResult.value;
           constrain(context.request, origin, info);
           digests.set(context.request, target.contractDigest);
-          const page = await timed(info, 'page creation', () => context.newPage());
+          const page = waitOnNavigation(await timed(info, 'page creation', () => context.newPage()));
           trackPage(page, titled(info.project.name, info.title));
           page.on('load', () => { void page.evaluate<number>("performance.getEntriesByType('navigation')[0]?.duration ?? 0").then(ms => { diagnostics(info).timings['page load'] = ms; }).catch(() => {}); });
           return { id: issued.user.id, email: issued.user.email, page, request: context.request };
@@ -191,7 +218,7 @@ function runner() {
           const context = await browser.newContext({ baseURL, viewport, isMobile, hasTouch });
           contexts.push(context);
           if (_preview) await _preview.prepareContext(context);
-          const page = await context.newPage();
+          const page = waitOnNavigation(await context.newPage());
           trackPage(page, titled(info.project.name, info.title));
           _forms.pages.add(page);
           return page;
@@ -245,7 +272,7 @@ async function previewNewUser(control: TestControl, args: { browser: import('@pl
     }
     constrain(context.request, origin, info);
     digests.set(context.request, control.target.contractDigest);
-    const page = await timed(info, 'page creation', () => context.newPage());
+    const page = waitOnNavigation(await timed(info, 'page creation', () => context.newPage()));
     trackPage(page, titled(info.project.name, info.title));
     return { id: user.id, email: user.email, page, request: context.request };
   };

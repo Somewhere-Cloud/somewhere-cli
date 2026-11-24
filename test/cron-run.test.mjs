@@ -37,22 +37,34 @@ function run(args, env, cwd = repoRoot) {
   });
 }
 
-function sendJson(res, payload) {
-  res.statusCode = 200;
+function sendJson(res, payload, status = 200) {
+  res.statusCode = status;
   res.setHeader('Content-Type', 'application/json');
   res.end(JSON.stringify(payload));
 }
 
-function fixtureServer(callTool) {
+function fixtureServer(callTool, onRequest) {
   return createServer((req, res) => {
+    onRequest?.(req);
     let body = '';
     req.on('data', (chunk) => (body += chunk));
     req.on('end', () => {
-      const jobId = req.method === 'GET' && /^\/v1\/jobs\/([^/]+)$/.exec(req.url)?.[1];
-      if (jobId) {
+      const url = new URL(req.url, 'http://fixture');
+      const jobId = req.method === 'GET' && /^\/v1\/jobs\/([^/]+)$/.exec(url.pathname)?.[1];
+      const cronId = req.method === 'POST' && /^\/v1\/cron\/([^/]+)\/run$/.exec(url.pathname)?.[1];
+      const list = req.method === 'GET' && url.pathname === '/v1/cron';
+      if (jobId || cronId || list) {
         assert.equal(req.headers.authorization, `Bearer ${fixtureToken}`);
-        const result = callTool({ name: 'job_get', arguments: { job_id: decodeURIComponent(jobId) } }, res);
-        sendJson(res, JSON.parse(result.content[0].text));
+        const project = url.searchParams.get('project_id');
+        const params = jobId ? { name: 'job_get', arguments: { job_id: decodeURIComponent(jobId) } }
+          : cronId ? { name: 'cron_run', arguments: { cron_id: decodeURIComponent(cronId) } }
+            : { name: 'cron_list', arguments: project ? { project_id: project } : {} };
+        const result = callTool(params, res);
+        const payload = JSON.parse(result.content[0].text);
+        const status = result.isError
+          ? { NOT_FOUND: 404, FORBIDDEN: 403, PROJECT_NOT_FOUND: 404, SERVICE_UNAVAILABLE: 503 }[payload.error] ?? 400
+          : cronId ? 202 : 200;
+        sendJson(res, payload, status);
         return;
       }
       const rpc = JSON.parse(body);
@@ -82,8 +94,8 @@ function fixtureServer(callTool) {
   });
 }
 
-async function withFixture(callTool, fn) {
-  const server = fixtureServer(callTool);
+async function withFixture(callTool, fn, onRequest) {
+  const server = fixtureServer(callTool, onRequest);
   await new Promise((resolvePromise) => server.listen(0, '127.0.0.1', resolvePromise));
   const { port } = server.address();
   try {
@@ -109,6 +121,7 @@ function toolError(error, message) {
 test('cron list and run use canonical cron_id fields and run a named task once', async () => {
   const home = credentialHome('sw-cron-run-home-');
   const calls = [];
+  const requests = [];
   await withFixture((params) => {
     calls.push({ name: params.name, arguments: params.arguments });
     if (params.name === 'cron_list') {
@@ -134,6 +147,7 @@ test('cron list and run use canonical cron_id fields and run a named task once',
     assert.equal(listed.status, 0, listed.stderr);
     assert.match(listed.stdout, /cron_daily/);
 
+    requests.length = 0;
     const named = await run(['cron', 'run', 'Daily digest', '--project', 'platform'], env);
     assert.equal(named.status, 0, named.stderr);
     assert.match(named.stdout, /queued \(not finished yet\)\. Job job_once/);
@@ -144,8 +158,11 @@ test('cron list and run use canonical cron_id fields and run a named task once',
     const direct = await run(['cron', 'run', 'cron_daily', '--json'], env);
     assert.equal(direct.status, 0, direct.stderr);
     assert.equal(JSON.parse(direct.stdout).data.job_id, 'job_once');
-  });
+  }, req => requests.push([req.method, req.url]));
 
+  assert.deepEqual(requests, [
+    ['GET', '/v1/cron?project_id=platform'], ['POST', '/v1/cron/cron_daily/run'], ['POST', '/v1/cron/cron_daily/run'],
+  ]);
   assert.deepEqual(calls, [
     { name: 'cron_list', arguments: { project_id: 'platform' } },
     { name: 'cron_list', arguments: { project_id: 'platform' } },
@@ -392,4 +409,17 @@ test('cron run --wait honors Retry-After while reading the one queued job', asyn
   assert.equal(admissions, 1);
   assert.equal(reads.length, 2);
   assert.ok(reads[1] - reads[0] >= 1000);
+});
+
+test('cron run does not submit a second job after an ambiguous server failure', async () => {
+  const home = credentialHome('sw-cron-once-home-');
+  const requests = [];
+  await withFixture(() => toolError('SERVICE_UNAVAILABLE', 'Job admission could not be confirmed.'), async (url) => {
+    const result = await run(['cron', 'run', 'cron_daily', '--wait', '--json'], {
+      HOME: home, USERPROFILE: home, SOMEWHERE_MCP_URL: url,
+    });
+    assert.equal(result.status, 1);
+    assert.equal(JSON.parse(result.stdout).error, 'SERVICE_UNAVAILABLE');
+  }, req => requests.push([req.method, req.url]));
+  assert.deepEqual(requests, [['POST', '/v1/cron/cron_daily/run']]);
 });

@@ -21,3 +21,12 @@ export function writePlatformSource(cliRoot) {
   for (const file of files) sha256.update(file + '\0').update(readFileSync(join(cliRoot, 'runtime', file)));
   writeFileSync(join(cliRoot, PLATFORM_SOURCE_FILE), JSON.stringify({ sha256: sha256.digest('hex') }, null, 2) + '\n');
 }
+
+/** Verify the generated checker bytes against their vendored source manifest. */
+export function verifyDeclaredDataVendor(cliRoot) {
+  const runtime = join(cliRoot, 'runtime');
+  const { source_commit: sourceCommit, sha256 } = JSON.parse(readFileSync(join(runtime, 'DECLARED-DATA-VENDOR.json'), 'utf8'));
+  if (!/^[0-9a-f]{40}$/.test(sourceCommit)) throw new Error('The generated checker needs a pinned platform source commit.');
+  const actual = createHash('sha256').update(readFileSync(join(runtime, 'declared-data.cjs'))).digest('hex');
+  if (actual !== sha256) throw new Error('The generated checker differs from its source manifest. Run scripts/vendor-declared-data.mjs.');
+}

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdtempSync, mkdirSync, rmSync, writeFileSync, appendFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -168,6 +168,20 @@ test('declared tables: an undeclared table and a mistyped column are type errors
 // Drift check: the vendored bytes must equal a fresh bundle of the platform's
 // runtime-types source. Set SOMEWHERE_PLATFORM_SOURCE to a platform checkout
 // (with the compiler's pinned esbuild installed) before cutting a CLI release.
+test('changed vendored checker bytes fail the build verification', async (t) => {
+  const { verifyDeclaredDataVendor } = await import('../scripts/platform-source.mjs');
+  const fixture = mkdtempSync(join(tmpdir(), 'sw-checker-vendor-'));
+  t.after(() => rmSync(fixture, { recursive: true, force: true }));
+  const runtime = join(fixture, 'runtime');
+  mkdirSync(runtime);
+  for (const file of ['declared-data.cjs', 'DECLARED-DATA-VENDOR.json']) {
+    cpSync(new URL('../runtime/' + file, import.meta.url), join(runtime, file));
+  }
+  verifyDeclaredDataVendor(fixture);
+  appendFileSync(join(runtime, 'declared-data.cjs'), '// altered checker\n');
+  assert.throws(() => verifyDeclaredDataVendor(fixture), /differs from its source manifest/);
+});
+
 const platformSource = process.env.SOMEWHERE_PLATFORM_SOURCE;
 test('vendored runtime declaration matches the platform source', { skip: platformSource ? false : 'SOMEWHERE_PLATFORM_SOURCE is not set' }, () => {
   // fileURLToPath, not .pathname: a checkout path with a space must still resolve.

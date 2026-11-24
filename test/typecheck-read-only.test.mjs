@@ -106,7 +106,7 @@ async function assertTreeGone(p) {
 
 test('a typecheck that does not finish is stopped at the deadline, TERM-resistant descendants included', { skip: process.platform === 'win32' }, async () => {
   const p = hangingProject();
-  const run = start(['typecheck', '--json'], p, { SOMEWHERE_TYPECHECK_TIMEOUT_MS: '1500' });
+  const run = start(['typecheck', '--project', '--json'], p, { SOMEWHERE_TYPECHECK_TIMEOUT_MS: '1500' });
   await waitFor(join(p.base, 'grandchild.pid'));
   assert.equal(overlays(p.dir).length, 1, 'the overlay exists while the check runs');
   const result = await run.done;
@@ -118,7 +118,7 @@ test('a typecheck that does not finish is stopped at the deadline, TERM-resistan
 for (const [signal, code] of [['SIGINT', 130], ['SIGTERM', 143]]) {
   test(`${signal} to the CLI stops the typecheck tree, TERM-resistant descendants included, and removes its temp file`, { skip: process.platform === 'win32' }, async () => {
     const p = hangingProject();
-    const run = start(['typecheck'], p);
+    const run = start(['typecheck', '--project'], p);
     await waitFor(join(p.base, 'grandchild.pid'));
     run.child.kill(signal);
     const result = await run.done;

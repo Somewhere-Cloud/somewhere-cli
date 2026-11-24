@@ -52,6 +52,7 @@ interface CheckerContract {
 interface ReferenceCheckVendor {
   checkerContract: CheckerContract;
   referenceCheckDeclarations(graphFiles: Record<string, string>): Record<string, string>;
+  isPlainPageScript(file: string, functions: Record<string, string> | undefined): boolean;
   isRuntimeEndpointGlobal(
     diag: { file?: string; line?: number; column?: number; message: string },
     functions: Record<string, string> | undefined,
@@ -178,7 +179,7 @@ export function parseDeployOutput(
     }
     if (contract.isIgnoredDiagnostic(code)) continue;
     const kind = contract.classifyDiagnostic(code);
-    if (!kind) continue;
+    if (!kind || (kind === 'type' && vendor.isPlainPageScript(file, functions))) continue;
     const finding = { kind, code, file, line: Number(lineText), column: Number(columnText), message };
     if (vendor.isRuntimeEndpointGlobal(finding, functions)) continue;
     findings.push(finding);
@@ -194,9 +195,9 @@ process.once('exit', () => { for (const cleanup of pendingCleanups) cleanup(); }
 /** Run the deploy's reference check over `projectDir`. Writes only a
  *  uniquely named dot-prefixed config and directory in the project root
  *  (outside the deploy's file set), removed when the check ends. */
-export async function runDeployCheck(projectDir: string): Promise<DeployCheckResult> {
+export async function runDeployCheck(projectDir: string, onFetch?: () => void): Promise<DeployCheckResult> {
   try {
-    return await startDeployCheck(projectDir);
+    return await startDeployCheck(projectDir, onFetch);
   } catch (error) {
     // Reading the project or writing the temporary files failed (a file
     // renamed mid-walk, an unreadable tsconfig): the check did not run.
@@ -207,7 +208,7 @@ export async function runDeployCheck(projectDir: string): Promise<DeployCheckRes
   }
 }
 
-async function startDeployCheck(projectDir: string): Promise<DeployCheckResult> {
+async function startDeployCheck(projectDir: string, onFetch?: () => void): Promise<DeployCheckResult> {
   const typescript = DEPLOY_CHECK_TYPESCRIPT_VERSION;
   const collected = collectFiles(projectDir);
   const graph: Record<string, string> = {};
@@ -217,6 +218,7 @@ async function startDeployCheck(projectDir: string): Promise<DeployCheckResult> 
   const checked = Object.keys(graph);
   if (checked.length === 0) return { ok: true, findings: [], typescript, checkedFiles: 0 };
 
+  const { command, args } = deployCheckTsc(projectDir);
   const tsconfigPath = join(projectDir, 'tsconfig.json');
   const own = projectCompilerOptions(existsSync(tsconfigPath) ? readFileSync(tsconfigPath, 'utf8') : undefined);
   // The config sits in the project root so `paths`/`baseUrl` resolve from
@@ -242,12 +244,12 @@ async function startDeployCheck(projectDir: string): Promise<DeployCheckResult> 
       compilerOptions: contract.localCheckCompilerOptions(own),
       files: [...checked, ...declarations],
     }));
+    if (command !== process.execPath) onFetch?.();
   } catch (error) {
     cleanup();
     throw error;
   }
 
-  const { command, args } = deployCheckTsc(projectDir);
   // Bounded, with its process group stopped on timeout or Ctrl-C: an npx
   // fetch of TypeScript never hangs or outlives the command.
   const run = await runBounded(command, [...args, '--project', config, '--pretty', 'false'], projectDir, { onAbort: cleanup });

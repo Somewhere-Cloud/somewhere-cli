@@ -2,11 +2,15 @@ import { build } from 'esbuild';
 import ts from 'typescript';
 import { createHash } from 'node:crypto';
 import { isBuiltin } from 'node:module';
+import { execFileSync } from 'node:child_process';
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { verifyDeclaredDataVendor } from './platform-source.mjs';
+
 const root = fileURLToPath(new URL('../', import.meta.url));
+verifyDeclaredDataVendor(root);
 const dist = join(root, 'dist');
 // The platform's pinned docs and starter tools also import these paths by
 // filename. Route those imports to the same implementation as the CLI.
@@ -176,3 +180,7 @@ for (const entry of entries) {
   writeFileSync(filename, lines.join('\n') + '\n');
 }
 writeFileSync(join(dist, 'index.js'), "export { runCli } from './lib/bundle.js';\nimport { runCli } from './lib/bundle.js';\nif (import.meta.main) void runCli();\n");
+
+if (process.env.SOMEWHERE_PLATFORM_SOURCE) {
+  execFileSync(process.execPath, [join(root, 'scripts/vendor-declared-data.mjs'), process.env.SOMEWHERE_PLATFORM_SOURCE, '--check'], { stdio: 'inherit' });
+}

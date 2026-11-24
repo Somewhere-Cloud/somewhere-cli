@@ -1123,9 +1123,13 @@ type SomewhereDbColumn<T extends string> = Extract<keyof SomewhereDbRow<T>, stri
 type SomewhereDbRelations<T extends string> = __SomewhereDeclared<T, 'relations', Record<string, unknown>>;
 type SomewhereDbRelationName<T extends string> = Extract<keyof SomewhereDbRelations<T>, string>;
 // A column list narrows the rows to those columns; each included relation adds
-// its related rows under its name.
+// its related rows under its name. An empty list selects all columns, just as
+// the structured query does when columns is omitted.
+type __SomewhereDbSelectedColumns<T extends string, C> = [C] extends [readonly []]
+  ? keyof SomewhereDbRow<T>
+  : Extract<C extends readonly (infer K)[] ? K : never, keyof SomewhereDbRow<T>>;
 type SomewhereDbReadRow<T extends string, C, I> = T extends keyof SomewhereDeclaredTables
-  ? Pick<SomewhereDbRow<T>, Extract<C extends readonly (infer K)[] ? K : never, keyof SomewhereDbRow<T>>>
+  ? Pick<SomewhereDbRow<T>, __SomewhereDbSelectedColumns<T, C>>
     & Pick<SomewhereDbRelations<T>, Extract<I extends readonly (infer K)[] ? K : never, keyof SomewhereDbRelations<T>>>
   : Record<string, unknown>;
 type SomewhereDbReadOptionsFor<T extends string, C, I> = Omit<SomewhereDbReadOptions, 'columns' | 'include'> & {
@@ -4511,8 +4515,8 @@ var require_consumer_contract = __commonJS({
   "worker/containers/compile/consumer-contract.cjs"(exports2, module2) {
     "use strict";
     var CONSUMER_CONTRACT2 = Object.freeze({
-      version: 39,
-      digest: "735f80e8c71b5c115e57aa84506faadeba2ca50196908ea26766c17c79cf0262"
+      version: 40,
+      digest: "5a319ea5f381a0b3a0847d0b7a1ee3504b434c364fa7dfa338ebf71da502e329"
     });
     var MEMBERSHIPS = "memberships: table({ id: id(), team_id: text(), member_id: text() }, { scope: owner(), client: { read: true } }),";
     var SHARES = "shares: table({ id: id(), grantee_id: text() }, { scope: owner(), client: { read: true, create: ['grantee_id'], delete: true }, unique: [['user_id', 'grantee_id']] }),";
@@ -4629,6 +4633,7 @@ __export(declared_data_vendor_entry_exports, {
   declaredTablesFromFiles: () => declaredTablesFromFiles,
   filesDeclarationFromFiles: () => filesDeclarationFromFiles,
   generateFromFiles: () => generateFromFiles,
+  isPlainPageScript: () => isPlainPageScript,
   isRuntimeEndpointGlobal: () => isRuntimeEndpointGlobal,
   localDeclarationFromFiles: () => localDeclarationFromFiles,
   parseConsumerContractHeader: () => import_consumer_contract.parseConsumerContractHeader,
@@ -8648,6 +8653,11 @@ function referenceCheckDeclarations(graphFiles) {
     hasSchema: graphFiles["db/schema.ts"] !== void 0
   });
 }
+function isPlainPageScript(file, functions) {
+  if (!/\.(?:js|jsx|mjs|cjs)$/i.test(file)) return false;
+  if (typeof functions?.[file] === "string") return false;
+  return !file.startsWith("functions/");
+}
 var RUNTIME_ENDPOINT_ACCESS = /^sw(?:\s|\/\*[\s\S]*?\*\/|\/\/[^\n]*\n)*\??\.(?:\s|\/\*[\s\S]*?\*\/|\/\/[^\n]*\n)*endpoint(?![\w$])/;
 function isRuntimeEndpointGlobal(diag, functions) {
   if (!/^Cannot find name 'sw'\./.test(diag.message)) return false;
@@ -8692,6 +8702,7 @@ function filesDeclarationFromFiles(files) {
   declaredTablesFromFiles,
   filesDeclarationFromFiles,
   generateFromFiles,
+  isPlainPageScript,
   isRuntimeEndpointGlobal,
   localDeclarationFromFiles,
   parseConsumerContractHeader,

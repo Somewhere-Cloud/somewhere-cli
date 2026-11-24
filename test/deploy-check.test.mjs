@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -153,6 +153,37 @@ test('sw.endpoint is defined only in function modules; other bare sw stays repor
   const result = await runDeployCheck(dir);
   assert.deepEqual(findings(result), ['reference:TS2304@api/bare.ts:1', 'reference:TS2304@src/main.ts:1']);
   assert.deepEqual(readdirSync(dir).filter((name) => name.startsWith('.__somewhere')), [], 'temporary config and declarations are removed');
+});
+
+test('default typecheck checks uploaded routes outside tsconfig include and preserves empty selects', (t) => {
+  const route = `export default async function (_req: Request, sw: SomewhereRuntimeContext) {
+    const { data } = await sw.db.server.from('slots', { columns: [] });
+    return Response.json(data[0].start);
+  }`;
+  const dir = project({
+    'db/schema.ts': `import { id, schema, serverOnly, table, text } from 'somewhere/db';
+      export default schema({ slots: table({ id: id(), start: text() }, { scope: serverOnly() }) });`,
+    'tsconfig.json': JSON.stringify({ compilerOptions: { strict: true, skipLibCheck: true, target: 'ES2022', module: 'ESNext', moduleResolution: 'Bundler' }, include: ['src'] }),
+    'src/main.ts': 'export const booking = true;',
+    'src/browser.js': 'export const label = ({ title: "Booking" }).description;',
+    'api/slots.ts': route,
+  });
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const bin = fileURLToPath(new URL('../bin/somewhere.js', import.meta.url));
+  const check = (...args) => {
+    const result = spawnSync(process.execPath, [bin, 'typecheck', dir, '--json', ...args], {
+      encoding: 'utf8', env: { ...process.env, SOMEWHERE_CONFIG_DIR: join(dir, '.config') },
+    });
+    return { status: result.status, body: JSON.parse(result.stdout) };
+  };
+  const clean = check();
+  assert.equal(clean.status, 0, JSON.stringify(clean.body));
+  assert.equal(clean.body.typescript, DEPLOY_CHECK_TYPESCRIPT_VERSION);
+  writeFileSync(join(dir, 'api/slots.ts'), route.replace('columns: []', "columns: ['id']"));
+  const failed = check();
+  assert.equal(failed.status, 1, JSON.stringify(failed.body));
+  assert.deepEqual(failed.body.errors.map(({ file, code }) => [file, code]), [['api/slots.ts', 'TS2339']]);
+  assert.equal(check('--project').status, 0);
 });
 
 test('a config or global error beside located findings means the check did not run', () => {

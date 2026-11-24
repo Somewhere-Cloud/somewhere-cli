@@ -223,7 +223,7 @@ test('non-TTY deploy prints collection once across all preflight warnings and ke
 });
 
 
-test('typecheck and deploy use the installed compiler or pinned fallback, with identical upload rules', async () => {
+test('typecheck --project and deploy use the installed compiler or pinned fallback, with identical upload rules', async () => {
   for (const via of ['project', 'npx']) {
     const { HOME, dir } = project();
     writeFileSync(join(dir, 'tsconfig.json'), JSON.stringify({ include: ['api/**/*.ts'] }));
@@ -245,7 +245,7 @@ export const GET = () => { sw.auth.server.grantRole(); return VALUE; };
     writeFileSync(route, source.replace('VALUE', 'missing'));
     await withPlatform([], async (apiUrl, requests) => {
       const env = { HOME, USERPROFILE: HOME, SOMEWHERE_API_URL: apiUrl };
-      const checked = await run(['typecheck', '--json'], { cwd: dir, env });
+      const checked = await run(['typecheck', '--project', '--json'], { cwd: dir, env });
       assert.equal(checked.status, 1, checked.all);
       const verdict = JSON.parse(checked.stdout);
       assert.equal(verdict.via, via);
@@ -262,7 +262,7 @@ export const GET = () => { sw.auth.server.grantRole(); return VALUE; };
       }
 
       writeFileSync(route, source.replace('VALUE', '42'));
-      const clean = await run(['typecheck', '--json'], { cwd: dir, env });
+      const clean = await run(['typecheck', '--project', '--json'], { cwd: dir, env });
       assert.equal(clean.status, 0, clean.all);
       assert.deepEqual(JSON.parse(clean.stdout).errors, []);
       const deployed = await run(['deploy', '--json'], { cwd: dir, env });

@@ -321,8 +321,9 @@ test('advisor, MCP docs topics, and catalog use the authenticated platform help 
     assert.equal(docs.status, 0, docs.stderr);
     const docsPayload = JSON.parse(docs.stdout);
     assert.equal(docsPayload.topic, 'sw.db');
-    assert.equal(docsPayload.content, '# sw.db\n\nDatabase reference.');
-    assert.equal('complete' in docsPayload, false, 'an old platform gives no status line, so nothing is guessed');
+    assert.equal(docsPayload.view, 'full');
+    assert.equal(docsPayload.complete, true);
+    assert.equal(docsPayload.content, '[docs] topic=sw.db view=full complete=true shown=27 full=27\n# sw.db\n\nDatabase reference.');
 
     const docsFull = await run(['docs', 'sw.db', '--full', '--json'], env);
     assert.equal(docsFull.status, 0, docsFull.stderr);
@@ -386,7 +387,7 @@ test('advisor, MCP docs topics, and catalog use the authenticated platform help 
     assert.match(catalogHuman.stdout, /db_query, db_migrate/);
 
     assert.deepEqual(calls.slice(2).map((call) => [call.name, call.arguments]), [
-      ['docs', { topic: 'sw.db' }],
+      ['docs', { topic: 'sw.db', detail: 'full' }],
       ['docs', { topic: 'sw.db', detail: 'full' }],
       ['docs', { topic: 'sw.db', section: 'where' }],
       ['docs', { topic: 'sw.db', section: 'legacy' }],

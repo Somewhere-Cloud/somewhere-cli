@@ -10,7 +10,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readFileSync } from 'node:fs';
-import { renderDocsIndex, searchPublicDocs, parsePublicDocsGroups } from '../dist/commands/docs.js';
+import { renderDocsIndex, parsePublicDocsGroups } from '../dist/commands/docs.js';
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 const distIndex = join(repoRoot, 'dist', 'index.js');
@@ -36,6 +36,16 @@ const MANIFEST = {
     { id: 'search', title: 'Search — full-text search', section: 'primitives', body: 'Index documents with sw.search.\n' },
   ],
 };
+const SEARCH_RESULTS = {
+  'magic link': [
+    { topic: 'sw.auth', title: MANIFEST.pages[0].title, section: 'expiry', heading: 'Expiry',
+      content: 'A magic link expires after 15 minutes.', complete: true },
+    { topic: 'sw.auth', title: MANIFEST.pages[0].title, section: 'magic-links', heading: 'Magic links',
+      content: 'Send a magic link with sw.auth.sendMagicLink(email).', complete: true },
+  ],
+  UTC: [{ topic: 'cron', title: MANIFEST.pages[1].title, section: null, heading: null,
+    content: 'Schedules run in UTC.', complete: true }],
+};
 
 function run(args, env = {}) {
   return new Promise((resolvePromise) => {
@@ -55,9 +65,17 @@ async function withServer(fn) {
   const requests = [];
   const server = createServer((req, res) => {
     requests.push(req.url);
-    if (req.url === '/docs-manifest.json') {
+    const url = new URL(req.url, 'http://localhost');
+    if (url.pathname === '/docs-manifest.json') {
       res.setHeader('Content-Type', 'application/json');
       res.end(JSON.stringify(MANIFEST));
+      return;
+    }
+    if (url.pathname === '/docs-search.json') {
+      const topic = url.searchParams.get('topic');
+      const results = (SEARCH_RESULTS[url.searchParams.get('q')] ?? []).filter(match => !topic || match.topic === topic);
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ results, total: results.length }));
       return;
     }
     res.statusCode = 404;
@@ -82,13 +100,13 @@ test('bare docs prints the grouped topic index and how to open, never the manual
     assert.match(result.stdout.slice(0, 1100), /Owner\/staff record.*parent\(\)/);
     assert.match(result.stdout, /Primitives\n {2}sw\.auth\s+Auth — sign-in for your users/);
     assert.match(result.stdout, /Open a section: {3}somewhere docs <topic> --section <id>/);
-    assert.match(result.stdout, /Search all docs: {2}somewhere docs search <term>/);
+    assert.match(result.stdout, /Search all docs: {2}somewhere docs --search "<words>"/);
     assert.match(result.stdout, /Full manual: +somewhere docs --full/);
   });
 });
 
 test('docs search returns topic, section id, snippet and the command that opens it', async () => {
-  await withServer(async (base) => {
+  await withServer(async (base, requests) => {
     const result = await run(['docs', 'search', 'magic', 'link', '--json'], { SOMEWHERE_DOCS_BASE: base });
     assert.equal(result.status, 0, result.stderr);
     const body = JSON.parse(result.stdout);
@@ -101,26 +119,32 @@ test('docs search returns topic, section id, snippet and the command that opens 
 
     const text = await run(['docs', 'search', 'UTC'], { SOMEWHERE_DOCS_BASE: base });
     assert.equal(text.status, 0, text.stderr);
-    assert.match(text.stdout, /^cron {2}Cron — scheduled triggers\n {2}Schedules run in UTC\.\n {2}somewhere docs cron --full/m);
+    assert.match(text.stdout, /^cron {2}Cron — scheduled triggers\n\nSchedules run in UTC\.\n\nsomewhere docs cron --full/m);
 
     const none = await run(['docs', 'search', 'zebra'], { SOMEWHERE_DOCS_BASE: base });
     assert.equal(none.status, 0);
-    assert.match(none.stdout, /No docs sections mention "zebra"/);
+    assert.match(none.stdout, /No docs sections match "zebra"/);
+    const blank = await run(['docs', '--search', '   '], { SOMEWHERE_DOCS_BASE: base });
+    assert.equal(blank.status, 1);
+    assert.match(blank.stderr, /Enter search words/);
+    assert.deepEqual(requests, ['/docs-search.json?q=magic+link', '/docs-search.json?q=UTC', '/docs-search.json?q=zebra']);
   });
 });
 
 test('`docs search` with no term still opens the search topic; trailing terms search within a topic', async () => {
-  await withServer(async (base) => {
+  await withServer(async (base, requests) => {
     const topic = await run(['docs', 'search'], { SOMEWHERE_DOCS_BASE: base });
     assert.equal(topic.status, 0, topic.stderr);
     assert.match(topic.stdout, /Index documents with sw\.search/);
     const stray = await run(['docs', 'sw.auth', 'extra'], { SOMEWHERE_DOCS_BASE: base });
     assert.equal(stray.status, 0);
-    assert.match(stray.stdout, /No docs sections in sw.auth mention "extra"/);
-    const scoped = await run(['docs','sw.auth','magic','link','--json'], { SOMEWHERE_DOCS_BASE: base });
-    assert.equal(scoped.status,0);
-    assert.equal(JSON.parse(scoped.stdout).topic,'sw.auth');
-    assert.ok(JSON.parse(scoped.stdout).results.every(r => r.topic === 'sw.auth'));
+    assert.match(stray.stdout, /No docs sections in sw\.auth match "extra"/);
+    const scoped = await run(['docs', 'sw.auth', 'magic', 'link', '--json'], { SOMEWHERE_DOCS_BASE: base });
+    assert.equal(scoped.status, 0, scoped.stderr);
+    const body = JSON.parse(scoped.stdout);
+    assert.equal(body.topic, 'sw.auth');
+    assert.deepEqual(body.results.map(result => result.topic), ['sw.auth', 'sw.auth']);
+    assert.deepEqual(requests, ['/docs-manifest.json', '/docs-search.json?q=extra&topic=sw.auth', '/docs-search.json?q=magic+link&topic=sw.auth']);
   });
 });
 
@@ -145,13 +169,11 @@ test('docs warn when they describe a newer minor CLI, and stay quiet for a patch
   });
 });
 
-test('index and search helpers: ungrouped manifests still list every topic', () => {
+test('ungrouped manifests still list every topic', () => {
   const pages = MANIFEST.pages;
   const index = renderDocsIndex(pages, parsePublicDocsGroups({}));
   assert.match(index, /Topics\n {2}sw\.auth/);
   assert.match(index, / {2}search +Search — full-text search/);
-  assert.deepEqual(searchPublicDocs(pages, '   '), []);
-  assert.equal(searchPublicDocs(pages, 'PASSWORD')[0].section, 'passwords', 'case-insensitive, innermost section');
 });
 
 test('root and init help lead new apps to the generated contract', async () => {

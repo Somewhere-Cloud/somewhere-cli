@@ -197,6 +197,13 @@ test('advisor, MCP docs topics, and catalog use the authenticated platform help 
   };
 
   const server = createServer((req, res) => {
+    if (req.method === 'GET' && req.url.startsWith('/docs/sw.db.txt?')) {
+      publicRequests.push(req.url);
+      assert.equal(req.headers.authorization, undefined);
+      res.statusCode = 404;
+      res.end();
+      return;
+    }
     if (req.method === 'GET' && req.url === '/docs-manifest.json') {
       publicRequests.push(req.url);
       assert.equal(req.headers.authorization, undefined);
@@ -249,7 +256,7 @@ test('advisor, MCP docs topics, and catalog use the authenticated platform help 
                 ? ['legacy', 'unknown'].includes(rpc.params.arguments.section)
                   ? '# sw.db\n\nDatabase reference.'
                   : '[docs] topic=sw.db view=section complete=false shown=9 full=27\n## Where\n'
-                : '# sw.db\n\nDatabase reference.'
+                : '[docs] topic=sw.db view=summary complete=true shown=27 full=27\nShowing the whole topic (27 characters).\n\n# sw.db\n\nDatabase reference.'
             : JSON.stringify(catalog, null, 2);
         if (rpc.params.name === 'catalog' && rpc.params.arguments.load) {
           text = JSON.stringify({ loaded: [rpc.params.arguments.load], count: 1, tools: [cronCreate] }, null, 2);
@@ -321,9 +328,9 @@ test('advisor, MCP docs topics, and catalog use the authenticated platform help 
     assert.equal(docs.status, 0, docs.stderr);
     const docsPayload = JSON.parse(docs.stdout);
     assert.equal(docsPayload.topic, 'sw.db');
-    assert.equal(docsPayload.view, 'full');
+    assert.equal(docsPayload.view, 'summary');
     assert.equal(docsPayload.complete, true);
-    assert.equal(docsPayload.content, '[docs] topic=sw.db view=full complete=true shown=27 full=27\n# sw.db\n\nDatabase reference.');
+    assert.equal(docsPayload.content, '[docs] topic=sw.db view=summary complete=true shown=27 full=27\nShowing the whole topic (27 characters).\n\n# sw.db\n\nDatabase reference.');
 
     const docsFull = await run(['docs', 'sw.db', '--full', '--json'], env);
     assert.equal(docsFull.status, 0, docsFull.stderr);
@@ -345,7 +352,12 @@ test('advisor, MCP docs topics, and catalog use the authenticated platform help 
     assert.equal(unknownSection.status, 1);
     assert.equal(JSON.parse(unknownSection.stdout).error, 'DOCS_SECTION_NOT_FOUND');
     assert.doesNotMatch(unknownSection.stdout, /Recovered current section|Unrelated full-body evidence/);
-    assert.deepEqual(publicRequests, ['/docs-manifest.json', '/docs-manifest.json']);
+    assert.deepEqual(publicRequests, [
+      '/docs/sw.db.txt?view=section&section=legacy',
+      '/docs-manifest.json',
+      '/docs/sw.db.txt?view=section&section=unknown',
+      '/docs-manifest.json',
+    ]);
     const docsBoth = await run(['docs', 'sw.db', '--full', '--section', 'where'], env);
     assert.equal(docsBoth.status, 1);
     assert.match(docsBoth.stderr, /--full or --section/);
@@ -387,7 +399,7 @@ test('advisor, MCP docs topics, and catalog use the authenticated platform help 
     assert.match(catalogHuman.stdout, /db_query, db_migrate/);
 
     assert.deepEqual(calls.slice(2).map((call) => [call.name, call.arguments]), [
-      ['docs', { topic: 'sw.db', detail: 'full' }],
+      ['docs', { topic: 'sw.db' }],
       ['docs', { topic: 'sw.db', detail: 'full' }],
       ['docs', { topic: 'sw.db', section: 'where' }],
       ['docs', { topic: 'sw.db', section: 'legacy' }],

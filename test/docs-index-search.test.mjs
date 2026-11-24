@@ -144,7 +144,12 @@ test('`docs search` with no term still opens the search topic; trailing terms se
     const body = JSON.parse(scoped.stdout);
     assert.equal(body.topic, 'sw.auth');
     assert.deepEqual(body.results.map(result => result.topic), ['sw.auth', 'sw.auth']);
-    assert.deepEqual(requests, ['/docs-manifest.json', '/docs-search.json?q=extra&topic=sw.auth', '/docs-search.json?q=magic+link&topic=sw.auth']);
+    assert.deepEqual(requests, [
+      '/docs/search.txt?view=summary',
+      '/docs-manifest.json',
+      '/docs-search.json?q=extra&topic=sw.auth',
+      '/docs-search.json?q=magic+link&topic=sw.auth',
+    ]);
   });
 });
 

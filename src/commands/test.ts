@@ -10,7 +10,7 @@ import { describeScriptResults, hasSpecFiles, isScript, lastFailedScripts, listS
 
 export function registerTest(program: Command): void {
   program.command('test [files...]')
-    .description('Read the live release\'s latest checks, run in Somewhere\'s browser: your saved checks/*.json journeys, the stranger and signed-out access probes and a page crawl (the same check that runs after every deploy). Exits 0 when they pass, 1 for a named failure, or 2 when a check or cleanup could not finish. With a file, runs that tests/*.mjs or *.cjs script; a project with tests/**/*.spec.ts runs its Playwright specs (--preview: this folder\'s open preview)')
+    .description("Read the deployed app's smoke check. It checks the built-in data path, pages and saved browser flows, and reports function errors with evidence. Use @somewhere-cloud/cli/testing for your own app tests. A named file runs that script.")
     .option('--preview', 'Test this folder\'s open preview (its own users, data copy and captured mail), pinned to the version saved when the run starts. Production is never touched.')
     .option('--workers <count>', 'Parallel workers', '5')
     .option('--again', 'Start a fresh run of the checks on the live release instead of reading the result of the last deploy\'s run')

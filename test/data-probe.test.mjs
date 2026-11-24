@@ -15,7 +15,7 @@ const cli = fileURLToPath(new URL('../dist/index.js', import.meta.url));
 const exec = promisify(execFile);
 const digest = 'a'.repeat(64);
 const bearer = session => ['Bearer', session].join(' ');
-const access = { filtered: true, by: 'owner' };
+const access = { filtered: true };
 
 test('data command fills the contract and acts only as the selected app user', async () => {
   const root = mkdtempSync(join(tmpdir(), 'data-probe-'));

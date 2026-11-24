@@ -219,7 +219,7 @@ as both users:
 \`\`\`sh
 ID=$(somewhere data create notes --as alice --values '{"title":"Access test"}' | jq -er 'select(.status == 200 and .kind == "ok") | .data.id') &&
 somewhere data get notes --as alice --id "$ID" | jq -e '.status == 200 and .kind == "ok"' &&
-somewhere data get notes --as bob --id "$ID" | jq -e '.status == 200 and .kind == "empty" and .data == null and .access == {"filtered":true,"by":"owner"}'
+somewhere data get notes --as bob --id "$ID" | jq -e '.status == 200 and .kind == "empty" and .data == null and .access == {"filtered":true}'
 \`\`\`
 
 200 with access.filtered means the rule constrained the read, even when rows

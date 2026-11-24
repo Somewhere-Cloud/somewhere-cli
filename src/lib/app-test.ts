@@ -44,7 +44,7 @@ export interface DataResult {
   data: unknown;
   error: string | null;
   message: string | null;
-  access?: { filtered: true; by: string };
+  access?: { filtered: true };
   current_contract_digest?: string;
 }
 type Who = Page | BrowserContext | APIRequestContext;
@@ -139,7 +139,7 @@ export function classifyData(status: number, raw: unknown, operation?: string): 
   const error = typeof body?.error === 'string' ? body.error : null;
   const message = typeof body?.message === 'string' ? body.message : null;
   const data = body?.data ?? null;
-  const access = body?.access as { filtered?: unknown; by?: unknown } | undefined;
+  const access = body?.access as { filtered?: unknown } | undefined;
   const digest = body?.current_contract_digest;
   const writing = operation === 'create' || operation === 'update' || operation === 'delete';
   let kind: DataKind = 'error';
@@ -153,7 +153,7 @@ export function classifyData(status: number, raw: unknown, operation?: string): 
   else if (status === 404 && error === 'DATA_NOT_FOUND' && (operation === undefined || operation === 'update' || operation === 'delete')) kind = 'missing-or-refused';
   return {
     status, kind, data, error, message,
-    ...(status === 200 && access?.filtered === true && typeof access.by === 'string' ? { access: { filtered: true, by: access.by } } : {}),
+    ...(status === 200 && access?.filtered === true ? { access: { filtered: true } } : {}),
     ...(kind === 'stale-contract' && typeof digest === 'string' ? { current_contract_digest: digest } : {}),
   };
 }

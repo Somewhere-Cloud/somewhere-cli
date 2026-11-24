@@ -33,8 +33,8 @@ export const MANIFEST_FILE = 'manifest.json';
 export const CLEANUP_RECEIPT_FILE = 'cleanup-receipt.json';
 export const MAX_PER_CREATE = 5;
 const ACTOR = /^[a-z][a-z0-9-]{0,31}$/;
-const ACCESS_COOKIE = '__Host-token';
-const REFRESH_COOKIE = '__Host-sw_refresh_token';
+export const ACCESS_COOKIE = '__Host-token';
+export const REFRESH_COOKIE = '__Host-sw_refresh_token';
 
 export type TestRole = 'user' | 'admin';
 export interface ActorSpec { name: string; role: TestRole }
@@ -144,21 +144,24 @@ export function readManifest(root: string): TestManifest | null {
 }
 
 /** Read the prepared actor's app session for this exact linked target. */
-export function preparedActorSession(root: string, target: { projectId: string; origin: string }, name: string): string {
+export function preparedActorState(root: string, target: { projectId: string; origin: string }, name: string): {
+  path: string; state: PlaywrightStorageState; access: string;
+} {
   const manifest = readManifest(root);
   const actor = manifest?.actors.find(item => item.name === name);
   if (!actor || manifest?.project_id !== target.projectId || manifest.origin !== target.origin) {
     throw new Error('No prepared actor for this app. Run somewhere test-users prepare with the actor name.');
   }
+  const path = join(stateDir(root), actor.state_file);
   const domain = new URL(target.origin).hostname;
-  let state: { cookies?: { name: string; domain: string; path: string; secure: boolean; value: string }[] } | null;
-  try { state = JSON.parse(readFileSync(join(stateDir(root), actor.state_file), 'utf8')); }
+  let state: PlaywrightStorageState | null;
+  try { state = JSON.parse(readFileSync(path, 'utf8')) as PlaywrightStorageState; }
   catch { throw new Error('Could not read the saved test user session.'); }
-  const session = Array.isArray(state?.cookies)
+  const token = Array.isArray(state?.cookies)
     ? state.cookies.find(cookie => cookie?.name === ACCESS_COOKIE && cookie.domain === domain && cookie.path === '/' && cookie.secure)?.value
     : undefined;
-  if (typeof session !== 'string' || !session) throw new Error('The prepared actor has no app session in its saved state.');
-  return session;
+  if (typeof token !== 'string' || !token || !state) throw new Error('The prepared actor has no app session in its saved state.');
+  return { path, state: { cookies: state.cookies, origins: state.origins ?? [] }, access: token };
 }
 
 export function writeManifest(root: string, manifest: TestManifest): void {
@@ -175,6 +178,11 @@ export function tokenTimes(accessToken: string): { iat: number; exp: number } | 
   } catch {
     return null;
   }
+}
+
+export function testAccessNeedsRefresh(token: string | undefined, now = Date.now()): boolean {
+  const times = token && tokenTimes(token);
+  return !!times && times.exp * 1000 <= now + 5_000;
 }
 
 export interface IssuedIdentity {

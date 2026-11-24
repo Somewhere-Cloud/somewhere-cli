@@ -1,7 +1,7 @@
 import { ApiClient } from './client.js';
 import { getToken, loadProjectConfig } from './config.js';
 import { fixtureTestTarget, type TestTarget } from './test-target.js';
-import type { PlaywrightStorageState } from './test-identities.js';
+import { ACCESS_COOKIE, REFRESH_COOKIE, testAccessNeedsRefresh, tokenTimes, type PlaywrightStorageState } from './test-identities.js';
 
 // Node 22.19+: native fetch, cookie storage and TypeScript; no test dependencies.
 export class UserSession {
@@ -9,17 +9,19 @@ export class UserSession {
   private cookies = new Map<string, string>();
   private target?: Promise<TestTarget>;
   private readonly seed: PlaywrightStorageState;
+  private refreshing?: Promise<void>;
   constructor(baseUrl: string, options: { target?: TestTarget; storageState?: PlaywrightStorageState } = {}) {
     this.origin = new URL(baseUrl).origin;
     if (options.target && options.target.origin !== this.origin) throw new Error('The test target belongs to a different app.');
     this.target = options.target ? Promise.resolve(options.target) : undefined;
-    this.seed = options.storageState ?? { cookies: [], origins: [] };
+    this.seed = options.storageState ? structuredClone(options.storageState) : { cookies: [], origins: [] };
     for (const cookie of this.seed.cookies) {
       if (cookie.domain === new URL(this.origin).hostname) this.cookies.set(cookie.name, cookie.value);
     }
   }
   /** Standard Playwright state. Treat this value like a signed-in session. */
-  storageState(): PlaywrightStorageState {
+  async storageState(): Promise<PlaywrightStorageState> {
+    await this.ensureFresh();
     const url = new URL(this.origin);
     return {
       cookies: [...this.cookies].map(([name, value]) => {
@@ -27,12 +29,43 @@ export class UserSession {
         return seed && seed.value === value ? { ...seed }
           : { name, value, domain: url.hostname, path: '/', expires: -1, httpOnly: true, secure: url.protocol === 'https:', sameSite: 'Lax' };
       }),
-      origins: structuredClone(this.seed.origins),
+      origins: this.seed.origins.map((entry) => ({ ...entry, localStorage: entry.localStorage.map((item) => {
+        if (entry.origin !== this.origin) return { ...item };
+        const access = this.cookies.get(ACCESS_COOKIE);
+        const refresh = this.cookies.get(REFRESH_COOKIE);
+        if (item.name === 'sw_access_token' && access) return { ...item, value: access };
+        if (item.name !== 'sw_auth' || !access || !refresh) return { ...item };
+        const state = JSON.parse(item.value) as Record<string, unknown>;
+        const times = tokenTimes(access);
+        return { ...item, value: JSON.stringify({ ...state, token: access, access_token: access, refresh_token: refresh,
+          ...(times ? { expires_in: times.exp - times.iat, expires_at: times.exp * 1000 } : {}) }) };
+      }) })),
     };
   }
   async request(path: string, init: RequestInit = {}): Promise<Response> {
     const url = new URL(path, this.origin);
     if (url.origin !== this.origin) throw new Error('Fixture requests must stay on the app origin');
+    if (url.pathname !== '/api/auth/refresh') await this.ensureFresh();
+    return this.send(url, init);
+  }
+  private async ensureFresh(): Promise<void> {
+    if (this.refreshing) return this.refreshing;
+    if (!this.cookies.has(REFRESH_COOKIE) || !testAccessNeedsRefresh(this.cookies.get(ACCESS_COOKIE))) return;
+    const refreshing = this.refresh();
+    this.refreshing = refreshing;
+    try { await refreshing; } finally { this.refreshing = undefined; }
+  }
+  private async refresh(): Promise<void> {
+    const previous = this.cookies.get(ACCESS_COOKIE);
+    const response = await this.send(new URL('/api/auth/refresh', this.origin), { method: 'POST', signal: AbortSignal.timeout(10_000) });
+    if (!response.ok) throw new Error(`The app test session could not refresh (HTTP ${response.status}).`);
+    await response.body?.cancel();
+    const next = this.cookies.get(ACCESS_COOKIE);
+    if (!next || next === previous || testAccessNeedsRefresh(next) || !this.cookies.has(REFRESH_COOKIE)) {
+      throw new Error('The app did not return renewed test-session cookies.');
+    }
+  }
+  private async send(url: URL, init: RequestInit): Promise<Response> {
     const headers = new Headers(init.headers);
     headers.set('Origin', this.origin);
     headers.set('Cookie', [...this.cookies].map(([k, v]) => k + '=' + v).join('; '));

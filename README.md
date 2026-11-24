@@ -346,6 +346,20 @@ From the linked app folder, `session.data('notes', { operation: 'list' })` sends
 the signed-in session, app Origin and deployed contract. For a shell probe, run
 `somewhere test-users prepare alice`, then `somewhere data list notes --as alice`.
 The command prints the HTTP status, outcome and rows or error as JSON.
+
+To reuse the prepared user in your own Playwright script, run
+`somewhere test-users prepare alice` in the linked app folder:
+
+```ts
+import { data } from '@somewhere-cloud/cli/testing';
+const alice = await browser.newContext({ storageState: '.somewhere/test/alice.state.json' });
+const response = await data(alice.request, 'notes', { operation: 'list' });
+```
+
+`data()` uses the linked app's contract and the context's own session. Save the
+context's storage state back to the same file if the app refreshes the session.
+Run `somewhere test-users cleanup` when finished.
+
 `expectRefusal(response, 403, 'DATA_ACCESS_DENIED')` checks the exact status and
 code. For an empty scoped read, also check that the owner can read the same fixture.
 

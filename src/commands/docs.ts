@@ -1,8 +1,6 @@
-import { existsSync } from 'node:fs';
-import { join } from 'node:path';
-import { CLI_PACKAGE_ROOT } from '../lib/package-root.js';
 import { cliInvocation } from '../lib/cli-invocation.js';
 import { fetchWithProxy as fetch } from '../lib/http.js';
+import { localDocsVersion, saveLocalDocs } from '../lib/local-docs.js';
 import { once } from 'node:events';
 import { Command } from 'commander';
 import { hasUsableCredential } from '../lib/config.js';
@@ -61,6 +59,29 @@ const ALIASES: Record<string, string> = {
  * page carries its actual canonical body; do not reconstruct topics from
  * references in the long-form corpus. */
 const PUBLIC_MANIFEST_PATH = '/docs-manifest.json';
+const DOCS_SEARCH_PATH = '/docs-search.json';
+
+function docsVersion(value: unknown): string | undefined {
+  return typeof value === 'string' && /^[a-f0-9]{16}$/.test(value) ? value : undefined;
+}
+
+async function warnIfLocalDocsOlder(platformVersion?: string): Promise<void> {
+  try {
+    const local = localDocsVersion();
+    if (!local) return;
+    if (!platformVersion) {
+      const response = await fetch(DOCS_BASE + PUBLIC_MANIFEST_PATH, { method: 'HEAD' });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      platformVersion = docsVersion(response.headers.get('etag')?.replace(/^(?:W\/)?"|"$/g, ''));
+    }
+    if (!platformVersion) throw new Error('the platform did not return a docs version');
+    if (local !== platformVersion) {
+      console.error(`The Markdown copy in .somewhere/docs/ is from an older version (${local}). Current platform docs: ${platformVersion}. Refresh with ${cliInvocation()} docs pull.`);
+    }
+  } catch (cause) {
+    console.error(`Could not check the local Markdown version (${cause instanceof Error ? cause.message : String(cause)}). Refresh with ${cliInvocation()} docs pull.`);
+  }
+}
 
 export interface PublicDocsSection {
   id: string;
@@ -155,7 +176,7 @@ export function renderPublicDocsView(page: PublicDocsPage, view: DocsView): Rend
   if (view.kind === 'full') return { content: renderPublicPage(page), view: 'full', complete: true };
   if (view.kind === 'default') {
     return page.summary
-      ? { content: withNewline(page.summary), view: 'summary', complete: page.summary_complete === true }
+      ? { content: page.summary_complete === true ? withNewline(page.summary) : topicSummary(page.summary, page.id, page.body.length), view: 'summary', complete: page.summary_complete === true }
       : { content: renderPublicPage(page), view: 'full', complete: true };
   }
   const sections = parseSections(page.sections, page.body.length);
@@ -219,11 +240,6 @@ function normalizeSectionHeading(value: string): string {
     .replace(/`([^`]*)`/g, '$1').replace(/\*\*([^*]+)\*\*/g, '$1')
     .replace(/\*([^*]+)\*/g, '$1').replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
     .toLowerCase().replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-').replace(/-+/g, '-').slice(0, 80);
-}
-
-/** Manifest headings are the raw markdown line (`## Reads`). */
-function headingText(section: PublicDocsSection): string {
-  return section.heading.replace(/^#+\s*/, '').trim();
 }
 
 function withNewline(value: string): string {
@@ -310,7 +326,7 @@ export function findPublicDocsPage(
   return byId(requested) ?? (target ? byId(target) : undefined);
 }
 
-async function fetchPublicManifestWithGroups(): Promise<{ pages: PublicDocsPage[]; groups: PublicDocsGroup[]; aliases: Record<string, string> }> {
+async function fetchPublicManifestWithGroups(): Promise<{ pages: PublicDocsPage[]; groups: PublicDocsGroup[]; aliases: Record<string, string>; version?: string }> {
   let res: Awaited<ReturnType<typeof fetch>>;
   try {
     res = await fetch(DOCS_BASE + PUBLIC_MANIFEST_PATH, {
@@ -327,14 +343,11 @@ async function fetchPublicManifestWithGroups(): Promise<{ pages: PublicDocsPage[
   }
   try {
     const body = await res.json() as unknown;
-    return { pages: parsePublicDocsManifest(body), groups: parsePublicDocsGroups(body), aliases: parsePublicDocsAliases(body) };
+    const version = body && typeof body === 'object' && 'sourceHash' in body ? docsVersion(body.sourceHash) : undefined;
+    return { pages: parsePublicDocsManifest(body), groups: parsePublicDocsGroups(body), aliases: parsePublicDocsAliases(body), version };
   } catch (cause) {
     throw new Error(`Could not read ${DOCS_BASE}${PUBLIC_MANIFEST_PATH}: ${cause instanceof Error ? cause.message : String(cause)}`);
   }
-}
-
-async function fetchPublicManifest(): Promise<PublicDocsPage[]> {
-  return (await fetchPublicManifestWithGroups()).pages;
 }
 
 /** The topic index: every public topic with its one-line title, in the
@@ -372,77 +385,47 @@ export function renderDocsIndex(pages: PublicDocsPage[], groups: PublicDocsGroup
   for (const [name, entry] of Object.entries(TOPICS)) lines.push(`  ${name.padEnd(10)} ${entry.blurb}`);
   lines.push(
     '',
-    `Open a topic:     ${cliInvocation()} docs <topic>                 (summary with its section ids)`,
+    `Open a topic:     ${cliInvocation()} docs <topic>                 (full when piped or redirected)`,
     `Open a section:   ${cliInvocation()} docs <topic> --section <id>`,
     `Whole topic:      ${cliInvocation()} docs <topic> --full`,
-    `Search all docs:  ${cliInvocation()} docs search <term>`,
+    `Search all docs:  ${cliInvocation()} docs --search "<words>"`,
+    `Download Markdown: ${cliInvocation()} docs pull`,
     `Full manual:      ${cliInvocation()} docs --full                  (very large)`,
   );
   return lines.join('\n') + '\n';
 }
 
-export interface DocsSearchResult {
+interface DocsSearchMatch {
   topic: string;
   title: string;
   section: string | null;
   heading: string | null;
-  snippet: string;
-  open: string;
+  content: string;
+  complete: boolean;
 }
 
-const DOCS_SEARCH_LIMIT = 20;
-const SNIPPET_RADIUS = 90;
-
-/** Case-insensitive search over the public manifest. Every word must appear
- *  in the same section; each hit is reported against the innermost section
- *  that contains its first match, with the command that opens it. Title and
- *  heading hits rank first, then the number of occurrences. */
-export function searchPublicDocs(pages: PublicDocsPage[], query: string): DocsSearchResult[] {
-  const words = query.toLowerCase().split(/\s+/).filter(Boolean);
-  if (!words.length) return [];
-  const scored: Array<DocsSearchResult & { score: number }> = [];
-  for (const page of pages) {
-    const sections = parseSections(page.sections, page.body.length) ?? [];
-    const lower = page.body.toLowerCase();
-    // Leaf spans: the body split at every section start, so each match maps to
-    // the innermost section that contains it.
-    const starts = [...new Set([0, ...sections.map((section) => section.start)])].sort((a, b) => a - b);
-    const seen = new Set<string>();
-    for (let index = 0; index < starts.length; index++) {
-      const start = starts[index];
-      const end = starts[index + 1] ?? page.body.length;
-      const span = lower.slice(start, end);
-      if (!words.every((word) => span.includes(word))) continue;
-      const innermost = sections
-        .filter((section) => section.start <= start && section.end >= end)
-        .sort((a, b) => (a.end - a.start) - (b.end - b.start))[0];
-      const key = innermost?.id ?? '';
-      if (seen.has(key)) continue;
-      seen.add(key);
-      const at = start + span.indexOf(words[0]);
-      const from = Math.max(0, at - SNIPPET_RADIUS);
-      const to = Math.min(page.body.length, at + words[0].length + SNIPPET_RADIUS);
-      const snippet = `${from > 0 ? '…' : ''}${page.body.slice(from, to).replace(/\s+/g, ' ').trim()}${to < page.body.length ? '…' : ''}`;
-      const heading = innermost ? headingText(innermost) : null;
-      const occurrences = words.reduce((count, word) => count + span.split(word).length - 1, 0);
-      const titleHit = words.every((word) => `${page.id} ${page.title} ${heading ?? ''}`.toLowerCase().includes(word));
-      scored.push({
-        topic: page.id,
-        title: page.title,
-        section: innermost?.id ?? null,
-        heading,
-        snippet,
-        open: innermost
-          ? `${cliInvocation()} docs ${commandArg(page.id)} --section ${commandArg(innermost.id)}`
-          : `${cliInvocation()} docs ${commandArg(page.id)} --full`,
-        score: (titleHit ? 1000 : 0) + occurrences,
-      });
-    }
+async function fetchDocsSearch(query: string, topic?: string) {
+  const params = new URLSearchParams({ q: query });
+  if (topic) params.set('topic', topic);
+  const res = await fetch(`${DOCS_BASE}${DOCS_SEARCH_PATH}?${params}`, {
+    headers: { 'User-Agent': 'somewhere-cli' },
+  });
+  if (!res.ok) {
+    if (topic && res.status === 404) throw new Error(`Unknown docs topic "${topic}". Run ${cliInvocation()} docs for the topic index.`);
+    throw new Error(`Could not search docs at ${DOCS_BASE} (HTTP ${res.status}).`);
   }
-  return scored
-    .sort((a, b) => b.score - a.score || (a.topic < b.topic ? -1 : a.topic > b.topic ? 1 : 0))
-    .slice(0, DOCS_SEARCH_LIMIT)
-    .map(({ score: _score, ...result }) => result);
+  const { results, total, version } = await res.json() as { results: DocsSearchMatch[]; total: number; version?: string };
+  return {
+    results: results.map(({ content, ...match }) => ({
+      ...match,
+      snippet: content,
+      open: match.section
+        ? `${cliInvocation()} docs ${commandArg(match.topic)} --section ${commandArg(match.section)}`
+        : `${cliInvocation()} docs ${commandArg(match.topic)} --full`,
+    })),
+    total,
+    version: docsVersion(version),
+  };
 }
 
 /** Published docs describe the latest CLI. When this CLI is a minor release or
@@ -485,22 +468,9 @@ export async function writeResponseBodyToStdout(res: Pick<Response, 'body'>): Pr
   }
 }
 
-const BUNDLED_DOCS_DIR = join(CLI_PACKAGE_ROOT, 'dist', 'docs');
-
-function bundledDocsPath(topic?: string): string | undefined {
-  if (topic !== undefined && !/^[a-z0-9][a-z0-9.-]*$/i.test(topic)) return undefined;
-  const path = topic === undefined ? BUNDLED_DOCS_DIR : join(BUNDLED_DOCS_DIR, topic + '.md');
-  return existsSync(path) ? path : undefined;
-}
-
-function printDocsHint(topic: string, view?: string, complete?: boolean): void {
-  const path = bundledDocsPath(topic) ?? bundledDocsPath();
-  if (view === 'summary' && complete === false) {
-    const read = `Run ${cliInvocation()} docs ${commandArg(topic)} --full for the whole topic or --section <id> for one section.`;
-    console.error(path ? `${read} Search installed Markdown in ${path}.` : read);
-  } else if (path) {
-    console.error(`Search installed Markdown in ${path}.`);
-  }
+function topicSummary(content: string, topic: string, full: number): string {
+  const command = `${cliInvocation()} docs ${commandArg(topic)}`;
+  return `${content.trimEnd()}\n\nFull topic (${full} characters): ${command} --full\n`;
 }
 
 export function registerDocs(program: Command) {
@@ -508,18 +478,20 @@ export function registerDocs(program: Command) {
     .command('docs [topic] [terms...]')
     .description(
       'Read platform docs. No login needed — every topic is public. With no topic, prints the topic index. '
-        + `Search with \`${cliInvocation()} docs <topic> <term>\` or \`${cliInvocation()} docs search <term>\`. Quick topics: `
+        + `Search with \`${cliInvocation()} docs --search "<words>"\`. Quick topics: `
         + Object.keys(TOPICS).join(', ')
         + `. Example manual topic: \`${cliInvocation()} docs sw.db\`.`,
     )
     .option('--list', `List available topics (the same index bare \`${cliInvocation()} docs\` prints)`)
-    .option('--full', 'Print the complete topic instead of its summary; with no topic, the full manual')
+    .option('--full', 'Print the complete topic in a terminal; with no topic, the full manual')
+    .option('--search <words>', 'Search matching sections across all live docs topics')
     .option('--section <id>', 'Print one section of a topic (ids are listed in the summary)')
     .option('--json', 'Print the selected document in a JSON envelope')
     .addHelpText('after', '\nExamples:\n'
       + `  ${cliInvocation()} docs                         # topic index\n`
-      + `  ${cliInvocation()} docs search magic link       # matching sections across every topic\n`
-      + `  ${cliInvocation()} docs sw.auth                 # topic summary with section ids\n`
+      + `  ${cliInvocation()} docs --search "magic link"   # matching sections across every topic\n`
+      + `  ${cliInvocation()} docs pull                    # download Markdown into .somewhere/docs/\n`
+      + `  ${cliInvocation()} docs sw.auth                 # full when piped or redirected\n`
       + `  ${cliInvocation()} docs sw.auth setRoles        # search within this topic\n`
       + `  ${cliInvocation()} docs sw.auth --section <id>  # one section\n`
       + `  ${cliInvocation()} docs --full                  # the whole manual (very large)\n`
@@ -527,46 +499,73 @@ export function registerDocs(program: Command) {
     .action(async (
       topic: string | undefined,
       terms: string[],
-      opts: { list?: boolean; full?: boolean; section?: string; json?: boolean },
+      opts: { list?: boolean; full?: boolean; section?: string; search?: string; json?: boolean },
     ) => {
       if (opts.full && opts.section !== undefined) {
         error('Pass --full or --section <id>, not both.');
         process.exitCode = 1;
         return;
       }
-      const searching = terms.length > 0;
-      const within = topic && topic !== 'search' ? (ALIASES[topic] ?? topic) : undefined;
       warnIfDocsNewerThanCli();
-      if (searching) {
-        if (opts.full || opts.section !== undefined || opts.list) {
-          error('docs search takes only a term (and --json).');
+      if (topic === 'pull') {
+        if (terms.length || opts.list || opts.full || opts.section !== undefined || opts.search !== undefined) {
+          error('docs pull accepts only --json.');
           process.exitCode = 1;
           return;
         }
-        const query = terms.join(' ');
         try {
-          const pages = await fetchPublicManifest();
-          if (within && !pages.some(page => page.id === within)) {
-            error(`Unknown docs topic "${within}". Run: ${cliInvocation()} docs`);
-            process.exitCode = 1;
-            return;
+          const { pages, version } = await fetchPublicManifestWithGroups();
+          if (!version || !pages.length) throw new Error('The platform did not return a versioned docs collection.');
+          const files = new Map<string, string>();
+          const names = new Set(['readme']);
+          for (const page of pages) {
+            const name = page.id.toLowerCase();
+            if (!/^[a-z0-9][a-z0-9.-]*$/.test(name) || names.has(name)) {
+              throw new Error(`Invalid docs topic ID ${JSON.stringify(page.id)}.`);
+            }
+            names.add(name);
+            files.set(page.id + '.md', renderPublicPage(page));
           }
-          const results = searchPublicDocs(within ? pages.filter(page => page.id === within) : pages, query);
+          const path = saveLocalDocs(version, files);
+          if (opts.json) printJson({ path, version, count: files.size });
+          else console.log(path);
+        } catch (e) {
+          error(e instanceof Error ? e.message : String(e), e);
+          process.exitCode = 1;
+        }
+        return;
+      }
+      const searching = opts.search !== undefined || terms.length > 0;
+      const within = topic && topic !== 'search' ? (ALIASES[topic] ?? topic) : undefined;
+      if (searching) {
+        if (opts.full || opts.section !== undefined || opts.list || (opts.search !== undefined && topic !== undefined)) {
+          error('Use docs --search "<words>" with optional --json.');
+          process.exitCode = 1;
+          return;
+        }
+        const query = (opts.search ?? terms.join(' ')).trim();
+        if (!/[a-z0-9]/i.test(query) || query.length > 200) {
+          error('Enter search words of up to 200 characters.');
+          process.exitCode = 1;
+          return;
+        }
+        try {
+          const { results, total, version } = await fetchDocsSearch(query, within);
+          await warnIfLocalDocsOlder(version);
           if (opts.json) {
-            printJson({ query, ...(within ? { topic: within } : {}), count: results.length, results });
+            printJson({ query, ...(within ? { topic: within } : {}), count: results.length, total, results });
             return;
           }
           if (!results.length) {
-            console.log(`No docs sections${within ? ` in ${within}` : ''} mention "${query}". Search all topics: ${cliInvocation()} docs search ${query}`);
+            console.log(`No docs sections${within ? ` in ${within}` : ''} match ${JSON.stringify(query)}.`);
             return;
           }
           for (const result of results) {
             console.log(`${result.topic}${result.section ? ` › ${result.section}` : ''}  ${dim(result.heading ?? result.title)}`);
-            console.log(`  ${result.snippet}`);
-            console.log(`  ${dim(result.open)}`);
+            console.log(`\n${result.snippet}\n\n${dim(result.open)}\n`);
           }
-          if (results.length === DOCS_SEARCH_LIMIT) {
-            console.log(dim(`Showing the first ${DOCS_SEARCH_LIMIT} matches; add a word to narrow the search.`));
+          if (results.length < total) {
+            console.log(dim(`Showing ${results.length} of ${total} matches. Add a word to narrow the search.`));
           }
         } catch (e) {
           error(e instanceof Error ? e.message : String(e), e);
@@ -576,10 +575,11 @@ export function registerDocs(program: Command) {
       }
       const view: DocsView = opts.section !== undefined
         ? { kind: 'section', id: opts.section }
-        : opts.full ? { kind: 'full' } : { kind: 'default' };
+        : opts.full || (topic !== undefined && !process.stdout.isTTY) ? { kind: 'full' } : { kind: 'default' };
       if (opts.list || (topic === undefined && view.kind === 'default')) {
         try {
-          const { pages, groups } = await fetchPublicManifestWithGroups();
+          const { pages, groups, version } = await fetchPublicManifestWithGroups();
+          await warnIfLocalDocsOlder(version);
           const quickLinks = Object.entries(TOPICS).map(([name, entry]) => ({
             name,
             path: entry.path,
@@ -598,8 +598,6 @@ export function registerDocs(program: Command) {
             return;
           }
           process.stdout.write(renderDocsIndex(pages, groups));
-          const docs = bundledDocsPath();
-          if (docs) console.log('\nSearch installed Markdown in ' + docs + '.');
           console.log(`\n${dim(`No account yet? Start with: ${cliInvocation()} docs start`)}`);
         } catch (e) {
           error(e instanceof Error ? e.message : String(e), e);
@@ -633,21 +631,24 @@ export function registerDocs(program: Command) {
         let authenticatedFailure: string | null = null;
         if (hasUsableCredential()) {
           try {
-            const content = await callPlatformHelpTool('docs', {
+            let content = await callPlatformHelpTool('docs', {
               topic: resolvedTopic,
               ...(view.kind === 'full' ? { detail: 'full' } : {}),
               ...(view.kind === 'section' ? { section: view.id } : {}),
             });
             const status = parseDocsStatusLine(content);
+            const first = content.split('\n', 1)[0];
+            const full = /\bfull=(\d+)/.exec(first)?.[1];
             if (/^Topic "[^\n]*" not found\./.test(content)
+                || (view.kind === 'full' && status.complete === false)
+                || (status.view === 'summary' && status.complete === false && !full)
                 || (view.kind === 'section' && (status.view !== 'section' || /(?:^|\n)No section "/.test(content)))) {
               throw new Error('Authenticated docs did not return the requested view; trying the public index.');
             }
+            if (status.view === 'summary' && status.complete === false) content = topicSummary(content, resolvedTopic, Number(full));
+            await warnIfLocalDocsOlder();
             if (opts.json) printJson({ topic: requestedTopic, ...status, content });
-            else {
-              process.stdout.write(withNewline(content));
-              if (view.kind === 'default') printDocsHint(resolvedTopic, status.view, status.complete);
-            }
+            else process.stdout.write(withNewline(content));
             return;
           } catch (e) {
             authenticatedFailure = e instanceof Error ? e.message : String(e);
@@ -655,7 +656,8 @@ export function registerDocs(program: Command) {
         }
 
         try {
-          const { pages, aliases } = await fetchPublicManifestWithGroups();
+          const { pages, aliases, version } = await fetchPublicManifestWithGroups();
+          await warnIfLocalDocsOlder(version);
           const page = findPublicDocsPage(pages, aliases, resolvedTopic);
           if (page) {
             const rendered = renderPublicDocsView(page, view);
@@ -675,7 +677,6 @@ export function registerDocs(program: Command) {
               });
             } else {
               process.stdout.write(rendered.content);
-              if (view.kind === 'default') printDocsHint(page.id, rendered.view, rendered.complete);
             }
             return;
           }
@@ -709,6 +710,7 @@ export function registerDocs(program: Command) {
           error(`Could not fetch ${DOCS_BASE}${entry.path} (HTTP ${res.status}). Try again shortly, or open it in a browser.`);
           process.exit(1);
         }
+        await warnIfLocalDocsOlder();
         if (opts.json) {
           printJson({
             topic: key,
@@ -718,7 +720,6 @@ export function registerDocs(program: Command) {
           return;
         }
         await writeResponseBodyToStdout(res);
-        if (view.kind === 'default') printDocsHint(key ?? requestedTopic);
       } catch (e) {
         error(`Could not reach ${DOCS_BASE} — check your connection. (${e instanceof Error ? e.message : String(e)})`, e);
         process.exit(1);

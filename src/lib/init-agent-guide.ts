@@ -75,7 +75,8 @@ import on your deployed app. See \`somewhere docs recipe-csv-import --full\`
 for the upload, job and ownership checks.
 
 ${SKILLS_POINTER}
-Search the installed topic Markdown in \`node_modules/@somewhere-cloud/cli/dist/docs/\`.
+Search the live docs with \`somewhere docs --search "<words>"\`.
+Download Markdown to \`.somewhere/docs/\` with \`somewhere docs pull\`.
 Without a global CLI, use \`npx @somewhere-cloud/cli deploy\` and \`npx @somewhere-cloud/cli test\`.
 
 For Node or Playwright tests, see [Testing your app](https://somewhere.cloud/docs/test).

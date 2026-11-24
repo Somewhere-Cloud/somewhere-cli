@@ -101,7 +101,7 @@ export async function runTestJob(target: TestTarget, job: TestJobTarget, options
       const job = await readJob(id, Math.max(1, deadline - Date.now()));
       if (job.job_id !== id || !validTarget(job)) throw new Error('Unexpected job receipt.');
       status = job.status;
-      if (job.terminal ?? (terminal.has(status) && (job.completed_at !== null || preview))) {
+      if (job.terminal ?? (terminal.has(status) && typeof job.completed_at === 'string')) {
         const duration = job.duration_ms ?? (job.started_at && job.completed_at ? Date.parse(job.completed_at) - Date.parse(job.started_at) : null);
         return { status, job_id: id, request_id: requestId, duration_ms: duration, timed_out: false, error_code: job.error_code };
       }

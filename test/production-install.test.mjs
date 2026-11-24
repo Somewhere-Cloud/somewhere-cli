@@ -17,7 +17,7 @@ test('packed CLI starts and offers deploy notes after an offline production-only
   run('npm',['install','--prefix',root,'--offline','--ignore-scripts',join(root,packed.filename)]);
   assert.ok(!packed.files.some(({ path }) => path.startsWith('node_modules/')));
   const paths = packed.files.map(({ path }) => path);
-  for (const path of ['dist/lib/bundle.js', 'dist/lib/bundle.js.map', 'NOTICE.third-party.txt']) {
+  for (const path of ['dist/lib/bundle.js', 'dist/lib/bundle.js.map', 'NOTICE.third-party.txt', 'dist/docs/declared-data.md']) {
     assert.ok(paths.includes(path));
   }
   assert.equal(existsSync(join(root, 'node_modules/typescript')), false);
@@ -27,7 +27,7 @@ test('packed CLI starts and offers deploy notes after an offline production-only
   assert.deepEqual(manifest.dependencies ?? {}, {});
   assert.deepEqual(manifest.peerDependencies ?? {}, {});
   assert.equal(run(process.execPath, ['-e', "console.log(typeof require('@somewhere-cloud/cli/script').openAppTest)"], root).trim(), 'function');
-  assert.equal(run(process.execPath, ['--input-type=module', '-e', "import {UserSession} from '@somewhere-cloud/cli/testing'; console.log(typeof UserSession)"], root).trim(), 'function');
+  assert.equal(run(process.execPath, ['--input-type=module', '-e', "import {UserSession} from '@somewhere-cloud/cli/testing'; console.log(typeof UserSession.prototype.expectRefused)"], root).trim(), 'function');
   assert.equal(manifest.devDependencies, undefined);
   assert.equal(manifest.gitHead, 'a'.repeat(40));
   const lock = JSON.parse(readFileSync(join(installed, 'npm-shrinkwrap.json'), 'utf8'));

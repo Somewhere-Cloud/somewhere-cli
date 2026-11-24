@@ -1,3 +1,4 @@
+import { DEPLOY_CHECK_TYPESCRIPT_VERSION } from '../dist/lib/deploy-check.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
@@ -87,7 +88,7 @@ test('typecheck verdict is advisory on errors and keeps the clean summary unchan
 test('npx fallback installs the typescript package before invoking tsc', () => {
   assert.deepEqual(npxTscInvocation('linux'), {
     command: 'npx',
-    args: ['-y', '-p', 'typescript@5.9.3', 'tsc'],
+    args: ['-y', '-p', `typescript@${DEPLOY_CHECK_TYPESCRIPT_VERSION}`, 'tsc'],
     via: 'npx',
   });
   assert.equal(npxTscInvocation('win32').command, 'npx.cmd');

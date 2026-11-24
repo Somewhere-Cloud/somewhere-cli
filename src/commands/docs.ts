@@ -1,3 +1,6 @@
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
+import { CLI_PACKAGE_ROOT } from '../lib/package-root.js';
 import { cliInvocation } from '../lib/cli-invocation.js';
 import { fetchWithProxy as fetch } from '../lib/http.js';
 import { once } from 'node:events';
@@ -482,6 +485,24 @@ export async function writeResponseBodyToStdout(res: Pick<Response, 'body'>): Pr
   }
 }
 
+const BUNDLED_DOCS_DIR = join(CLI_PACKAGE_ROOT, 'dist', 'docs');
+
+function bundledDocsPath(topic?: string): string | undefined {
+  if (topic !== undefined && !/^[a-z0-9][a-z0-9.-]*$/i.test(topic)) return undefined;
+  const path = topic === undefined ? BUNDLED_DOCS_DIR : join(BUNDLED_DOCS_DIR, topic + '.md');
+  return existsSync(path) ? path : undefined;
+}
+
+function printDocsHint(topic: string, view?: string, complete?: boolean): void {
+  const path = bundledDocsPath(topic) ?? bundledDocsPath();
+  if (view === 'summary' && complete === false) {
+    const read = `Run ${cliInvocation()} docs ${commandArg(topic)} --full for the whole topic or --section <id> for one section.`;
+    console.error(path ? `${read} Search installed Markdown in ${path}.` : read);
+  } else if (path) {
+    console.error(`Search installed Markdown in ${path}.`);
+  }
+}
+
 export function registerDocs(program: Command) {
   program
     .command('docs [topic] [terms...]')
@@ -577,6 +598,8 @@ export function registerDocs(program: Command) {
             return;
           }
           process.stdout.write(renderDocsIndex(pages, groups));
+          const docs = bundledDocsPath();
+          if (docs) console.log('\nSearch installed Markdown in ' + docs + '.');
           console.log(`\n${dim(`No account yet? Start with: ${cliInvocation()} docs start`)}`);
         } catch (e) {
           error(e instanceof Error ? e.message : String(e), e);
@@ -621,7 +644,10 @@ export function registerDocs(program: Command) {
               throw new Error('Authenticated docs did not return the requested view; trying the public index.');
             }
             if (opts.json) printJson({ topic: requestedTopic, ...status, content });
-            else process.stdout.write(withNewline(content));
+            else {
+              process.stdout.write(withNewline(content));
+              if (view.kind === 'default') printDocsHint(resolvedTopic, status.view, status.complete);
+            }
             return;
           } catch (e) {
             authenticatedFailure = e instanceof Error ? e.message : String(e);
@@ -649,6 +675,7 @@ export function registerDocs(program: Command) {
               });
             } else {
               process.stdout.write(rendered.content);
+              if (view.kind === 'default') printDocsHint(page.id, rendered.view, rendered.complete);
             }
             return;
           }
@@ -691,6 +718,7 @@ export function registerDocs(program: Command) {
           return;
         }
         await writeResponseBodyToStdout(res);
+        if (view.kind === 'default') printDocsHint(key ?? requestedTopic);
       } catch (e) {
         error(`Could not reach ${DOCS_BASE} — check your connection. (${e instanceof Error ? e.message : String(e)})`, e);
         process.exit(1);

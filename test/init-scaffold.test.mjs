@@ -35,6 +35,19 @@ const { buildCheckBody } =
 const { runTypecheck } =
   await import(`${moduleRoot}/lib/typecheck.${process.env.SOMEWHERE_TEST_SOURCE ? 'ts' : 'js'}`);
 
+const { DEPLOY_CHECK_TYPESCRIPT_VERSION } =
+  await import(`${moduleRoot}/lib/deploy-check.${process.env.SOMEWHERE_TEST_SOURCE ? 'ts' : 'js'}`);
+
+test('init starters install the compiler used by the deploy check', () => {
+  for (const files of [
+    createGreenTemplate(),
+    createFeatureTemplate({ requested: ['auth'], added: [], modules: ['auth'], ui: 'styled' }, { appName: 'fixture' }),
+  ]) {
+    const pkg = JSON.parse(files.find(({ path }) => path === 'package.json').content);
+    assert.equal(pkg.devDependencies.typescript, DEPLOY_CHECK_TYPESCRIPT_VERSION);
+  }
+});
+
 function tempDir() {
   return mkdtempSync(join(tmpdir(), 'somewhere-init-scaffold-'));
 }
@@ -134,7 +147,7 @@ test('minimal starter is a small typed frontend, function, and schema', () => {
     '@types/react': '19.2.2',
     '@types/react-dom': '19.2.2',
     // Installed by init, so a deploy's type check never fetches TypeScript with npx.
-    typescript: '5.9.3',
+    typescript: DEPLOY_CHECK_TYPESCRIPT_VERSION,
   });
   assert.deepEqual(pkg.somewhere, { cli_version: CLI_PACKAGE_VERSION, project_name: 'somewhere-starter' });
   assert.equal(

@@ -18,6 +18,7 @@ function run(args, { env, input = '' }) {
       env: {
         ...process.env,
         ...env,
+        SOMEWHERE_CONFIG_DIR: env.SOMEWHERE_CONFIG_DIR ?? join(env.HOME, '.somewhere'),
         CI: '',
         SOMEWHERE_NO_NOTIFICATIONS: '1',
       },
@@ -129,7 +130,7 @@ test('project delete prints and accepts the confirm command from a 200 needs_con
     assert.equal(first.status, 0, `stdout:\n${first.stdout}\nstderr:\n${first.stderr}`);
     assert.deepEqual(JSON.parse(first.stdout), {
       status: 'needs_confirmation',
-      confirmation_code: '482917',
+      confirm_code: '482917',
       confirm_command: 'somewhere project delete proj_delete_123 --confirm-code 482917',
     });
 
@@ -311,4 +312,20 @@ test('project delete surfaces the server error message without adding owner-only
     assert.doesNotMatch(result.stdout, /owner-only/);
     assert.doesNotMatch(result.stderr, /owner-only/);
   });
+});
+
+test('project delete refuses bypass flags before contacting the platform', async () => {
+  const home = mkdtempSync(join(tmpdir(), 'sw-project-delete-flags-'));
+  let requests = 0;
+  await withServer((_req, res) => { requests++; sendJson(res, 500, {}); }, async (base) => {
+    const env = { HOME: home, SOMEWHERE_CONFIG_DIR: join(home, '.somewhere'), SOMEWHERE_API_URL: base };
+    for (const [flag, json] of [['--yes', false], ['--force', true]]) {
+      const result = await run(['project', 'delete', 'fixture', flag, ...(json ? ['--json'] : [])], { env });
+      assert.equal(result.status, 1);
+      const message = json ? JSON.parse(result.stdout).message : result.stderr;
+      assert.match(message, new RegExp('Unknown option.*' + flag));
+      assert.match(message, /repeat with --confirm-code <code>/);
+    }
+  });
+  assert.equal(requests, 0);
 });

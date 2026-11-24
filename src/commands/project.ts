@@ -12,6 +12,7 @@ import {
   info,
   platformErrorEnvelope,
   printJson,
+  printJsonError,
   statusDot,
   success,
   table,
@@ -213,9 +214,18 @@ export function registerProject(program: Command) {
   proj
     .command('delete <name-or-id>')
     .description('Permanently delete a project and all its data')
-    .option('--confirm-code <code>', 'Confirm deletion with the code returned by the first call')
-    .option('--json', 'Print the raw delete response as JSON')
-    .action(async (nameOrId: string, opts: { confirmCode?: string; json?: boolean }) => {
+    .option('--confirm-code <code>', 'Confirm deletion using the confirm_code returned by the first call')
+    .option('--json', 'Print the deletion result as JSON')
+    .addOption(new Option('--yes').hideHelp())
+    .addOption(new Option('--force').hideHelp())
+    .action(async (nameOrId: string, opts: { confirmCode?: string; json?: boolean; yes?: boolean; force?: boolean }) => {
+      const unsupported = opts.yes ? '--yes' : opts.force ? '--force' : undefined;
+      if (unsupported) {
+        const message = `Unknown option '${unsupported}'. Run ${cliInvocation()} project delete <name-or-id> to get a code, then repeat with --confirm-code <code>.`;
+        if (opts.json) printJsonError('UNKNOWN_OPTION', message);
+        else error(message);
+        process.exit(1);
+      }
       const client = new ApiClient(getToken());
       const promptStdout = opts.json ? process.stderr : undefined;
       let project: ProjectDeleteTarget;
@@ -248,7 +258,7 @@ export function registerProject(program: Command) {
           if (opts.json) {
             printJson({
               status: 'needs_confirmation',
-              confirmation_code: code,
+              confirm_code: code,
               confirm_command: confirmCommand,
             });
           } else {

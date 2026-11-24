@@ -608,6 +608,7 @@ test('docs pull writes every topic explicitly and docs warns when the copy ages'
   const options = { cwd: project };
   const env = { HOME: home, SOMEWHERE_NO_NOTIFICATIONS: '1', NO_COLOR: '1', CI: '1' };
   const manifest = { ...MANIFEST };
+  manifest.pages = [...manifest.pages, { id: 'sw.rateLimit', title: 'Rate limits', section: null, body: 'Rate limit a request.' }];
   await withManifest(async (base) => {
     const config = { ...env, SOMEWHERE_DOCS_BASE: base };
     const index = await run(['docs'], config, options);

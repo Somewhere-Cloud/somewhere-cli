@@ -517,10 +517,13 @@ export function registerDocs(program: Command) {
           const { pages, version } = await fetchPublicManifestWithGroups();
           if (!version || !pages.length) throw new Error('The platform did not return a versioned docs collection.');
           const files = new Map<string, string>();
+          const names = new Set(['readme']);
           for (const page of pages) {
-            if (!/^[a-z0-9][a-z0-9.-]*$/.test(page.id) || files.has(page.id + '.md')) {
+            const name = page.id.toLowerCase();
+            if (!/^[a-z0-9][a-z0-9.-]*$/.test(name) || names.has(name)) {
               throw new Error(`Invalid docs topic ID ${JSON.stringify(page.id)}.`);
             }
+            names.add(name);
             files.set(page.id + '.md', renderPublicPage(page));
           }
           const path = saveLocalDocs(version, files);

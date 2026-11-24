@@ -10,7 +10,7 @@ export function localDocsVersion(root = process.cwd()): string | undefined {
   const path = join(root, FOLDER, DOCS, STAMP);
   if (!existsSync(path)) return undefined;
   const stamp = JSON.parse(readFileSync(path, 'utf8')) as { version?: unknown };
-  return typeof stamp.version === 'string' ? stamp.version : undefined;
+  return typeof stamp.version === 'string' && /^[a-f0-9]{16}$/.test(stamp.version) ? stamp.version : undefined;
 }
 
 function ensureGitIgnore(root: string): void {

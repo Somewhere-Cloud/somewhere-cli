@@ -1125,7 +1125,7 @@ type SomewhereDbRelationName<T extends string> = Extract<keyof SomewhereDbRelati
 // A column list narrows the rows to those columns; each included relation adds
 // its related rows under its name. An empty list selects all columns, just as
 // the structured query does when columns is omitted.
-type __SomewhereDbSelectedColumns<T extends string, C> = C extends readonly []
+type __SomewhereDbSelectedColumns<T extends string, C> = [C] extends [readonly []]
   ? keyof SomewhereDbRow<T>
   : Extract<C extends readonly (infer K)[] ? K : never, keyof SomewhereDbRow<T>>;
 type SomewhereDbReadRow<T extends string, C, I> = T extends keyof SomewhereDeclaredTables
@@ -4516,7 +4516,7 @@ var require_consumer_contract = __commonJS({
     "use strict";
     var CONSUMER_CONTRACT2 = Object.freeze({
       version: 40,
-      digest: "dc6ff597ccb80101a5e955b4726ef3ea0a131843c7041397e87eb9ff7e2f8b02"
+      digest: "5a319ea5f381a0b3a0847d0b7a1ee3504b434c364fa7dfa338ebf71da502e329"
     });
     var MEMBERSHIPS = "memberships: table({ id: id(), team_id: text(), member_id: text() }, { scope: owner(), client: { read: true } }),";
     var SHARES = "shares: table({ id: id(), grantee_id: text() }, { scope: owner(), client: { read: true, create: ['grantee_id'], delete: true }, unique: [['user_id', 'grantee_id']] }),";

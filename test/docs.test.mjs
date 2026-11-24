@@ -12,14 +12,16 @@ const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 const distIndex = join(repoRoot, 'dist', 'index.js');
 const sourceIndex = join(repoRoot, 'src', 'index.ts');
 
-function run(args, env) {
+function run(args, env, options = {}) {
   return new Promise((resolvePromise) => {
     const sourceRunner = process.env.SOMEWHERE_TEST_SOURCE_RUNNER;
     const child = spawn(
       sourceRunner ?? process.execPath,
-      sourceRunner ? [sourceIndex, ...args] : [distIndex, ...args],
+      [...(options.tty ? ['--import', 'data:text/javascript,Object.defineProperty(process.stdout,"isTTY",{value:true})'] : []),
+        sourceRunner ? sourceIndex : distIndex, ...args],
       {
-      env: { ...process.env, ...env, SOMEWHERE_CONFIG_DIR: env.SOMEWHERE_CONFIG_DIR ?? join(env.HOME ?? emptyCredentialHome(), '.somewhere') },
+        cwd: options.cwd,
+        env: { ...process.env, ...env, SOMEWHERE_CONFIG_DIR: env.SOMEWHERE_CONFIG_DIR ?? join(env.HOME ?? emptyCredentialHome(), '.somewhere') },
       },
     );
     let stdout = '';
@@ -48,6 +50,7 @@ const SECTIONED_PAGE = {
 
 const MANIFEST = {
   version: 1,
+  sourceHash: '1111111111111111',
   pages: [
     {
       id: 'sw.db', title: 'Database', section: 'data-identity',
@@ -279,6 +282,8 @@ test('docs <topic> --json returns the exact public manifest page in an envelope'
       topic: 'setup',
       url: `${base}/docs-manifest.json`,
       source: 'public',
+      view: 'full',
+      complete: true,
       content: '# Setup — Install the CLI and connect MCP\n\nInstall the CLI, then connect it.\n',
     });
   });
@@ -341,7 +346,7 @@ test('a manifest page without a body fails precisely instead of substituting ano
   }
 });
 
-test('public docs default to the published summary; --full and --section retrieve the rest', async () => {
+test('terminal docs summarize and pipes and --full return the full topic', async () => {
   const home = emptyCredentialHome();
   const env = (base) => ({
     HOME: home,
@@ -352,11 +357,14 @@ test('public docs default to the published summary; --full and --section retriev
     CI: '1',
   });
   await withManifest(async (base) => {
-    const summary = await run(['docs', 'sw.data'], env(base));
+    const summary = await run(['docs', 'sw.data'], env(base), { tty: true });
     assert.equal(summary.status, 0, summary.stderr);
-    assert.equal(summary.stdout, SECTIONED_PAGE.summary);
-    assert.match(summary.stderr, /docs sw\.data --full for the whole topic or --section <id>/);
-    assert.match(summary.stderr, /Search installed Markdown in .*dist[/\\]docs/);
+    assert.ok(summary.stdout.startsWith(SECTIONED_PAGE.summary));
+    assert.ok(summary.stdout.trimEnd().endsWith(`Full topic (${SECTIONED_BODY.length} characters): somewhere docs sw.data --full`));
+
+    const piped = await run(['docs', 'sw.data'], env(base));
+    assert.equal(piped.status, 0, piped.stderr);
+    assert.equal(piped.stdout, `# Data\n\n${SECTIONED_BODY}`);
 
     const full = await run(['docs', 'sw.data', '--full', '--json'], env(base));
     assert.equal(full.status, 0, full.stderr);
@@ -594,11 +602,62 @@ test('public command bounds large parents in JSON/plain while exact leaves and f
   assert.match(renderPublicDocsView(page, { kind: 'section', id: 'query-rows-2' }).content, /Second child/);
 });
 
-test('bundled markdown matches the full public view for each topic', () => {
-  const { pages } = JSON.parse(readFileSync(new URL('../docs/topics.generated.json', import.meta.url), 'utf8'));
-  assert.ok(pages.some(({ id }) => id === 'declared-data'));
-  for (const page of pages) {
-    const file = readFileSync(new URL('../dist/docs/' + page.id + '.md', import.meta.url), 'utf8');
-    assert.equal(file, renderPublicDocsView(page, { kind: 'full' }).content, page.id);
+test('docs pull writes every topic explicitly and docs warns when the copy ages', async () => {
+  const home = emptyCredentialHome();
+  const project = mkdtempSync(join(tmpdir(), 'sw-docs-project-'));
+  const options = { cwd: project };
+  const env = { HOME: home, SOMEWHERE_NO_NOTIFICATIONS: '1', NO_COLOR: '1', CI: '1' };
+  const manifest = { ...MANIFEST };
+  await withManifest(async (base) => {
+    const config = { ...env, SOMEWHERE_DOCS_BASE: base };
+    const index = await run(['docs'], config, options);
+    assert.equal(index.status, 0, index.stderr);
+    assert.throws(() => readFileSync(join(project, '.somewhere/docs/.stamp.json')), { code: 'ENOENT' });
+    const pull = await run(['docs', 'pull', '--json'], config, options);
+    assert.equal(pull.status, 0, pull.stderr);
+    const { path, count, version } = JSON.parse(pull.stdout);
+    assert.equal(count, manifest.pages.length);
+    assert.equal(version, manifest.sourceHash);
+    assert.equal(path, join(project, '.somewhere/docs'));
+    assert.equal(JSON.parse(readFileSync(join(path, '.stamp.json'), 'utf8')).version, version);
+    assert.match(readFileSync(join(path, 'README.md'), 'utf8'), /docs pull/);
+    assert.match(readFileSync(join(project, '.gitignore'), 'utf8'), /\/\.somewhere\//);
+    for (const page of manifest.pages) {
+      assert.equal(readFileSync(join(path, page.id + '.md'), 'utf8'), renderPublicDocsView(page, { kind: 'full' }).content);
+    }
+
+    manifest.sourceHash = '2222222222222222';
+    manifest.pages = [SECTIONED_PAGE];
+    const read = await run(['docs', 'sw.data'], config, options);
+    assert.equal(read.status, 0, read.stderr);
+    assert.match(read.stderr, /older version .*Refresh with somewhere docs pull/);
+    const replace = await run(['docs', 'pull'], config, options);
+    assert.equal(replace.status, 0, replace.stderr);
+    assert.throws(() => readFileSync(join(path, 'sw.db.md')), { code: 'ENOENT' });
+    assert.doesNotMatch((await run(['docs', 'sw.data'], config, options)).stderr, /older version/);
+  }, manifest);
+});
+
+test('docs --search calls the public search endpoint and prints section text', async () => {
+  const server = createServer((req, res) => {
+    assert.equal(req.url, '/docs-search.json?q=owner+rows');
+    assert.equal(req.headers.authorization, undefined);
+    res.setHeader('content-type', 'application/json');
+    res.end(JSON.stringify({ version: MANIFEST.sourceHash, total: 1, results: [{
+      topic: 'declared-data', title: 'Declared data', section: 'owners', heading: 'Owner-scoped rows',
+      content: 'Declare the table with scope: owner().', complete: true,
+    }] }));
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const result = await run(['docs', '--search', 'owner rows'], {
+      SOMEWHERE_DOCS_BASE: `http://127.0.0.1:${server.address().port}`, CI: '1',
+    });
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /declared-data › owners +Owner-scoped rows/);
+    assert.match(result.stdout, /scope: owner\(\)/);
+    assert.match(result.stdout, /somewhere docs declared-data --section owners/);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
   }
 });

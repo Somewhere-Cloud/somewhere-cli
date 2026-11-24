@@ -17,7 +17,8 @@ test('packed CLI starts and offers deploy notes after an offline production-only
   run('npm',['install','--prefix',root,'--offline','--ignore-scripts',join(root,packed.filename)]);
   assert.ok(!packed.files.some(({ path }) => path.startsWith('node_modules/')));
   const paths = packed.files.map(({ path }) => path);
-  for (const path of ['dist/lib/bundle.js', 'dist/lib/bundle.js.map', 'NOTICE.third-party.txt', 'dist/docs/declared-data.md']) {
+  assert.ok(!paths.some((path) => path.startsWith('dist/docs/')));
+  for (const path of ['dist/lib/bundle.js', 'dist/lib/bundle.js.map', 'NOTICE.third-party.txt']) {
     assert.ok(paths.includes(path));
   }
   assert.equal(existsSync(join(root, 'node_modules/typescript')), false);

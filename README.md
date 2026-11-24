@@ -71,8 +71,11 @@ when no compiler is installed in the project.
 `init` installs React, the SDK, TypeScript, and editor types. For a local Vite server, use
 `npm install -D --save-exact vite@7.2.2` for `somewhere dev`.
 Save each journey you want re-checked after every deploy as `checks/<plain-name>.json`;
-the platform runs them in its browser after each deploy and `somewhere test` runs them now
-(nothing to install). A Playwright script or spec runs locally with
+the platform runs them in its browser after each deploy, with nothing to install. Run `somewhere test`
+for the latest result or add `--again` to start a fresh run. The last line is JSON
+with `outcome` and `counts`. Exit codes are 0 for passed, 1 for a named failure,
+and 2 for an incomplete check or cleanup. Warnings leave the exit status unchanged.
+A Playwright script or spec runs locally with
 `somewhere test <file>` after `npm install -D --save-exact @playwright/test@1.65.0`.
 `init --template bare` is the same as `init --bare` and installs no dependencies.
 

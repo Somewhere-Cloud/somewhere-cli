@@ -1,3 +1,4 @@
+import { checkSummaryExitCode, summarizeChecks } from '../lib/check-summary.js';
 import { cliInvocation } from '../lib/cli-invocation.js';
 import { safeCode, safeInvalid, safeStatus } from '../lib/repro-packet.js';
 import { preflightBrowserActions } from '../lib/browser-flow-preflight.js';
@@ -1281,7 +1282,9 @@ export function createVerifyJourneyRun(
     if (keep && keptForReuse.size > 0 && testActors.every((name) => keptForReuse.has(name))) return { status: 'kept', reason: 'kept with their browsers for the next --keep-actors run; remove them with --close-actors' };
     try {
       const removed = await client.call<{ deleted?: number }>('DELETE', '/auth/test-users', { project_id: target.project_id, ids: [...testIdentities.values()].map((item) => item.user_id) });
-      return { status: 'deleted', deleted: typeof removed?.deleted === 'number' ? removed.deleted : undefined };
+      const deleted = removed?.deleted;
+      return deleted === testIdentities.size ? { status: 'deleted', deleted }
+        : { status: 'unconfirmed', deleted, reason: 'The platform did not confirm removal of every test user.' };
     } catch (cause) {
       const code = cause instanceof CliApiError ? cause.code : cause instanceof Error ? cause.message : String(cause);
       return { status: 'unconfirmed', reason: `delete failed (${code}); the platform removes test users when they expire` };
@@ -1631,6 +1634,11 @@ export function createVerifyJourneyRun(
       ? { identities: [...testIdentities].map(([actor, item]) => ({ actor, ...item })), cleanup: await removeTestUsers() }
       : undefined;
     const testUsersDeleteMs = testUsers ? now() - deleteStartedAt : undefined;
+    if (testUsers?.cleanup.status === 'unconfirmed') {
+      passed = false;
+      const note = `Could not check cleanup. Test users for ${testUsers.identities.map((user) => user.actor).join(', ')} may remain.`;
+      verdict = verdict.startsWith('PASS') ? `INCOMPLETE — ${note}` : `${verdict} ${note}`;
+    }
     if (cleanup.some((item) => item.status === 'unconfirmed')) {
       passed = false;
       const lifecycle: Array<VerifySignal<BrowserLifecycle>> = cleanup.filter((item) => item.status === 'unconfirmed')
@@ -1650,7 +1658,7 @@ export function createVerifyJourneyRun(
       limits: VERIFY_JOURNEY_LIMITS,
       cleanup,
       cleanup_ms,
-      cleanup_confirmed: cleanup.every((item) => item.status !== 'unconfirmed'),
+      cleanup_confirmed: cleanup.every((item) => item.status !== 'unconfirmed') && testUsers?.cleanup.status !== 'unconfirmed',
       kept_sessions: [...kept.values()],
       ...(testUsers ? { test_users: testUsers } : {}),
       ...(keep ? { keep_actors: {
@@ -1929,6 +1937,41 @@ export function formatJourneyCleanup(cleanup: VerifyJourneyCleanup[], cleanupMs:
   return lines;
 }
 
+/** Verification keeps named step failures ahead of an unconfirmed cleanup. */
+export function verifyResultSummary(report: VerifyReport | VerifyJourneyReport) {
+  const failedSteps = report.steps.filter((step) => step.ran !== false && !step.passed).length;
+  const failedRequests = report.health.network.failed_requests.length + report.health.network.expectations.filter((item) => !item.detail.ok).length;
+  const refused = report.refusals?.length ?? 0;
+  const cleanup = 'cleanup' in report
+    ? Number(report.test_users?.cleanup.status === 'unconfirmed') : 0;
+  const segmentsNotStarted = 'segments' in report ? report.segments.filter((segment) => !segment.ran && segment.error).length : 0;
+  const incomplete = report.incomplete.length + (report.lifecycle?.length ?? 0) + refused + segmentsNotStarted + cleanup;
+  const failed = failedSteps + failedRequests + report.health.page.errors.length + report.health.console.errors.length;
+  return summarizeChecks({
+    passed: report.steps.filter((step) => step.ran !== false && step.passed).length || report.viewports.filter((item) => item.passed).length,
+    failed: failed || Number(!report.passed && incomplete === 0 && report.verdict.startsWith('FAIL')),
+    could_not_check: incomplete || Number(!report.passed && failed === 0 && !report.verdict.startsWith('FAIL')),
+    warnings: report.layout.filter((item) => OVERFLOW_FINDING.test(item.detail)).length,
+  });
+}
+
+function printVerificationResult(report: VerifyReport | VerifyJourneyReport, opts: { json?: boolean; out?: string }): void {
+  const result = verifyResultSummary(report);
+  if (opts.out !== undefined) {
+    writeVerifyReportTo(opts.out, report);
+    const summary = summarizeVerifyReport(report);
+    if (opts.json) console.log(JSON.stringify({ ...summary, ...result }));
+    else console.log(formatVerifySummaryLine(summary) + '\n' + JSON.stringify(result));
+    noteVerifyRefusal(summary);
+  } else if (opts.json) {
+    console.log(JSON.stringify({ ...report, ...result }));
+  } else {
+    for (const line of formatVerifyOutput(report)) console.log(line);
+    console.log(JSON.stringify(result));
+  }
+  process.exitCode = checkSummaryExitCode(result);
+}
+
 export function registerVerify(program: Command): void {
   const cliCookies: Array<{ name: string; value: string }> = [];
   const collectCookie = (value: string): string => {
@@ -1974,6 +2017,8 @@ Signed-in check (from a linked folder):
   Run: ${cliInvocation()} verify --path /admin --flow owner-flow.json
   When done, run: ${cliInvocation()} test-users cleanup
 
+A run ends with one JSON line containing outcome and counts.
+Exit 0 means passed, 1 means a named check failed, and 2 means a check or cleanup could not finish.
 Reports default to verify-reports/ inside the CLI config directory.
 Set SOMEWHERE_CONFIG_DIR before signing in to relocate both the CLI config
 and default reports. Use --out to choose just the report file for one run.
@@ -2104,7 +2149,7 @@ with account access. Print the full flow schema with ${cliInvocation()} verify -
               }
               if (!allConfirmed) console.log('Some cleanup is unconfirmed; its record is kept so --close-actors can run again.');
             }
-            if (!allConfirmed) process.exitCode = 1;
+            if (!allConfirmed) process.exitCode = 2;
             return;
           }
           const releaseKeepLock = keepKeyValue ? lockKeep(root, keepKeyValue) : undefined;
@@ -2147,14 +2192,8 @@ with account access. Print the full flow schema with ${cliInvocation()} verify -
               else if (decision.action === 'drop') dropKeep(root, keepKeyValue);
             } finally { releaseKeepLock?.(); }
           }
-          if (opts.out !== undefined) {
-            writeVerifyReportTo(opts.out, report);
-            const summary = summarizeVerifyReport(report);
-            console.log(opts.json ? JSON.stringify(summary, null, 2) : formatVerifySummaryLine(summary));
-            noteVerifyRefusal(summary);
-          } else if (opts.json) console.log(JSON.stringify(report, null, 2));
-          else for (const line of formatVerifyOutput(report)) console.log(line);
-          process.exit(report.passed ? 0 : 1);
+          printVerificationResult(report, opts);
+          return;
         }
         const loadedFlow = input.flow;
         const flow: VerifyFlow = {
@@ -2168,14 +2207,7 @@ with account access. Print the full flow schema with ${cliInvocation()} verify -
           flow,
           client,
         ), !opts.json);
-        if (opts.out !== undefined) {
-          writeVerifyReportTo(opts.out, report);
-          const summary = summarizeVerifyReport(report);
-          console.log(opts.json ? JSON.stringify(summary, null, 2) : formatVerifySummaryLine(summary));
-          noteVerifyRefusal(summary);
-        } else if (opts.json) console.log(JSON.stringify(report, null, 2));
-        else for (const line of formatVerifyOutput(report)) console.log(line);
-        process.exit(report.passed ? 0 : 1);
+        printVerificationResult(report, opts);
       } catch (cause) {
         if (cause instanceof CliApiError && cause.code === 'VALIDATION_ERROR'
             && /provide exactly one of|unknown action|unsupported action|upload is not supported|screenshot is not supported/i.test(cause.message)) {

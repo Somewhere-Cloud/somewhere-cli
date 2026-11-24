@@ -112,9 +112,9 @@ test('somewhere test reads the stored result of the last deploy; waits only whil
   const settledClient = { call: async (method, path, body, query) => { stored.push({ method, path, query }); return { access_check: record }; } };
   const s1 = await runChecksNow(settledClient, 'p1', c0);
   assert.deepEqual(stored, [{ method: 'GET', path: '/deploy/log', query: { project_id: 'p1' } }]);
-  assert.deepEqual(formatChecksReport(s1), ['FAIL Your check "add a note" on a phone', 'PASS Your check "add a note"', record.sentence]);
+  assert.match(formatChecksReport(s1).join('\n'), /FAIL Your check "add a note" on a phone[\s\S]*Response 1: HTTP 200[\s\S]*Reproduce:.*checks\/add-a-note.json/);
   assert.equal(checksExitCode(s1), 1);
-  assert.equal(checksExitCode({ ...record, passed: true }), 0);
+  assert.equal(checksExitCode({ ...record, passed: true, checks: record.checks.map(l => ({ ...l, pass: true })) }), 0);
   // Still running: it waits for that same run.
   const c1 = clock(); let reads = 0;
   const runningClient = { call: async (method) => { if (method === 'POST') throw new Error('no new run'); reads += 1; return { access_check: reads < 3 ? { status: 'pending', sentence: null } : record }; } };
@@ -136,7 +136,7 @@ test('somewhere test reads the stored result of the last deploy; waits only whil
   const pending = await runChecksNow({ call: async (method) => method === 'POST' ? { read: 'GET /v1/deploy/log?project_id=p1&version=4' } : { access_check: { status: 'pending', sentence: null } } }, 'p1', c3);
   assert.ok(c3.now() <= 150_000 && c3.now() >= 147_000, `${c3.now()} ms`);
   assert.match(formatChecksReport(pending)[0], /did not finish within 150 s/);
-  assert.equal(checksExitCode(pending), 1);
+  assert.equal(checksExitCode(pending), 2);
 });
 
 test('somewhere test with no file runs the platform checks with no local browser and exits by their verdict', async () => {
@@ -150,6 +150,7 @@ test('somewhere test with no file runs the platform checks with no local browser
   writeFileSync(join(dir, 'tests', 'app-check.mjs'), "throw new Error('must not run');\n");
   const requests = [];
   let passed = false;
+  let custom;
   const send = (res, status, payload) => { res.writeHead(status, { 'content-type': 'application/json' }); res.end(JSON.stringify(payload)); };
   const s = createServer((req, res) => {
     let body = '';
@@ -158,7 +159,7 @@ test('somewhere test with no file runs the platform checks with no local browser
       if (req.url.includes('/notices')) return send(res, 200, { ok: true, data: { notices: [] } });
       requests.push(`${req.method} ${req.url.split('?')[0]}${body ? ' ' + body : ''}`);
       if (req.method === 'POST' && req.url === '/v1/deploy/checks') return send(res, 202, { ok: true, data: { status: 'running', version: 4, read: `GET /v1/deploy/log?project_id=${PROJECT}&version=4` } });
-      if (req.url.startsWith('/v1/deploy/log')) return send(res, 200, { ok: true, data: { access_check: { ...record, passed, ...(passed ? { checks: record.checks.map(l => ({ ...l, pass: true })), sentence: 'Every check passed.' } : {}) } } });
+      if (req.url.startsWith('/v1/deploy/log')) return send(res, 200, { ok: true, data: { access_check: custom ?? { ...record, passed, ...(passed ? { checks: record.checks.map(l => ({ ...l, pass: true })), sentence: 'Every check passed.' } : {}) } } });
       send(res, 404, { ok: false, error: 'NOT_FOUND', message: req.url });
     });
   });
@@ -173,7 +174,9 @@ test('somewhere test with no file runs the platform checks with no local browser
   try {
     const failing = await run([]);
     assert.equal(failing.status, 1, failing.stderr);
-    assert.deepEqual(failing.stdout.trim().split('\n'), ['FAIL Your check "add a note" on a phone', 'PASS Your check "add a note"', record.sentence]);
+    assert.match(failing.stdout, /^FAIL Your check "add a note" on a phone$/m);
+    assert.deepEqual(JSON.parse(failing.stdout.trim().split('\n').at(-1)),
+      { outcome: 'failed', counts: { passed: 1, failed: 1, could_not_check: 0, warnings: 0 } });
     assert.doesNotMatch(failing.stdout + failing.stderr, /must not run|Playwright/);
     assert.deepEqual(requests.slice(0, 1), ['GET /v1/deploy/log'], 'it reads the last deploy\'s stored result first');
     const json = await run(['--json']);
@@ -183,6 +186,39 @@ test('somewhere test with no file runs the platform checks with no local browser
     const passing = await run([]);
     assert.equal(passing.status, 0, passing.stderr);
     assert.match(passing.stdout, /^PASS Your check "add a note" on a phone$/m);
-    assert.match(passing.stdout, /^Every check passed\.$/m);
+    assert.equal(JSON.parse(passing.stdout.trim().split('\n').at(-1)).outcome, 'passed');
+
+    custom = { status: 'checked', passed: false, checks: [], sentence: 'Warning: A server function crashed: GET /favicon.ico. A test row could not be removed after the check.',
+      findings: [{ kind: 'crash', via: 'GET /favicon.ico' }, { kind: 'cleanup', table: 'bookings', left_behind: 'Test row bookings / test-42 may remain.' }] };
+    const cleanup = await run([]);
+    assert.equal(cleanup.status, 2);
+    assert.doesNotMatch(cleanup.stdout, /crashed|^FAIL/m);
+    assert.match(cleanup.stdout, /Could not check cleanup: Test row bookings \/ test-42 may remain/);
+    assert.equal(JSON.parse(cleanup.stdout.trim().split('\n').at(-1)).outcome, 'could_not_check');
+
+    custom = { ...custom, findings: [{ kind: 'crash', via: 'GET /api/boom', request_id: 'exception-id' }] };
+    const warning = await run([]);
+    assert.equal(warning.status, 0);
+    assert.match(warning.stdout, /Warning: A server function crashed: GET \/api\/boom/);
+    assert.equal(JSON.parse(warning.stdout.trim().split('\n').at(-1)).counts.warnings, 1);
+
+    custom = { status: 'checked', passed: false, checks: [{ name: 'A stranger cannot list members', as: 'stranger', pass: false,
+      outcome: 'could_not_check', detail: 'Inconsistent: tell us. Request ID: one, two.',
+      request: { method: 'POST', url: 'https://app.example/__sw/data', body: { table: 'members', operation: 'list' } },
+      responses: [{ status: 200, request_id: 'one', observed: 'A row was returned' }, { status: 200, request_id: 'two', observed: 'Empty list' }],
+    }] };
+    const inconsistent = await run([]);
+    assert.equal(inconsistent.status, 2);
+    assert.match(inconsistent.stdout, /Response 1: HTTP 200.*row was returned/);
+    assert.match(inconsistent.stdout, /Response 2: HTTP 200.*Empty list/);
+    assert.match(inconsistent.stdout, /Inconsistent: tell us.*one, two/);
+    assert.doesNotMatch(inconsistent.stdout, /^FAIL/m);
+    custom.checks[0].outcome = 'failed';
+    custom.checks[0].responses[1].observed = 'A row was returned';
+    delete custom.checks[0].detail;
+    const confirmed = await run(['--json']);
+    assert.equal(confirmed.status, 1);
+    assert.equal(confirmed.stdout.trim().split('\n').length, 1);
+    assert.equal(JSON.parse(confirmed.stdout).outcome, 'failed');
   } finally { await new Promise((r) => s.close(r)); }
 });

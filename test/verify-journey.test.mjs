@@ -16,6 +16,7 @@ const {
   normalizeVerifyFlow,
   normalizeVerifyJourney,
   verifyFlowSchema,
+  verifyResultSummary,
 } = await import('../dist/commands/verify.js');
 const { normalizeBrowserActions } = await import('../dist/lib/browser-actions.js');
 const { CliApiError } = await import('../dist/lib/client.js');
@@ -679,6 +680,10 @@ test('test_user: kept on request, unconfirmed delete is reported, invalid combin
   const failed = await createVerifyJourneyRun({ project_id: 'club' }, normalizeVerifyJourney(teamFlow), testUserClient({ failDelete: true })).run();
   assert.equal(failed.test_users.cleanup.status, 'unconfirmed');
   assert.match(failed.test_users.cleanup.reason, /AUTH_STORE_UNAVAILABLE/);
+  assert.equal(failed.cleanup_confirmed, false);
+  assert.match(failed.verdict, /Could not check cleanup.*alice, bob may remain/);
+  assert.equal(verifyResultSummary(failed).outcome, 'could_not_check');
+  assert.equal(verifyResultSummary(failed).counts.failed, 0);
   assert.throws(() => normalizeVerifyJourney({ actors: { a: { test_user: true, auth: { user_id: 'x' } } }, journey: [{ as: 'a' }] }), /remove auth/);
   assert.throws(() => normalizeVerifyJourney({ actors: { a: { test_user: 'yes' } }, journey: [{ as: 'a' }] }), /must be true/);
 });

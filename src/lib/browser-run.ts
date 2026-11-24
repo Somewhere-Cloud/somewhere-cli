@@ -359,6 +359,7 @@ export async function executeLocalAction(
         await sleep(100);
       }
       await sleep(SETTLE_MS);
+      await waitForLocalAuth(session, deadline);
       return step;
     }
     if ('screenshot' in action) {
@@ -403,6 +404,18 @@ export async function executeLocalActions(
  * the page looks like, and "it broke here, and here is the rest" is the useful
  * answer.
  */
+async function waitForLocalAuth(session: DevToolsSession, deadline: number): Promise<void> {
+  const until = Math.min(deadline, Date.now() + 5_000);
+  while (true) {
+    const state = await evaluate(session, "document.documentElement.getAttribute('data-sw-auth')");
+    if (state === 'indeterminate') throw new Error('The app could not confirm its sign-in state.');
+    if (state !== 'checking') return;
+    const remaining = until - Date.now();
+    if (remaining <= 0) throw new Error('The app session check did not finish before the browser deadline.');
+    await sleep(Math.min(50, remaining));
+  }
+}
+
 export async function runLocalBrowser(req: LocalBrowserRequest): Promise<LocalBrowserReport> {
   const found = findBrowser();
   if (!found) throw new Error(NO_BROWSER_MESSAGE);
@@ -543,9 +556,16 @@ export async function runLocalBrowser(req: LocalBrowserRequest): Promise<LocalBr
     }
     await sleep(SETTLE_MS);
 
-    if (req.path && loadFired) steps.push({ action: 'goto', ok: true, path: req.path });
+    if (loadFired) {
+      try {
+        await waitForLocalAuth(session, deadline);
+        if (req.path) steps.push({ action: 'goto', ok: true, path: req.path });
+      } catch (error) {
+        steps.push({ action: 'goto', ok: false, path: req.path, error: error instanceof Error ? error.message : String(error) });
+      }
+    }
 
-    const actionSteps = await executeLocalActions(
+    const actionSteps = loadFired && steps.some((step) => !step.ok) ? [] : await executeLocalActions(
       session,
       req.actions ?? [],
       deadline,

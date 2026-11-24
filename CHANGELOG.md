@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.38.149
+
+- The local browser and Playwright test fixtures wait for an app's SDK session check after navigation.
+
 ## 0.38.148
 
 - `somewhere advisor` in a folder linked to an app, while signed in, sends the app's overview and its last deploy (after a failed deploy, the failure's file, line and message), read with your own sign-in, and says so in one line. `--no-context` sends the question alone.

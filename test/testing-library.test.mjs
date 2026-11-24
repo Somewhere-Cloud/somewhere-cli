@@ -13,7 +13,7 @@ test('direct sessions and Playwright use cookies for the linked origin only', as
     return new Response('ok');
   });
   assert.equal(await (await session.request('/api/tasks')).text(), 'ok');
-  assert.equal(session.storageState().cookies[0].value, 'fixture');
+  assert.equal((await session.storageState()).cookies[0].value, 'fixture');
   await assert.rejects(session.request('https://outside.test'), /app origin/);
   assert.equal(mock.mock.callCount(), 1);
 });

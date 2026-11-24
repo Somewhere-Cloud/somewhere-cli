@@ -70,9 +70,9 @@ export function registerTestUsers(program: Command): void {
       'With data imported from @somewhere-cloud/cli/testing: await data(alice.request, "notes", { operation: "list" })',
       'Save the context back after each run:  await context.storageState({ path: ".somewhere/test/alice.state.json" })',
       'The app refreshes the short-lived access token and rotates the session on its first refresh, so an unsaved',
-      'file stops working after a run that refreshed it. The prepared session starts with the expiry prepare',
-      'prints ("session until …", session_expires_at in manifest.json). A refresh during a run can renew it, and',
-      'the saved-back state carries the renewal, so do not rely on expiry to end access: remove the identities',
+      'file stops working after a run that refreshed it. Prepare prints the access token expiry and the initial',
+      'refresh session expiry separately. A refresh can renew the session, and the saved state carries the',
+      'renewal. Remove the identities to end access',
       'with `somewhere test-users cleanup` when you are done. To use the same user in a fresh hosted browser, pass its recorded user ID to browser --auth-user.',
     ].join('\n'))
     .action(async (actorValues: string[], opts: { project?: string; origin?: string; json?: boolean }) => {
@@ -133,7 +133,7 @@ export function registerTestUsers(program: Command): void {
       }
       for (const actor of manifest.actors) {
         info(`${actor.name} (${actor.role})  ${actor.email}  user ${actor.user_id}`);
-        info(`  ${TEST_STATE_DIR}/${actor.state_file}  session until ${actor.session_expires_at}`);
+        info(`  ${TEST_STATE_DIR}/${actor.state_file}  access token until ${actor.access_expires_at}, refresh session initially until ${actor.session_expires_at}`);
       }
       if (gitignore !== 'present') info(`${gitignore === 'created' ? 'Created' : 'Updated'} .gitignore to ignore ${TEST_STATE_DIR}/.`);
       info(RETAINED_NOTE);

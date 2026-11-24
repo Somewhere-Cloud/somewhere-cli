@@ -210,6 +210,26 @@ export const MCP_POINTER = 'Use this app from Claude as its signed-in user (MCP 
  *  Rewrite it when previews gain these (the full list: docs dev-environments). */
 export const PREVIEW_POINTER = 'somewhere preview runs your change on a copy of production data with its own sign-in: a preview starts with no users (sign up in it or `somewhere preview user-add`), its sign-in mail is captured (`somewhere preview mail`), and rows private to a production user stay hidden from preview users. Server user lookup, roles and built-in teams work in a preview (its own users, its own copy; team invitations are captured); jobs/cron handlers do not yet: check those in production after promoting (`somewhere docs dev-environments`). Test your change in the preview before you promote it: `somewhere test --preview`.';
 
+const TEST_ACCESS_RULES = `## Testing access rules
+
+In a linked test app, run \`somewhere test-users prepare alice bob\`. For an
+owner() table with client create and read, create a fixture as Alice and read it
+as both users:
+
+\`\`\`sh
+ID=$(somewhere data create notes --as alice --values '{"title":"Access test"}' | jq -er 'select(.status == 200 and .kind == "ok") | .data.id') &&
+somewhere data get notes --as alice --id "$ID" | jq -e '.status == 200 and .kind == "ok"' &&
+somewhere data get notes --as bob --id "$ID" | jq -e '.status == 200 and .kind == "empty" and .data == null and .access == {"filtered":true}'
+\`\`\`
+
+200 with access.filtered means the rule constrained the read, even when rows
+are returned. 404 DATA_NOT_FOUND on update or delete hides whether the row
+exists. 401 AUTH_REQUIRED needs a signed-in session. 403 names the access rule
+or operation that refused the call. DATA_CONTRACT_* means the operation never
+ran. Assert the exact outcome in handed-over tests and confirm a refused write
+left the owner's fixture unchanged.
+`;
+
 export const INIT_AGENTS_MD = `# somewhere.cloud project contract
 ${FIRST_CLI_PERMISSION}
 
@@ -219,5 +239,5 @@ Build your app. Deploy the raw source and run its tests: \`npx @somewhere-cloud/
 
 For an app with sign-in, keep the starter's auth gate. Render private UI only after the session is confirmed. Keep the pending and retry views. In a browser test wait for the expected screen; if the SDK publishes \`data-sw-auth\` on \`<html>\`, first wait for the expected sign-in state there.
 
-${AGENT_WORKFLOW}\n${PORTABILITY_POINTER}\n${MCP_POINTER}\n${PREVIEW_POINTER}\n`;
+${AGENT_WORKFLOW}\n${TEST_ACCESS_RULES}\n${PORTABILITY_POINTER}\n${MCP_POINTER}\n${PREVIEW_POINTER}\n`;
 export const INIT_CLAUDE_MD = 'Read AGENTS.md for project instructions.\n';

@@ -63,7 +63,7 @@ function fixtureServer(callTool) {
         return;
       }
       if (rpc.method === 'tools/call') {
-        sendJson(res, { jsonrpc: '2.0', id: rpc.id, result: callTool(rpc.params) });
+        sendJson(res, { jsonrpc: '2.0', id: rpc.id, result: callTool(rpc.params, res) });
         return;
       }
       res.statusCode = 404;
@@ -355,4 +355,31 @@ test('cron run rejects --timeout without --wait before calling the platform', as
     assert.equal(JSON.parse(bad.stdout).error, 'USAGE_ERROR');
   });
   assert.deepEqual(calls, []);
+});
+
+test('cron run --wait honors Retry-After while reading the one queued job', async () => {
+  const home = credentialHome('sw-cron-retry-after-home-');
+  const reads = [];
+  let admissions = 0;
+  await withFixture((params, res) => {
+    if (params.name === 'cron_run') {
+      admissions++;
+      return toolSuccess({ cron_id: 'cron_daily', job_id: 'job_once', status: 'queued', trigger: 'manual' });
+    }
+    assert.equal(params.name, 'job_get');
+    assert.deepEqual(params.arguments, { job_id: 'job_once' });
+    reads.push(Date.now());
+    if (reads.length === 1) {
+      res.setHeader('Retry-After', '1');
+      return toolSuccess({ job_id: 'job_once', status: 'running' });
+    }
+    return toolSuccess({ job_id: 'job_once', status: 'complete' });
+  }, async (url) => {
+    const result = await run(['cron', 'run', 'cron_daily', '--wait', '--json'], { HOME: home, USERPROFILE: home, SOMEWHERE_MCP_URL: url });
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(JSON.parse(result.stdout).data.job.job_id, 'job_once');
+  });
+  assert.equal(admissions, 1);
+  assert.equal(reads.length, 2);
+  assert.ok(reads[1] - reads[0] >= 1000);
 });

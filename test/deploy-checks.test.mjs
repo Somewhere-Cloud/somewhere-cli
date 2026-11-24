@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { retryAfterMs } from '../dist/lib/poll-delay.js';
 import { awaitDeployChecks, checksExitCode, checksJsonReport, formatChecksReport, parseChecksRead, runChecksNow, DEPLOY_CHECKS_RUNNING } from '../dist/lib/deploy-checks.js';
 
 const checks = { status: 'running', read: 'GET /v1/deploy/log?project_id=p1&version=3' };
@@ -14,14 +15,14 @@ test('the read named by the platform becomes the API path and query', () => {
   assert.equal(parseChecksRead('POST /v1/x'), null);
 });
 
-test('polls every 3 s until the access check settles and prints its sentence', async () => {
+test('starts with short waits until the access check settles and prints its sentence', async () => {
   const c = clock();
   const calls = [];
   const answers = [{ access_check: { status: 'pending', sentence: null } }, new Error('network'), { access_check: { status: 'checked', sentence: 'Only owners can read notes.', findings: [], checked_at: 'x' } }];
   const client = { call: async (method, path, body, query) => { calls.push({ method, path, query, at: c.now() }); const a = answers.shift(); if (a instanceof Error) throw a; return a; } };
   const check = await awaitDeployChecks(client, checks, c);
   assert.equal(check.status, 'checked');
-  assert.deepEqual(calls.map(x => x.at), [0, 3000, 6000]);
+  assert.deepEqual(calls.map(x => x.at), [0, 150, 450]);
   assert.deepEqual(calls[0], { method: 'GET', path: '/deploy/log', query: { project_id: 'p1', version: '3' }, at: 0 });
 });
 
@@ -31,7 +32,7 @@ test('reading for somewhere test stops at 150 s; every read failing is the same 
   const client = { call: async () => { n += 1; return { access_check: { status: 'pending', sentence: null } }; } };
   const check = await awaitDeployChecks(client, checks, c);
   assert.equal(check.status, 'pending');
-  assert.ok(c.now() <= 150_000 && n === 51, `${n} reads by ${c.now()} ms`);
+  assert.ok(c.now() <= 150_000 && n === 152, `${n} reads by ${c.now()} ms`);
   const failing = { call: async () => { throw new Error('down'); } };
   assert.equal(await awaitDeployChecks(failing, checks, clock()), null);
 });
@@ -302,4 +303,26 @@ test('a targeted check cannot pass on a full result or a different selection', a
   assert.equal(result.scope, 'partial');
   assert.deepEqual(result.checked_parts, []);
   assert.match(formatChecksReport(result).join('\n'), /No parts ran/);
+});
+
+test('hosted reads honor Retry-After from admission and status polling', async () => {
+  const c = clock();
+  const reads = [];
+  const client = { call: async (method, path, body, query, opts) => {
+    if (method === 'POST') {
+      opts.onRetryAfter(2000);
+      return { read: checks.read };
+    }
+    reads.push(c.now());
+    if (reads.length === 1) {
+      opts.onRetryAfter(3000);
+      return { access_check: { status: 'pending', sentence: null } };
+    }
+    return { access_check: record };
+  } };
+  await runChecksNow(client, 'p1', { ...c, again: true });
+  assert.deepEqual(reads, [2000, 5000]);
+  assert.equal(retryAfterMs('2'), 2000);
+  assert.equal(retryAfterMs('Tue, 24 Nov 2026 10:30:03 GMT', Date.parse('2026-11-24T10:30:00Z')), 3000);
+  assert.equal(retryAfterMs(null), undefined);
 });

@@ -158,18 +158,17 @@ test('minimal starter is a small typed frontend, function, and schema', () => {
   const agents = readFileSync(join(dir, 'AGENTS.md'), 'utf8');
   const claude = readFileSync(join(dir, 'CLAUDE.md'), 'utf8');
   assert.equal(agents, INIT_AGENTS_MD);
-  assert.match(agents, /## Build, deploy, test\n\nEnough to start a typical app/);
-  assert.match(agents, /Teams are built-in groups/);
-  // Saved checks are how a journey is re-checked; no local browser script is the default.
-  for (const line of ['Save each journey you want re-checked after every deploy as checks/<plain-name>.json; the platform runs them\nin its browser after each deploy and `somewhere test` runs them now.',
-    '"signed_in": true', '"viewports": ["desktop", "mobile"]', 'Find controls by data-testid', 'clicking the item element itself']) assert.ok(agents.includes(line), line);
+  assert.match(agents, /\| Does your app verify emails\?/);
+  assert.match(agents, /invited teams.*group\(\).*team-example/);
+  assert.match(agents, /app-managed teams.*member\(\).*teams-without-email-verification/);
+  assert.match(agents, /staff by invitation.*setRoles.*sign-up route/);
+  assert.match(agents, /public pages from private drafts.*120 seconds/);
+  assert.match(agents, /Saved checks run after deploy/);
+  assert.match(agents, /"signed_in": true/);
+  assert.match(agents, /"viewports": \["desktop", "mobile"\]/);
+  assert.match(agents, /Keep test IDs when restyling/);
+  assert.match(agents, /preserve edits when a late response arrives/);
   assert.doesNotMatch(agents, /tests\/app-check\.mjs|openAppTest|@playwright\/test/);
-  // Apps that cannot ask for email verification (bench-1115b: every Team Board and Help Desk build looked this up).
-  assert.match(agents, /^No email verification in your app: keep membership in your own table with member\(\) \(somewhere docs sw\.groups --section relationships-that-are-not-teams\) and assign staff with setRoles in the sign-up route \(above\)\.$/m);
-  // Pages that need several reads (bench-1115b: a subject shown before its messages; an input overwritten by a late answer).
-  assert.match(agents, /show it once every read it depends on has answered/);
-  assert.match(agents, /Keep an input disabled until the data it depends on has loaded, including who the user is/);
-  assert.match(agents, /Never let a late answer overwrite what the user typed/);
   assert.equal(claude, 'Read AGENTS.md for project instructions.\n');
 
 });
@@ -275,8 +274,8 @@ test('the starter saves one check, add a note, that the platform runs and finds 
     const board = readFileSync(join(dir, 'src/ui/NotesBoard.tsx'), 'utf8');
     for (const id of ['note-title', 'note-save', 'note-item']) assert.match(board, new RegExp(`data-testid="${id}"`), `${ui}: board carries ${id}`);
     const guide = readFileSync(join(dir, 'AGENTS.md'), 'utf8');
-    assert.match(guide, /checks\/add-a-note\.json \(note-title, note-save, note-item\): start from it/);
-    assert.match(guide, /keep the ids when you restyle/);
+    assert.match(guide, /checks\/add-a-note\.json` from the notes starter as a model/);
+    assert.match(guide, /Keep test IDs when restyling/);
   }
 });
 
@@ -527,14 +526,14 @@ test('one generated template consumes the SDK auth adapter and server data/files
   }
 
   const guide = readFileSync(join(dir, 'AGENTS.md'), 'utf8');
-  assert.match(guide, /^Run them now: npx @somewhere-cloud\/cli test \(one PASS or FAIL line per check, failures first; exit 1 when one fails\)\.$/m);
+  assert.match(guide, /npx @somewhere-cloud\/cli test/);
   assert.doesNotMatch(guide, /node tests\/app-check\.mjs/, 'one way to run the tests');
   assert.doesNotMatch(guide, /You do not need a separate browser script/);
   assert.doesNotMatch(guide, /allow-type-errors/);
   // What the platform checks after every deploy, and where a journey goes.
-  assert.match(guide, /After every deploy the platform checks the live app in its own browser/);
-  assert.match(guide, /checks\/<plain-name>\.json; the platform runs them\nin its browser after each deploy and `somewhere test` runs them now\./);
-  assert.match(guide, /Deploy raw source/);
+  assert.match(guide, /Saved checks run after deploy/);
+  assert.match(guide, /Save journeys in `checks\/<name>\.json`/);
+  assert.match(guide, /uploads raw source directly to production/);
   assert.doesNotMatch(guide, /worker\/src\/runtime\/auth\.ts/);
   assert.equal(
     readFileSync(join(dir, 'CLAUDE.md'), 'utf8'),

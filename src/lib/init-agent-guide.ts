@@ -1,197 +1,49 @@
-import { FIRST_CLI_PERMISSION } from './first-cli-permission.js';
 import { SKILLS_DIR } from './skills-pack.js';
 
 // Generated mirror of somewhere.cloud/docs/agent-workflow.md. The platform
 // docs lint byte-compares this value when SOMEWHERE_CLI_REPO points here.
 export const AGENT_WORKFLOW = `## Build, deploy, test
 
-Enough to start a typical app: declare access and use the browser client; docs are for exceptions.
-
-| Requirement | Declaration below |
+| Does your app verify emails? | Choose the declared access rule |
 | --- | --- |
-| Each user sees only their own rows | notes: owner() |
-| Team: owner invites members; members read/write; creator or team owner deletes | tasks: anyOf(owner(), group()); sw.groups endpoints below |
-| Owner/staff record with staff-only child notes | tickets: owner() or appRole(); parent() thread; staff-only notes; staff by verified emailDomain (or grantableBy) |
-| Public pages from private drafts | pages: conditional publicRead |
-| Share one record read-only | shared_notes/note_shares: read-only grant() |
+| Yes, invited teams | Use \`group()\` and \`sw.groups\` for invitations, membership and owner/admin permissions. See \`somewhere docs sw.groups --section team-example\`. |
+| No, app-managed teams | Use \`member()\` over a server-only roster. Declare author-or-team-owner delete with \`anyOf()\` and a role-filtered branch. See \`somewhere docs declared-data --section teams-without-email-verification\`. |
+| Yes, staff by domain | Use \`appRole()\` and \`appRoles: { staff: { emailDomain: 'staff.example' } }\`. The address must be verified. |
+| No, staff by invitation | Use \`appRole()\` and \`assignedBy: 'server'\`. Redeem an app-issued invitation and call \`sw.auth.server.setRoles\` inside the sign-up route. See \`somewhere docs sw.auth --section server-assigned-app-roles-setroles\`. |
+| Either, personal rows | Use \`owner()\`. The platform stamps the owner from the signed-in user. |
+| Either, shared private row | Use a read-only \`grant()\` for a known app-user ID. Share by address only after verification. Adding the grant widens existing caller-scoped reads. See \`somewhere docs declared-data --section read-only-sharing-without-email-verification\`. |
+| Either, public pages from private drafts | Use conditional \`client.publicRead\`. Anonymous results can be cached for up to 120 seconds. For fresh pages, read with \`sw.db.server.from\` in a page handler, filter for published rows, select public fields, and set \`Cache-Control: no-store\`. |
 
-db/schema.ts is declaration only: imports, constants/spreads, default schema;
-no helpers/expressions. id() is random text; owner() stamps user_id. client.read
-includes the key. Inside anyOf(), owner() takes only column/read: it stamps the
-creator, not create/delete options; group() gates placement (non-member create is
-refused); inside anyOf an operation missing from roles allows no group role. Other fields: timestamp({ default: 'now' }), text({ nullable: true });
-indexes: [['team_id']].
+### Schema and data
 
-\`\`\`ts
-import { schema, table, id, text, owner, group, anyOf, parent, appRole, boolean, grant } from 'somewhere/db';
-export default schema({
-  notes: table({ id: id(), title: text() }, { scope: owner(), client: { read: ['id', 'title'], create: ['title'], update: ['title'], delete: true },
-  }),
-  tasks: table({ id: id(), team_id: text(), title: text() }, {
-    scope: anyOf(owner(), group({ column: 'team_id', roles: { read: ['owner', 'admin', 'member'],
-      create: ['owner', 'admin', 'member'], update: ['owner', 'admin', 'member'], delete: ['owner'] } })),
-    client: { read: ['id', 'team_id', 'title'], create: ['team_id', 'title'], update: ['title'], delete: true },
-  }),
-  tickets: table({ id: id(), subject: text() }, {
-    scope: anyOf(owner(), appRole({ roles: { read: ['staff'], create: ['staff'], update: ['staff'] } })),
-    client: { read: true, create: ['subject'], update: ['subject'] },
-  }),
-  messages: table({ id: id(), ticket_id: text({ references: 'tickets' }), body: text() }, {
-    scope: parent({ via: 'ticket_id' }),
-    client: { read: true, create: ['ticket_id', 'body'] },
-  }),
-  staff_notes: table({ id: id(), ticket_id: text({ references: 'tickets' }), body: text() }, {
-    scope: appRole({ roles: { read: ['staff'], create: ['staff'] } }),
-    client: { read: true, create: ['ticket_id', 'body'] },
-  }),
-  pages: table({ id: id(), title: text(), published: boolean({ default: false }) }, {
-    scope: owner(), client: { read: ['id', 'title'], create: ['title'], update: ['title'],
-      publicRead: { where: { published: true } } },
-  }),
-  note_shares: table({ id: id(), grantee_id: text(), note_id: text({ references: 'shared_notes', onDelete: 'cascade' }) }, {
-    scope: owner(), unique: [['note_id', 'grantee_id']],
-  }),
-  shared_notes: table({ id: id(), title: text() }, {
-    scope: anyOf(owner(), grant({ table: 'note_shares', grantee: 'grantee_id', row: 'note_id', operations: ['read'] })),
-    client: { read: ['id', 'title'], create: ['title'], update: ['title'] },
-  }),
-}, { appRoles: { staff: { emailDomain: 'staff.example' } } });
-\`\`\`
+Declare tables in \`db/schema.ts\` with imports, literal values, constants and spreads.
+New \`id()\` keys are text. Reference them with \`text({ references: 'table_name' })\`.
+Existing integer IDs stay integers. Declare composite uniqueness with \`unique: [['a', 'b']]\`.
 
-Who is staff is your app's decision; the platform enforces what the role may do.
-First choice, as above: emailDomain. The role holds once the person verifies an address
-at that domain; no grant code. An email ending alone proves nothing: anyone can sign up
-as anyone@your-domain without owning that mailbox. Without verification, grant only from
-something the visitor cannot choose, such as an invitation your app issued, checked inside
-the sign-up route: single use, bound to one account, its link delivered only to that person:
-somewhere docs sw.auth --section server-assigned-app-roles-setroles.
-messages use parent(): owner() would hide staff replies from the customer.
-A staff reply is a messages row, and creating a parent() child needs create on the parent
-for that person: its owner, or a role listed under the parent's create. Read or update is
-not enough. So tickets lists create: ['staff']; without it every staff reply is refused
-(403 POLICY_AUTHORITY_REQUIRED).
-Publish pages in an owner-checked endpoint. Share with caller-scoped
-sw.db.insert('note_shares', { grantee_id, note_id }); it checks row ownership.
-Browser calls THROW, not { error }; catch below.
-Browser list: paginate with after. Sort locally or in an endpoint.
+- Browser reads and writes use generated \`somewhere:data\`. \`client\` sets allowed operations and fields. Include the key in explicit read lists. Browser calls throw errors, and list pages use the returned \`next\` as \`after\` (at most 100 rows per page).
+- \`anyOf()\` grants access through either branch. \`allOf()\` requires both the membership gate and the action rule. \`parent()\` inherits the parent row's access. To let a child author update or delete, declare \`parent({ author, update, delete })\`. It evaluates the child author and the parent operation separately. For staff replies through \`parent()\`, grant staff create permission on the ticket's rule. See \`somewhere docs declared-data --section comments-that-their-author-may-edit\`.
+- \`sw.db.from/insert/update/remove\` apply the caller's scope and return \`{ data, count, changes }\`. Use \`where\`, \`columns\`, \`order\`, \`limit\` and \`offset\` for server reads. \`sw.db.tx\` takes an array of write intents. Supply related IDs up front.
+- Authorize before \`sw.db.server\` calls, which bypass the caller's scope. Keep declared scopes on records users work with, even when an exceptional write needs server authority. Use \`serverOnly()\` for protected ledgers and job state. Raw SQL uses a separate raw database.
+- For booking and help desk schemas, see \`somewhere docs sw.db --section provider-or-booker-and-owner-or-staff-recipes\`. For browser paging, server paging and transactions, see \`somewhere docs sw.db\`.
 
-\`\`\`ts
-import { data } from 'somewhere:data';
-export async function save(title: string) {
-  try { await data.notes.create({ title }); return null; }
-  catch (e) { return e instanceof Error ? e.message : 'Save failed'; }
-}
-export const list = (after?: string) => data.notes.list({ limit: 100, after });
-\`\`\`
+Use \`client.intake\` for public submissions to a private parent row. See
+\`somewhere docs declared-data\` for intake, scoped writes and related rows.
 
-A page that needs several reads: start them together and show it once every read it depends on has answered.
-Keep an input disabled until the data it depends on has loaded, including who the user is.
-Never let a late answer overwrite what the user typed: fill an input from loaded data only before it is enabled.
+### Routes and auth
 
-Teams are built-in groups: the platform keeps the team, invitations, roster, removal,
-leaving, last owner. Starting a team needs a signed-in user; joining needs a verified
-email (a password sign-up joins once it enters its emailed code).
-No email verification in your app: keep membership in your own table with member() (somewhere docs sw.groups --section relationships-that-are-not-teams) and assign staff with setRoles in the sign-up route (above).
-The browser cannot call
-sw.groups: pass each call through an endpoint. A parent() child's delete follows the task
-(creator or team owner), so "comment author or team owner deletes" is an endpoint.
-Staff making others staff: appRoles { staff: { grantableBy: ['staff'] } } and
-sw.groups.appRoles.grant(request, userId, 'staff') in an endpoint (never to oneself).
-Complete apps and specs: somewhere docs sw.groups --section team-example or staff-example.
+- \`src/App.tsx\` and \`src/routes.ts\` route React pages. \`api/notes/[id].ts\` serves \`/api/notes/:id\`. A root \`[...path].ts\` handles document routes, including \`/\`. Underscore-prefixed files are import-only helpers.
+- JSON routes use \`sw.endpoint({ auth, body, rateLimit, handler })\`. Set \`auth\` to \`'required'\`, \`'optional'\` or \`'none'\`. Use a limit like \`'30/minute'\`. Read route parameters from the handler's \`params\`. Use a default handler or named HTTP method exports. For streaming, webhooks or custom responses, use a bare \`(req, sw)\` handler and \`sw.params\`. See \`somewhere docs functions\`.
+- Keep \`api/auth/[...path].ts\` and extend the starter's \`src/auth/hooks.ts\`. Configure providers in \`src/config.ts\`. Gate private UI on auth state. Password sign-up starts unverified, and signed-in unverified users pass \`auth: 'required'\`. See \`somewhere docs auth-client\`.
+- Render a view when the reads it depends on finish. Keep inputs disabled until their initial data and identity are ready, and preserve edits when a late response arrives.
+- Browser requests use same-origin cookies. For scripted writes with a cookie session, send the app's origin in the \`Origin\` header. Use the CLI test helper to send data endpoint calls with the deployed contract digest.
 
-\`\`\`ts
-// api/teams.ts — GET my teams (completes invitations to me); POST starts one I own
-const refusal = (e: { code: string; message: string; status: number }) =>
-  Response.json({ error: e.code, message: e.message }, { status: e.status });
-export const GET = sw.endpoint({ auth: 'required', handler: async ({ request }, sw) => {
-  const page = await sw.groups.list(request, { limit: 100 });
-  return page.error ? refusal(page.error) : { teams: page.data.items, next_cursor: page.data.next_cursor };
-} });
-export default sw.endpoint({ auth: 'required', body: { name: 'string' }, handler: async ({ request, body }, sw) => {
-  const made = await sw.groups.create(request, { name: body.name });
-  return made.error ? refusal(made.error) : { id: made.data.id };
-} });
-\`\`\`
+### Run and verify
 
-\`\`\`ts
-// api/teams/[id]/invitations.ts — owners invite; others 403; a member's address 409 ALREADY_MEMBER
-export default sw.endpoint({ auth: 'required', body: { email: 'string' }, handler: async ({ request, params, body }, sw) => {
-  const sent = await sw.groups.invite(request, params.id, { email: body.email, role: 'member', redirect_uri: '/' });
-  return sent.error ? Response.json({ error: sent.error.code }, { status: sent.error.status }) : { delivery: sent.data.delivery };
-} });
-\`\`\`
+Run \`somewhere typecheck\` and focused tests. \`somewhere deploy-check\` checks compilation and schema without publishing. \`somewhere deploy\` uploads raw source directly to production. When testing changes with real users or data, use \`somewhere preview\`, test with \`somewhere test --preview\`, then promote. See \`somewhere docs dev-environments\`.
 
-Same shape: sw.groups.get/members(request, id), remove(request, id, userId), leave(request, id)
-(last owner: 409 LAST_OWNER), delete(request, id) by owners.
+Save journeys in \`checks/<name>.json\`, using \`checks/add-a-note.json\` from the notes starter as a model. Keep test IDs when restyling and click the item a person would use. Set \`"signed_in": true\` for a test user and \`"viewports": ["desktop", "mobile"]\` to check both sizes. Saved checks run after deploy. Use \`somewhere test\` to rerun them and \`somewhere verify --flow flow.json\` for a focused journey. For shared access, test the owner, a recipient and an unrelated user separately. The team fixture is in \`somewhere docs sw.groups --section team-example\`. For schedules, trigger \`somewhere cron run <id> --wait\` before asserting its effects. Inspect failures with \`somewhere errors\` and \`somewhere logs\`.
 
-Do not hand-write access to app-read/write data: declare who may read/write it.
-serverOnly() fits job/import/audit/counter state.
-Grant ledgers use owner() without browser writes. Undeclarable: arbitrary predicates
-(e.g. expiry) or per-role writable fields (split tables or check that write).
-
-Build src/pages/HomePage.tsx; routes src/App.tsx + src/routes.ts; auth src/auth/hooks.ts.
-Auth is wired: keep api/auth/[...path].ts; src/config.ts controls providers.
-api/notes/[id]/sub.ts → params.id; underscore files are helpers. POST: default export;
-GET/DELETE: named exports.
-
-\`\`\`ts
-export const GET = sw.endpoint({ auth: 'required', handler: async (_, sw) => sw.db.from('notes', { limit: 100 }) });
-\`\`\`
-
-sw.db applies caller scopes; sw.db.server bypasses them: authorize first.
-Caller-scoped sw.db.insert needs no client.create grant: client limits only the browser.
-Reads: from(table, { where, columns, order: [['id', 'asc']], limit, offset }).
-Filter: { id: { in: ids } }; unique: [['a', 'b']] in schema.
-Writes: insert(table, values), update(table, { where, set }), remove(table, { where }).
-tx takes an ARRAY of write intents, never a callback; pre-generate related IDs.
-
-Browser: fetch(path, { method: 'POST', credentials: 'same-origin',
-headers: { 'content-type': 'application/json' }, body: JSON.stringify(values) }).
-Access cookies refresh automatically. Cookie-auth POST/PATCH/DELETE from scripts
-need Origin equal to the app URL.
-
-After every deploy the platform checks the live app in its own browser: pages load signed out and as a
-test user, a stranger and a signed-out visitor cannot read a person's data, and your saved checks pass.
-Save each journey you want re-checked after every deploy as checks/<plain-name>.json; the platform runs them
-in its browser after each deploy and \`somewhere test\` runs them now.
-${FIRST_CLI_PERMISSION}
-Run them now: npx @somewhere-cloud/cli test (one PASS or FAIL line per check, failures first; exit 1 when one fails).
-A saved check is the somewhere verify --flow actions list; "signed_in": true runs it as a test user the platform
-creates and removes, and "viewports": ["desktop", "mobile"] runs it at both sizes:
-  { "actions": [ { "fill": "[data-testid=note-title]", "value": "Lunch with Ana 42" },
-      { "click": "[data-testid=note-save]" },
-      { "expect": { "selector": "[data-testid=note-item]", "text": "Lunch with Ana 42" } } ],
-    "signed_in": true, "viewports": ["desktop", "mobile"] }
-Find controls by data-testid so renaming a button does not break a check; keep the ids when you restyle.
-The notes starter ships this one as checks/add-a-note.json (note-title, note-save, note-item): start from it.
-Open a list item by clicking the item element itself (what a person clicks), not a link inside it.
-Deploy raw source, no frontend build; type errors stop upload.
-The complete team spec, with removal and leaving: somewhere docs sw.groups --section team-example.
-Diagnose with somewhere errors and somewhere logs.
-
-On demand:
-- Server paging: \`somewhere docs sw.db --section server-read-paging\`
-
-## Testing shared access
-
-With the team endpoints above, the owner invites a fixture by email; test users are verified,
-so its next GET /api/teams shows the team. A test user who still owns a team is not deleted:
-delete the team last (api/teams/[id].ts DELETE: sw.groups.delete). Group calls take
-about a second, so raise the timeout:
-
-\`\`\`ts
-// tests/team.spec.ts
-import { test, expect } from '@somewhere-cloud/cli/testing';
-test.describe.configure({ timeout: 90_000 });
-test('owner invites a second user by email', async ({ newUser }) => {
-  const [owner, bob] = await Promise.all([newUser(), newUser()]);
-  const { id } = await (await owner.request.post('/api/teams', { data: { name: 'Shared team' } })).json();
-  expect((await owner.request.post(\`/api/teams/\${id}/invitations\`, { data: { email: bob.email } })).ok()).toBeTruthy();
-  const { teams } = await (await bob.request.get('/api/teams')).json();
-  expect(teams).toContainEqual(expect.objectContaining({ id, role: 'member' }));
-  expect((await owner.request.delete(\`/api/teams/\${id}\`)).status()).toBe(204);
-});
-\`\`\`
+Use \`somewhere docs <topic> --section <id>\` for one section or \`--full\` for all examples. Ask before destructive or paid actions unless the user already authorized them.
 `;
 
 export const SKILLS_POINTER = `Task-specific skills: \`${SKILLS_DIR}/\`. Inspect/update with somewhere skills status/update.`;
@@ -204,40 +56,21 @@ export const DECLARED_ACCESS_POINTER = '';
 export const PORTABILITY_POINTER = 'Data/code export limits: `somewhere docs portability`.';
 
 /** One line: using the app from Claude as its signed-in user (MCP tools). */
-export const MCP_POINTER = 'Use this app from Claude as its signed-in user (MCP tools): `somewhere docs sw.endpoint --section mcp-tools-for-claude`.';
+export const MCP_POINTER = 'App MCP tools: `somewhere docs app-mcp`.';
 
 /** One line on what a preview cannot do today, so no agent learns it by failing.
  *  Rewrite it when previews gain these (the full list: docs dev-environments). */
-export const PREVIEW_POINTER = 'somewhere preview runs your change on a copy of production data with its own sign-in: a preview starts with no users (sign up in it or `somewhere preview user-add`), its sign-in mail is captured (`somewhere preview mail`), and rows private to a production user stay hidden from preview users. Server user lookup, roles and built-in teams work in a preview (its own users, its own copy; team invitations are captured); jobs/cron handlers do not yet: check those in production after promoting (`somewhere docs dev-environments`). Test your change in the preview before you promote it: `somewhere test --preview`.';
-
-const TEST_ACCESS_RULES = `## Testing access rules
-
-In a linked test app, run \`somewhere test-users prepare alice bob\`. For an
-owner() table with client create and read, create a fixture as Alice and read it
-as both users:
-
-\`\`\`sh
-ID=$(somewhere data create notes --as alice --values '{"title":"Access test"}' | jq -er 'select(.status == 200 and .kind == "ok") | .data.id') &&
-somewhere data get notes --as alice --id "$ID" | jq -e '.status == 200 and .kind == "ok"' &&
-somewhere data get notes --as bob --id "$ID" | jq -e '.status == 200 and .kind == "empty" and .data == null and .access == {"filtered":true}'
-\`\`\`
-
-200 with access.filtered means the rule constrained the read, even when rows
-are returned. 404 DATA_NOT_FOUND on update or delete hides whether the row
-exists. 401 AUTH_REQUIRED needs a signed-in session. 403 names the access rule
-or operation that refused the call. DATA_CONTRACT_* means the operation never
-ran. Assert the exact outcome in handed-over tests and confirm a refused write
-left the owner's fixture unchanged.
-`;
+export const PREVIEW_POINTER = 'Preview users are separate from live users. Sign up in the preview or use `somewhere preview user-add`. Check captured mail with `somewhere preview mail`.';
 
 export const INIT_AGENTS_MD = `# somewhere.cloud project contract
-${FIRST_CLI_PERMISSION}
-
+${AGENT_WORKFLOW}
 ${SKILLS_POINTER}
+Without a global CLI, use \`npx @somewhere-cloud/cli deploy\` and \`npx @somewhere-cloud/cli test\`.
 
-Build your app. Deploy the raw source and run its tests: \`npx @somewhere-cloud/cli deploy && npx @somewhere-cloud/cli test\`.
+For a signed-in browser test, wait for the SDK's expected \`data-sw-auth\` state when available. See \`somewhere docs auth-client --section wait-for-auth-in-a-browser-test\`. For direct data checks, prepare fixture users with \`somewhere test-users prepare alice bob\`, then call \`somewhere data get notes --as alice --id <id>\` as each user. Assert the exact outcome. See \`somewhere docs test --section testing-access-rules\`.
 
-For an app with sign-in, keep the starter's auth gate. Render private UI only after the session is confirmed. Keep the pending and retry views. In a browser test wait for the expected screen; if the SDK publishes \`data-sw-auth\` on \`<html>\`, first wait for the expected sign-in state there.
-
-${AGENT_WORKFLOW}\n${TEST_ACCESS_RULES}\n${PORTABILITY_POINTER}\n${MCP_POINTER}\n${PREVIEW_POINTER}\n`;
+${PORTABILITY_POINTER}
+${MCP_POINTER}
+${PREVIEW_POINTER}
+`;
 export const INIT_CLAUDE_MD = 'Read AGENTS.md for project instructions.\n';

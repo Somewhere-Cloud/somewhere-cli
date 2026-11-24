@@ -163,7 +163,7 @@ test('root and init help lead new apps to the generated contract', async () => {
   const init = await run(['init', '--help']);
   assert.equal(init.status, 0, init.stderr);
   assert.match(init.stdout, /Write a starter app with a generated AGENTS\.md guide/);
-  assert.match(init.stdout, /Before your first Somewhere command for a user, ask their permission/);
+  assert.match(init.stdout, /Ask before destructive or paid actions unless the user already authorized them/);
   assert.match(init.stdout, /run `somewhere init` in an empty directory/);
   assert.match(init.stdout.replace(/\s+/g, ' '), /Init installs React, the SDK and editor types\. The platform builds your source when you deploy\./);
   assert.match(init.stdout, /existing AGENTS\.md\/CLAUDE\.md are never replaced/);

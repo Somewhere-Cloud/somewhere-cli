@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.38.151
+
+- The generated project guide shows where to declare data access and how to check it with signed-in users.
+- `somewhere typecheck` recognizes `ownerOnly: true` for caller-scoped browser and function reads. Use it to return only rows owned by the current user.
+
 ## 0.38.150
 
 - `somewhere typecheck` now checks the source and functions sent to deploy, using the platform's TypeScript version, generated types and checker settings. Use `somewhere typecheck --project` for the full local project check.

@@ -110,11 +110,10 @@ test('init on an empty directory writes the pack, links it for Claude, and pins 
   const agents = readFileSync(join(dir, 'AGENTS.md'), 'utf8');
   assert.equal(agents, INIT_AGENTS_MD);
   const opening = agents.split('\n').slice(0, 12).join('\n');
-  assert.match(opening, /Task-specific skills: `\.agents\/skills\/`/);
-  assert.match(opening, /Build your app\. Deploy the raw source and run its tests/);
-  const command = 'npx @somewhere-cloud/cli deploy && npx @somewhere-cloud/cli test';
-  const permission = opening.indexOf('Before your first Somewhere command');
-  assert.ok(permission >= 0 && opening.indexOf(command) > permission, 'the first screen gives permission guidance before the runnable loop');
+  assert.match(opening, /Does your app verify emails\?/);
+  assert.match(agents, /Task-specific skills: `\.agents\/skills\/`/);
+  assert.match(agents, /Ask before destructive or paid actions/);
+  assert.doesNotMatch(agents, /Before your first Somewhere command/);
   assert.ok(agents.includes(AGENT_WORKFLOW));
 });
 

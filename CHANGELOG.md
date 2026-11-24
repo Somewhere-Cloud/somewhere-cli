@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.38.149
+## 0.38.150
 
 - The local browser and Playwright test fixtures wait for an app's SDK session check after navigation.
 - `somewhere typecheck` now checks the source and functions sent to deploy, using the platform's TypeScript version, generated types and checker settings. Use `somewhere typecheck --project` for the full local project check.

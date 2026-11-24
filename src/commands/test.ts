@@ -4,7 +4,7 @@ import { getToken, loadProjectConfig } from '../lib/config.js';
 import { prepareRunner, runTests } from '../lib/test-run.js';
 import { mark, markProcessStart } from '../lib/test-timeline.js';
 import { referenceCheckNote } from '../lib/reference-check-note.js';
-import { checksJsonReport, deployChecksSummary, formatChecksReport, runChecksNow, type AccessCheck } from '../lib/deploy-checks.js';
+import { checksJsonReport, deployChecksSummary, formatChecksReport, partialCheckUnavailable, runChecksNow, type AccessCheck } from '../lib/deploy-checks.js';
 import { checkSummaryExitCode } from '../lib/check-summary.js';
 import { describeScriptResults, hasSpecFiles, isScript, lastFailedScripts, listScripts, recordScriptResults, runScripts } from '../lib/test-scripts.js';
 
@@ -14,6 +14,7 @@ export function registerTest(program: Command): void {
     .option('--preview', 'Test this folder\'s open preview (its own users, data copy and captured mail), pinned to the version saved when the run starts. Production is never touched.')
     .option('--workers <count>', 'Parallel workers', '5')
     .option('--again', 'Start a fresh run of the checks on the live release instead of reading the result of the last deploy\'s run')
+    .option('--only <check>', 'Run just access, crawl, or one saved check, e.g. checks/add-note.json')
     .option('--failed', 'Rerun what failed last time: each failed tests/*.mjs or *.cjs script, all its checks (specs: only the failed tests)')
     .option('--fail-fast', 'Stop app-check scripts at their first failed check')
     .option('--grep <name>', 'Filter test names (subset)')
@@ -22,7 +23,7 @@ export function registerTest(program: Command): void {
     .option('--json', 'Print structured results')
     .option('--verbose', 'Also print where the full result file is when everything passed')
     .addHelpText('after', '\nSave each journey you want re-checked after every deploy as checks/<plain-name>.json; the platform runs them in its browser after each deploy and `somewhere test` reads the latest result. Use --again for a fresh run. The last line of a platform run is JSON with outcome and counts.\n')
-    .action(async (files: string[], opts: { workers: string; again?: boolean; failed?: boolean; failFast?: boolean; grep?: string; url?: string; json?: boolean; phone?: boolean; preview?: boolean; verbose?: boolean }) => {
+    .action(async (files: string[], opts: { workers: string; again?: boolean; only?: string; failed?: boolean; failFast?: boolean; grep?: string; url?: string; json?: boolean; phone?: boolean; preview?: boolean; verbose?: boolean }) => {
       markProcessStart('cli');
       mark('cli:action');
       if (opts.url) throw new Error('--url is unsupported: tests use the linked project canonical production origin only.');
@@ -30,15 +31,22 @@ export function registerTest(program: Command): void {
       const root = process.cwd();
       const projectId = loadProjectConfig()?.project_id;
       if (!projectId) throw new Error('Run somewhere test from a linked project folder');
+      if (opts.only !== undefined && (files.length || opts.preview || opts.failed)) {
+        throw new Error('--only runs a single part of the hosted smoke check. Use it without file arguments, --preview, or --failed.');
+      }
+      if (opts.only !== undefined && opts.only !== 'access' && opts.only !== 'crawl' && !/^checks\/[^/\\\x00-\x1f\x7f]+\.json$/.test(opts.only)) {
+        throw new Error('Choose --only access, --only crawl, or a saved check path like --only checks/add-note.json.');
+      }
       // No file, no specs, no preview: the platform runs the live release's checks in its own browser.
-      if (!files.length && !opts.preview && !opts.failed && !hasSpecFiles(root)) {
+      if (opts.only !== undefined || (!files.length && !opts.preview && !opts.failed && !hasSpecFiles(root))) {
         const unsupported = [opts.phone && '--phone', opts.grep && '--grep', opts.workers !== '5' && '--workers', opts.failFast && '--fail-fast'].filter(Boolean);
         if (unsupported.length) throw new Error(`${unsupported.join(', ')} apply to Playwright specs and scripts; the platform runs checks/*.json as saved.`);
         let check: AccessCheck | null;
         try {
-          check = await runChecksNow(new ApiClient(getToken()), projectId, { again: opts.again === true });
+          check = await runChecksNow(new ApiClient(getToken()), projectId, { again: opts.again === true, only: opts.only });
         } catch (cause) {
-          check = { status: 'unavailable', sentence: cause instanceof Error ? cause.message : 'The platform could not start the checks.' };
+          const sentence = cause instanceof Error ? cause.message : 'The platform could not start the checks.';
+          check = opts.only ? partialCheckUnavailable(opts.only, sentence) : { status: 'unavailable', sentence };
         }
         mark('cli:exit');
         const summary = deployChecksSummary(check);

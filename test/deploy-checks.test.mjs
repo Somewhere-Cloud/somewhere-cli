@@ -197,11 +197,26 @@ test('somewhere test with no file runs the platform checks with no local browser
     assert.match(cleanup.stdout, /Could not check cleanup: Test row bookings \/ test-42 may remain/);
     assert.equal(JSON.parse(cleanup.stdout.trim().split('\n').at(-1)).outcome, 'could_not_check');
 
-    custom = { ...custom, findings: [{ kind: 'crash', via: 'GET /api/boom', request_id: 'exception-id' }] };
+    custom = { ...custom, passed: true, checks: [{ name: 'Pages load on desktop', pass: true }],
+      findings: [{ kind: 'crash', via: 'GET /api/boom', request_id: 'exception-id' }] };
     const warning = await run([]);
     assert.equal(warning.status, 0);
     assert.match(warning.stdout, /Warning: A server function crashed: GET \/api\/boom/);
     assert.equal(JSON.parse(warning.stdout.trim().split('\n').at(-1)).counts.warnings, 1);
+
+    custom.findings = [{ kind: 'function_http_error', via: 'GET /api/unsure', status: 503, request_id: 'unmatched-id' },
+      { kind: 'function_http_error', via: 'GET /api/no-id', status: 500 }];
+    const unresolved = await run([]);
+    assert.equal(unresolved.status, 0);
+    assert.match(unresolved.stdout, /GET \/api\/unsure returned 5xx; no error record found yet \(HTTP 503, request ID unmatched-id\)/);
+    assert.match(unresolved.stdout, /GET \/api\/no-id returned 5xx; no error record found yet \(HTTP 500\)/);
+    assert.doesNotMatch(unresolved.stdout, /crashed/);
+    assert.equal(JSON.parse(unresolved.stdout.trim().split('\n').at(-1)).counts.warnings, 2);
+
+    custom.checks = [];
+    const empty = await run([]);
+    assert.equal(empty.status, 2);
+    assert.match(empty.stdout, /Could not check: no named checks ran/);
 
     custom = { status: 'checked', passed: false, checks: [{ name: 'A stranger cannot list members', as: 'stranger', pass: false,
       outcome: 'could_not_check', detail: 'Inconsistent: tell us. Request ID: one, two.',

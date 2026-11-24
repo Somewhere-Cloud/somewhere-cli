@@ -106,13 +106,14 @@ function lineOutcome(line: CheckLine): CheckSummary['outcome'] {
 }
 
 const cleanupFindings = (check: AccessCheck | null) => (check?.findings ?? []).filter((f) => f.kind === 'cleanup');
-const crashWarnings = (check: AccessCheck | null) => (check?.findings ?? []).filter((f) => f.kind === 'crash' && f.request_id);
+const functionWarnings = (check: AccessCheck | null) => (check?.findings ?? []).filter((finding) =>
+  finding.kind === 'function_http_error' || finding.kind === 'crash' && Boolean(finding.request_id));
 
 export function deployChecksSummary(check: AccessCheck | null): CheckSummary {
   const lines = check?.checks ?? [];
-  const counts = { passed: 0, failed: 0, could_not_check: cleanupFindings(check).length, warnings: crashWarnings(check).length };
+  const counts = { passed: 0, failed: 0, could_not_check: cleanupFindings(check).length, warnings: functionWarnings(check).length };
   for (const line of lines) counts[lineOutcome(line)]++;
-  if (check?.status !== 'checked' || check.passed === false && !counts.failed && !counts.could_not_check
+  if (check?.status !== 'checked' || !lines.length || check.passed === false && !counts.failed && !counts.could_not_check
       && (!check.findings?.length || check.findings.some((finding) => finding.kind !== 'crash'))) counts.could_not_check++;
   return summarizeChecks(counts);
 }
@@ -159,12 +160,19 @@ export function formatChecksReport(check: AccessCheck | null): string[] {
       if (!line.outcome && label === 'Could not check') lines.push(`  Run ${cliInvocation()} test --again to confirm this access check.`);
     }
     for (const line of checks.filter((item) => lineOutcome(item) === 'passed')) lines.push(`PASS ${line.name}`);
-    for (const finding of crashWarnings(check)) lines.push(`Warning: A server function crashed: ${finding.via} (request ID ${finding.request_id}).`);
+    for (const finding of functionWarnings(check)) {
+      if (finding.kind === 'crash') {
+        lines.push(`Warning: A server function crashed: ${finding.via} (request ID ${finding.request_id}).`);
+      } else {
+        const receipt = [finding.status ? `HTTP ${finding.status}` : '', finding.request_id ? `request ID ${finding.request_id}` : ''].filter(Boolean).join(', ');
+        lines.push(`Warning: ${finding.via} returned 5xx; no error record found yet${receipt ? ` (${receipt})` : ''}.`);
+      }
+    }
     for (const finding of cleanupFindings(check)) {
       const receipt = [finding.status ? `HTTP ${finding.status}` : '', finding.request_id ? `request ID ${finding.request_id}` : ''].filter(Boolean).join(', ');
       lines.push(`Could not check cleanup: ${finding.left_behind ?? (finding.table ? `A test row in ${finding.table} may remain.` : `Check whether any ${finding.via ?? 'test data'} remain.`)}${receipt ? ` (${receipt})` : ''}`);
     }
-    if (!checks.length && !summary.counts.failed && !summary.counts.could_not_check && !summary.counts.warnings && check.sentence && !check.sentence.startsWith('Warning:')) lines.push(check.sentence);
+    if (!checks.length) lines.push('Could not check: no named checks ran.');
     if (summary.counts.could_not_check && !lines.some((line) => line.startsWith('Could not check'))) lines.push(`Could not check: run ${cliInvocation()} test --again to get named results.`);
   }
   return [...lines, JSON.stringify(summary)];

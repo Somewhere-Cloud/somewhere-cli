@@ -447,7 +447,7 @@ export class ApiClient {
     method: string,
     path: string,
     body?: unknown,
-    opts?: { timeoutMs?: number; captureIncompleteBody?: true },
+    opts?: { timeoutMs?: number; captureIncompleteBody?: true; redirect?: 'error' },
   ): Promise<{ status: number; ok: boolean; body: string; headers: Record<string, string> }> {
     const url = `${API_BASE_URL}${path}`;
     const headers: Record<string, string> = { ...this.authHeader() };
@@ -465,6 +465,7 @@ export class ApiClient {
         headers,
         body: reqBody,
         signal: AbortSignal.timeout(timeoutMs),
+        ...(opts?.redirect ? { redirect: opts.redirect } : {}),
       }, timeoutMs);
     } catch (err) {
       const cause = (err as { cause?: { code?: string; message?: string } }).cause;

@@ -1,3 +1,4 @@
+import { printPreviewScheduleTest } from '../lib/test-preview-job.js';
 import { cliInvocation } from '../lib/cli-invocation.js';
 import { Command } from 'commander';
 import { loadProjectConfig } from '../lib/config.js';
@@ -46,6 +47,7 @@ interface CronRow extends Record<string, unknown> {
 }
 
 interface CronRunOptions extends ProjectOptions {
+  twice?: boolean;
   wait?: boolean;
   timeout?: string;
   preview?: boolean;
@@ -372,7 +374,7 @@ async function findNamedCronRow(target: string, explicit: string | undefined, si
   return { ...matches[0], cron_id: id };
 }
 
-async function resolveCronId(target: string, explicit: string | undefined): Promise<string> {
+export async function resolveCronId(target: string, explicit: string | undefined): Promise<string> {
   if (target.startsWith('cron_')) return target;
   return (await findNamedCronRow(target, explicit)).cron_id;
 }
@@ -554,6 +556,7 @@ export function registerCron(program: Command): void {
     .option('-p, --project <project>', 'Project slug or ID used to resolve a task name; defaults to the linked project')
     .option('--wait', 'Wait for the queued job to finish and print its result; exits non-zero on failure or timeout')
     .option('--preview', 'Run the task\'s handler and payload once in this folder\'s open preview instead (its code, data, files and mail); the production schedule never changes')
+    .option('--twice', 'With --preview, wait for each of two runs and report declared table row count changes')
     .option('--timeout <seconds>', `With --wait, how long to wait before giving up (default ${DEFAULT_WAIT_TIMEOUT_SECONDS})`)
     .option('--json', 'Print the complete response as JSON')
     .addHelpText(
@@ -564,12 +567,19 @@ export function registerCron(program: Command): void {
     .action(async (target: string, opts: CronRunOptions) => {
       let queued = false;
       try {
+        if (opts.twice && (!opts.preview || opts.timeout !== undefined)) {
+          throw new Error('USAGE_ERROR: --twice requires --preview and uses the platform job timeout.');
+        }
         const timeoutSeconds = parseWaitTimeout(opts.timeout);
         if (opts.timeout !== undefined && !opts.wait) {
           throw new Error('USAGE_ERROR: --timeout only applies with --wait.');
         }
         const cronId = await resolveCronId(target, opts.project);
         if (opts.preview) {
+          if (opts.twice) {
+            await printPreviewScheduleTest(cronId, await folderPreviewTool({}), true, Boolean(opts.json));
+            return;
+          }
           await runCronInPreview(cronId, opts, timeoutSeconds);
           return;
         }

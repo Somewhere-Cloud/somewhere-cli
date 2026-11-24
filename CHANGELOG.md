@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.38.152
+
+- Run a scheduled job twice in a preview with `somewhere cron run <name> --preview --twice` and see each result and table row-count change.
+- Use a Playwright session from `somewhere test-users prepare` with the data testing helper.
+
 ## 0.38.151
 
 - The generated project guide shows where to declare data access and how to check it with signed-in users.

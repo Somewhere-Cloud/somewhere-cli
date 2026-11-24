@@ -507,8 +507,7 @@ test('a preview saved again mid-run fails the run as a preview run, never passin
   reset(); state.candidate = CANDIDATE;
   const r = await somewhere(['test', '--preview', 'tests/save.spec.ts', '--workers', '1']);
   state.candidate = CANDIDATE;
-  assert.equal(r.status, 2, r.all);
-  assert.equal(JSON.parse(r.stdout.trim().split('\n').at(-1)).outcome, 'could_not_check');
+  assert.equal(r.status, 1, r.all);
   assert.match(r.all, /saved again during this run \(rel_candidate_E001 → rel_candidate_E002\)/);
   assert.doesNotMatch(r.stdout, /0 failed, 0 expected failures, 0 setup errors/);
   assert.deepEqual(state.production, []);
@@ -519,8 +518,7 @@ test('the end-of-run check fails a run whose every request passed when the previ
   reset(); state.candidate = CANDIDATE;
   const r = await somewhere(['test', '--preview', 'tests/save-unnoticed.spec.ts', '--workers', '1']);
   state.candidate = CANDIDATE;
-  assert.equal(r.status, 2, r.all);
-  assert.equal(JSON.parse(r.stdout.trim().split('\n').at(-1)).outcome, 'could_not_check');
+  assert.equal(r.status, 1, r.all);
   assert.match(r.stdout, /passed: every request passes; the preview is saved after the last one/, 'the test itself passed');
   assert.match(r.all, /saved again during this run \(rel_candidate_E001 → rel_candidate_E002\)/);
   const report = JSON.parse(readFileSync(join(root, '.somewhere', 'tests', 'results.json'), 'utf8'));
@@ -544,8 +542,7 @@ test('a preview closed mid-run fails the run as a preview run; cleanup is report
   reset(); state.dead = false;
   const r = await somewhere(['test', '--preview', 'tests/close.spec.ts', '--workers', '1']);
   state.dead = false;
-  assert.equal(r.status, 2, r.all);
-  assert.equal(JSON.parse(r.stdout.trim().split('\n').at(-1)).outcome, 'could_not_check');
+  assert.equal(r.status, 1, r.all);
   assert.match(r.all, /preview is closed, promoted or expired/);
   assert.match(r.all, /nothing ran against production/);
   assert.match(r.all, /Dropped the cleanup record of sw-[0-9a-f]+@example\.com: the preview is closed, promoted or expired, and its accounts went with it/);
@@ -576,8 +573,7 @@ test('a team with a member outside the run is left alone: its owner is kept, the
   // Someone in the preview who is not one of the run's sign-ups (a person the app's own users invited).
   state.users.set('pvu_outsider', { id: 'pvu_outsider', email: 'outsider@e5.test', password: 'x', test: false, verified: true });
   const r = await somewhere(['test', '--preview', 'tests/shared.spec.ts', '--workers', '1']);
-  assert.equal(r.status, 2, r.all);
-  assert.equal(JSON.parse(r.stdout.trim().split('\n').at(-1)).outcome, 'could_not_check');
+  assert.equal(r.status, 1, r.all);
   assert.match(r.all, /it is the only owner of the team "Shared" \(grp_[0-9a-f]+\), which has members outside this run's sign-ups; the team and the account were left alone/);
   const [teamId, team] = [...state.teams].find(([, t]) => t.name === 'Shared');
   assert.ok(team.members.has('pvu_outsider') && state.users.has('pvu_outsider'), 'the outsider and the team stay');

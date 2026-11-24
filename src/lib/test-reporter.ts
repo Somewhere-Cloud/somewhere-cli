@@ -105,9 +105,8 @@ export default class TestReporter implements Reporter {
     };
     writePrivateFile(process.env.SW_TEST_RESULTS!, JSON.stringify(report) + '\n');
     mark('runner:end', { passed, failed });
-    if (process.env.SW_TEST_JSON === 'true') {
-      if (process.env.SW_TEST_JSON_FROM_PARENT !== 'true') console.log(JSON.stringify(report));
-    } else {
+    if (process.env.SW_TEST_JSON === 'true') console.log(JSON.stringify(report));
+    else {
       // Exactly what ran in this invocation; a filtered or --failed run is a SUBSET, never a full result.
       console.log(`${subset ? 'SUBSET (only the tests selected for this run): ' : 'FULL: '}${passed} passed, ${failed} failed, ${expectedFailures} expected failures, ${this.errors} setup errors, ${skipped} skipped, ${report.notRun} not run · ${preview ? `preview ${preview.previewSessionId} · ` : ''}${report.target} · ${report.release} · ${report.browser} · ${(result.duration / 1000).toFixed(1)} s`);
       if (failures.length) {

@@ -137,6 +137,7 @@ test('somewhere test reads the stored result of the last deploy; waits only whil
   assert.ok(c3.now() <= 150_000 && c3.now() >= 147_000, `${c3.now()} ms`);
   assert.match(formatChecksReport(pending)[0], /did not finish within 150 s/);
   assert.equal(checksExitCode(pending), 2);
+  assert.equal(checksExitCode({ status: 'checked', sentence: null, passed: false, findings: [] }), 2);
 });
 
 test('somewhere test with no file runs the platform checks with no local browser and exits by their verdict', async () => {

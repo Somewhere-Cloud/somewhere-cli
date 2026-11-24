@@ -113,7 +113,7 @@ export function deployChecksSummary(check: AccessCheck | null): CheckSummary {
   const counts = { passed: 0, failed: 0, could_not_check: cleanupFindings(check).length, warnings: crashWarnings(check).length };
   for (const line of lines) counts[lineOutcome(line)]++;
   if (check?.status !== 'checked' || check.passed === false && !counts.failed && !counts.could_not_check
-      && (check.findings ?? []).some((f) => f.kind !== 'crash')) counts.could_not_check++;
+      && (!check.findings?.length || check.findings.some((finding) => finding.kind !== 'crash'))) counts.could_not_check++;
   return summarizeChecks(counts);
 }
 

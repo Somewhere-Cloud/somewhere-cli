@@ -5,7 +5,7 @@ import { prepareRunner, runTests } from '../lib/test-run.js';
 import { mark, markProcessStart } from '../lib/test-timeline.js';
 import { referenceCheckNote } from '../lib/reference-check-note.js';
 import { checksJsonReport, deployChecksSummary, formatChecksReport, runChecksNow, type AccessCheck } from '../lib/deploy-checks.js';
-import { checkSummaryExitCode, summarizeChecks } from '../lib/check-summary.js';
+import { checkSummaryExitCode } from '../lib/check-summary.js';
 import { describeScriptResults, hasSpecFiles, isScript, lastFailedScripts, listScripts, recordScriptResults, runScripts } from '../lib/test-scripts.js';
 
 export function registerTest(program: Command): void {
@@ -64,10 +64,9 @@ export function registerTest(program: Command): void {
         if (results.length) recordScriptResults(root, results, Boolean(opts.failed));
         mark('cli:exit');
         const failed = results.filter((result) => !result.ok).length;
-        const summary = summarizeChecks({ passed: results.length - failed, failed, could_not_check: Number(!results.length), warnings: 0 });
-        if (opts.json) process.stdout.write(JSON.stringify({ passed: results.length - failed, failed, scripts: results, ...summary }) + '\n');
-        else process.stdout.write('\n' + [...describeScriptResults(results, { verbose: Boolean(opts.verbose) }), JSON.stringify(summary)].join('\n') + '\n');
-        process.exitCode = checkSummaryExitCode(summary);
+        if (opts.json) process.stdout.write(JSON.stringify({ passed: results.length - failed, failed, scripts: results }, null, 2) + '\n');
+        else process.stdout.write('\n' + describeScriptResults(results, { verbose: Boolean(opts.verbose) }).join('\n') + '\n');
+        process.exitCode = failed || !results.length ? 1 : 0;
         return;
       }
       if (opts.failFast) throw new Error('--fail-fast applies to app-check scripts (tests/*.mjs or *.cjs).');
@@ -75,13 +74,6 @@ export function registerTest(program: Command): void {
       const outcome = await runTests({ root, ...(opts.preview ? {} : { client: new ApiClient(getToken()) }), projectId, prepared: prepareRunner(root), options: { ...opts, files } });
       await note;
       mark('cli:exit');
-      const count = (key: string) => Number(outcome.results?.[key] ?? 0);
-      const failed = count('failed');
-      const summary = summarizeChecks({ passed: count('passed'), failed, warnings: 0,
-        could_not_check: count('skipped') + count('notRun') + count('setupErrors') + Number(outcome.cleanupUnconfirmed)
-          || Number(!outcome.results || outcome.exitCode !== 0 && failed === 0) });
-      if (opts.json) process.stdout.write(JSON.stringify({ ...outcome.results, ...summary }) + '\n');
-      else process.stdout.write(JSON.stringify(summary) + '\n');
-      process.exitCode = checkSummaryExitCode(summary);
+      process.exitCode = outcome.exitCode;
     });
 }

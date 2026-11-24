@@ -18,7 +18,7 @@ import { mark, span } from './test-timeline.js';
 
 export interface PreparedRunner { cli: string; channel: 'chrome' | undefined; version: string; browserLaunchMs: number; playwright: string }
 export interface RunOptions { workers: string; files?: string[]; grep?: string; failed?: boolean; json?: boolean; phone?: boolean; preview?: boolean }
-export interface RunOutcome { exitCode: number; results: Record<string, unknown> | null; cleanupUnconfirmed: boolean; target: TestTarget }
+export interface RunOutcome { exitCode: number; results: Record<string, unknown> | null; target: TestTarget }
 
 export function testImportEnv(root: string, env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   if (!readProjectPin(root)?.versionOnly) return env;
@@ -128,7 +128,7 @@ export async function runTests(input: { root: string; client?: ApiClient; projec
   const resultsPath = join(dir, 'results.json');
   rmSync(resultsPath, { force: true });
   mark('runner:spawn');
-  const child = spawn(process.execPath, args, { cwd: root, stdio: ['inherit', input.toStderr ? 'pipe' : 'inherit', 'inherit'], env: { ...runnerEnv, SW_TEST_TARGET: JSON.stringify(target), SW_TEST_RELEASE: target.releaseId, PLAYWRIGHT_NO_COPY_PROMPT: '1', SW_TEST_ORIGIN: origin, SW_TEST_BROWSER_LAUNCH_MS: String(prepared.browserLaunchMs), SW_TEST_BROWSER: browser, SW_TEST_SUBSET: String(subset), SW_TEST_JSON: String(Boolean(options.json)), SW_TEST_JSON_FROM_PARENT: String(Boolean(options.json && !input.toStderr)), SW_TEST_RESULTS: resultsPath, SW_TEST_RUN: process.env.SW_TEST_RUN, SW_TEST_RUN_PID: String(process.pid), SW_TEST_RERUN_FLAGS: rerunFlags } });
+  const child = spawn(process.execPath, args, { cwd: root, stdio: ['inherit', input.toStderr ? 'pipe' : 'inherit', 'inherit'], env: { ...runnerEnv, SW_TEST_TARGET: JSON.stringify(target), SW_TEST_RELEASE: target.releaseId, PLAYWRIGHT_NO_COPY_PROMPT: '1', SW_TEST_ORIGIN: origin, SW_TEST_BROWSER_LAUNCH_MS: String(prepared.browserLaunchMs), SW_TEST_BROWSER: browser, SW_TEST_SUBSET: String(subset), SW_TEST_JSON: String(Boolean(options.json)), SW_TEST_RESULTS: resultsPath, SW_TEST_RUN: process.env.SW_TEST_RUN, SW_TEST_RUN_PID: String(process.pid), SW_TEST_RERUN_FLAGS: rerunFlags } });
   if (input.toStderr) child.stdout?.pipe(process.stderr);
   const status = await new Promise<number | null>(resolve => child.on('close', code => resolve(code)));
   mark('runner:exit', { status: status ?? -1 });
@@ -144,5 +144,5 @@ export async function runTests(input: { root: string; client?: ApiClient; projec
   cleanArtifacts(artifacts);
   const exitCode = status === null ? 1 : status || (after === null || after.failed.length || after.unknownId.length ? 1 : 0);
   const results = existsSync(resultsPath) ? JSON.parse(readFileSync(resultsPath, 'utf8')) as Record<string, unknown> : null;
-  return { exitCode, results, cleanupUnconfirmed: after === null || Boolean(after.failed.length || after.unknownId.length), target };
+  return { exitCode, results, target };
 }

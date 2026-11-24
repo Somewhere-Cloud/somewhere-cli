@@ -24,7 +24,8 @@ function run(args, env, cwd = repoRoot) {
   return new Promise((resolvePromise) => {
     const child = spawn(process.execPath, [distIndex, ...args], {
       cwd,
-      env: { ...process.env, ...env, CI: '1', SOMEWHERE_NO_NOTIFICATIONS: '1' },
+      env: { ...process.env, ...env, SOMEWHERE_API_URL: env.SOMEWHERE_MCP_URL?.replace(/\/mcp$/, '/v1'),
+        CI: '1', SOMEWHERE_NO_NOTIFICATIONS: '1' },
     });
     let stdout = '';
     let stderr = '';
@@ -45,6 +46,13 @@ function fixtureServer(callTool) {
     let body = '';
     req.on('data', (chunk) => (body += chunk));
     req.on('end', () => {
+      const jobId = req.method === 'GET' && /^\/v1\/jobs\/([^/]+)$/.exec(req.url)?.[1];
+      if (jobId) {
+        assert.equal(req.headers.authorization, 'Bearer smt_cron_run_test');
+        const result = callTool({ name: 'job_get', arguments: { job_id: decodeURIComponent(jobId) } }, res);
+        sendJson(res, JSON.parse(result.content[0].text));
+        return;
+      }
       const rpc = JSON.parse(body);
       if (rpc.method === 'initialize') {
         sendJson(res, {

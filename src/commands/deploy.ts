@@ -2073,22 +2073,32 @@ async function callDeployWithRetry<T>(
   let attempt = 1;
   let publicationDeadline: number | undefined;
   let publicationRetries = 0;
+  let confirmation: { project_id: string; confirm_publication: string } | undefined;
+  let pendingResponse: CliApiError | undefined;
   for (;;) {
     const startedAt = Date.now();
     const stopHeartbeat = startDeployHeartbeat(opts, attempt, startedAt);
     const timeoutMs = publicationDeadline === undefined ? deployTimeoutMs()
       : Math.min(deployTimeoutMs(), Math.max(1, Math.floor(publicationDeadline - performance.now())));
     try {
-      return await client.call<T>('POST', '/deploy', body, undefined, {
+      return await client.call<T>('POST', '/deploy', confirmation ?? body, undefined, {
         timeoutMs,
         ...(publicationDeadline === undefined ? {} : { refresh: false as const }),
       }).finally(stopHeartbeat);
     } catch (err) {
       if (transportFailure && err && typeof err === 'object') retriedAfterTransportFailure.set(err, transportFailure);
-      if (!opts.dryRun && err instanceof CliApiError && err.statusCode === 503
-        && err.code === 'EXEC_CONTROL_PUBLICATION_PENDING' && err.meta.retry === true) {
-        // The server can already have applied the release. Repeating this
-        // same body asks it to confirm publication without applying it again.
+      if (err instanceof CliApiError && err.statusCode === 503 && err.code === 'EXEC_CONTROL_PUBLICATION_PENDING') {
+        const target = err.data?.confirm_publication;
+        if (opts.dryRun || !target || typeof target !== 'object'
+          || !('project_id' in target) || typeof target.project_id !== 'string'
+          || !('release_id' in target) || typeof target.release_id !== 'string'
+          || target.release_id !== err.data?.release_id
+          || target.project_id !== (confirmation?.project_id ?? body.project_id ?? target.project_id)
+          || (confirmation && confirmation.confirm_publication !== target.release_id)) throw err;
+        // A live release may only need its data access confirmed. The exact
+        // continuation sends no source and cannot start another publish.
+        confirmation ??= { project_id: target.project_id, confirm_publication: target.release_id };
+        pendingResponse = err;
         publicationDeadline ??= performance.now() + PUBLICATION_RETRY_BUDGET_MS;
         const backoffMs = PUBLICATION_RETRY_DELAYS_MS[publicationRetries];
         if (backoffMs === undefined) throw err;
@@ -2099,8 +2109,8 @@ async function callDeployWithRetry<T>(
         if (!opts.json) {
           opts.spinner?.stop();
           warn(waitMs > 0
-            ? `Publication is still pending. Retrying in ${Math.ceil(waitMs / 1000)}s.`
-            : 'Publication is still pending. Retrying now.');
+            ? `Deploy confirmation is pending. Retrying in ${Math.ceil(waitMs / 1000)}s.`
+            : 'Deploy confirmation is pending. Retrying now.');
         }
         await new Promise<void>(resolve => setTimeout(resolve, waitMs));
         if (performance.now() >= publicationDeadline) throw err;
@@ -2108,7 +2118,7 @@ async function callDeployWithRetry<T>(
         publicationRetries++;
         continue;
       }
-      if (publicationDeadline !== undefined) throw err;
+      if (pendingResponse) throw outcomeUnknown(err) ? pendingResponse : err;
       if (attempt >= DEPLOY_MAX_ATTEMPTS) throw err;
 
       if (!isRetryableDeployError(err)) throw err;

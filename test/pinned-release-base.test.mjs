@@ -13,7 +13,7 @@ test('CLI never substitutes the current release into an unanchored request', () 
   const devSource = readFileSync(new URL('../src/commands/dev.ts', import.meta.url), 'utf8');
 
   assert.doesNotMatch(deploySource, /pinnedReleaseRetryBody|BASE_RELEASE_REQUIRED/);
-  assert.match(deploySource, /client\.call<T>\('POST', '\/deploy', body/);
+  assert.match(deploySource, /client\.call<T>\('POST', '\/deploy', confirmation \?\? body/);
   assert.doesNotMatch(devSource, /callWithPinnedReleaseRetry/);
   assert.match(devSource, /callDraftCandidate<DeployResult>\(client, '\/deploy', body(?:,|\))/);
   assert.match(devSource, /callDraftCandidate<PatchResult>\(client, '\/deploy\/patch', body\)/);

@@ -3,7 +3,7 @@ import { ApiClient } from './client.js';
 import { loadProjectConfig } from './config.js';
 import { previewToolClient } from './preview-credential.js';
 import { previewControl, previewCredentialFor, readPreviewTarget } from './test-control.js';
-import { buildStorageState, createTestIdentities, expiryOf, type PlaywrightStorageState } from './test-identities.js';
+import { buildStorageState, createTestIdentities, expiryOf, MAX_PER_CREATE, type PlaywrightStorageState } from './test-identities.js';
 import { loadTestTarget } from './test-target.js';
 import { privateMarker } from './test-response-capture.js';
 import { runTestJob, testingDeveloperToken, type TestJob, type TestJobOptions, type TestJobTarget } from './testing-jobs.js';
@@ -112,11 +112,17 @@ export async function openTestApp(options: { preview?: boolean; projectDir?: str
         }
         return out;
       }
+      const out: TestActor[] = [];
       try {
-        const { issued, receivedAt } = await createTestIdentities(client!, projectId, 'user', count, 'script');
-        for (const identity of issued) ids.add(identity.user.id);
-        return issued.map(identity => add(identity.user.id, identity.user.email,
-          new UserSession(origin, { target, storageState: buildStorageState(origin, new URL(origin).hostname, identity, expiryOf(identity, receivedAt)) })));
+        for (let offset = 0; offset < count; offset += MAX_PER_CREATE) {
+          const { issued, receivedAt } = await createTestIdentities(client!, projectId, 'user', Math.min(MAX_PER_CREATE, count - offset), 'script');
+          for (const identity of issued) ids.add(identity.user.id);
+          for (const identity of issued) {
+            const state = buildStorageState(origin, new URL(origin).hostname, identity, expiryOf(identity, receivedAt));
+            out.push(add(identity.user.id, identity.user.email, new UserSession(origin, { target, storageState: state })));
+          }
+        }
+        return out;
       } catch (error) {
         if (error && typeof error === 'object' && 'createdIds' in error && Array.isArray(error.createdIds)) {
           for (const id of error.createdIds) if (typeof id === 'string') ids.add(id);

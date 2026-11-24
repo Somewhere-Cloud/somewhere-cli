@@ -17,3 +17,21 @@ const ADD_A_NOTE = {
 export function starterChecks(options: { privateData?: boolean } = {}): InitScaffoldFile[] {
   return options.privateData ? [{ path: 'checks/add-a-note.json', content: JSON.stringify(ADD_A_NOTE, null, 2) + '\n' }] : [];
 }
+
+export const STARTER_AUTH_TEST: InitScaffoldFile = {
+  path: 'tests/starter.mjs',
+  content: `import assert from 'node:assert/strict';
+import { openTestApp } from '@somewhere-cloud/cli/testing';
+
+const app = await openTestApp();
+try {
+  const [person] = await app.users(1);
+  const response = await person.session.request('/api/auth/me');
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).user.id, person.id);
+  console.log('The deployed app recognizes the test user.');
+} finally {
+  await app.cleanup();
+}
+`,
+};

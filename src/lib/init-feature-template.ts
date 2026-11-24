@@ -1,4 +1,4 @@
-import { starterChecks } from './init-test-template.js';
+import { STARTER_AUTH_TEST, starterChecks } from './init-test-template.js';
 import { buildScaffoldGitignore } from './scaffold.js';
 import { CLI_VERSION } from './version.js';
 import { TYPECHECK_TYPESCRIPT_VERSION } from './typecheck-version.js';
@@ -25,6 +25,7 @@ const packageJson = (appName: string) => `{
   "somewhere": { "cli_version": "${CLI_VERSION}", "project_name": ${JSON.stringify(appName)} },
   "scripts": {
     "dev": "npx -y @somewhere-cloud/cli dev",
+    "test": "node tests/starter.mjs",
     "typecheck": "npx -y @somewhere-cloud/cli typecheck"
   },
   "dependencies": {
@@ -33,6 +34,7 @@ const packageJson = (appName: string) => `{
     "react-dom": "19.2.7"
   },
   "devDependencies": {
+    "@somewhere-cloud/cli": "${CLI_VERSION}",
     "@types/react": "19.2.2",
     "@types/react-dom": "19.2.2",
     "typescript": "${TYPECHECK_TYPESCRIPT_VERSION}"
@@ -3440,6 +3442,7 @@ export function createFeatureTemplate(
   const files: InitScaffoldFile[] = [
     ...starterChecks({ privateData }),
     { path: '.gitignore', content: buildScaffoldGitignore() },
+    STARTER_AUTH_TEST,
     { path: 'AGENTS.md', content: INIT_AGENTS_MD },
     { path: 'CLAUDE.md', content: INIT_CLAUDE_MD },
     { path: 'README.md', content: readme(selection) },

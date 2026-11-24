@@ -6,7 +6,6 @@
 // press sends it, once; an account already signed in here is signed out first
 // (and a sign-out the server did not confirm sends nothing); only a same-origin
 // redirect is followed; a failure or an unknown outcome is shown, never retried.
-import { spawnSync } from 'node:child_process';
 import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
@@ -14,6 +13,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import test from 'node:test';
+import { installStarterDependencies } from './starter-init-fixture.mjs';
 
 const source = Boolean(process.env.SOMEWHERE_TEST_SOURCE);
 const moduleRoot = source ? '../src' : '../dist';
@@ -95,15 +95,6 @@ function transpile(code) {
   return ts.transpileModule(code, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText;
 }
 
-// The typecheck never installs (read-only, ); this test installs
-// the starter's pinned dependencies itself, the way a developer runs npm install.
-const installStarter = (specs, cwd) => {
-  const done = spawnSync(process.platform === 'win32' ? 'npm.cmd' : 'npm',
-    ['install', '--no-save', '--no-audit', '--no-fund', '--loglevel', 'error', ...specs],
-    { cwd, stdio: 'ignore', shell: process.platform === 'win32' });
-  if (done.error) throw done.error;
-  if (done.status !== 0) throw new Error(`npm install exited ${done.status}`);
-};
 
 /** The generated auth starter, its pinned SDK installed, and the landing hook
  *  and auth client compiled to modules that import the real SDK. */
@@ -116,7 +107,7 @@ async function prepareStarter(ui) {
     pkg.dependencies['@somewhere-cloud/sdk'] = `file:${process.env.SOMEWHERE_TEST_SDK_TARBALL}`;
     writeFileSync(pkgPath, JSON.stringify(pkg, null, 2));
   }
-  const checked = await runTypecheck(dir, { installTypePackages: installStarter });
+  const checked = await runTypecheck(dir, { installTypePackages: installStarterDependencies });
   assert.equal(checked.ok, true, JSON.stringify(checked));
   const sdkAuth = join(dir, 'node_modules', '@somewhere-cloud', 'sdk', 'dist', 'esm', 'auth', 'index.js');
   assert.ok(existsSync(sdkAuth), 'the starter installs its pinned SDK');

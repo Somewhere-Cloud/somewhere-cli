@@ -2,9 +2,10 @@ import { printPreviewScheduleTest } from '../lib/test-preview-job.js';
 import { cliInvocation } from '../lib/cli-invocation.js';
 import { Command } from 'commander';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { loadProjectConfig } from '../lib/config.js';
+import { ApiClient, CliApiError } from '../lib/client.js';
+import { getToken, loadProjectConfig } from '../lib/config.js';
 import { shellQuote } from '../lib/next-actions.js';
-import { callPlatformTool, PlatformToolError } from '../lib/platform-tools.js';
+import { callPlatformTool } from '../lib/platform-tools.js';
 import { interactivePollDelay } from '../lib/poll-delay.js';
 import { folderPreviewTool, previewCurrentVersion, waitForPreviewJob } from '../lib/preview-jobs.js';
 import {
@@ -179,9 +180,11 @@ function isTerminalJobStatus(status: string): boolean {
   return status === JOB_SUCCESS_STATUS || JOB_FAILURE_STATUSES.has(status);
 }
 
-/** Polls job_get until the job reaches a terminal status or the deadline
+/** Reads the admitted job until it reaches a terminal status or the deadline
  *  passes; returns the last job view either way. */
 async function waitForJob(admitted: CronRunResult, timeoutSeconds: number, firstDelayMs: number): Promise<{ job: JobView; timedOut: boolean }> {
+  const client = new ApiClient(getToken());
+  const path = '/jobs/' + encodeURIComponent(admitted.job_id);
   const deadline = Date.now() + timeoutSeconds * 1000;
   let job: JobView = admitted;
   let delay = firstDelayMs;
@@ -194,13 +197,13 @@ async function waitForJob(admitted: CronRunResult, timeoutSeconds: number, first
     if (delay) await sleep(delay);
     let retryAfter: number | undefined;
     try {
-      const view = jobView(await callPlatformTool('job_get', { job_id: admitted.job_id }, {
-        allTools: true, onRetryAfter: (ms) => { retryAfter = Math.max(retryAfter ?? 0, ms); },
+      const view = jobView(await client.call('GET', path, undefined, undefined, {
+        onRetryAfter: (ms) => { retryAfter = Math.max(retryAfter ?? 0, ms); },
       }));
       if (isTerminalJobStatus(view.status)) return { job: view, timedOut: false };
       job = view;
     } catch (error) {
-      const hint = error instanceof PlatformToolError ? error.meta.retryAfterMs : undefined;
+      const hint = error instanceof CliApiError ? error.meta.retryAfterMs : undefined;
       if (retryAfter === undefined && hint === undefined) throw error;
       retryAfter = Math.max(retryAfter ?? 0, hint ?? 0);
     }
@@ -638,7 +641,7 @@ export function registerCron(program: Command): void {
         }
         printWaitedJob(job, timedOut, timeoutSeconds);
       } catch (err) {
-        // Once cron_run has answered, a later error comes from job_get and
+        // Once cron_run has answered, a later error comes from reading the queued job and
         // says nothing about whether cron run exists on this platform.
         if (!queued && cronRunUnavailable(err)) {
           printTypedCronError('CRON_RUN_NOT_AVAILABLE', CRON_RUN_UNAVAILABLE, opts.json);

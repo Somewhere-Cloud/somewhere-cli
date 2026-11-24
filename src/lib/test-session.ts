@@ -96,7 +96,7 @@ export async function createUser(baseUrl: string): Promise<UserSession> {
   const session = new UserSession(baseUrl);
   // Reserved platform test domain: no real recipient, no admin credential.
   const email = 'starter-' + crypto.randomUUID() + '@fixture.test.somewhere.site';
-  const password = 'Fixture!9-' + crypto.randomUUID();
+  const password = `A1!${crypto.randomUUID()}`;
   const response = await session.post('/api/auth/signup', { email, password });
   await expectStatus(response, 200);
   const body = await response.json() as { cookie_session?: boolean };

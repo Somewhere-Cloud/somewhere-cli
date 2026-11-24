@@ -30,6 +30,6 @@ test('public helper keeps a user cookie and Origin; malformed requests cannot pa
     await assert.rejects(user.request('https://other.example/'), /stay on the app origin/);
     let selector;
     await waitForApp({ locator(value) { selector = value; return { async waitFor() {} }; } }, 'signed-out');
-    assert.equal(selector, '[data-app-state="signed-out"]');
+    assert.equal(selector, 'html[data-sw-auth="signed-out"], [data-app-state="signed-out"]');
   } finally { await new Promise(resolve => server.close(resolve)); }
 });

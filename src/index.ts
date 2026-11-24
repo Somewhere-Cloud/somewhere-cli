@@ -47,6 +47,7 @@ import { registerUsage } from './commands/usage.js';
 import { registerGit } from './commands/git.js';
 import { registerCron } from './commands/cron.js';
 import { registerEmail } from './commands/email.js';
+import { registerData } from './commands/data.js';
 import { registerTest } from './commands/test.js';
 import { registerTestUsers } from './commands/test-users.js';
 import { registerSupport } from './commands/support.js';
@@ -166,6 +167,7 @@ export async function runCli(): Promise<void> {
   registerVerify(program);
   registerTestUsers(program);
   registerTest(program);
+  registerData(program);
   registerSupport(program);
   registerCheck(program);
   registerApi(program);

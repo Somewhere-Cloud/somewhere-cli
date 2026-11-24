@@ -33,11 +33,20 @@ export interface DataRequest { table: string; operation: 'list' | 'get' | 'creat
  *  - empty: a list with no rows or a get with null (a missing row and a hidden row look the same);
  *  - refused: 401/403;
  *  - missing-or-refused: 404 DATA_NOT_FOUND on update/delete (a missing row and a refused write look the same);
+ *  - missing-contract: 400 DATA_CONTRACT_MISSING (the request did not supply a digest);
  *  - malformed: 400/405/413/415, or 403 DATA_ORIGIN_FORBIDDEN (the request is wrong; it proves nothing about access);
  *  - stale-contract: 409 DATA_CONTRACT_MISMATCH (the app changed since the contract was read; it proves nothing);
  *  - error: anything else, such as 409 DATA_CONFLICT (a unique-key conflict). */
-export type DataKind = 'ok' | 'empty' | 'refused' | 'missing-or-refused' | 'malformed' | 'stale-contract' | 'error';
-export interface DataResult { status: number; kind: DataKind; data: unknown; error: string | null; message: string | null }
+export type DataKind = 'ok' | 'empty' | 'refused' | 'missing-or-refused' | 'missing-contract' | 'malformed' | 'stale-contract' | 'error';
+export interface DataResult {
+  status: number;
+  kind: DataKind;
+  data: unknown;
+  error: string | null;
+  message: string | null;
+  access?: { filtered: true; by: string };
+  current_contract_digest?: string;
+}
 type Who = Page | BrowserContext | APIRequestContext;
 
 /** One check's outcome, including whether a prerequisite kept it from running. */
@@ -125,21 +134,28 @@ export function undeployedChanges(root: string, projectId: string, preview = fal
 }
 
 /** What a data-endpoint answer means (see DataKind). */
-export function classifyData(status: number, raw: unknown): DataResult {
+export function classifyData(status: number, raw: unknown, operation?: string): DataResult {
   const body = raw && typeof raw === 'object' ? raw as Record<string, unknown> : null;
   const error = typeof body?.error === 'string' ? body.error : null;
   const message = typeof body?.message === 'string' ? body.message : null;
   const data = body?.data ?? null;
-  // A wrong Origin or a malformed body is the request's fault, never an access answer; a 409 is a
-  // stale contract only with DATA_CONTRACT_MISMATCH (DATA_CONFLICT is a real unique-key conflict).
-  const kind: DataKind = status === 200
-    ? ((Array.isArray(data) && data.length === 0) || data === null ? 'empty' : 'ok')
-    : status === 403 && error === 'DATA_ORIGIN_FORBIDDEN' ? 'malformed'
-      : status === 401 || status === 403 ? 'refused'
-        : status === 404 && error === 'DATA_NOT_FOUND' ? 'missing-or-refused'
-          : [400, 405, 413, 415].includes(status) ? 'malformed'
-            : status === 409 && error === 'DATA_CONTRACT_MISMATCH' ? 'stale-contract' : 'error';
-  return { status, kind, data, error, message };
+  const access = body?.access as { filtered?: unknown; by?: unknown } | undefined;
+  const digest = body?.current_contract_digest;
+  const writing = operation === 'create' || operation === 'update' || operation === 'delete';
+  let kind: DataKind = 'error';
+  if (status === 200 && !error) {
+    if (writing && typeof body?.changes === 'number') kind = 'ok';
+    else if (body && Object.hasOwn(body, 'data')) kind = data === null || (Array.isArray(data) && !data.length) ? 'empty' : 'ok';
+  } else if (status === 400 && error === 'DATA_CONTRACT_MISSING') kind = 'missing-contract';
+  else if (status === 409 && error === 'DATA_CONTRACT_MISMATCH') kind = 'stale-contract';
+  else if ([400, 405, 413, 415].includes(status) || error === 'DATA_ORIGIN_FORBIDDEN') kind = 'malformed';
+  else if ((status === 401 || status === 403) && error) kind = 'refused';
+  else if (status === 404 && error === 'DATA_NOT_FOUND' && (operation === undefined || operation === 'update' || operation === 'delete')) kind = 'missing-or-refused';
+  return {
+    status, kind, data, error, message,
+    ...(status === 200 && access?.filtered === true && typeof access.by === 'string' ? { access: { filtered: true, by: access.by } } : {}),
+    ...(kind === 'stale-contract' && typeof digest === 'string' ? { current_contract_digest: digest } : {}),
+  };
 }
 
 export class AppTest {
@@ -257,7 +273,7 @@ export class AppTest {
     });
     let body: unknown = null;
     try { body = await response.json(); } catch { /* not JSON */ }
-    return classifyData(response.status(), body);
+    return classifyData(response.status(), body, request.operation);
   }
 
   /** Throws unless `who` was refused. An empty read or a 404 on a write counts only with
@@ -271,7 +287,7 @@ export class AppTest {
     if (before === 'null') throw new Error(`expectRefused: ${request.table} ${String(request.id)} does not exist for the allowed person, so there is nothing to refuse. Create the row first.`);
     const result = await this.data(who, request);
     const said = `${label} answered HTTP ${result.status}${result.error ? ' ' + result.error : ''}${result.message ? ` (${result.message})` : ''}`;
-    if (result.kind === 'malformed' || result.kind === 'stale-contract') throw new Error(`expectRefused: ${said}: the request was malformed or the app's contract changed, so nothing ran and this proves nothing about access.`);
+    if (result.kind === 'malformed' || result.kind === 'missing-contract' || result.kind === 'stale-contract') throw new Error(`expectRefused: ${said}: the request was malformed or the app's contract changed, so nothing ran and this proves nothing about access.`);
     if (result.kind === 'ok') throw new Error(`expectRefused: ${said}: it was allowed, not refused.`);
     if (result.kind === 'error') throw new Error(`expectRefused: ${said}: not a refusal.`);
     if (result.kind === 'refused') return result;

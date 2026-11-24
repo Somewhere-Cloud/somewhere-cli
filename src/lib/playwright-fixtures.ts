@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import type { APIRequestContext, APIResponse, BrowserContext, Locator, Page, TestType, PlaywrightTestArgs, PlaywrightTestOptions, PlaywrightWorkerArgs, PlaywrightWorkerOptions } from '@playwright/test';
 import { fixtureTestTarget } from './test-target.js';
 import { ApiClient } from './client.js';
+import { classifyData } from './app-test.js';
 import { getToken, loadProjectConfig } from './config.js';
 import { buildStorageState, createTestIdentities, expiryOf, messagesAfter, type IssuedIdentity, type InboxMessage } from './test-identities.js';
 import { diagnostics, rememberSecrets, scrub, scrubTestErrors, describeError, timed, titled } from './test-diagnostics.js';
@@ -445,15 +446,18 @@ async function refusedAs(person: Person_, target: string, request: unknown, opti
   const status = response.status();
   const { code, message, json } = await bodyOf(response);
   const said = `${operation} on ${target} answered ${seen(status, code, message)}`;
-  if (status === 400 || status === 409) throw new Error(`expectRefused: ${said}. Nothing ran, so this proves nothing about access.`);
+  const { kind } = classifyData(status, json, operation);
+  if (kind === 'missing-contract' || kind === 'stale-contract' || kind === 'malformed') {
+    throw new Error(`expectRefused: ${said}. Nothing ran, so this proves nothing about access.`);
+  }
   const rows = json?.data;
   const empty = status === 200 && ((operation === 'get' && rows === null) || ((operation === 'list' || operation === 'relation_list') && Array.isArray(rows) && rows.length === 0));
-  const missing = status === 404 && code === 'DATA_NOT_FOUND';
+  const missing = kind === 'missing-or-refused';
   if (status === 200 && !empty) {
     if (reading) throw new Error(`expectRefused: ${said}: this person read ${Array.isArray(rows) ? `${rows.length} row(s)` : 'the row'}.`);
     throw new Error(`expectRefused: ${said}: the ${operation} was allowed.`);
   }
-  if (status !== 401 && status !== 403 && !empty && !missing) throw new Error(`expectRefused: ${said}: not a refusal.`);
+  if (kind !== 'refused' && !empty && !missing) throw new Error(`expectRefused: ${said}: not a refusal.`);
   if ((empty || missing) && !allowed) throw new Error(`expectRefused: ${said}: ${empty ? 'an empty answer' : 'a 404'} ${INCONCLUSIVE}`);
   if (!allowed) return;
   if (reading) {

@@ -143,6 +143,24 @@ export function readManifest(root: string): TestManifest | null {
   return value;
 }
 
+/** Read the prepared actor's app session for this exact linked target. */
+export function preparedActorSession(root: string, target: { projectId: string; origin: string }, name: string): string {
+  const manifest = readManifest(root);
+  const actor = manifest?.actors.find(item => item.name === name);
+  if (!actor || manifest?.project_id !== target.projectId || manifest.origin !== target.origin) {
+    throw new Error('No prepared actor for this app. Run somewhere test-users prepare with the actor name.');
+  }
+  const domain = new URL(target.origin).hostname;
+  let state: { cookies?: { name: string; domain: string; path: string; secure: boolean; value: string }[] } | null;
+  try { state = JSON.parse(readFileSync(join(stateDir(root), actor.state_file), 'utf8')); }
+  catch { throw new Error('Could not read the saved test user session.'); }
+  const session = Array.isArray(state?.cookies)
+    ? state.cookies.find(cookie => cookie?.name === ACCESS_COOKIE && cookie.domain === domain && cookie.path === '/' && cookie.secure)?.value
+    : undefined;
+  if (typeof session !== 'string' || !session) throw new Error('The prepared actor has no app session in its saved state.');
+  return session;
+}
+
 export function writeManifest(root: string, manifest: TestManifest): void {
   writePrivateFile(join(stateDir(root), MANIFEST_FILE), JSON.stringify(manifest, null, 2) + '\n');
 }

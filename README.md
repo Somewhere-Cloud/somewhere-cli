@@ -339,10 +339,12 @@ await expectStatus(await user.request('/api/auth/me'), 200);
 The app must mount the packaged auth handler at `/api/auth`. `createUser` creates
 an independent throwaway user at the platform test domain; it does not use admin
 credentials. `signIn(url, email, password)` supports an existing test user.
-Sessions retain cookies and send the app Origin. `session.data(table, contract,
-{ operation: 'list' })` posts the browser runtime shape; supply the deployed
-browser client's contract digest. `expectRefusal(response, 403, 'DATA_ACCESS_DENIED')`
-requires both the exact status and code: malformed 400 requests fail.
+From the linked app folder, `session.data('notes', { operation: 'list' })` sends
+the signed-in session, app Origin and deployed contract. For a shell probe, run
+`somewhere test-users prepare alice`, then `somewhere data list notes --as alice`.
+The command prints the HTTP status, outcome and rows or error as JSON.
+`expectRefusal(response, 403, 'DATA_ACCESS_DENIED')` checks the exact status and
+code. For an empty scoped read, also check that the owner can read the same fixture.
 
 Browser tests can call `waitForApp(page, 'signed-in')` or `'signed-out'`; omit the
 state for either ready state. Add `data-app-state` to your own app's confirmed auth

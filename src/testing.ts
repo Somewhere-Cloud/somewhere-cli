@@ -1,7 +1,12 @@
+import { ApiClient } from './lib/client.js';
+import { getToken, loadProjectConfig } from './lib/config.js';
+import { fixtureTestTarget, type TestTarget } from './lib/test-target.js';
+
 // Node 22.19+: native fetch, cookie storage and TypeScript; no test dependencies.
 export class UserSession {
   readonly origin: string;
   private cookies = new Map<string, string>();
+  private target?: Promise<TestTarget>;
   constructor(baseUrl: string) { this.origin = new URL(baseUrl).origin; }
   async request(path: string, init: RequestInit = {}): Promise<Response> {
     const url = new URL(path, this.origin);
@@ -20,9 +25,18 @@ export class UserSession {
   post(path: string, body: unknown): Promise<Response> {
     return this.request(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   }
-  // Pass the deployed browser client's contract digest when the app declares client data.
-  data(table: string, contract: string, request: DataRequest): Promise<Response> {
-    return this.post('/__sw/data', { ...request, table, contract });
+  /** Use this session's cookies and the linked app's declared data contract. */
+  data(table: string, request: DataRequest): Promise<Response>;
+  data(table: string, contract: string, request: DataRequest): Promise<Response>;
+  async data(table: string, requestOrContract: DataRequest | string, request?: DataRequest): Promise<Response> {
+    if (typeof requestOrContract === 'string') {
+      return this.post('/__sw/data', { ...request, table, contract: requestOrContract });
+    }
+    const projectId = loadProjectConfig()?.project_id;
+    if (!projectId) throw new Error('Use the data helper from a linked project folder.');
+    const target = await (this.target ??= fixtureTestTarget(new ApiClient(process.env.SW_TEST_TARGET ? null : getToken()), projectId));
+    if (target.origin !== this.origin) throw new Error('This session belongs to a different app than the linked test target.');
+    return this.post('/__sw/data', { ...requestOrContract, table, contract: target.contractDigest ?? '' });
   }
 }
 export type DataRequest =

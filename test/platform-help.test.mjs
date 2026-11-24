@@ -256,7 +256,7 @@ test('advisor, MCP docs topics, and catalog use the authenticated platform help 
                 ? ['legacy', 'unknown'].includes(rpc.params.arguments.section)
                   ? '# sw.db\n\nDatabase reference.'
                   : '[docs] topic=sw.db view=section complete=false shown=9 full=27\n## Where\n'
-                : '[docs] topic=sw.db view=summary complete=true shown=27 full=27\nShowing the whole topic (27 characters).\n\n# sw.db\n\nDatabase reference.'
+                : '[docs] topic=sw.db view=summary complete=true shown=27 full=27\nShowing the whole topic (27 characters, about 7 tokens at 4 characters per token).\n\n# sw.db\n\nDatabase reference.'
             : JSON.stringify(catalog, null, 2);
         if (rpc.params.name === 'catalog' && rpc.params.arguments.load) {
           text = JSON.stringify({ loaded: [rpc.params.arguments.load], count: 1, tools: [cronCreate] }, null, 2);
@@ -330,7 +330,7 @@ test('advisor, MCP docs topics, and catalog use the authenticated platform help 
     assert.equal(docsPayload.topic, 'sw.db');
     assert.equal(docsPayload.view, 'summary');
     assert.equal(docsPayload.complete, true);
-    assert.equal(docsPayload.content, '[docs] topic=sw.db view=summary complete=true shown=27 full=27\nShowing the whole topic (27 characters).\n\n# sw.db\n\nDatabase reference.');
+    assert.equal(docsPayload.content, '[docs] topic=sw.db view=summary complete=true shown=27 full=27\nShowing the whole topic (27 characters, about 7 tokens at 4 characters per token).\n\n# sw.db\n\nDatabase reference.');
 
     const docsFull = await run(['docs', 'sw.db', '--full', '--json'], env);
     assert.equal(docsFull.status, 0, docsFull.stderr);

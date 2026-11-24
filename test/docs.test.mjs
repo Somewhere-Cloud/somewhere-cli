@@ -356,8 +356,8 @@ test('published topic views share plain progress text and allow a summary on cap
     requests.push(req.url);
     const view = new URL(req.url, 'http://localhost').searchParams.get('view');
     const complete = view === 'full';
-    const notice = complete ? 'Showing the whole topic (30,000 characters).'
-      : 'Showing 1 of 2 sections in full, 40% of this topic (12,000 of 30,000 characters).';
+    const notice = complete ? 'Showing the whole topic (30,000 characters, about 7,500 tokens at 4 characters per token).'
+      : 'Showing 1 of 2 sections in full, 31% of this topic (9,300 of 30,000 characters, about 2,325 of 7,500 tokens at 4 characters per token).';
     const text = `[docs] topic=sw.db view=${view} complete=${complete}\n${notice}\n\n# Database\n`;
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ topic: 'sw.db', text, complete, view, version: MANIFEST.sourceHash }));
@@ -371,10 +371,10 @@ test('published topic views share plain progress text and allow a summary on cap
     };
     const summary = await run(['docs', 'sw.db'], env);
     assert.equal(summary.status, 0, summary.stderr);
-    assert.match(summary.stdout, /^Showing 1 of 2 sections in full, 40%/);
+    assert.equal(summary.stdout.split('\n')[0], 'Showing 1 of 2 sections in full, 31% of this topic (9,300 of 30,000 characters, about 2,325 of 7,500 tokens at 4 characters per token).');
     const full = await run(['docs', 'sw.db', '--full'], env);
     assert.equal(full.status, 0, full.stderr);
-    assert.match(full.stdout, /^Showing the whole topic/);
+    assert.equal(full.stdout.split('\n')[0], 'Showing the whole topic (30,000 characters, about 7,500 tokens at 4 characters per token).');
     const section = await run(['docs', 'sw.db', '--section', 'reads', '--json'], env);
     assert.equal(section.status, 0, section.stderr);
     assert.equal(JSON.parse(section.stdout).view, 'section');

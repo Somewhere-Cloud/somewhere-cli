@@ -29,7 +29,7 @@ export async function runTestJob(target: TestTarget, job: TestJobTarget, options
   const preview = target.environment === 'preview';
   if (preview && (!previewCredential || !target.previewSessionId)) throw new Error('The test has no preview job credential.');
   const binding = { preview_session_id: target.previewSessionId, preview_id: target.releaseId };
-  const developer = 'schedule' in job || !preview ? testingDeveloperToken() : null;
+  const developer = testingDeveloperToken();
   const client = new ApiClient(developer);
   let path: string;
   let body: unknown;
@@ -62,9 +62,9 @@ export async function runTestJob(target: TestTarget, job: TestJobTarget, options
     } else readJob = liveRead;
   } else {
     if (!job.handler.startsWith('/') || new URL(job.handler, target.origin).origin !== target.origin) throw new Error('Choose a handler path in this app.');
-    path = preview ? '/preview-tools/run-job' : '/jobs';
-    body = { handler: job.handler, payload: job.payload, ...(!preview ? { project_id: target.projectId } : {}) };
-    credential = preview ? previewCredential : developer;
+    path = preview ? `/projects/${encodeURIComponent(target.projectId)}/preview/run-job` : '/jobs';
+    body = { handler: job.handler, payload: job.payload, ...(preview ? binding : { project_id: target.projectId }) };
+    credential = developer;
     const tool = new ApiClient(previewCredential ?? null);
     readJob = preview
       ? (id, timeoutMs) => tool.call('GET', `/preview-tools/jobs/${encodeURIComponent(id)}`, undefined, undefined, { refresh: false, timeoutMs })
@@ -91,7 +91,7 @@ export async function runTestJob(target: TestTarget, job: TestJobTarget, options
   }
   const validTarget = (value: { preview_session_id?: string; preview_id?: string }) =>
     !preview || value.preview_session_id === binding.preview_session_id && value.preview_id === binding.preview_id;
-  if (!receipt?.job_id || !validTarget(receipt)) return { status: 'unknown', request_id: requestId, timed_out: false };
+  if (typeof receipt?.job_id !== 'string' || !receipt.job_id.startsWith('job_') || !validTarget(receipt)) return { status: 'unknown', request_id: requestId, timed_out: false };
   const id = receipt.job_id;
   const budget = preview ? Math.min(time, receipt.timeout_seconds || 270) : time;
   const deadline = Date.now() + budget * 1000;

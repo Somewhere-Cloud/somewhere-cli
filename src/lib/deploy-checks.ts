@@ -154,7 +154,7 @@ function resultEvidence(line: CheckLine): string[] {
 
 export function formatChecksReport(check: AccessCheck | null): string[] {
   const summary = deployChecksSummary(check);
-  const lines: string[] = [];
+  const lines: string[] = ['App smoke check'];
   if (!check || check.status === 'pending') {
     lines.push(`Could not check: the run did not finish within ${TEST_CHECKS_WAIT_MS / 1000} s.`);
   } else if (check.status !== 'checked') {
@@ -201,6 +201,7 @@ export function formatChecksReport(check: AccessCheck | null): string[] {
   } else {
     lines.push('Coverage details are unavailable for this run.');
   }
+  lines.push('For your own app tests, use @somewhere-cloud/cli/testing. See somewhere docs test.');
   return [...lines, JSON.stringify({
     ...summary, not_checked: coverage,
     ...(coverage ? { routes_checked: check?.routes_checked, routes_discovered: check?.routes_discovered } : {}),

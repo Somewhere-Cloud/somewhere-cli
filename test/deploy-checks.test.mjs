@@ -135,7 +135,10 @@ test('somewhere test reads the stored result of the last deploy; waits only whil
   const c3 = clock();
   const pending = await runChecksNow({ call: async (method) => method === 'POST' ? { read: 'GET /v1/deploy/log?project_id=p1&version=4' } : { access_check: { status: 'pending', sentence: null } } }, 'p1', c3);
   assert.ok(c3.now() <= 150_000 && c3.now() >= 147_000, `${c3.now()} ms`);
-  assert.match(formatChecksReport(pending)[0], /did not finish within 150 s/);
+  const report = formatChecksReport(pending);
+  assert.equal(report[0], 'App smoke check');
+  assert.match(report[1], /did not finish within 150 s/);
+  assert.match(report.at(-2), /@somewhere-cloud\/cli\/testing/);
   assert.equal(checksExitCode(pending), 2);
   assert.equal(checksExitCode({ status: 'checked', sentence: null, passed: false, findings: [] }), 2);
 });

@@ -53,10 +53,16 @@ export function registerTypecheck(program: Command) {
         process.exit(outcome.exitCode);
       }
 
+      let deployFetchAnnounced = false;
+      const announceDeployFetch = () => {
+        if (deployFetchAnnounced) return;
+        deployFetchAnnounced = true;
+        announceDeployCheckFetch(dir);
+      };
+
       if (opts.deploy) {
-        if (/^npx(\.cmd)?$/.test(deployCheckTsc(dir).command)) announceDeployCheckFetch(dir);
         const check = async () => {
-          const result = await runDeployCheck(dir);
+          const result = await runDeployCheck(dir, announceDeployFetch);
           if (opts.json) printJson(result);
           else reportDeployCheck(result);
           return result;
@@ -98,15 +104,14 @@ export function registerTypecheck(program: Command) {
       const announceFetch = () => {
         if (announced || via !== 'npx') return;
         announced = true;
-        if (opts.project) announceNpxTypeScriptFetch(TYPECHECK_TYPESCRIPT_VERSION);
-        else announceDeployCheckFetch(dir);
+        announceNpxTypeScriptFetch(TYPECHECK_TYPESCRIPT_VERSION);
       };
 
       const check = async () => {
         const refused = notInstalled();
-        if (!refused) announceFetch();
+        if (!refused && opts.project) announceFetch();
         const spinner = opts.json || refused || opts.watch ? null : ora('Typechecking (tsc --noEmit)...').start();
-        const deployResult = refused || opts.project ? undefined : await runDeployCheck(dir);
+        const deployResult = refused || opts.project ? undefined : await runDeployCheck(dir, announceDeployFetch);
         const result = deployResult ? {
           ok: deployResult.ok,
           errors: deployResult.findings,

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.38.158
+
+- `somewhere cron run <name> --wait` reports job completion sooner.
+
 ## 0.38.157
 
 - Generated starter guides show how to import large CSV files in background jobs using batched writes.

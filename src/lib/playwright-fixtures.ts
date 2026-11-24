@@ -473,9 +473,30 @@ async function refusedAs(person: Person_, target: string, request: unknown, opti
 }
 /** Test seam: a stand-in request client that data() accepts. */
 export function _fixtureClientForTests(client: APIRequestContext, digest: string): APIRequestContext { digests.set(client, digest); return client; }
-export function data(client: APIRequestContext, table: string, request: DataRequest): Promise<APIResponse> {
-  if (!digests.has(client)) throw new Error('Use a newUser or anonymous fixture client');
-  return client.post('/__sw/data', { data: { ...request, table, contract: digests.get(client) ?? '' } });
+// A request context created from saved Playwright state is outside our fixtures.
+const contextTargets = new WeakMap<APIRequestContext, { projectId: string; load: Promise<TestTarget> }>();
+
+export async function data(client: APIRequestContext, table: string, request: DataRequest): Promise<APIResponse> {
+  if (digests.has(client)) {
+    return client.post('/__sw/data', { data: { ...request, table, contract: digests.get(client) ?? '' } });
+  }
+  const projectId = loadProjectConfig()?.project_id;
+  if (!projectId) throw new Error('Use the data helper from a linked project folder.');
+  let target = contextTargets.get(client);
+  if (!target || target.projectId !== projectId) {
+    const load = fixtureTestTarget(new ApiClient(process.env.SW_TEST_TARGET ? null : getToken()), projectId).catch((error) => {
+      if (contextTargets.get(client)?.load === load) contextTargets.delete(client);
+      throw error;
+    });
+    target = { projectId, load };
+    contextTargets.set(client, target);
+  }
+  const { origin, contractDigest } = await target.load;
+  return client.post(new URL('/__sw/data', origin).href, {
+    headers: { Origin: origin },
+    maxRedirects: 0,
+    data: { ...request, table, contract: contractDigest ?? '' },
+  });
 }
 export { ready };
 

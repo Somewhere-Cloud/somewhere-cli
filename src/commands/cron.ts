@@ -6,7 +6,8 @@ import { ApiClient, CliApiError } from '../lib/client.js';
 import { getToken, loadProjectConfig } from '../lib/config.js';
 import { shellQuote } from '../lib/next-actions.js';
 import { callPlatformTool } from '../lib/platform-tools.js';
-import { interactivePollDelay } from '../lib/poll-delay.js';
+import { jobPollDelay } from '../lib/poll-delay.js';
+import { previewToolClient } from '../lib/preview-credential.js';
 import { folderPreviewTool, previewCurrentVersion, waitForPreviewJob } from '../lib/preview-jobs.js';
 import {
   compactRecord,
@@ -182,13 +183,13 @@ function isTerminalJobStatus(status: string): boolean {
 
 /** Reads the admitted job until it reaches a terminal status or the deadline
  *  passes; returns the last job view either way. */
-async function waitForJob(admitted: CronRunResult, timeoutSeconds: number, firstDelayMs: number): Promise<{ job: JobView; timedOut: boolean }> {
-  const client = new ApiClient(getToken());
+async function waitForJob(client: ApiClient, admitted: CronRunResult, timeoutSeconds: number, firstDelayMs: number): Promise<{ job: JobView; timedOut: boolean }> {
   const path = '/jobs/' + encodeURIComponent(admitted.job_id);
-  const deadline = Date.now() + timeoutSeconds * 1000;
+  const startedAt = Date.now();
+  const deadline = startedAt + timeoutSeconds * 1000;
   let job: JobView = admitted;
   let delay = firstDelayMs;
-  for (let attempt = 0; ; attempt++) {
+  for (;;) {
     const remaining = deadline - Date.now();
     if (delay >= remaining) {
       if (remaining > 0) await sleep(remaining);
@@ -207,7 +208,7 @@ async function waitForJob(admitted: CronRunResult, timeoutSeconds: number, first
       if (retryAfter === undefined && hint === undefined) throw error;
       retryAfter = Math.max(retryAfter ?? 0, hint ?? 0);
     }
-    delay = Math.max(interactivePollDelay(attempt), retryAfter ?? 0);
+    delay = Math.max(jobPollDelay(Date.now() - startedAt), retryAfter ?? 0);
   }
 }
 
@@ -378,11 +379,7 @@ function cronProjectScope(explicit: string | undefined): string | undefined {
   return explicit ?? loadProjectConfig()?.project_id;
 }
 
-async function findNamedCronRow(target: string, explicit: string | undefined, signal?: AbortSignal): Promise<CronRow & { cron_id: string }> {
-  const project = cronProjectScope(explicit);
-  const rows = cronRows(await callPlatformTool('cron_list', compactRecord([
-    ['project_id', project],
-  ]), { allTools: true, signal }));
+function matchNamedCron(target: string, project: string | undefined, rows: CronRow[]): CronRow & { cron_id: string } {
   const matches = rows.filter((row) => row.name === target);
   if (matches.length === 0) {
     throw new Error(`CRON_NOT_FOUND: No scheduled task named "${target}" was found${project ? ` in project "${project}"` : ''}.`);
@@ -393,6 +390,21 @@ async function findNamedCronRow(target: string, explicit: string | undefined, si
   const id = cronRowId(matches[0]);
   if (!id) throw new Error('cron_list returned a scheduled task without a cron_id.');
   return { ...matches[0], cron_id: id };
+}
+
+async function findNamedCronRow(target: string, explicit: string | undefined, signal?: AbortSignal): Promise<CronRow & { cron_id: string }> {
+  const project = cronProjectScope(explicit);
+  const rows = cronRows(await callPlatformTool('cron_list', compactRecord([
+    ['project_id', project],
+  ]), { allTools: true, signal }));
+  return matchNamedCron(target, project, rows);
+}
+
+async function resolveRunCronId(client: ApiClient, target: string, explicit: string | undefined): Promise<string> {
+  if (target.startsWith('cron_')) return target;
+  const project = cronProjectScope(explicit);
+  const rows = cronRows(await client.call('GET', '/cron', undefined, { project_id: project }));
+  return matchNamedCron(target, project, rows).cron_id;
 }
 
 export async function resolveCronId(target: string, explicit: string | undefined): Promise<string> {
@@ -486,22 +498,21 @@ function printCronMutation(verb: string, value: unknown): void {
 /** `cron run <task> --preview`: the task's handler and payload, once, in this folder's open preview, through the
  *  platform's preview admission (one attempt, at most 270 s, no user). The production schedule is only read. Its
  *  outcome is read through the preview's own credential: a production job read never sees a preview job. */
-async function runCronInPreview(cronId: string, opts: CronRunOptions, timeoutSeconds: number): Promise<void> {
+async function runCronInPreview(client: ApiClient, cronId: string, opts: CronRunOptions, timeoutSeconds: number): Promise<void> {
   const tool = await folderPreviewTool({});
   const version = await previewCurrentVersion(tool.credential);
   let firstDelayMs = 0;
-  const value = await callPlatformTool('cron_run', { cron_id: cronId, preview_session_id: version.preview_session_id, preview_id: version.preview_id }, {
-    allTools: true, onRetryAfter: (ms) => { firstDelayMs = Math.max(firstDelayMs, ms); },
-  });
-  const result = cronRunResult(value);
+  const result = cronRunResult(await client.call('POST', `/cron/${encodeURIComponent(cronId)}/run-preview`, version, undefined, {
+    onRetryAfter: (ms) => { firstDelayMs = ms; },
+  }));
   if (!opts.wait) {
-    if (opts.json) { printJson(value); return; }
+    if (opts.json) { printJson({ ok: true, data: result }); return; }
     success(`Scheduled task queued in preview ${version.preview_session_id} (not finished yet). Job ${result.job_id}.`);
     console.log(dim('The production schedule did not change. Pass --wait to wait for the run to finish and see its result.'));
     return;
   }
   if (!opts.json) console.log(dim(`Job ${result.job_id} queued in preview ${version.preview_session_id} for cron ${result.cron_id}; waiting up to ${timeoutSeconds}s…`));
-  const { job, timedOut } = await waitForPreviewJob(tool.credential, result.job_id, timeoutSeconds, firstDelayMs);
+  const { job, timedOut } = await waitForPreviewJob(previewToolClient(tool.credential), result.job_id, timeoutSeconds, firstDelayMs);
   const succeeded = !timedOut && job.status === JOB_SUCCESS_STATUS;
   if (!succeeded) process.exitCode = 1;
   if (opts.json) {
@@ -598,34 +609,34 @@ export function registerCron(program: Command): void {
         if (opts.timeout !== undefined && !opts.wait) {
           throw new Error('USAGE_ERROR: --timeout only applies with --wait.');
         }
-        const cronId = await resolveCronId(target, opts.project);
+        const client = new ApiClient(getToken());
+        const cronId = await resolveRunCronId(client, target, opts.project);
         if (opts.preview) {
           if (opts.twice) {
             await printPreviewScheduleTest(cronId, await folderPreviewTool({}), true, Boolean(opts.json));
             return;
           }
-          await runCronInPreview(cronId, opts, timeoutSeconds);
+          await runCronInPreview(client, cronId, opts, timeoutSeconds);
           return;
         }
         let firstDelayMs = 0;
-        const value = await callPlatformTool('cron_run', { cron_id: cronId }, {
-          allTools: true, onRetryAfter: (ms) => { firstDelayMs = Math.max(firstDelayMs, ms); },
+        const value = await client.call('POST', `/cron/${encodeURIComponent(cronId)}/run`, undefined, undefined, {
+          onRetryAfter: (ms) => { firstDelayMs = ms; },
         });
         queued = true;
+        const result = cronRunResult(value);
         if (!opts.wait) {
           if (opts.json) {
-            printJson(value);
+            printJson({ ok: true, data: result });
             return;
           }
-          const result = cronRunResult(value);
           success(`Scheduled task queued (not finished yet). Job ${result.job_id}.`);
           console.log(dim(`Cron ${result.cron_id}  Job ${result.job_id}  ${result.status}  trigger: ${result.trigger}`));
           console.log(dim('Pass --wait to wait for the run to finish and see its result.'));
           return;
         }
-        const result = cronRunResult(value);
         if (!opts.json) console.log(dim(`Job ${result.job_id} queued for cron ${result.cron_id}; waiting up to ${timeoutSeconds}s…`));
-        const { job, timedOut } = await waitForJob(result, timeoutSeconds, firstDelayMs);
+        const { job, timedOut } = await waitForJob(client, result, timeoutSeconds, firstDelayMs);
         const succeeded = !timedOut && job.status === JOB_SUCCESS_STATUS;
         if (!succeeded) process.exitCode = 1;
         if (opts.json) {

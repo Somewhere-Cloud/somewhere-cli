@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { awaitDeployChecks, checksExitCode, formatChecksReport, parseChecksRead, runChecksNow, DEPLOY_CHECKS_RUNNING } from '../dist/lib/deploy-checks.js';
+import { awaitDeployChecks, checksExitCode, checksJsonReport, formatChecksReport, parseChecksRead, runChecksNow, DEPLOY_CHECKS_RUNNING } from '../dist/lib/deploy-checks.js';
 
 const checks = { status: 'running', read: 'GET /v1/deploy/log?project_id=p1&version=3' };
 
@@ -261,4 +261,48 @@ test('somewhere test with no file runs the platform checks with no local browser
     assert.equal(confirmed.stdout.trim().split('\n').length, 1);
     assert.equal(JSON.parse(confirmed.stdout).outcome, 'failed');
   } finally { await new Promise((r) => s.close(r)); }
+});
+
+test('a targeted check starts a separate run and both reports show its partial coverage', async () => {
+  const only = 'checks/add-note.json';
+  const calls = [];
+  const partial = {
+    ...record, scope: 'partial', selection: only, checked_parts: [only], passed: true,
+    checks: [record.checks[0]],
+    not_checked: { routes_without_read_check: [], routes_without_write_check: [], schedules_not_run: [],
+      other: ['Access probes', 'Browser page crawl', 'Other saved checks'] },
+  };
+  const client = { call: async (method, path, body, query) => {
+    calls.push({ method, path, body, query });
+    return method === 'POST'
+      ? { scope: 'partial', selection: only, read: 'GET /v1/deploy/log?project_id=p1&check_run_id=chk_one' }
+      : { access_check: partial };
+  } };
+  const result = await runChecksNow(client, 'p1', { ...clock(), only });
+  assert.equal(checksExitCode(result), 0);
+  assert.deepEqual(calls, [
+    { method: 'POST', path: '/deploy/checks/targeted', body: { project_id: 'p1', check: only }, query: undefined },
+    { method: 'GET', path: '/deploy/log', body: undefined, query: { project_id: 'p1', check_run_id: 'chk_one' } },
+  ]);
+  const human = formatChecksReport(result);
+  assert.match(human[0], /Partial smoke check/);
+  assert.equal(human[1], 'Checked checks/add-note.json.');
+  assert.match(human.join('\n'), /Other checks skipped or out of scope: Access probes, Browser page crawl, Other saved checks/);
+  for (const report of [JSON.parse(human.at(-1)), checksJsonReport(result)]) {
+    assert.equal(report.scope, 'partial');
+    assert.equal(report.outcome, 'passed');
+    assert.deepEqual(report.checked_parts, [only]);
+    assert.deepEqual(report.not_checked, partial.not_checked);
+  }
+});
+
+test('a targeted check cannot pass on a full result or a different selection', async () => {
+  const result = await runChecksNow({ call: async (method) => method === 'POST'
+    ? { scope: 'partial', selection: 'access', read: 'GET /v1/deploy/log?project_id=p1&check_run_id=chk_one' }
+    : { access_check: { ...record, passed: true, checks: [record.checks[0]] } } },
+  'p1', { ...clock(), only: 'access' });
+  assert.equal(checksExitCode(result), 2);
+  assert.equal(result.scope, 'partial');
+  assert.deepEqual(result.checked_parts, []);
+  assert.match(formatChecksReport(result).join('\n'), /No parts ran/);
 });

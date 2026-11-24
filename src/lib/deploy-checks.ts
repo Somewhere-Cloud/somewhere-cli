@@ -26,6 +26,9 @@ interface Finding { kind: string; table?: string; via?: string; status?: number;
 export interface AccessCheck {
   status: 'pending' | 'checked' | 'unavailable' | string;
   sentence: string | null;
+  scope?: 'partial';
+  selection?: string;
+  checked_parts?: string[];
   findings?: Finding[];
   checks?: CheckLine[];
   passed?: boolean;
@@ -94,16 +97,37 @@ export const TEST_CHECKS_WAIT_MS = 150_000;
 export async function runChecksNow(
   client: Pick<ApiClient, 'call'>,
   projectId: string,
-  opts: Parameters<typeof awaitDeployChecks>[2] & { again?: boolean } = {},
+  opts: Parameters<typeof awaitDeployChecks>[2] & { again?: boolean; only?: string } = {},
 ): Promise<AccessCheck | null> {
-  if (!opts.again) {
+  if (!opts.again && opts.only === undefined) {
     const read = `GET /v1/deploy/log?project_id=${encodeURIComponent(projectId)}`;
     const stored = await awaitDeployChecks(client, { read }, { ...opts, waitMs: 0 });
     if (stored && stored.status !== 'pending') return stored;
     if (stored) return awaitDeployChecks(client, { read }, { waitMs: TEST_CHECKS_WAIT_MS, ...opts });
   }
-  const started = await client.call<{ status?: string; version?: number; read?: string }>('POST', '/deploy/checks', { project_id: projectId });
-  return awaitDeployChecks(client, { read: started?.read }, { waitMs: TEST_CHECKS_WAIT_MS, ...opts });
+  const started = await client.call<{ status?: string; version?: number; read?: string; scope?: string; selection?: string }>(
+    'POST', opts.only === undefined ? '/deploy/checks' : '/deploy/checks/targeted', { project_id: projectId, ...(opts.only !== undefined ? { check: opts.only } : {}) },
+  );
+  if (opts.only !== undefined && (started?.scope !== 'partial' || started.selection !== opts.only)) {
+    return partialCheckUnavailable(opts.only, 'The platform did not confirm a targeted check.');
+  }
+  const result = await awaitDeployChecks(client, { read: started?.read }, { waitMs: TEST_CHECKS_WAIT_MS, ...opts });
+  if (opts.only !== undefined && (result?.scope !== 'partial' || result.selection !== opts.only)) {
+    return partialCheckUnavailable(opts.only, 'The platform did not return a result for the selected check.');
+  }
+  return result;
+}
+
+const selectionLabel = (selection: string) => selection === 'access' ? 'Access probes' : selection === 'crawl' ? 'Browser page crawl' : selection;
+
+export function partialCheckUnavailable(selection: string, sentence: string): AccessCheck {
+  return {
+    status: 'unavailable', scope: 'partial', selection, checked_parts: [], sentence,
+    not_checked: {
+      routes_without_read_check: null, routes_without_write_check: null, schedules_not_run: null,
+      other: ['Access probes', 'Browser page crawl', 'Saved checks'],
+    },
+  };
 }
 
 function lineOutcome(line: CheckLine): CheckSummary['outcome'] {
@@ -154,7 +178,14 @@ function resultEvidence(line: CheckLine): string[] {
 
 export function formatChecksReport(check: AccessCheck | null): string[] {
   const summary = deployChecksSummary(check);
-  const lines: string[] = ['App smoke check'];
+  const lines: string[] = [];
+  if (check?.scope === 'partial' && check.selection) {
+    const ran = (check.checked_parts ?? []).map(selectionLabel);
+    lines.push('Partial smoke check requested for ' + selectionLabel(check.selection) + '.');
+    lines.push(ran.length ? 'Checked ' + ran.join(', ') + '.' : 'No parts ran.');
+  } else {
+    lines.push('App smoke check');
+  }
   if (!check || check.status === 'pending') {
     lines.push(`Could not check: the run did not finish within ${TEST_CHECKS_WAIT_MS / 1000} s.`);
   } else if (check.status !== 'checked') {
@@ -186,7 +217,7 @@ export function formatChecksReport(check: AccessCheck | null): string[] {
       lines.push(`Could not check cleanup: ${finding.left_behind ?? (finding.table ? `A test row in ${finding.table} may remain.` : `Check whether any ${finding.via ?? 'test data'} remain.`)}${receipt ? ` (${receipt})` : ''}`);
     }
     if (!checks.length) lines.push('Could not check: no named checks ran.');
-    if (summary.counts.could_not_check && !lines.some((line) => line.startsWith('Could not check'))) lines.push(`Could not check: run ${cliInvocation()} test --again to get named results.`);
+    if (check.scope !== 'partial' && summary.counts.could_not_check && !lines.some((line) => line.startsWith('Could not check'))) lines.push(`Could not check: run ${cliInvocation()} test --again to get named results.`);
   }
   const coverage = check?.not_checked ?? null;
   if (coverage) {
@@ -204,6 +235,7 @@ export function formatChecksReport(check: AccessCheck | null): string[] {
   lines.push('For your own app tests, use @somewhere-cloud/cli/testing. See somewhere docs test.');
   return [...lines, JSON.stringify({
     ...summary, not_checked: coverage,
+    ...(check?.scope === 'partial' ? { scope: check.scope, selection: check.selection, checked_parts: check.checked_parts } : {}),
     ...(coverage ? { routes_checked: check?.routes_checked, routes_discovered: check?.routes_discovered } : {}),
   })];
 }

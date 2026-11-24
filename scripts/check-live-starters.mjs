@@ -5,7 +5,7 @@ import { spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { delimiter, join, resolve } from 'node:path';
 
 const [packageSpec, ...flags] = process.argv.slice(2);
 if (!packageSpec) throw new Error('Pass the packed CLI tarball or exact npm package version.');
@@ -13,6 +13,16 @@ const root = mkdtempSync(join(tmpdir(), 'somewhere-live-starter-'));
 const buildProof = flags.includes('--browser');
 const nameSeed = randomBytes(3).toString('hex');
 const registry = 'https://registry.npmjs.org/';
+const candidateTarball = packageSpec.endsWith('.tgz') ? resolve(packageSpec) : null;
+const npmShim = join(root, 'starter-bin');
+if (candidateTarball) {
+  mkdirSync(npmShim);
+  // A generated starter pins the CLI version it imports. Before publication,
+  // install that exact local artifact without changing the starter manifest.
+  writeFileSync(join(npmShim, 'npm'),
+    '#!/bin/sh\nPATH="$STARTER_NPM_PATH" exec npm "$@" --no-save "$STARTER_CLI_TARBALL"\n',
+    { mode: 0o700 });
+}
 
 function run(label, command, args, cwd, env) {
   console.log(label);
@@ -75,7 +85,7 @@ try {
   const install = join(root, 'install');
   mkdirSync(install);
   await run('Install exact CLI package', 'npm', ['install', '--ignore-scripts', '--no-audit', '--no-fund',
-    packageSpec.endsWith('.tgz') ? resolve(packageSpec) : packageSpec], install, testEnv('install'));
+    candidateTarball ?? packageSpec], install, testEnv('install'));
   const cli = join(install, 'node_modules', '@somewhere-cloud', 'cli', 'bin', 'somewhere.js');
   const { stdout } = await run('Read installed version', process.execPath, [cli, '--version'], install, testEnv('install'));
   console.log('Testing installed CLI ' + stdout.trim());
@@ -91,8 +101,12 @@ try {
     const name = 'swtest-cli-' + template.slice(0, 3) + '-' + nameSeed;
     // Bare only links a project. Use the temporary credential the minimal
     // deploy just minted, and supply a static page for the deploy.
+    const initEnv = candidateTarball ? {
+      ...env, PATH: npmShim + delimiter + env.PATH,
+      STARTER_NPM_PATH: env.PATH, STARTER_CLI_TARBALL: candidateTarball,
+    } : env;
     const init = await run(template + ' init', process.execPath, [cli, 'init', '--name', name, '--json',
-      ...(template === 'default' ? [] : ['--template', template])], cwd, env);
+      ...(template === 'default' ? [] : ['--template', template])], cwd, initEnv);
     if (template === 'bare') {
       assert.ok(!existsSync(join(cwd, 'node_modules')) && !existsSync(join(cwd, 'package.json')), 'bare must leave the folder free of dependencies and starter source');
       writeFileSync(join(cwd, 'index.html'), '<!doctype html><title>Bare release fixture</title><h1>Bare release fixture</h1>');

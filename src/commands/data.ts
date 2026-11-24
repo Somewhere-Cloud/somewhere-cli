@@ -2,7 +2,7 @@ import type { Command } from 'commander';
 import { classifyData } from '../lib/app-test.js';
 import { ApiClient } from '../lib/client.js';
 import { getToken, loadProjectConfig } from '../lib/config.js';
-import { preparedActorSession } from '../lib/test-identities.js';
+import { preparedActorSession } from '../lib/prepared-actor-session.js';
 import { loadTestTarget } from '../lib/test-target.js';
 
 function parseJson(text: string, flag: string): unknown {
@@ -36,7 +36,7 @@ export function registerData(program: Command): void {
       if (origin.protocol !== 'https:' && !['localhost', '127.0.0.1', '[::1]'].includes(origin.hostname)) {
         throw new Error('The linked app needs an HTTPS address.');
       }
-      const session = opts.as ? preparedActorSession(process.cwd(), target, opts.as) : process.env.SOMEWHERE_APP_SESSION;
+      const session = opts.as ? await preparedActorSession(process.cwd(), target, opts.as) : process.env.SOMEWHERE_APP_SESSION;
       if (!session || !/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(session)) {
         throw new Error('Supply a valid app session token.');
       }

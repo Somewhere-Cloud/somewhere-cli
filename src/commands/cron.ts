@@ -1,9 +1,12 @@
 import { printPreviewScheduleTest } from '../lib/test-preview-job.js';
 import { cliInvocation } from '../lib/cli-invocation.js';
 import { Command } from 'commander';
-import { loadProjectConfig } from '../lib/config.js';
+import { setTimeout as sleep } from 'node:timers/promises';
+import { ApiClient, CliApiError } from '../lib/client.js';
+import { getToken, loadProjectConfig } from '../lib/config.js';
 import { shellQuote } from '../lib/next-actions.js';
 import { callPlatformTool } from '../lib/platform-tools.js';
+import { interactivePollDelay } from '../lib/poll-delay.js';
 import { folderPreviewTool, previewCurrentVersion, waitForPreviewJob } from '../lib/preview-jobs.js';
 import {
   compactRecord,
@@ -177,16 +180,34 @@ function isTerminalJobStatus(status: string): boolean {
   return status === JOB_SUCCESS_STATUS || JOB_FAILURE_STATUSES.has(status);
 }
 
-/** Polls job_get until the job reaches a terminal status or the deadline
+/** Reads the admitted job until it reaches a terminal status or the deadline
  *  passes; returns the last job view either way. */
-async function waitForJob(jobId: string, timeoutSeconds: number): Promise<{ job: JobView; timedOut: boolean }> {
+async function waitForJob(admitted: CronRunResult, timeoutSeconds: number, firstDelayMs: number): Promise<{ job: JobView; timedOut: boolean }> {
+  const client = new ApiClient(getToken());
+  const path = '/jobs/' + encodeURIComponent(admitted.job_id);
   const deadline = Date.now() + timeoutSeconds * 1000;
-  for (;;) {
-    const job = jobView(await callPlatformTool('job_get', { job_id: jobId }, { allTools: true }));
-    if (isTerminalJobStatus(job.status)) return { job, timedOut: false };
+  let job: JobView = admitted;
+  let delay = firstDelayMs;
+  for (let attempt = 0; ; attempt++) {
     const remaining = deadline - Date.now();
-    if (remaining <= 0) return { job, timedOut: true };
-    await new Promise((resolveDelay) => setTimeout(resolveDelay, Math.min(WAIT_POLL_INTERVAL_MS, remaining)));
+    if (delay >= remaining) {
+      if (remaining > 0) await sleep(remaining);
+      return { job, timedOut: true };
+    }
+    if (delay) await sleep(delay);
+    let retryAfter: number | undefined;
+    try {
+      const view = jobView(await client.call('GET', path, undefined, undefined, {
+        onRetryAfter: (ms) => { retryAfter = Math.max(retryAfter ?? 0, ms); },
+      }));
+      if (isTerminalJobStatus(view.status)) return { job: view, timedOut: false };
+      job = view;
+    } catch (error) {
+      const hint = error instanceof CliApiError ? error.meta.retryAfterMs : undefined;
+      if (retryAfter === undefined && hint === undefined) throw error;
+      retryAfter = Math.max(retryAfter ?? 0, hint ?? 0);
+    }
+    delay = Math.max(interactivePollDelay(attempt), retryAfter ?? 0);
   }
 }
 
@@ -468,7 +489,10 @@ function printCronMutation(verb: string, value: unknown): void {
 async function runCronInPreview(cronId: string, opts: CronRunOptions, timeoutSeconds: number): Promise<void> {
   const tool = await folderPreviewTool({});
   const version = await previewCurrentVersion(tool.credential);
-  const value = await callPlatformTool('cron_run', { cron_id: cronId, preview_session_id: version.preview_session_id, preview_id: version.preview_id }, { allTools: true });
+  let firstDelayMs = 0;
+  const value = await callPlatformTool('cron_run', { cron_id: cronId, preview_session_id: version.preview_session_id, preview_id: version.preview_id }, {
+    allTools: true, onRetryAfter: (ms) => { firstDelayMs = Math.max(firstDelayMs, ms); },
+  });
   const result = cronRunResult(value);
   if (!opts.wait) {
     if (opts.json) { printJson(value); return; }
@@ -477,7 +501,7 @@ async function runCronInPreview(cronId: string, opts: CronRunOptions, timeoutSec
     return;
   }
   if (!opts.json) console.log(dim(`Job ${result.job_id} queued in preview ${version.preview_session_id} for cron ${result.cron_id}; waiting up to ${timeoutSeconds}s…`));
-  const { job, timedOut } = await waitForPreviewJob(tool.credential, result.job_id, timeoutSeconds);
+  const { job, timedOut } = await waitForPreviewJob(tool.credential, result.job_id, timeoutSeconds, firstDelayMs);
   const succeeded = !timedOut && job.status === JOB_SUCCESS_STATUS;
   if (!succeeded) process.exitCode = 1;
   if (opts.json) {
@@ -583,7 +607,10 @@ export function registerCron(program: Command): void {
           await runCronInPreview(cronId, opts, timeoutSeconds);
           return;
         }
-        const value = await callPlatformTool('cron_run', { cron_id: cronId }, { allTools: true });
+        let firstDelayMs = 0;
+        const value = await callPlatformTool('cron_run', { cron_id: cronId }, {
+          allTools: true, onRetryAfter: (ms) => { firstDelayMs = Math.max(firstDelayMs, ms); },
+        });
         queued = true;
         if (!opts.wait) {
           if (opts.json) {
@@ -598,7 +625,7 @@ export function registerCron(program: Command): void {
         }
         const result = cronRunResult(value);
         if (!opts.json) console.log(dim(`Job ${result.job_id} queued for cron ${result.cron_id}; waiting up to ${timeoutSeconds}s…`));
-        const { job, timedOut } = await waitForJob(result.job_id, timeoutSeconds);
+        const { job, timedOut } = await waitForJob(result, timeoutSeconds, firstDelayMs);
         const succeeded = !timedOut && job.status === JOB_SUCCESS_STATUS;
         if (!succeeded) process.exitCode = 1;
         if (opts.json) {
@@ -614,7 +641,7 @@ export function registerCron(program: Command): void {
         }
         printWaitedJob(job, timedOut, timeoutSeconds);
       } catch (err) {
-        // Once cron_run has answered, a later error comes from job_get and
+        // Once cron_run has answered, a later error comes from reading the queued job and
         // says nothing about whether cron run exists on this platform.
         if (!queued && cronRunUnavailable(err)) {
           printTypedCronError('CRON_RUN_NOT_AVAILABLE', CRON_RUN_UNAVAILABLE, opts.json);

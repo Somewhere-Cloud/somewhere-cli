@@ -117,6 +117,7 @@ test('minimal starter is a small typed frontend, function, and schema', () => {
     'src/main.tsx',
     'src/services/greeting.ts',
     'src/styles.css',
+    'tests/starter.mjs',
     'tsconfig.json',
     'types/app.ts',
     'types/assets.d.ts',
@@ -129,6 +130,7 @@ test('minimal starter is a small typed frontend, function, and schema', () => {
     'react-dom': '19.2.7',
   });
   assert.deepEqual(pkg.devDependencies, {
+    '@somewhere-cloud/cli': CLI_PACKAGE_VERSION,
     '@types/react': '19.2.2',
     '@types/react-dom': '19.2.2',
     // Installed by init, so a deploy's type check never fetches TypeScript with npx.
@@ -260,7 +262,7 @@ test('the starter saves one check, add a note, that the platform runs and finds 
       { requested: ['auth', 'private-data'], added: [], modules: ['auth', 'private-data'], ui },
       { appName: 'Starter' },
     ));
-    assert.deepEqual(result.created.filter(path => path.startsWith('tests/') || path.startsWith('checks/')), ['checks/add-a-note.json']);
+    assert.deepEqual(result.created.filter(path => path.startsWith('tests/') || path.startsWith('checks/')), ['checks/add-a-note.json', 'tests/starter.mjs']);
     const check = JSON.parse(readFileSync(join(dir, 'checks/add-a-note.json'), 'utf8'));
     assert.deepEqual(check, {
       actions: [
@@ -289,7 +291,7 @@ test('default starter is the auth module: SDK client, packaged handler, hooks, r
   assert.ok(result.created.includes('src/ui/AuthCard.tsx'));
   assert.ok(!result.created.includes('db/schema.ts'), 'private data is opt-in');
   // No notes form without private data, so no saved check; the platform's probes and crawl still run.
-  assert.deepEqual(result.created.filter(path => path.startsWith('tests/') || path.startsWith('checks/')), []);
+  assert.deepEqual(result.created.filter(path => path.startsWith('tests/') || path.startsWith('checks/')), ['tests/starter.mjs']);
   // The hooks signUp/signIn/signOut find, by action: the submit names what it does.
   const authCard = readFileSync(join(dir, 'src/ui/AuthCard.tsx'), 'utf8');
   // Both actions are on the page at once: Sign in and Create account, no mode switch (bench-1115b: every first build

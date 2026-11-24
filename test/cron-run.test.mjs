@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
@@ -7,6 +8,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+const fixtureToken = `smt_${randomUUID()}`;
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 const distIndex = join(repoRoot, 'dist', 'index.js');
 
@@ -14,7 +16,7 @@ function credentialHome(prefix) {
   const home = mkdtempSync(join(tmpdir(), prefix));
   mkdirSync(join(home, '.somewhere'), { recursive: true });
   writeFileSync(join(home, '.somewhere', 'config.json'), JSON.stringify({
-    token: 'smt_cron_run_test',
+    token: fixtureToken,
     user: { email: 'cron@example.com', username: 'cron' },
   }) + '\n');
   return home;
@@ -24,7 +26,8 @@ function run(args, env, cwd = repoRoot) {
   return new Promise((resolvePromise) => {
     const child = spawn(process.execPath, [distIndex, ...args], {
       cwd,
-      env: { ...process.env, ...env, CI: '1', SOMEWHERE_NO_NOTIFICATIONS: '1' },
+      env: { ...process.env, ...env, SOMEWHERE_API_URL: env.SOMEWHERE_MCP_URL?.replace(/\/mcp$/, '/v1'),
+        CI: '1', SOMEWHERE_NO_NOTIFICATIONS: '1' },
     });
     let stdout = '';
     let stderr = '';
@@ -45,6 +48,13 @@ function fixtureServer(callTool) {
     let body = '';
     req.on('data', (chunk) => (body += chunk));
     req.on('end', () => {
+      const jobId = req.method === 'GET' && /^\/v1\/jobs\/([^/]+)$/.exec(req.url)?.[1];
+      if (jobId) {
+        assert.equal(req.headers.authorization, `Bearer ${fixtureToken}`);
+        const result = callTool({ name: 'job_get', arguments: { job_id: decodeURIComponent(jobId) } }, res);
+        sendJson(res, JSON.parse(result.content[0].text));
+        return;
+      }
       const rpc = JSON.parse(body);
       if (rpc.method === 'initialize') {
         sendJson(res, {
@@ -63,7 +73,7 @@ function fixtureServer(callTool) {
         return;
       }
       if (rpc.method === 'tools/call') {
-        sendJson(res, { jsonrpc: '2.0', id: rpc.id, result: callTool(rpc.params) });
+        sendJson(res, { jsonrpc: '2.0', id: rpc.id, result: callTool(rpc.params, res) });
         return;
       }
       res.statusCode = 404;
@@ -355,4 +365,31 @@ test('cron run rejects --timeout without --wait before calling the platform', as
     assert.equal(JSON.parse(bad.stdout).error, 'USAGE_ERROR');
   });
   assert.deepEqual(calls, []);
+});
+
+test('cron run --wait honors Retry-After while reading the one queued job', async () => {
+  const home = credentialHome('sw-cron-retry-after-home-');
+  const reads = [];
+  let admissions = 0;
+  await withFixture((params, res) => {
+    if (params.name === 'cron_run') {
+      admissions++;
+      return toolSuccess({ cron_id: 'cron_daily', job_id: 'job_once', status: 'queued', trigger: 'manual' });
+    }
+    assert.equal(params.name, 'job_get');
+    assert.deepEqual(params.arguments, { job_id: 'job_once' });
+    reads.push(Date.now());
+    if (reads.length === 1) {
+      res.setHeader('Retry-After', '1');
+      return toolSuccess({ job_id: 'job_once', status: 'running' });
+    }
+    return toolSuccess({ job_id: 'job_once', status: 'complete' });
+  }, async (url) => {
+    const result = await run(['cron', 'run', 'cron_daily', '--wait', '--json'], { HOME: home, USERPROFILE: home, SOMEWHERE_MCP_URL: url });
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(JSON.parse(result.stdout).data.job.job_id, 'job_once');
+  });
+  assert.equal(admissions, 1);
+  assert.equal(reads.length, 2);
+  assert.ok(reads[1] - reads[0] >= 1000);
 });

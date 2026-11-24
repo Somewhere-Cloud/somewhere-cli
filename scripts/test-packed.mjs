@@ -23,6 +23,7 @@ try {
     env: {
       ...process.env,
       SOMEWHERE_TEST_PACKED_CLI: installed,
+      SOMEWHERE_TEST_PACKED_TARBALL: join(fixture, pack.filename),
       NODE_OPTIONS: [process.env.NODE_OPTIONS, '--import=' + hook.href].filter(Boolean).join(' '),
     },
   });

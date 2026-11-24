@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { awaitDeployChecks, checksExitCode, formatChecksReport, parseChecksRead, runChecksNow, DEPLOY_CHECKS_RUNNING } from '../dist/lib/deploy-checks.js';
+import { retryAfterMs } from '../dist/lib/poll-delay.js';
+import { awaitDeployChecks, checksExitCode, checksJsonReport, formatChecksReport, parseChecksRead, runChecksNow, DEPLOY_CHECKS_RUNNING } from '../dist/lib/deploy-checks.js';
 
 const checks = { status: 'running', read: 'GET /v1/deploy/log?project_id=p1&version=3' };
 
@@ -14,14 +15,14 @@ test('the read named by the platform becomes the API path and query', () => {
   assert.equal(parseChecksRead('POST /v1/x'), null);
 });
 
-test('polls every 3 s until the access check settles and prints its sentence', async () => {
+test('starts with short waits until the access check settles and prints its sentence', async () => {
   const c = clock();
   const calls = [];
   const answers = [{ access_check: { status: 'pending', sentence: null } }, new Error('network'), { access_check: { status: 'checked', sentence: 'Only owners can read notes.', findings: [], checked_at: 'x' } }];
   const client = { call: async (method, path, body, query) => { calls.push({ method, path, query, at: c.now() }); const a = answers.shift(); if (a instanceof Error) throw a; return a; } };
   const check = await awaitDeployChecks(client, checks, c);
   assert.equal(check.status, 'checked');
-  assert.deepEqual(calls.map(x => x.at), [0, 3000, 6000]);
+  assert.deepEqual(calls.map(x => x.at), [0, 150, 450]);
   assert.deepEqual(calls[0], { method: 'GET', path: '/deploy/log', query: { project_id: 'p1', version: '3' }, at: 0 });
 });
 
@@ -31,7 +32,7 @@ test('reading for somewhere test stops at 150 s; every read failing is the same 
   const client = { call: async () => { n += 1; return { access_check: { status: 'pending', sentence: null } }; } };
   const check = await awaitDeployChecks(client, checks, c);
   assert.equal(check.status, 'pending');
-  assert.ok(c.now() <= 150_000 && n === 51, `${n} reads by ${c.now()} ms`);
+  assert.ok(c.now() <= 150_000 && n === 152, `${n} reads by ${c.now()} ms`);
   const failing = { call: async () => { throw new Error('down'); } };
   assert.equal(await awaitDeployChecks(failing, checks, clock()), null);
 });
@@ -135,7 +136,10 @@ test('somewhere test reads the stored result of the last deploy; waits only whil
   const c3 = clock();
   const pending = await runChecksNow({ call: async (method) => method === 'POST' ? { read: 'GET /v1/deploy/log?project_id=p1&version=4' } : { access_check: { status: 'pending', sentence: null } } }, 'p1', c3);
   assert.ok(c3.now() <= 150_000 && c3.now() >= 147_000, `${c3.now()} ms`);
-  assert.match(formatChecksReport(pending)[0], /did not finish within 150 s/);
+  const report = formatChecksReport(pending);
+  assert.equal(report[0], 'App smoke check');
+  assert.match(report[1], /did not finish within 150 s/);
+  assert.match(report.at(-2), /@somewhere-cloud\/cli\/testing/);
   assert.equal(checksExitCode(pending), 2);
   assert.equal(checksExitCode({ status: 'checked', sentence: null, passed: false, findings: [] }), 2);
 });
@@ -258,4 +262,70 @@ test('somewhere test with no file runs the platform checks with no local browser
     assert.equal(confirmed.stdout.trim().split('\n').length, 1);
     assert.equal(JSON.parse(confirmed.stdout).outcome, 'failed');
   } finally { await new Promise((r) => s.close(r)); }
+});
+
+test('a targeted check starts a separate run and both reports show its partial coverage', async () => {
+  const only = 'checks/add-note.json';
+  const calls = [];
+  const partial = {
+    ...record, scope: 'partial', selection: only, checked_parts: [only], passed: true,
+    checks: [record.checks[0]],
+    not_checked: { routes_without_read_check: [], routes_without_write_check: [], schedules_not_run: [],
+      other: ['Access probes', 'Browser page crawl', 'Other saved checks'] },
+  };
+  const client = { call: async (method, path, body, query) => {
+    calls.push({ method, path, body, query });
+    return method === 'POST'
+      ? { scope: 'partial', selection: only, read: 'GET /v1/deploy/log?project_id=p1&check_run_id=chk_one' }
+      : { access_check: partial };
+  } };
+  const result = await runChecksNow(client, 'p1', { ...clock(), only });
+  assert.equal(checksExitCode(result), 0);
+  assert.deepEqual(calls, [
+    { method: 'POST', path: '/deploy/checks/targeted', body: { project_id: 'p1', check: only }, query: undefined },
+    { method: 'GET', path: '/deploy/log', body: undefined, query: { project_id: 'p1', check_run_id: 'chk_one' } },
+  ]);
+  const human = formatChecksReport(result);
+  assert.match(human[0], /Partial smoke check/);
+  assert.equal(human[1], 'Checked checks/add-note.json.');
+  assert.match(human.join('\n'), /Other checks skipped or out of scope: Access probes, Browser page crawl, Other saved checks/);
+  for (const report of [JSON.parse(human.at(-1)), checksJsonReport(result)]) {
+    assert.equal(report.scope, 'partial');
+    assert.equal(report.outcome, 'passed');
+    assert.deepEqual(report.checked_parts, [only]);
+    assert.deepEqual(report.not_checked, partial.not_checked);
+  }
+});
+
+test('a targeted check cannot pass on a full result or a different selection', async () => {
+  const result = await runChecksNow({ call: async (method) => method === 'POST'
+    ? { scope: 'partial', selection: 'access', read: 'GET /v1/deploy/log?project_id=p1&check_run_id=chk_one' }
+    : { access_check: { ...record, passed: true, checks: [record.checks[0]] } } },
+  'p1', { ...clock(), only: 'access' });
+  assert.equal(checksExitCode(result), 2);
+  assert.equal(result.scope, 'partial');
+  assert.deepEqual(result.checked_parts, []);
+  assert.match(formatChecksReport(result).join('\n'), /No parts ran/);
+});
+
+test('hosted reads honor Retry-After from admission and status polling', async () => {
+  const c = clock();
+  const reads = [];
+  const client = { call: async (method, path, body, query, opts) => {
+    if (method === 'POST') {
+      opts.onRetryAfter(2000);
+      return { read: checks.read };
+    }
+    reads.push(c.now());
+    if (reads.length === 1) {
+      opts.onRetryAfter(3000);
+      return { access_check: { status: 'pending', sentence: null } };
+    }
+    return { access_check: record };
+  } };
+  await runChecksNow(client, 'p1', { ...c, again: true });
+  assert.deepEqual(reads, [2000, 5000]);
+  assert.equal(retryAfterMs('2'), 2000);
+  assert.equal(retryAfterMs('Tue, 24 Nov 2026 10:30:03 GMT', Date.parse('2026-11-24T10:30:00Z')), 3000);
+  assert.equal(retryAfterMs(null), undefined);
 });

@@ -38,12 +38,12 @@ function run(cwd, args, env = {}) {
 
 const pkg = (spec) => ({ name: 'app', private: true, devDependencies: { '@somewhere-cloud/cli': spec, typescript: '5.9.3' } });
 
-test('init writes the exact CLI pin without making the CLI a dependency', () => {
+test('init pins the CLI installed for the starter test', () => {
   const dir = folder();
   const result = run(dir, ['init', '--name', 'pinned', '--json'], { PATH: starterInstallPath() });
   assert.equal(result.status, 0, result.stderr);
   const written = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'));
-  assert.equal(written.devDependencies['@somewhere-cloud/cli'], undefined);
+  assert.equal(written.devDependencies['@somewhere-cloud/cli'], VERSION);
   assert.equal(written.somewhere.cli_version, VERSION);
   assert.deepEqual(readProjectPin(dir), { spec: VERSION, source: 'package.json', versionOnly: true });
   // A pinned folder at its own version prints nothing extra.

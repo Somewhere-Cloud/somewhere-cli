@@ -5,7 +5,7 @@ import { fixtureTestTarget } from './test-target.js';
 import { ApiClient } from './client.js';
 import { classifyData } from './app-test.js';
 import { getToken, loadProjectConfig } from './config.js';
-import { buildStorageState, createTestIdentities, expiryOf, messagesAfter, type IssuedIdentity, type InboxMessage } from './test-identities.js';
+import { ACCESS_COOKIE, REFRESH_COOKIE, buildStorageState, createTestIdentities, expiryOf, messagesAfter, testAccessNeedsRefresh, type IssuedIdentity, type InboxMessage } from './test-identities.js';
 import { diagnostics, rememberSecrets, scrub, scrubTestErrors, describeError, timed, titled } from './test-diagnostics.js';
 import { mark as timelineMark, markProcessStart, span, trackPage } from './test-timeline.js';
 import { forgetRecord } from './form-accounts.js';
@@ -474,6 +474,30 @@ async function refusedAs(person: Person_, target: string, request: unknown, opti
 /** Test seam: a stand-in request client that data() accepts. */
 export function _fixtureClientForTests(client: APIRequestContext, digest: string): APIRequestContext { digests.set(client, digest); return client; }
 // A request context created from saved Playwright state is outside our fixtures.
+const contextRefreshes = new WeakMap<APIRequestContext, Promise<void>>();
+async function refreshTestContext(client: APIRequestContext, origin: string): Promise<void> {
+  const ongoing = contextRefreshes.get(client);
+  if (ongoing) return ongoing;
+  const work = (async () => {
+    const hostname = new URL(origin).hostname;
+    const cookie = (state: Awaited<ReturnType<APIRequestContext['storageState']>>, name: string) =>
+      state.cookies.find((item) => item.domain === hostname && item.path === '/' && item.name === name)?.value;
+    const state = await client.storageState();
+    const previous = cookie(state, ACCESS_COOKIE);
+    if (!cookie(state, REFRESH_COOKIE) || !testAccessNeedsRefresh(previous)) return;
+    const refresh = await client.post(new URL('/api/auth/refresh', origin).href, {
+      headers: { Origin: origin }, maxRedirects: 0, failOnStatusCode: false, timeout: 10_000,
+    });
+    if (!refresh.ok()) throw new Error(`The app test session could not refresh (HTTP ${refresh.status()}).`);
+    const renewed = await client.storageState();
+    const next = cookie(renewed, ACCESS_COOKIE);
+    if (!next || next === previous || testAccessNeedsRefresh(next) || !cookie(renewed, REFRESH_COOKIE)) {
+      throw new Error('The app did not return renewed test-session cookies.');
+    }
+  })();
+  contextRefreshes.set(client, work);
+  try { await work; } finally { contextRefreshes.delete(client); }
+}
 const contextTargets = new WeakMap<APIRequestContext, { projectId: string; load: Promise<TestTarget> }>();
 
 export async function data(client: APIRequestContext, table: string, request: DataRequest): Promise<APIResponse> {
@@ -492,6 +516,7 @@ export async function data(client: APIRequestContext, table: string, request: Da
     contextTargets.set(client, target);
   }
   const { origin, contractDigest } = await target.load;
+  await refreshTestContext(client, origin);
   return client.post(new URL('/__sw/data', origin).href, {
     headers: { Origin: origin },
     maxRedirects: 0,

@@ -407,29 +407,7 @@ export class AppTest {
 /** Open a linked project for a plain script: reads its live origin, release and data contract. */
 export function openAppTest(options?: OpenOptions): Promise<AppTest> { return AppTest.open(options); }
 
-export interface Captured { url: string; status: number; contentType: string; body: string }
-/** Record every response this page receives (documents, scripts, data) with its body, so a
- *  privacy check can wait for all of them and say exactly where a secret appeared. */
-export function captureResponses(page: Page) {
-  const pending: Promise<Captured | null>[] = [];
-  const listener = (response: import('@playwright/test').Response) => {
-    const url = new URL(response.url());
-    pending.push(response.text().then(body => ({ url: url.origin + url.pathname, status: response.status(), contentType: response.headers()['content-type'] ?? '', body })).catch(() => null));
-  };
-  page.on('response', listener);
-  return {
-    /** Every captured response, after each body has been read. */
-    async all(): Promise<Captured[]> { return (await Promise.all(pending)).filter((c): c is Captured => c !== null); },
-    /** Where `secret` appeared: URL, status, content type and the text around it. Use a unique value you planted. */
-    async find(secret: string): Promise<{ url: string; status: number; contentType: string; around: string }[]> {
-      return (await this.all()).filter(c => c.body.includes(secret)).map(c => {
-        const at = c.body.indexOf(secret);
-        return { url: c.url, status: c.status, contentType: c.contentType, around: c.body.slice(Math.max(0, at - 60), at + secret.length + 60) };
-      });
-    },
-    stop(): void { page.off('response', listener); },
-  };
-}
+export { captureResponses, type Captured } from './test-response-capture.js';
 
 /** Wait until the page's data views have finished loading: the starter marks each with
  *  data-sw-data="loading" | "ready" | "error". Signed-in is not "the list has loaded". */

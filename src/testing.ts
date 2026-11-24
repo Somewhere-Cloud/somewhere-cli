@@ -1,85 +1,21 @@
-import { ApiClient } from './lib/client.js';
-import { getToken, loadProjectConfig } from './lib/config.js';
-import { fixtureTestTarget, type TestTarget } from './lib/test-target.js';
+export { UserSession, signIn, createUser, expectStatus, expectRefusal, type DataRequest } from './lib/test-session.js';
 
-// Node 22.19+: native fetch, cookie storage and TypeScript; no test dependencies.
-export class UserSession {
-  readonly origin: string;
-  private cookies = new Map<string, string>();
-  private target?: Promise<TestTarget>;
-  constructor(baseUrl: string) { this.origin = new URL(baseUrl).origin; }
-  async request(path: string, init: RequestInit = {}): Promise<Response> {
-    const url = new URL(path, this.origin);
-    if (url.origin !== this.origin) throw new Error('Fixture requests must stay on the app origin');
-    const headers = new Headers(init.headers);
-    headers.set('Origin', this.origin);
-    headers.set('Cookie', [...this.cookies].map(([k, v]) => k + '=' + v).join('; '));
-    const response = await fetch(url, { ...init, headers, redirect: 'error' });
-    for (const cookie of response.headers.getSetCookie()) {
-      const pair = cookie.split(';')[0];
-      const split = pair.indexOf('=');
-      this.cookies.set(pair.slice(0, split), pair.slice(split + 1));
-    }
-    return response;
-  }
-  post(path: string, body: unknown): Promise<Response> {
-    return this.request(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-  }
-  /** Use this session's cookies and the linked app's declared data contract. */
-  data(table: string, request: DataRequest): Promise<Response>;
-  data(table: string, contract: string, request: DataRequest): Promise<Response>;
-  async data(table: string, requestOrContract: DataRequest | string, request?: DataRequest): Promise<Response> {
-    if (typeof requestOrContract === 'string') {
-      return this.post('/__sw/data', { ...request, table, contract: requestOrContract });
-    }
-    const projectId = loadProjectConfig()?.project_id;
-    if (!projectId) throw new Error('Use the data helper from a linked project folder.');
-    const target = await (this.target ??= fixtureTestTarget(new ApiClient(process.env.SW_TEST_TARGET ? null : getToken()), projectId));
-    if (target.origin !== this.origin) throw new Error('This session belongs to a different app than the linked test target.');
-    return this.post('/__sw/data', { ...requestOrContract, table, contract: target.contractDigest ?? '' });
-  }
+// Structurally compatible with Playwright without loading its browser.
+interface ReadyLocator {
+  first?(): ReadyLocator;
+  waitFor(options: { state: 'visible' }): Promise<void>;
 }
-export type DataRequest =
-  | { operation: 'list'; limit?: number; after?: string | number; where?: Record<string, unknown> }
-  | { operation: 'get' | 'delete'; id: string | number }
-  | { operation: 'create'; values: Record<string, unknown> }
-  | { operation: 'update'; id: string | number; values: Record<string, unknown> };
-
-export async function expectStatus(response: Response, expected: number): Promise<void> {
-  if (response.status !== expected) throw new Error('Expected HTTP ' + expected + ', received ' + response.status);
-}
-export async function expectRefusal(response: Response, status: 401 | 403, code: string): Promise<void> {
-  await expectStatus(response, status);
-  const body: unknown = await response.json();
-  if (!body || typeof body !== 'object' || !('error' in body) || body.error !== code) {
-    throw new Error('Refusal did not have the exact expected error code: ' + code);
-  }
-}
-export async function signIn(baseUrl: string, email: string, password: string): Promise<UserSession> {
-  const session = new UserSession(baseUrl);
-  const response = await session.post('/api/auth/login', { email, password });
-  await expectStatus(response, 200);
-  const body = await response.json() as { cookie_session?: boolean };
-  if (!body.cookie_session) throw new Error('Sign-in did not establish a cookie session');
-  return session;
-}
-export async function createUser(baseUrl: string): Promise<UserSession> {
-  const session = new UserSession(baseUrl);
-  // Reserved platform test domain: no real recipient, no admin credential.
-  const email = 'starter-' + crypto.randomUUID() + '@fixture.test.somewhere.site';
-  const password = 'Fixture!9-' + crypto.randomUUID();
-  const response = await session.post('/api/auth/signup', { email, password });
-  await expectStatus(response, 200);
-  const body = await response.json() as { cookie_session?: boolean };
-  if (!body.cookie_session) throw new Error('Signup did not establish a cookie session');
-  return session;
-}
-// Structurally compatible with Playwright Page; no browser dependency required.
-interface BrowserPage { locator(selector: string): { waitFor(options: { state: 'visible' }): Promise<void> } }
+interface BrowserPage { locator(selector: string): ReadyLocator }
 export function waitForApp(page: BrowserPage, state: 'ready' | 'signed-in' | 'signed-out' = 'ready'): Promise<void> {
-  const selector = state === 'ready' ? '[data-app-state="signed-in"], [data-app-state="signed-out"]' : '[data-app-state="' + state + '"]';
-  return page.locator(selector).waitFor({ state: 'visible' });
+  const values = state === 'ready' ? ['signed-in', 'signed-out'] : [state];
+  const matches = values.flatMap(value => [`html[data-sw-auth="${value}"]`, `[data-app-state="${value}"]`]);
+  const locator = page.locator(matches.join(', '));
+  return (locator.first?.() ?? locator).waitFor({ state: 'visible' });
 }
 
 // Lazy project-local Playwright resolution keeps UserSession dependency-free.
 export { test, expect, expectRefused, data, ready, type RefusalOptions, type TestUser, type NewUserOptions, type Person, type SignUpOptions, type SignInOptions, type FormSteps, type CodeSteps } from './lib/playwright-fixtures.js';
+
+export { openTestApp, type TestApp, type TestActor } from './lib/testing-app.js';
+export { assertNoLeak, captureResponses } from './lib/test-response-capture.js';
+export type { TestJob, TestJobOptions, TestJobTarget } from './lib/testing-jobs.js';

@@ -67,7 +67,8 @@ ${AGENT_WORKFLOW}
 ${SKILLS_POINTER}
 Without a global CLI, use \`npx @somewhere-cloud/cli deploy\` and \`npx @somewhere-cloud/cli test\`.
 
-For a signed-in browser test, wait for the SDK's expected \`data-sw-auth\` state when available. See \`somewhere docs auth-client --section wait-for-auth-in-a-browser-test\`. For direct data checks, prepare fixture users with \`somewhere test-users prepare alice bob\`, then call \`somewhere data get notes --as alice --id <id>\` as each user. Assert the exact outcome. See \`somewhere docs test --section testing-access-rules\`.
+For Node or Playwright tests, see [Testing your app](https://somewhere.cloud/docs/test).
+In a generated starter, run \`npm test\` after its first deploy to verify the signed-in session.
 
 ${PORTABILITY_POINTER}
 ${MCP_POINTER}

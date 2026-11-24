@@ -64,6 +64,16 @@ export const PREVIEW_POINTER = 'Preview users are separate from live users. Sign
 
 export const INIT_AGENTS_MD = `# somewhere.cloud project contract
 ${AGENT_WORKFLOW}
+### CSV imports
+
+Use one background job for a large import. Normalize and deduplicate keys
+before writing. Pair schema uniqueness with an \`onConflict\` action that makes
+each batch safe to retry. Send up to 100 writes per transaction with \`sw.db.tx\` or \`sw.db.server.tx\`.
+Await dependent batches in order. Run up to four independent batches together,
+then write one progress update for the group. Set the job deadline from a timed
+import on your deployed app. See \`somewhere docs recipe-csv-import --full\`
+for the upload, job and ownership checks.
+
 ${SKILLS_POINTER}
 Search the live docs with \`somewhere docs --search "<words>"\`.
 Download Markdown to \`.somewhere/docs/\` with \`somewhere docs pull\`.

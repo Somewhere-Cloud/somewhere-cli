@@ -614,8 +614,8 @@ async function intake(table, reference, values, extra) {
   export interface InsertRequest<T> { readonly key: string; readonly createdAt: number; retry(): Promise<T>; }
   export type InsertResult<T> = T & { readonly idempotency: InsertReceipt; readonly request: InsertRequest<InsertResult<T>> };
 `;
-    var CLIENT_GENERATION2 = 5;
-    var ACCEPTED_CLIENT_GENERATIONS2 = Object.freeze([5, 4, 3, 2, 1]);
+    var CLIENT_GENERATION2 = 6;
+    var ACCEPTED_CLIENT_GENERATIONS2 = Object.freeze([6, 5, 4, 3, 2, 1]);
     var PUBLIC_BOOTSTRAP_CLIENT_RUNTIME = 'const swCanon=(v,d)=>{if(v===null||typeof v==="string"||typeof v==="boolean"||(typeof v==="number"&&Number.isFinite(v)))return JSON.stringify(v);if(d===0||typeof v!=="object"||Array.isArray(v))return null;const parts=[];for(const k of Object.keys(v).sort()){if(v[k]===undefined)continue;const e=swCanon(v[k],d-1);if(e===null)return null;parts.push(JSON.stringify(k)+":"+e)}return"{"+parts.join(",")+"}"};let swBoot;const swBootTake=body=>{try{if(swBoot===undefined){swBoot=null;const el=typeof document!=="undefined"&&document.getElementById?document.getElementById("__sw_public_data"):null;if(el&&el.type==="application/json"&&(el.parentNode===document.head||el.parentNode===document.body)){const p=JSON.parse(el.textContent||"null");if(p&&p.v===1&&p.contract===contract&&Number.isSafeInteger(p.validated_at)&&p.validated_at<=Date.now()&&Number.isInteger(p.max_age)&&p.max_age>0&&p.max_age<=120&&p.entries&&typeof p.entries==="object"&&!Array.isArray(p.entries)&&typeof p.path==="string"&&typeof location!=="undefined")swBoot={until:p.validated_at+p.max_age*1000,path:p.path,entries:new Map(Object.entries(p.entries))}}if(el&&el.parentNode)el.parentNode.removeChild(el)}if(!swBoot)return undefined;if(Date.now()>=swBoot.until||location.pathname!==swBoot.path){swBoot=null;return undefined}const key=swCanon(body,2);if(key===null||!swBoot.entries.has(key))return undefined;const value=swBoot.entries.get(key);swBoot.entries.delete(key);return value}catch(error){swBoot=null;return undefined}};';
     var PUBLIC_BOOTSTRAP_INVOKE = 'if(operation==="list"||operation==="get"||operation==="aggregate"||operation==="relation_list"){const booted=swBootTake({...input,contract,table,operation});if(booted!==undefined)return booted}else swBoot=null;';
     function describeDataClient2(authority, contract_digest, insertReceiptCapability, localTypes = false, generation = CLIENT_GENERATION2) {
@@ -638,17 +638,18 @@ async function intake(table, reference, values, extra) {
         const hidden = generation >= 5 ? hiddenByBranch(table) :                 new Set();
         const row = shape(columns, readable, "read",                 new Set(), hidden);
         const id = columnType(columns.find((column) => column.n === primaryKey));
+        const ownerOnly = generation >= 6 && !client.publicRead && (table.owner || table.policy?.k === "a" && table.policy.p[0].k === "o" || table.policy?.k === "n" && ["o", "a"].includes(table.policy.w.k));
         const operations = [];
         const methods = [];
         if (client.read !== false) {
           const equality = readable.filter((field) => !["json", "blob"].includes(columns.find((column) => column.n === field).t) && !hidden.has(field));
           if (generation >= 2) {
-            const listOptions = `limit?: L & (number extends L ? unknown : [L] extends [PageSize] ? unknown : never); after?: ${id}; where?: ${shape(columns, equality, "update")}`;
+            const listOptions = `limit?: L & (number extends L ? unknown : [L] extends [PageSize] ? unknown : never); after?: ${id}; where?: ${shape(columns, equality, "update")}${ownerOnly ? "; ownerOnly?: true" : ""}`;
             const hinted = generation >= 4 ? "RowHints" : "{ can: RowCan }";
             operations.push(`list<const L extends number = number>(options: { ${listOptions}; can: true }): Promise<{ data: (${row} & ${hinted})[]; next: ${id} | null; has_more: boolean }>`);
             operations.push(`list<const L extends number = number>(options?: { ${listOptions}; can?: false }): Promise<{ data: ${row}[]; next: ${id} | null; has_more: boolean }>`);
-            operations.push(`get(id: ${id}, options: { can: true }): Promise<{ data: (${row} & ${hinted}) | null }>`);
-            operations.push(`get(id: ${id}, options?: { can?: false }): Promise<{ data: ${row} | null }>`);
+            operations.push(`get(id: ${id}, options: { can: true${ownerOnly ? "; ownerOnly?: true" : ""} }): Promise<{ data: (${row} & ${hinted}) | null }>`);
+            operations.push(`get(id: ${id}, options?: { can?: false${ownerOnly ? "; ownerOnly?: true" : ""} }): Promise<{ data: ${row} | null }>`);
           } else {
             operations.push(`list<const L extends number = number>(options?: { limit?: L & (number extends L ? unknown : [L] extends [PageSize] ? unknown : never); after?: ${id}; where?: ${shape(columns, equality, "update")} }): Promise<{ data: ${row}[]; next: ${id} | null; has_more: boolean }>`);
             operations.push(`get(id: ${id}): Promise<{ data: ${row} | null }>`);
@@ -657,6 +658,7 @@ async function intake(table, reference, values, extra) {
           const numeric = equality.filter((field) => ["integer", "number"].includes(columns.find((column) => column.n === field).t));
           const fieldUnion = (list) => list.map((field) => JSON.stringify(field)).join(" | ");
           const aggregateOptions = ["count?: true"];
+          if (ownerOnly) aggregateOptions.push("ownerOnly?: true");
           if (numeric.length) aggregateOptions.push(`sum?: ${fieldUnion(numeric)}`, `avg?: ${fieldUnion(numeric)}`);
           if (equality.length) {
             aggregateOptions.push(`min?: ${fieldUnion(equality)}`, `max?: ${fieldUnion(equality)}`);
@@ -792,7 +794,7 @@ ${generation >= 4 ? ROW_HINTS_DECLARATION : generation >= 2 ? ROW_CAN_DECLARATIO
 class DataError extends Error{constructor(status,payload){super(payload&&typeof payload.message==="string"?payload.message:payload&&typeof payload.error==="string"?payload.error:"Data operation failed");this.name="DataError";this.status=status;this.code=payload&&typeof payload.error==="string"?payload.error:null}}
 const validateListLimit=input=>{if(input.limit!==undefined&&(!Number.isInteger(input.limit)||input.limit<1||input.limit>100))throw new DataError(400,{error:"DATA_INPUT_INVALID",message:"limit must be an integer from 1 to 100"})};
 let swReadSession=null,swInFlight=0,swStarts=0;const swReadSessionVoid=()=>{swReadSession=null;swStarts++};${generation >= 3 ? PUBLIC_BOOTSTRAP_CLIENT_RUNTIME : ""}const invoke=async(table,operation,input)=>{if(operation==="list"||operation==="relation_list")validateListLimit(input);${generation >= 3 ? PUBLIC_BOOTSTRAP_INVOKE : ""}const alone=swInFlight===0,start=++swStarts,isRead=operation==="list"||operation==="get"||operation==="aggregate"||operation==="relation_list";swInFlight++;let response;try{response=await fetch("/__sw/data",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json",...(swReadSession?{"X-Sw-Read-Session":swReadSession}:{})},body:JSON.stringify({...input,contract,table,operation})})}catch(error){if(!isRead)swReadSession=null;throw error}finally{swInFlight--}const next=response.headers&&typeof response.headers.get==="function"?response.headers.get("X-Sw-Read-Session"):null;if(!alone||swStarts!==start||swInFlight!==0)swReadSession=null;else if(next&&/^swrs1[.][A-Za-z0-9_-]+[.][A-Za-z0-9_-]+$/.test(next))swReadSession=next;else if(!isRead||!response.ok)swReadSession=null;const payload=await response.json().catch(()=>{throw new DataError(response.status,{error:"INVALID_DATA_RESPONSE",message:"Data operation returned an invalid response"})});if(!response.ok)throw new DataError(response.status,payload);return payload};
-${receiptCapable ? INSERT_CLIENT_RUNTIME + "const receiptTables=" + JSON.stringify(receiptTables) + ";\n" : ""}${anonymousTables.length ? ANONYMOUS_CLIENT_RUNTIME + CREATOR_CLIENT_RUNTIME : ""}${intakeTables.length ? INTAKE_CLIENT_RUNTIME : ""}${linkedSpec.length ? LINK_CLIENT_RUNTIME : ""}const data=Object.freeze(Object.fromEntries(${JSON.stringify(runtimeTables)}.map(([table,operations,relations])=>{const entries=operations.map(operation=>[operation,operation==="list"||operation==="aggregate"?(options={})=>invoke(table,operation,options):operation==="create"?${receiptCapable ? "(values,...extra)=>createWithReceipt(table,values,extra,receiptTables.includes(table))" : '(values,...extra)=>{if(extra.length!==0)throw new DataError(400,{error:"DATA_INPUT_INVALID",message:"create takes only the values to insert. Nothing was sent."});return invoke(table,operation,{values})}'}:${anonymousTables.length ? 'operation==="createAnonymous"?(values,...extra)=>createAnonymous(table,values,extra):' : ""}${intakeTables.length ? 'operation==="intake"?(reference,values,...extra)=>intake(table,reference,values,extra):' : ""}operation==="update"?(id,values)=>invoke(table,operation,{id,values}):operation==="createLink"?(id,options)=>createLink(table,id,options):operation==="links"?id=>invoke(table,"link_list",{id}):operation==="revokeLink"?(id,link_id)=>invoke(table,"link_revoke",{id,link_id}):${generation >= 2 ? 'operation==="get"?(id,options={})=>invoke(table,operation,options&&options.can===true?{id,can:true}:{id}):' : ""}id=>invoke(table,operation,{id})]);if(relations.length)entries.push(["relations",Object.freeze(Object.fromEntries(relations.map(relation=>[relation,Object.freeze({list:(parent_id,options={})=>invoke(table,"relation_list",{...options,relation,parent_id})})])))]);return[table,Object.freeze(Object.fromEntries(entries))];}).concat(${linkedSpec.length ? `[["links",links],["linked",linkedView(${JSON.stringify(linkedSpec)})]]` : "[]"})${creatorSpec.length ? `.concat([["creators",creators],["creator",creatorView(${JSON.stringify(creatorSpec)})]])` : ""}));
+${receiptCapable ? INSERT_CLIENT_RUNTIME + "const receiptTables=" + JSON.stringify(receiptTables) + ";\n" : ""}${anonymousTables.length ? ANONYMOUS_CLIENT_RUNTIME + CREATOR_CLIENT_RUNTIME : ""}${intakeTables.length ? INTAKE_CLIENT_RUNTIME : ""}${linkedSpec.length ? LINK_CLIENT_RUNTIME : ""}const data=Object.freeze(Object.fromEntries(${JSON.stringify(runtimeTables)}.map(([table,operations,relations])=>{const entries=operations.map(operation=>[operation,operation==="list"||operation==="aggregate"?(options={})=>invoke(table,operation,options):operation==="create"?${receiptCapable ? "(values,...extra)=>createWithReceipt(table,values,extra,receiptTables.includes(table))" : '(values,...extra)=>{if(extra.length!==0)throw new DataError(400,{error:"DATA_INPUT_INVALID",message:"create takes only the values to insert. Nothing was sent."});return invoke(table,operation,{values})}'}:${anonymousTables.length ? 'operation==="createAnonymous"?(values,...extra)=>createAnonymous(table,values,extra):' : ""}${intakeTables.length ? 'operation==="intake"?(reference,values,...extra)=>intake(table,reference,values,extra):' : ""}operation==="update"?(id,values)=>invoke(table,operation,{id,values}):operation==="createLink"?(id,options)=>createLink(table,id,options):operation==="links"?id=>invoke(table,"link_list",{id}):operation==="revokeLink"?(id,link_id)=>invoke(table,"link_revoke",{id,link_id}):${generation >= 6 ? 'operation==="get"?(id,options={})=>invoke(table,operation,{id,...(options?.can===true?{can:true}:{}),...(options?.ownerOnly===undefined?{}:{ownerOnly:options.ownerOnly})}):' : generation >= 2 ? 'operation==="get"?(id,options={})=>invoke(table,operation,options&&options.can===true?{id,can:true}:{id}):' : ""}id=>invoke(table,operation,{id})]);if(relations.length)entries.push(["relations",Object.freeze(Object.fromEntries(relations.map(relation=>[relation,Object.freeze({list:(parent_id,options={})=>invoke(table,"relation_list",{...options,relation,parent_id})})])))]);return[table,Object.freeze(Object.fromEntries(entries))];}).concat(${linkedSpec.length ? `[["links",links],["linked",linkedView(${JSON.stringify(linkedSpec)})]]` : "[]"})${creatorSpec.length ? `.concat([["creators",creators],["creator",creatorView(${JSON.stringify(creatorSpec)})]])` : ""}));
 export{data,DataError};
 `;
       return { contract_digest, declaration, runtime, manifest: { version: 1, contract_digest, tables, declaration, ...insertReceiptCapability === void 0 ? {} : { insert_receipt: insertReceiptCapability } } };
@@ -1072,6 +1074,7 @@ interface SomewhereDbRowHints {
   readonly mine: boolean;
 }
 interface SomewhereDbCountOptions { where?: SomewhereDbWhere | null }
+type SomewhereCallerReadScope = { ownerOnly?: true; asServer?: never } | { ownerOnly?: never; asServer?: true };
 interface SomewhereDbPlainInsertOptions { onConflict?: 'ignore' | 'update' | null }
 // idempotencyKey: an explicit key (16-128 of A-Z a-z 0-9 - _) for a single plain insert by a
 // signed-in user or visitor on a table keyed by id() with no blob() column. Any other insert
@@ -1196,10 +1199,10 @@ interface SomewhereCallerDb extends Omit<SomewhereServerDb, 'from' | 'count' | '
   tx(intents: readonly SomewhereDbCallerWriteIntent[]): Promise<SomewhereDbResult[]>;
   // can: true (signed-in callers only; never with asServer): each row also carries the row hints.
   from<T extends SomewhereDbTable, const C extends readonly SomewhereDbColumn<T>[] = readonly SomewhereDbColumn<T>[], const I extends readonly SomewhereDbRelationName<T>[] = []>(
-    table: T, options: SomewhereDbReadOptionsFor<T, C, I> & { can: true; asServer?: never }): Promise<SomewhereDbResult<SomewhereDbReadRow<T, C, I> & SomewhereDbRowHints>>;
+    table: T, options: SomewhereDbReadOptionsFor<T, C, I> & { can: true; asServer?: never; ownerOnly?: true }): Promise<SomewhereDbResult<SomewhereDbReadRow<T, C, I> & SomewhereDbRowHints>>;
   from<T extends SomewhereDbTable, const C extends readonly SomewhereDbColumn<T>[] = readonly SomewhereDbColumn<T>[], const I extends readonly SomewhereDbRelationName<T>[] = []>(
-    table: T, options?: (SomewhereDbReadOptionsFor<T, C, I> & { asServer?: true; can?: false }) | null): Promise<SomewhereDbResult<SomewhereDbReadRow<T, C, I>>>;
-  count(table: SomewhereDbTable, options?: (SomewhereDbCountOptions & { asServer?: true }) | null): Promise<{ data: number; error: null }>;
+    table: T, options?: (SomewhereDbReadOptionsFor<T, C, I> & SomewhereCallerReadScope & { can?: false }) | null): Promise<SomewhereDbResult<SomewhereDbReadRow<T, C, I>>>;
+  count(table: SomewhereDbTable, options?: (SomewhereDbCountOptions & SomewhereCallerReadScope) | null): Promise<{ data: number; error: null }>;
   delete<T extends SomewhereDbTable>(table: T, spec?: SomewhereDbRemove | null): Promise<SomewhereDbResult<SomewhereDbRow<T>>>;
   readonly server: SomewhereServerDb;
 }
@@ -1347,7 +1350,7 @@ interface SomewhereCallerDb {
   live(name: 'sw.db.live was replaced by sw.rooms.live(name, sw.db.from(...))', read: never): never;
   query(sql: string, params?: readonly unknown[] | null, options?: SomewhereDbRawCallerOptions | null): Promise<SomewhereDbResult>;
   batch(statements: readonly SomewhereRawDbStatement[], options?: SomewhereDbRawCallerOptions | null): Promise<SomewhereRawBatchResult[]>;
-  aggregate<T extends SomewhereDbTable, const G extends SomewhereDbGroupBy<T> = SomewhereDbGroupBy<T>>(table: T, options: SomewhereDbAggregateOptionsFor<T> & { asServer?: true } & { groupBy?: G }): Promise<SomewhereDbAggregateResult<SomewhereDbAggregateRow<T, G>>>;
+  aggregate<T extends SomewhereDbTable, const G extends SomewhereDbGroupBy<T> = SomewhereDbGroupBy<T>>(table: T, options: SomewhereDbAggregateOptionsFor<T> & SomewhereCallerReadScope & { groupBy?: G }): Promise<SomewhereDbAggregateResult<SomewhereDbAggregateRow<T, G>>>;
   tables(): Promise<string[]>;
   readonly scope: SomewhereDbScopeApi;
 }
@@ -4515,8 +4518,8 @@ var require_consumer_contract = __commonJS({
   "worker/containers/compile/consumer-contract.cjs"(exports2, module2) {
     "use strict";
     var CONSUMER_CONTRACT2 = Object.freeze({
-      version: 40,
-      digest: "5a319ea5f381a0b3a0847d0b7a1ee3504b434c364fa7dfa338ebf71da502e329"
+      version: 41,
+      digest: "f452cd4f0c1387cd4f77d2a5371baf563a93e1307e75dbef61dbad29bf0435a3"
     });
     var MEMBERSHIPS = "memberships: table({ id: id(), team_id: text(), member_id: text() }, { scope: owner(), client: { read: true } }),";
     var SHARES = "shares: table({ id: id(), grantee_id: text() }, { scope: owner(), client: { read: true, create: ['grantee_id'], delete: true }, unique: [['user_id', 'grantee_id']] }),";
@@ -8304,7 +8307,7 @@ function readTable(r, rawName, nameLine) {
     }
     if (entry.columns.length < 2) {
       throw new SchemaTsError(
-        `line ${entry.line}: the "unique" option on table "${rawName}" lists only "${entry.columns[0]}", the owner column the platform manages, and an owner column cannot be unique on its own. Pair it with another column (for example [['${entry.columns[0]}', 'kind']]) for per-owner uniqueness.`
+        `line ${entry.line}: the "unique" option on table "${rawName}" lists only "${entry.columns[0]}", the owner column the platform manages, and an owner column cannot be unique on its own. For one row per owner, add kind: text({ default: 'profile' }), keep kind out of client writes, omit it from server writes, and declare unique: [['${entry.columns[0]}', 'kind']].`
       );
     }
     uniques.push(entry.columns);

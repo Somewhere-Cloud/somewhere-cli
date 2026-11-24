@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const tree = mkdtempSync(join(tmpdir(), 'somewhere-cli-test-tree-'));
-const inputs = new Set(['.github', '.gitignore', 'bin', 'docs', 'runtime', 'scripts', 'server', 'src', 'test',
+const inputs = new Set(['.github', '.gitignore', 'bin', 'runtime', 'scripts', 'server', 'src', 'test',
   'CHANGELOG.md', 'LICENSE', 'README.md', 'npm-shrinkwrap.json', 'package.json', 'tsconfig.json']);
 
 try {

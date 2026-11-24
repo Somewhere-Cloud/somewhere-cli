@@ -65,7 +65,8 @@ export const PREVIEW_POINTER = 'Preview users are separate from live users. Sign
 export const INIT_AGENTS_MD = `# somewhere.cloud project contract
 ${AGENT_WORKFLOW}
 ${SKILLS_POINTER}
-Search the installed topic Markdown in \`node_modules/@somewhere-cloud/cli/dist/docs/\`.
+Search the live docs with \`somewhere docs --search "<words>"\`.
+Download Markdown to \`.somewhere/docs/\` with \`somewhere docs pull\`.
 Without a global CLI, use \`npx @somewhere-cloud/cli deploy\` and \`npx @somewhere-cloud/cli test\`.
 
 For Node or Playwright tests, see [Testing your app](https://somewhere.cloud/docs/test).

@@ -12,8 +12,6 @@ export const RELEASE_INPUTS = [
   'runtime',
   'scripts/extract-runtime.mjs',
   'scripts/build-bundle.mjs',
-  'scripts/bundle-topic-docs.mjs',
-  'docs/topics.generated.json',
   'scripts/pack-cli.mjs',
   'scripts/licenses',
   'tsconfig.json',

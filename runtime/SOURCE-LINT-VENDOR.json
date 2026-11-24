@@ -25,7 +25,7 @@
     "worker/src/utils/db-schema-deploy/extract-schema-parents.ts": "623a0034c5196e7655574387493574ce59555d0a1cffd88ff696ce85b9f56228",
     "worker/src/utils/db-schema-deploy/extract-schema-relations.ts": "f5deac350ee915758f61d4be33711d23bad51ab20abcf153a463f0c90bfc3e27",
     "worker/src/utils/db-schema-deploy/extract-schema-roles.ts": "a5cc7524108c19121445ea2feb85c155067b790075eb823a5d5f8c2a12e92e78",
-    "worker/src/utils/db-schema-deploy/extract-schema-ts.ts": "6ece9f185e2de72b720c6c5fb942609701874ea3951b679b8c8dc7c92b10aba3",
+    "worker/src/utils/db-schema-deploy/extract-schema-ts.ts": "5f56bd9ea9a54a089705baf1e976ad0815e5d15841eb403f48f9666b462ddcea",
     "worker/src/utils/db-schema-deploy/schema-constants.ts": "9742bc649f494963af4ae2039a1d6062cc6dbe087285bdf470f6ee71d9f76aac",
     "worker/src/utils/db-schema-deploy/schema-ownership.ts": "e6c811a87bc657707be3518dfe547c6d97718ac073108b126eb7f791c9c08202",
     "worker/src/utils/deploy-classify.ts": "d565b3c1d7628932ba69a1d93a82364319b66cfed1147b8639fff567a1e63b88",
@@ -33,6 +33,6 @@
     "worker/src/utils/managed-groups/errors.ts": "18d952edd7f46bb7e459d4e6678226f4bd6e040ab40073ee5a8d0802be2f3721",
     "worker/src/utils/managed-groups/policy.ts": "2c5b48479a2925bea9a820022c63ca5fa827e2ff5531fe1ab6c0b058b7212b39"
   },
-  "sha256": "06b04ae4ef754320bf441d74986d74b6b44ac298d6dcc8ec24d8373875dda34f",
+  "sha256": "4027e00501358b4f2292e80d2531f1c27a3a4beec9293433090f9d1f733f2726",
   "fixtures_sha256": "908827d1430f4af5a83cae59ed476abc51dc9648757eac0089fe6e6db95f66c5"
 }

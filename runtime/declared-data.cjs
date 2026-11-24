@@ -4267,6 +4267,10 @@ var require_schema_types = __commonJS({
   interface Scope { readonly __somewhereScope: unique symbol }
   interface OwnerScope extends Scope { readonly __somewhereOwner: unique symbol }
   interface MemberScope extends Scope { readonly __somewhereMember: unique symbol }
+  interface MemberJoin {
+    group: string | string[]; membership: string; member_user: string; member_group: string | string[];
+    operations?: Array<'read' | 'create' | 'update' | 'delete' | 'upload' | 'replace'>;
+  }
   interface GrantScope extends Scope { readonly __somewhereGrant: unique symbol }
   interface GroupScope extends Scope { readonly __somewhereGroup: unique symbol }
   interface AppRoleScope extends Scope { readonly __somewhereAppRole: unique symbol }
@@ -4323,7 +4327,8 @@ function blob(options?: SomewhereSchemaDeclaration.ColumnOptions<never>): Somewh
 function owner(options?: { column?: string; visitors?: boolean; read?: string[] }): SomewhereSchemaDeclaration.OwnerScope;
 function shared(): SomewhereSchemaDeclaration.Scope;
 function serverOnly(): SomewhereSchemaDeclaration.Scope;
-function member(options: { group: string | string[]; membership: string; member_user: string; member_group: string | string[]; where?: Record<string, string | string[]>; operations?: Array<'read' | 'create' | 'update' | 'delete' | 'upload' | 'replace'>; read?: string[] }): SomewhereSchemaDeclaration.MemberScope;
+function member(options: SomewhereSchemaDeclaration.MemberJoin & { where?: Record<string, string | string[]>; read?: string[]; deleteWhere?: never }): SomewhereSchemaDeclaration.MemberScope;
+function member(options: SomewhereSchemaDeclaration.MemberJoin & { deleteWhere: Record<string, string | string[]>; where?: never }): SomewhereSchemaDeclaration.Scope;
 function files(options: SomewhereSchemaDeclaration.FileCollectionOptions): SomewhereSchemaDeclaration.FileCollection;
 function hasMany(table: string, foreignKey: string): SomewhereSchemaDeclaration.Relation;
 function belongsTo(table: string, foreignKey: string): SomewhereSchemaDeclaration.Relation;
@@ -4518,8 +4523,8 @@ var require_consumer_contract = __commonJS({
   "worker/containers/compile/consumer-contract.cjs"(exports2, module2) {
     "use strict";
     var CONSUMER_CONTRACT2 = Object.freeze({
-      version: 41,
-      digest: "f452cd4f0c1387cd4f77d2a5371baf563a93e1307e75dbef61dbad29bf0435a3"
+      version: 42,
+      digest: "a2e64aea9f363bd48107929ab7896d5be267a0e998010222913001f7fe47056c"
     });
     var MEMBERSHIPS = "memberships: table({ id: id(), team_id: text(), member_id: text() }, { scope: owner(), client: { read: true } }),";
     var SHARES = "shares: table({ id: id(), grantee_id: text() }, { scope: owner(), client: { read: true, create: ['grantee_id'], delete: true }, unique: [['user_id', 'grantee_id']] }),";
@@ -7689,7 +7694,7 @@ function readMemberOperations(r, tableName) {
   const normalized = MEMBER_OPERATIONS.filter((operation) => seen.has(operation));
   return normalized.length === MEMBER_OPERATIONS.length ? void 0 : normalized;
 }
-function readMemberScope(r, tableName, scopeLine) {
+function readMemberScope(r, tableName, scopeLine, context) {
   r.expectPunct("{", `in member() options for table "${tableName}" \u2014 member() needs { group, membership, member_user, member_group }`);
   let group = null;
   let membership = null;
@@ -7697,6 +7702,7 @@ function readMemberScope(r, tableName, scopeLine) {
   let memberGroup = null;
   let operations, operationsSeen = false;
   let selector;
+  let selectorOption;
   let read;
   while (!r.tryPunct("}")) {
     const key = r.readKey(`for a member() option of table "${tableName}"`);
@@ -7713,35 +7719,43 @@ function readMemberScope(r, tableName, scopeLine) {
       if (operationsSeen) throw new SchemaTsError(`line ${key.line}: member() on table "${tableName}" declares operations more than once.`);
       operationsSeen = true;
       operations = readMemberOperations(r, tableName);
-    } else if (key.name === "where") {
-      if (selector) throw new SchemaTsError("member() declares where more than once.");
-      r.expectPunct("{", "opening member where");
-      const column = r.readKey("member where column").name;
-      validateMemberColumns([column], "where", tableName, key.line);
-      r.expectPunct(":", "after member where column");
+    } else if (key.name === "where" || key.name === "deleteWhere") {
+      const option = key.name;
+      if (option === "deleteWhere" && context !== "standalone") {
+        throw new SchemaTsError(`line ${key.line}: deleteWhere on table "${tableName}" requires a standalone member() scope.`);
+      }
+      if (selectorOption && selectorOption !== option) {
+        throw new SchemaTsError(`line ${key.line}: member() on table "${tableName}" accepts either where or deleteWhere.`);
+      }
+      if (selectorOption) throw new SchemaTsError(`member() declares ${option} more than once.`);
+      selectorOption = option;
+      r.expectPunct("{", `opening member ${option}`);
+      const column = r.readKey(`member ${option} column`).name;
+      validateMemberColumns([column], option, tableName, key.line);
+      r.expectPunct(":", `after member ${option} column`);
       let value;
       if (r.tryPunct("[")) {
         const list = [];
         while (!r.tryPunct("]")) {
-          list.push(r.readLiteral("member where value"));
+          list.push(r.readLiteral(`member ${option} value`));
           if (!r.tryPunct(",")) {
-            r.expectPunct("]", "closing member where list");
+            r.expectPunct("]", `closing member ${option} list`);
             break;
           }
         }
         value = list;
-      } else value = r.readLiteral("member where literal");
+      } else value = r.readLiteral(`member ${option} literal`);
       const values = typeof value === "string" ? [value] : value;
-      if (!Array.isArray(values) || !values.length || values.some((v) => typeof v !== "string")) throw new SchemaTsError("member where needs one text column and a nonempty string literal or list.");
+      if (!Array.isArray(values) || !values.length || values.some((v) => typeof v !== "string")) throw new SchemaTsError(`member ${option} needs one text column and a nonempty string literal or list.`);
       r.tryPunct(",");
-      r.expectPunct("}", "member where accepts exactly one column");
+      r.expectPunct("}", `member ${option} accepts exactly one column`);
       selector = { column, values: [...new Set(values)].sort() };
     } else if (key.name === "read") {
       if (read) throw new SchemaTsError(`line ${key.line}: member() on table "${tableName}" declares read more than once.`);
       read = readBranchReadColumns(r, `member({ read }) on table "${tableName}"`);
     } else {
       throw new SchemaTsError(
-        `line ${key.line}: member() on table "${tableName}" has an unknown option "${key.name}". Allowed: group, membership, member_user, member_group, operations, read.`
+        `line ${key.line}: member() on table "${tableName}" has an unknown option "${key.name}". Allowed: group, membership, member_user, member_group, operations, where, read${context === "standalone" ? ", deleteWhere" : ""}.`
       );
     }
     if (!r.tryPunct(",")) {
@@ -7771,7 +7785,11 @@ function readMemberScope(r, tableName, scopeLine) {
       `line ${scopeLine}: member() on table "${tableName}" has a ${group.length}-column group but a ${memberGroup.length}-column member_group. The group key must have the same number of columns on both sides.`
     );
   }
-  const node = { kind: "member", group, membership, memberUser, memberGroup, ...selector ? { restriction: { ...selector, operations: operations ?? [...MEMBER_OPERATIONS] } } : {}, ...operations !== void 0 ? { operations } : {}, ...read ? { read } : {} };
+  if (selectorOption === "deleteWhere" && operations && !operations.includes("delete")) {
+    throw new SchemaTsError(`line ${scopeLine}: member() on table "${tableName}" uses deleteWhere, so operations must include 'delete'.`);
+  }
+  const restrictedOperations = selectorOption === "deleteWhere" ? ["delete"] : operations ?? [...MEMBER_OPERATIONS];
+  const node = { kind: "member", group, membership, memberUser, memberGroup, ...selector ? { restriction: { ...selector, operations: restrictedOperations } } : {}, ...operations !== void 0 ? { operations } : {}, ...read ? { read } : {} };
   if (operationsSeen) explicitMemberOperations.add(node);
   return node;
 }
@@ -7832,7 +7850,7 @@ function refuseBranchRead(node, line, tableName, where) {
 }
 function readPolicyMember(r, tableName, line) {
   r.expectPunct("(", 'after "member"');
-  const scope = readMemberScope(r, tableName, line);
+  const scope = readMemberScope(r, tableName, line, "composed");
   r.tryPunct(",");
   r.expectPunct(")", "closing member()");
   if (scope.kind !== "member") throw new SchemaTsError(`line ${line}: invalid member() policy.`);
@@ -8049,7 +8067,7 @@ function readScope(r, tableName) {
   }
   if (tok.value === "member") {
     r.expectPunct("(", 'after "member"');
-    const scope = readMemberScope(r, tableName, tok.line);
+    const scope = readMemberScope(r, tableName, tok.line, "standalone");
     r.tryPunct(",");
     r.expectPunct(")", "closing member()");
     if (scope.kind === "member") refuseBranchRead(scope, tok.line, tableName, "the member() scope");

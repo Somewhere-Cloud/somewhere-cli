@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.38.154
+
+- `somewhere typecheck` recognizes `deleteWhere` in access rules for team tables.
+
 ## 0.38.153
 
 - Write signed-in app tests with `@somewhere-cloud/cli/testing`. Generated starters include a test, and test sessions renew when the access token nears expiry.

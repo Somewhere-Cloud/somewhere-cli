@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
@@ -8,7 +9,9 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import test from 'node:test';
-import { UserSession } from '../dist/testing.js';
+import { request as playwrightRequest } from '@playwright/test';
+import { UserSession, data } from '../dist/testing.js';
+import { buildStorageState } from '../dist/lib/test-identities.js';
 import { _fixtureClientForTests, expectRefused } from '../dist/lib/playwright-fixtures.js';
 
 const cli = fileURLToPath(new URL('../dist/index.js', import.meta.url));
@@ -124,6 +127,50 @@ test('UserSession fills the contract pinned by the runner and retains explicit-c
     url: origin + '/__sw/data', origin, body: { table: 'notes', contract, operation: 'list' },
   })));
   await assert.rejects(new UserSession('https://other.example.test').data('notes', { operation: 'list' }), /different app/);
+});
+
+test('Playwright data uses prepared cookies and the linked contract from a regular request context', async (t) => {
+  const cwd = process.cwd();
+  const root = mkdtempSync(join(tmpdir(), 'prepared-playwright-'));
+  process.chdir(root);
+  const oldTarget = process.env.SW_TEST_TARGET;
+  t.after(() => {
+    process.chdir(cwd);
+    if (oldTarget === undefined) delete process.env.SW_TEST_TARGET;
+    else process.env.SW_TEST_TARGET = oldTarget;
+    rmSync(root, { recursive: true, force: true });
+  });
+  const session = 'fixture.alice.sig';
+  const calls = [];
+  const server = createServer(async (req, res) => {
+    let text = '';
+    for await (const chunk of req) text += chunk;
+    calls.push({ path: req.url, origin: req.headers.origin, cookie: req.headers.cookie, auth: req.headers.authorization, body: JSON.parse(text) });
+    res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ data: [{ id: 'note-a' }] }));
+  }).listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  t.after(() => server.close());
+  const origin = `http://127.0.0.1:${server.address().port}`;
+  writeFileSync(join(root, '.somewhere.json'), JSON.stringify({ project_id: 'fixture' }));
+  process.env.SW_TEST_TARGET = JSON.stringify({ projectId: 'fixture', origin, contractDigest: digest });
+  const expiry = Date.now() + 60_000;
+  const storageState = buildStorageState(origin, new URL(origin).hostname, {
+    access_token: session, refresh_token: randomUUID(), expires_in: 60,
+    user: { id: 'alice', email: 'alice@example.test', test: true },
+  }, { accessExpiresAt: expiry, sessionExpiresAt: expiry });
+  const statePath = join(root, 'alice.state.json');
+  writeFileSync(statePath, JSON.stringify(storageState));
+  const client = await playwrightRequest.newContext({ storageState: statePath });
+  t.after(() => client.dispose());
+
+  const response = await data(client, 'notes', { operation: 'list' });
+  assert.deepEqual(await response.json(), { data: [{ id: 'note-a' }] });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].path, '/__sw/data');
+  assert.equal(calls[0].origin, origin);
+  assert.match(calls[0].cookie, /__Host-token=fixture[.]alice[.]sig/);
+  assert.equal(calls[0].auth, undefined);
+  assert.deepEqual(calls[0].body, { operation: 'list', table: 'notes', contract: digest });
 });
 
 test('the Playwright refusal helper fails contract errors even with a positive control', async () => {

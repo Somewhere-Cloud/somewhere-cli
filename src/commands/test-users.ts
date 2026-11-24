@@ -66,7 +66,8 @@ export function registerTestUsers(program: Command): void {
     .addHelpText('after', [
       '',
       'From the linked project folder, run somewhere test-users prepare alice. It writes .somewhere/test/<actor>.state.json (a standard Playwright storageState) and manifest.json.',
-      'Playwright:     browser.newContext({ storageState: ".somewhere/test/alice.state.json" })',
+      'Playwright:     const alice = await browser.newContext({ storageState: ".somewhere/test/alice.state.json" })',
+      'With data imported from @somewhere-cloud/cli/testing: await data(alice.request, "notes", { operation: "list" })',
       'Save the context back after each run:  await context.storageState({ path: ".somewhere/test/alice.state.json" })',
       'The app refreshes the short-lived access token and rotates the session on its first refresh, so an unsaved',
       'file stops working after a run that refreshed it. The prepared session starts with the expiry prepare',

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.38.153
+
+- Write signed-in app tests with `@somewhere-cloud/cli/testing`. Generated starters include a test, and test sessions renew when the access token nears expiry.
+- Run one part of the app smoke check with `somewhere test --only access`, `--only crawl`, or a saved check path. The report lists the parts it skipped.
+- When deployment is still pending, the CLI checks the exact release without uploading source again.
+- Hosted smoke checks and explicit job waits check for early results sooner.
+
 ## 0.38.152
 
 - Run a scheduled job twice in a preview with `somewhere cron run <name> --preview --twice` and see each result and table row-count change.

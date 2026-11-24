@@ -157,7 +157,7 @@ test('retry:false is a refusal — the deploy is not sent twice', async () => {
   );
 });
 
-test('publication pending honors Retry-After and retries identical deploy input until confirmed', async () => {
+test('publication pending honors Retry-After and confirms the exact release without another upload', async () => {
   const { HOME, dir } = fixture('swtest-pending');
   const bodies = [];
   const arrivals = [];
@@ -173,7 +173,11 @@ test('publication pending honors Retry-After and retries identical deploy input 
     if (bodies.length <= 2) {
       const headers = bodies.length === 1 ? { 'Retry-After': '1' } : {};
       return sendJson(res, 503, {
-        ok: false, error: 'EXEC_CONTROL_PUBLICATION_PENDING', message: 'Publication pending.', retry: true,
+        ok: false, error: 'EXEC_CONTROL_PUBLICATION_PENDING', message: 'Publication pending.', retry: bodies.length === 2,
+        data: {
+          release_id: 'rel_pending',
+          confirm_publication: { project_id: 'proj_swtest-pending', release_id: 'rel_pending' },
+        },
       }, headers);
     }
     sendJson(res, 200, {
@@ -185,11 +189,15 @@ test('publication pending honors Retry-After and retries identical deploy input 
     });
     assert.equal(result.status, 0, result.stderr);
     assert.equal(bodies.length, 3);
-    assert.equal(new Set(bodies).size, 1);
+    assert.ok(Object.hasOwn(JSON.parse(bodies[0]), 'files'));
+    assert.deepEqual(JSON.parse(bodies[1]), {
+      project_id: 'proj_swtest-pending', confirm_publication: 'rel_pending',
+    });
+    assert.equal(bodies[1], bodies[2]);
     assert.ok(arrivals[1] - arrivals[0] >= 1_000);
     assert.ok(arrivals[2] - arrivals[1] >= 2_000);
-    assert.match(result.stderr, /Publication is still pending\. Retrying in 1s\./);
-    assert.match(result.stderr, /Publication is still pending\. Retrying in 2s\./);
+    assert.match(result.stderr, /Deploy confirmation is pending\. Retrying in 1s\./);
+    assert.match(result.stderr, /Deploy confirmation is pending\. Retrying in 2s\./);
   });
 });
 
@@ -203,8 +211,35 @@ test('publication pending respects a Retry-After date beyond its retry budget', 
     if (req.url !== '/v1/deploy') return sendJson(res, 404, { ok: false, error: 'NOT_FOUND' });
     deployCalls++;
     sendJson(res, 503, {
-      ok: false, error: 'EXEC_CONTROL_PUBLICATION_PENDING', message: 'Publication pending.', retry: true,
+      ok: false, error: 'EXEC_CONTROL_PUBLICATION_PENDING', message: 'Publication pending.', retry: false,
+      data: {
+        release_id: 'rel_pending',
+        confirm_publication: { project_id: 'proj_swtest-pending-budget', release_id: 'rel_pending' },
+      },
     }, { 'Retry-After': new Date(Date.now() + 120_000).toUTCString() });
+  }, async apiUrl => {
+    const result = await run(['deploy', '--json'], {
+      cwd: dir, env: { HOME, USERPROFILE: HOME, SOMEWHERE_API_URL: apiUrl },
+    });
+    assert.equal(result.status, 1);
+    assert.equal(deployCalls, 1);
+    assert.match(result.stdout + result.stderr, /EXEC_CONTROL_PUBLICATION_PENDING/);
+  });
+});
+
+test('a pending response without an exact confirmation target never re-uploads source', async () => {
+  const { HOME, dir } = fixture('swtest-pending-legacy');
+  let deployCalls = 0;
+  await withServer((req, res) => {
+    if (req.method === 'GET') {
+      return sendJson(res, 200, { ok: true, data: { project_id: 'proj_swtest-pending-legacy', notices: [] } });
+    }
+    if (req.url !== '/v1/deploy') return sendJson(res, 404, { ok: false, error: 'NOT_FOUND' });
+    deployCalls++;
+    sendJson(res, 503, {
+      ok: false, error: 'EXEC_CONTROL_PUBLICATION_PENDING', message: 'Publication pending.', retry: true,
+      data: { live: true, release_id: 'rel_pending' },
+    });
   }, async apiUrl => {
     const result = await run(['deploy', '--json'], {
       cwd: dir, env: { HOME, USERPROFILE: HOME, SOMEWHERE_API_URL: apiUrl },

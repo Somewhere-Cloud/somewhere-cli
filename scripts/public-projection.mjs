@@ -56,9 +56,8 @@ export function assertPublicArtifact(text, filename) {
   }
 }
 
-// The first release with a source map and public declarations packed to
-// 43 files, 2.28 MB compressed and 10.13 MB unpacked.
-export const BUNDLE_BUDGET = { entryCount: 50, size: 2_500_000, unpackedSize: 11_000_000 };
+// Includes the installed topic Markdown. Keep the complete tarball small.
+export const BUNDLE_BUDGET = { entryCount: 190, size: 3_250_000, unpackedSize: 13_000_000 };
 
 export function assertBundleBudget(pack) {
   for (const [field, maximum] of Object.entries(BUNDLE_BUDGET)) {

@@ -1,3 +1,4 @@
+import { DEPLOY_CHECK_TYPESCRIPT_VERSION } from '../dist/lib/deploy-check.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
@@ -23,7 +24,7 @@ test('scaffold package.json carries provided deps and is private', () => {
   assert.equal(pkg.private, true);
   assert.equal(pkg.name, 'my-app');
   assert.deepEqual(pkg.dependencies, { zod: '^3.22.0' });
-  assert.deepEqual(pkg.devDependencies, { typescript: '5.9.3' });
+  assert.deepEqual(pkg.devDependencies, { typescript: DEPLOY_CHECK_TYPESCRIPT_VERSION });
 });
 
 test('sanitizePackageName lowercases and strips unsafe chars', () => {

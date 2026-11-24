@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { spawn } from 'node:child_process';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -355,6 +355,8 @@ test('public docs default to the published summary; --full and --section retriev
     const summary = await run(['docs', 'sw.data'], env(base));
     assert.equal(summary.status, 0, summary.stderr);
     assert.equal(summary.stdout, SECTIONED_PAGE.summary);
+    assert.match(summary.stderr, /docs sw\.data --full for the whole topic or --section <id>/);
+    assert.match(summary.stderr, /Search installed Markdown in .*dist[/\\]docs/);
 
     const full = await run(['docs', 'sw.data', '--full', '--json'], env(base));
     assert.equal(full.status, 0, full.stderr);
@@ -590,4 +592,13 @@ test('public command bounds large parents in JSON/plain while exact leaves and f
     assert.doesNotMatch(result.failure.message, /Parent lead|Second child|await data/);
   }
   assert.match(renderPublicDocsView(page, { kind: 'section', id: 'query-rows-2' }).content, /Second child/);
+});
+
+test('bundled markdown matches the full public view for each topic', () => {
+  const { pages } = JSON.parse(readFileSync(new URL('../docs/topics.generated.json', import.meta.url), 'utf8'));
+  assert.ok(pages.some(({ id }) => id === 'declared-data'));
+  for (const page of pages) {
+    const file = readFileSync(new URL('../dist/docs/' + page.id + '.md', import.meta.url), 'utf8');
+    assert.equal(file, renderPublicDocsView(page, { kind: 'full' }).content, page.id);
+  }
 });

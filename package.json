@@ -32,6 +32,7 @@
     "bin",
     "dist/commands/docs.js",
     "dist/commands/init.js",
+    "dist/docs",
     "dist/index.js",
     "dist/lib/bundle.js",
     "dist/lib/bundle.js.map",
@@ -51,7 +52,7 @@
     "src/testing.ts"
   ],
   "scripts": {
-    "build": "tsc && node scripts/build-bundle.mjs",
+    "build": "tsc && node scripts/build-bundle.mjs && node scripts/bundle-topic-docs.mjs",
     "dev": "tsc --watch",
     "prepublishOnly": "node -e \"console.error('Use the CLI publish workflow to publish the staged runtime tarball.'); process.exit(1)\"",
     "test": "npm run check:credentials && node scripts/test-isolated.mjs",

@@ -14,6 +14,8 @@ on:
       # this workflow.
       - 'runtime/**'
       - 'scripts/extract-runtime.mjs'
+      - 'scripts/bundle-topic-docs.mjs'
+      - 'docs/topics.generated.json'
       - 'scripts/version-guard.mjs'
       - '.github/workflows/version-guard.yml'
       - '.github/workflows/publish.yml'

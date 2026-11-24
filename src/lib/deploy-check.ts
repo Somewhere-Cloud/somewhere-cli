@@ -18,6 +18,7 @@ import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { isAbsolute, join, relative, resolve } from 'node:path';
+import { TYPECHECK_TYPESCRIPT_VERSION } from './typecheck-version.js';
 import { collectFiles } from './files.js';
 import { explainPageLimit, runBounded, timedOutMessage } from './typecheck.js';
 
@@ -43,7 +44,6 @@ export interface DeployCheckResult {
 }
 
 interface CheckerContract {
-  TYPESCRIPT_VERSION: string;
   isReferenceSource(path: string): boolean;
   localCheckCompilerOptions(projectCompilerOptions: unknown): Record<string, unknown>;
   isIgnoredDiagnostic(code: string): boolean;
@@ -64,7 +64,7 @@ const vendor = require('./runtime/declared-data.cjs') as ReferenceCheckVendor;
 const contract = vendor.checkerContract;
 
 /** The deploy's TypeScript version. */
-export const DEPLOY_CHECK_TYPESCRIPT_VERSION = contract.TYPESCRIPT_VERSION;
+export const DEPLOY_CHECK_TYPESCRIPT_VERSION = TYPECHECK_TYPESCRIPT_VERSION;
 
 interface TscInvocation { command: string; args: string[] }
 

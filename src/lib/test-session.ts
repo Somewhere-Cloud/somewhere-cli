@@ -1,3 +1,4 @@
+import { assertRefused, type RefusalClient } from './test-refusal.js';
 import { ApiClient } from './client.js';
 import { getToken, loadProjectConfig } from './config.js';
 import { fixtureTestTarget, type TestTarget } from './test-target.js';
@@ -83,6 +84,22 @@ export class UserSession {
   }
   post(path: string, body: unknown): Promise<Response> {
     return this.request(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  }
+  /** Prove a refusal against a table or a METHOD /path endpoint. Use an allowed session
+   *  as the positive control for hidden rows or a 404. */
+  expectRefused(table: string, request: DataRequest, options?: { allowed?: UserSession }): Promise<void>;
+  expectRefused(endpoint: `${string} /${string}`, body?: unknown, options?: { allowed?: UserSession }): Promise<void>;
+  async expectRefused(target: string, request?: unknown, { allowed }: { allowed?: UserSession } = {}): Promise<void> {
+    if (allowed && allowed.origin !== this.origin) throw new Error('Choose a control session from the same app.');
+    const adapt = (session: UserSession): RefusalClient => ({
+      endpoint(method, path, body) {
+        return session.request(path, body === undefined ? { method } : {
+          method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+        });
+      },
+      data: (table, request) => session.data(table, request),
+    });
+    await assertRefused(adapt(this), target, request, allowed && adapt(allowed));
   }
   /** Use this session's cookies and the linked app's declared data contract. */
   data(table: string, request: DataRequest): Promise<Response>;

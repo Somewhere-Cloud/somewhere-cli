@@ -712,12 +712,12 @@ test('docs --search calls the public search endpoint and prints section text', a
   }
 });
 
-test('docs recipe and example list or read whole published artifacts without credentials', async () => {
+test('docs example lists or reads whole published examples without credentials', async () => {
   const server = createServer((req, res) => {
     const url = new URL(req.url, 'http://localhost');
     const view = url.searchParams.get('view');
     const slug = url.searchParams.get('slug');
-    assert.ok(view === 'recipe' || view === 'example');
+    assert.equal(view, 'example');
     assert.equal(url.pathname, `/docs/${view}.txt`);
     assert.equal(req.headers.authorization, undefined);
     res.setHeader('content-type', 'application/json');
@@ -731,10 +731,10 @@ test('docs recipe and example list or read whole published artifacts without cre
   try {
     assert.equal((await run(['docs', 'example'], env)).stdout, 'Available example slugs.\n');
     for (const tty of [true, false]) {
-      const result = await run(['docs', 'recipe', 'csv-import', '--json'], env, { tty });
+      const result = await run(['docs', 'example', 'team-board', '--json'], env, { tty });
       assert.equal(result.status, 0, result.stderr);
       assert.deepEqual(JSON.parse(result.stdout), {
-        topic: 'csv-import', view: 'recipe', complete: true, content: '# csv-import\n\nA whole walkthrough.\n',
+        topic: 'team-board', view: 'example', complete: true, content: '# team-board\n\nA whole walkthrough.\n',
       });
     }
   } finally {

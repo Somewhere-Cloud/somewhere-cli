@@ -104,7 +104,7 @@ export interface PublicDocsPage {
 }
 
 export type DocsView = { kind: 'default' } | { kind: 'full' } | { kind: 'section'; id: string };
-type DocsArtifactView = { kind: 'recipe' | 'example'; slug?: string };
+type DocsExampleView = { kind: 'example'; slug?: string };
 
 interface RenderedDocs {
   content: string;
@@ -390,7 +390,6 @@ export function renderDocsIndex(pages: PublicDocsPage[], groups: PublicDocsGroup
     `Open a section:   ${cliInvocation()} docs <topic> --section <id>`,
     `Whole topic:      ${cliInvocation()} docs <topic> --full`,
     `Search all docs:  ${cliInvocation()} docs --search "<words>" [--include-api]`,
-    `Recipes:          ${cliInvocation()} docs recipe [slug]`,
     `Examples:         ${cliInvocation()} docs example [slug]`,
     `Download Markdown: ${cliInvocation()} docs pull`,
     `Full manual:      ${cliInvocation()} docs --full                  (very large)`,
@@ -480,13 +479,13 @@ function topicSummary(content: string, topic: string, full: number): string {
 
 /** The published topic renderer also supplies the CLI text used by the MCP tool.
  * Older platforms serve plain Markdown at this path, so keep the manifest fallback. */
-async function fetchPublishedDocsView(topic: string, view: DocsView | DocsArtifactView): Promise<{
+async function fetchPublishedDocsView(topic: string, view: DocsView | DocsExampleView): Promise<{
   topic: string; content: string; view: string; complete: boolean; version?: string;
 } | null> {
   if (!/^[a-z0-9_.-]+$/i.test(topic)) return null;
   const params = new URLSearchParams({ view: view.kind === 'default' ? 'summary' : view.kind });
   if (view.kind === 'section') params.set('section', view.id);
-  if ((view.kind === 'recipe' || view.kind === 'example') && view.slug) params.set('slug', view.slug);
+  if (view.kind === 'example' && view.slug) params.set('slug', view.slug);
   const response = await fetch(`${DOCS_BASE}/docs/${encodeURIComponent(topic.toLowerCase())}.txt?${params}`);
   if (!response.ok || !response.headers.get('content-type')?.includes('application/json')) return null;
   const value: unknown = await response.json();
@@ -529,7 +528,7 @@ export function registerDocs(program: Command) {
       + `  ${cliInvocation()} docs sw.auth --full          # complete topic for a terminal, pipe or file\n`
       + `  ${cliInvocation()} docs sw.auth setRoles        # search within this topic\n`
       + `  ${cliInvocation()} docs sw.auth --section <id>  # one section\n`
-      + `  ${cliInvocation()} docs recipe csv-import       # one complete recipe\n`
+      + `  ${cliInvocation()} docs example team-board      # one complete example\n`
       + `  ${cliInvocation()} docs example                 # list available examples\n`
       + `  ${cliInvocation()} docs --full                  # the whole manual (very large)\n`
       + `\n\`${cliInvocation()} docs search\` with no term opens the search primitive topic.\n`)
@@ -544,7 +543,7 @@ export function registerDocs(program: Command) {
         return;
       }
       warnIfDocsNewerThanCli();
-      if ((topic === 'recipe' || topic === 'example') && opts.search === undefined) {
+      if (topic === 'example' && opts.search === undefined) {
         if (terms.length > 1 || opts.list || opts.section !== undefined || opts.includeApi || opts.full) {
           error(`Use docs ${topic} [slug] with optional --json.`);
           process.exitCode = 1;

@@ -420,6 +420,15 @@ export class ApiClient {
     if (typeof retry_after_ms === 'number' && Number.isFinite(retry_after_ms)) {
       meta.retryAfterMs = retry_after_ms;
     }
+    if (res.status === 503 && error === 'EXEC_CONTROL_PUBLICATION_PENDING') {
+      const retryAfter = res.headers.get('retry-after')?.trim();
+      if (retryAfter && /^\d+$/.test(retryAfter)) {
+        meta.retryAfterMs = Math.min(Number(retryAfter) * 1000, Number.MAX_SAFE_INTEGER);
+      } else if (retryAfter) {
+        const retryAt = Date.parse(retryAfter);
+        if (Number.isFinite(retryAt)) meta.retryAfterMs = Math.max(0, retryAt - Date.now());
+      }
+    }
     const agentSignIn = `Run \`${cliInvocation()} login\` and ask the account owner to approve it.`;
     const agentMessage = error === 'PROJECT_AGENT_OPERATION_FORBIDDEN'
       ? `This app connection cannot use that feature. ${agentSignIn}`

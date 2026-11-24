@@ -127,6 +127,8 @@ const RETRYABLE_DEPLOY_CODES = new Set(['TIMEOUT', 'SERVER_SLOW', 'NETWORK_ERROR
 // one retry. A wait the platform asks for is worth honouring; an unbounded one
 // is a hang, and `somewhere deploy` must stay a command that finishes.
 const DEPLOY_RETRY_MAX_WAIT_MS = 10_000;
+const PUBLICATION_RETRY_BUDGET_MS = 30_000;
+const PUBLICATION_RETRY_DELAYS_MS = [1_000, 2_000, 4_000, 8_000] as const;
 
 export const POST_DEPLOY_HINT =
   `Next: keep building with \`${cliInvocation()} dev\`; run \`${cliInvocation()} deploy\` to update this live app. ` +
@@ -2068,15 +2070,45 @@ async function callDeployWithRetry<T>(
   opts: DeployRetryOptions,
 ): Promise<T> {
   let transportFailure: string | null = null;
-  for (let attempt = 1; attempt <= DEPLOY_MAX_ATTEMPTS; attempt++) {
+  let attempt = 1;
+  let publicationDeadline: number | undefined;
+  let publicationRetries = 0;
+  for (;;) {
     const startedAt = Date.now();
     const stopHeartbeat = startDeployHeartbeat(opts, attempt, startedAt);
+    const timeoutMs = publicationDeadline === undefined ? deployTimeoutMs()
+      : Math.min(deployTimeoutMs(), Math.max(1, Math.floor(publicationDeadline - performance.now())));
     try {
       return await client.call<T>('POST', '/deploy', body, undefined, {
-        timeoutMs: deployTimeoutMs(),
-      });
+        timeoutMs,
+        ...(publicationDeadline === undefined ? {} : { refresh: false as const }),
+      }).finally(stopHeartbeat);
     } catch (err) {
       if (transportFailure && err && typeof err === 'object') retriedAfterTransportFailure.set(err, transportFailure);
+      if (!opts.dryRun && err instanceof CliApiError && err.statusCode === 503
+        && err.code === 'EXEC_CONTROL_PUBLICATION_PENDING' && err.meta.retry === true) {
+        // The server can already have applied the release. Repeating this
+        // same body asks it to confirm publication without applying it again.
+        publicationDeadline ??= performance.now() + PUBLICATION_RETRY_BUDGET_MS;
+        const backoffMs = PUBLICATION_RETRY_DELAYS_MS[publicationRetries];
+        if (backoffMs === undefined) throw err;
+        const asked = err.meta.retryAfterMs;
+        const waitMs = typeof asked === 'number' && Number.isFinite(asked) && asked >= 0
+          ? Math.ceil(asked) : backoffMs;
+        if (performance.now() + waitMs >= publicationDeadline) throw err;
+        if (!opts.json) {
+          opts.spinner?.stop();
+          warn(waitMs > 0
+            ? `Publication is still pending. Retrying in ${Math.ceil(waitMs / 1000)}s.`
+            : 'Publication is still pending. Retrying now.');
+        }
+        await new Promise<void>(resolve => setTimeout(resolve, waitMs));
+        if (performance.now() >= publicationDeadline) throw err;
+        if (!opts.json) opts.spinner?.start(opts.baseText);
+        publicationRetries++;
+        continue;
+      }
+      if (publicationDeadline !== undefined) throw err;
       if (attempt >= DEPLOY_MAX_ATTEMPTS) throw err;
 
       if (!isRetryableDeployError(err)) throw err;
@@ -2099,12 +2131,9 @@ async function callDeployWithRetry<T>(
         opts.spinner?.start(`${opts.baseText} (retry 2/2)`);
       }
       if (waitMs) await new Promise((r) => setTimeout(r, waitMs));
-    } finally {
-      stopHeartbeat();
+      attempt++;
     }
   }
-
-  throw new CliApiError('DEPLOY_RETRY_EXHAUSTED', 'Deploy retry exhausted.', 0);
 }
 
 /** The request may have reached the server and no authoritative answer was

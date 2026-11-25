@@ -104,6 +104,7 @@ export interface PublicDocsPage {
 }
 
 export type DocsView = { kind: 'default' } | { kind: 'full' } | { kind: 'section'; id: string };
+type DocsExampleView = { kind: 'example'; slug?: string };
 
 interface RenderedDocs {
   content: string;
@@ -388,7 +389,8 @@ export function renderDocsIndex(pages: PublicDocsPage[], groups: PublicDocsGroup
     `Open a topic:     ${cliInvocation()} docs <topic>                `,
     `Open a section:   ${cliInvocation()} docs <topic> --section <id>`,
     `Whole topic:      ${cliInvocation()} docs <topic> --full`,
-    `Search all docs:  ${cliInvocation()} docs --search "<words>"`,
+    `Search all docs:  ${cliInvocation()} docs --search "<words>" [--include-api]`,
+    `Examples:         ${cliInvocation()} docs example [slug]`,
     `Download Markdown: ${cliInvocation()} docs pull`,
     `Full manual:      ${cliInvocation()} docs --full                  (very large)`,
   );
@@ -404,9 +406,10 @@ interface DocsSearchMatch {
   complete: boolean;
 }
 
-async function fetchDocsSearch(query: string, topic?: string) {
+async function fetchDocsSearch(query: string, topic?: string, includeApi?: boolean) {
   const params = new URLSearchParams({ q: query });
   if (topic) params.set('topic', topic);
+  if (includeApi) params.set('include_api', 'true');
   const res = await fetch(`${DOCS_BASE}${DOCS_SEARCH_PATH}?${params}`, {
     headers: { 'User-Agent': 'somewhere-cli' },
   });
@@ -476,12 +479,13 @@ function topicSummary(content: string, topic: string, full: number): string {
 
 /** The published topic renderer also supplies the CLI text used by the MCP tool.
  * Older platforms serve plain Markdown at this path, so keep the manifest fallback. */
-async function fetchPublishedDocsView(topic: string, view: DocsView): Promise<{
+async function fetchPublishedDocsView(topic: string, view: DocsView | DocsExampleView): Promise<{
   topic: string; content: string; view: string; complete: boolean; version?: string;
 } | null> {
   if (!/^[a-z0-9_.-]+$/i.test(topic)) return null;
   const params = new URLSearchParams({ view: view.kind === 'default' ? 'summary' : view.kind });
   if (view.kind === 'section') params.set('section', view.id);
+  if (view.kind === 'example' && view.slug) params.set('slug', view.slug);
   const response = await fetch(`${DOCS_BASE}/docs/${encodeURIComponent(topic.toLowerCase())}.txt?${params}`);
   if (!response.ok || !response.headers.get('content-type')?.includes('application/json')) return null;
   const value: unknown = await response.json();
@@ -512,23 +516,26 @@ export function registerDocs(program: Command) {
     )
     .option('--list', `List available topics (the same index bare \`${cliInvocation()} docs\` prints)`)
     .option('--full', 'Print the complete topic; with no topic, print the full manual')
-    .option('--search <words>', 'Search matching sections across all live docs topics')
+    .option('--search <words>', 'Find matching builder docs and read the top section whole')
+    .option('--include-api', 'Include the HTTP API catalog and developer tool reference in search')
     .option('--section <id>', 'Print one section of a topic (ids are listed in the summary)')
     .option('--json', 'Print the selected document in a JSON envelope')
     .addHelpText('after', '\nExamples:\n'
       + `  ${cliInvocation()} docs                         # topic index\n`
-      + `  ${cliInvocation()} docs --search "magic link"   # matching sections across every topic\n`
+      + `  ${cliInvocation()} docs --search "magic link"   # matching builder docs\n`
       + `  ${cliInvocation()} docs pull                    # download Markdown into .somewhere/docs/\n`
       + `  ${cliInvocation()} docs sw.auth                 # topic summary when the whole topic is long\n`
       + `  ${cliInvocation()} docs sw.auth --full          # complete topic for a terminal, pipe or file\n`
       + `  ${cliInvocation()} docs sw.auth setRoles        # search within this topic\n`
       + `  ${cliInvocation()} docs sw.auth --section <id>  # one section\n`
+      + `  ${cliInvocation()} docs example team-board      # one complete example\n`
+      + `  ${cliInvocation()} docs example                 # list available examples\n`
       + `  ${cliInvocation()} docs --full                  # the whole manual (very large)\n`
       + `\n\`${cliInvocation()} docs search\` with no term opens the search primitive topic.\n`)
     .action(async (
       topic: string | undefined,
       terms: string[],
-      opts: { list?: boolean; full?: boolean; section?: string; search?: string; json?: boolean },
+      opts: { list?: boolean; full?: boolean; section?: string; search?: string; includeApi?: boolean; json?: boolean },
     ) => {
       if (opts.full && opts.section !== undefined) {
         error('Pass --full or --section <id>, not both.');
@@ -536,8 +543,30 @@ export function registerDocs(program: Command) {
         return;
       }
       warnIfDocsNewerThanCli();
+      if (topic === 'example' && opts.search === undefined) {
+        if (terms.length > 1 || opts.list || opts.section !== undefined || opts.includeApi || opts.full) {
+          error(`Use docs ${topic} [slug] with optional --json.`);
+          process.exitCode = 1;
+          return;
+        }
+        try {
+          const result = await fetchPublishedDocsView(topic, { kind: topic, slug: terms[0] });
+          if (!result || result.view !== topic) {
+            throw new Error(`Could not read docs ${topic} at ${DOCS_BASE}.`);
+          }
+          await warnIfLocalDocsOlder(result.version);
+          const content = withNewline(result.content);
+          if (opts.json) printJson({ topic: result.topic, view: result.view, complete: result.complete, content });
+          else process.stdout.write(content);
+          if (!result.complete) process.exitCode = 1;
+        } catch (cause) {
+          error(cause instanceof Error ? cause.message : String(cause), cause);
+          process.exitCode = 1;
+        }
+        return;
+      }
       if (topic === 'pull') {
-        if (terms.length || opts.list || opts.full || opts.section !== undefined || opts.search !== undefined) {
+        if (terms.length || opts.list || opts.full || opts.section !== undefined || opts.search !== undefined || opts.includeApi) {
           error('docs pull accepts only --json.');
           process.exitCode = 1;
           return;
@@ -566,9 +595,14 @@ export function registerDocs(program: Command) {
       }
       const searching = opts.search !== undefined || terms.length > 0;
       const within = topic && topic !== 'search' ? (ALIASES[topic] ?? topic) : undefined;
+      if (opts.includeApi && !searching) {
+        error('--include-api requires a docs search.');
+        process.exitCode = 1;
+        return;
+      }
       if (searching) {
         if (opts.full || opts.section !== undefined || opts.list || (opts.search !== undefined && topic !== undefined)) {
-          error('Use docs --search "<words>" with optional --json.');
+          error('Use docs --search "<words>" with optional --include-api and --json.');
           process.exitCode = 1;
           return;
         }
@@ -579,7 +613,7 @@ export function registerDocs(program: Command) {
           return;
         }
         try {
-          const { results, total, version } = await fetchDocsSearch(query, within);
+          const { results, total, version } = await fetchDocsSearch(query, within, opts.includeApi);
           await warnIfLocalDocsOlder(version);
           if (opts.json) {
             printJson({ query, ...(within ? { topic: within } : {}), count: results.length, total, results });
@@ -591,8 +625,9 @@ export function registerDocs(program: Command) {
           }
           for (const result of results) {
             console.log(`${result.topic}${result.section ? ` › ${result.section}` : ''}  ${dim(result.heading ?? result.title)}`);
-            console.log(`\n${result.snippet}\n\n${dim(result.open)}\n`);
+            console.log(dim(result.open));
           }
+          if (results[0].snippet) console.log(`\n${results[0].snippet}`);
           if (results.length < total) {
             console.log(dim(`Showing ${results.length} of ${total} matches. Add a word to narrow the search.`));
           }

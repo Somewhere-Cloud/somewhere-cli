@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.38.160
+
+- Find complete examples with `somewhere docs example`. Search returns an outline and the best matching section in full. Add `--include-api` to include API reference topics.
+
 ## 0.38.159
 
 - Docs summaries show how much of the topic you received and give commands for the remaining sections, the whole topic, and search. The same summary goes to a terminal, pipe or file. Use `somewhere docs <topic> --full` when you need the complete topic.

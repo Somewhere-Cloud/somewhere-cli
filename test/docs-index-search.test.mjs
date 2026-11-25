@@ -119,7 +119,7 @@ test('docs search returns topic, section id, snippet and the command that opens 
 
     const text = await run(['docs', 'search', 'UTC'], { SOMEWHERE_DOCS_BASE: base });
     assert.equal(text.status, 0, text.stderr);
-    assert.match(text.stdout, /^cron {2}Cron — scheduled triggers\n\nSchedules run in UTC\.\n\nsomewhere docs cron --full/m);
+    assert.match(text.stdout, /^cron {2}Cron — scheduled triggers\nsomewhere docs cron --full\n\nSchedules run in UTC\./m);
 
     const none = await run(['docs', 'search', 'zebra'], { SOMEWHERE_DOCS_BASE: base });
     assert.equal(none.status, 0);

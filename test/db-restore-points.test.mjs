@@ -12,11 +12,13 @@ test('db restore-points lists, takes and deletes through the restore point route
   const home = mkdtempSync(join(tmpdir(), 'cli-db-restore-points-'));
   const requests = [];
   let reply;
+  let route = null;
   const server = createServer(async (req, res) => {
     let raw = ''; for await (const chunk of req) raw += chunk;
     requests.push({ path: req.url, method: req.method, body: raw ? JSON.parse(raw) : null });
-    res.writeHead(reply.status ?? 200, { 'content-type': 'application/json' });
-    res.end(JSON.stringify(reply.body));
+    const r = route ? route(req) : reply;
+    res.writeHead(r.status ?? 200, { 'content-type': r.type ?? 'application/json' });
+    res.end(typeof r.body === 'string' ? r.body : JSON.stringify(r.body));
   });
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   t.after(async () => {
@@ -24,14 +26,15 @@ test('db restore-points lists, takes and deletes through the restore point route
     await new Promise((resolve) => server.close(resolve));
     rmSync(home, { recursive: true, force: true });
   });
-  async function command(args) {
+  async function command(args, sub = ['restore-points', '--project', 'fixture-project']) {
+    args = [...sub, ...args];
     const script = `
       import { Command } from 'commander';
       import { registerDb } from './dist/commands/db.js';
       import { saveConfig } from './dist/lib/config.js';
       saveConfig({ token: 'smt_fixture_only', user: { email: 'fixture@example.test' } });
       const p = new Command(); registerDb(p);
-      await p.parseAsync(['node', 'somewhere', 'db', 'restore-points', '--project', 'fixture-project', ...JSON.parse(process.env.FIXTURE_ARGS)]);
+      await p.parseAsync(['node', 'somewhere', 'db', ...JSON.parse(process.env.FIXTURE_ARGS)]);
     `;
     const child = spawn(process.execPath, ['--input-type=module', '-e', script], {
       cwd: new URL('..', import.meta.url),
@@ -46,7 +49,7 @@ test('db restore-points lists, takes and deletes through the restore point route
     const status = await new Promise((resolve, reject) => { child.on('close', resolve); child.on('error', reject); });
     return { status, stdout, stderr };
   }
-  const point = { id: 'rp_fixture', reason: 'deploy', taken_at: '2026-11-26T12:00:00.000Z', expires_at: '2026-11-29T12:00:00.000Z', size_bytes: 2_500_000, tables: 2, rows: 40, planes: ['raw', 'managed'] };
+  const point = { id: 'rp_fixture', reason: 'deploy', state: 'ready', exact: true, detail: null, taken_at: '2026-11-26T12:00:00.000Z', expires_at: '2026-11-29T12:00:00.000Z', size_bytes: 2_500_000, tables: 2, rows: 40, planes: ['raw', 'managed'] };
 
   reply = { body: { ok: true, data: { project_id: 'fixture-project', restore_points: [point] } } };
   let r = await command([]);
@@ -54,16 +57,40 @@ test('db restore-points lists, takes and deletes through the restore point route
   assert.deepEqual(requests.at(-1), { path: '/v1/db/restore-points?project_id=fixture-project', method: 'GET', body: null });
   assert.match(r.stdout, /rp_fixture.*2026-11-26T12:00:00\.000Z.*deploy.*2\.5 MB.*2026-11-29T12:00:00\.000Z/s);
 
-  reply = { body: { ok: true, data: { project_id: 'fixture-project', restore_point: { ...point, reason: 'manual' } } } };
+  // --take starts one in the background and waits until the list shows it ready.
+  route = (req) => req.method === 'POST'
+    ? { status: 202, body: { ok: true, data: { project_id: 'fixture-project', restore_point: { ...point, reason: 'manual', state: 'running' } } } }
+    : { body: { ok: true, data: { project_id: 'fixture-project', restore_points: [{ ...point, reason: 'manual' }] } } };
   r = await command(['--take']);
   assert.equal(r.status, 0, r.stderr);
-  assert.deepEqual(requests.at(-1), { path: '/v1/db/restore-points', method: 'POST', body: { project_id: 'fixture-project' } });
+  assert.deepEqual(requests.find((q) => q.method === 'POST' && q.path === '/v1/db/restore-points')?.body, { project_id: 'fixture-project' });
   assert.match(r.stdout + r.stderr, /Restore point rp_fixture taken/);
+  // A point that was not taken says why and fails the command.
+  route = (req) => req.method === 'POST'
+    ? { status: 202, body: { ok: true, data: { project_id: 'fixture-project', restore_point: { ...point, state: 'running' } } } }
+    : { body: { ok: true, data: { project_id: 'fixture-project', restore_points: [{ ...point, state: 'failed', detail: 'COPY_STOPPED: The copy stopped.' }] } } };
+  r = await command(['--take']);
+  assert.notEqual(r.status, 0);
+  assert.match(r.stdout + r.stderr, /No restore point was taken: COPY_STOPPED/);
+  route = null;
 
   reply = { body: { ok: true, data: { project_id: 'fixture-project', deleted: 'rp_fixture' } } };
   r = await command(['--delete', 'rp_fixture']);
   assert.equal(r.status, 0, r.stderr);
   assert.deepEqual(requests.at(-1), { path: '/v1/db/restore-points/rp_fixture?project_id=fixture-project', method: 'DELETE', body: null });
+
+  // db dump on a database too large for one response exports in the background and streams the file.
+  const ex = { id: 'cp_fixture', state: 'ready', size_bytes: 40, tables: 1, rows: 2, exact: false, detail: null, consistency: 'Read in pages over 3 seconds while the app kept running.' };
+  route = (req) => req.url === '/v1/db/dump' ? { status: 413, body: { ok: false, error: 'DUMP_SIZE_LIMIT_EXCEEDED', message: 'too large' } }
+    : req.url === '/v1/db/exports' ? { status: 202, body: { ok: true, data: { export: { ...ex, state: 'running' } } } }
+    : req.url.startsWith('/v1/db/exports/cp_fixture/sql') ? { type: 'application/sql', body: 'CREATE TABLE t (x);\nINSERT INTO t VALUES (1);\n' }
+    : { body: { ok: true, data: { export: ex } } };
+  r = await command([], ['dump', '--project', 'fixture-project']);
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(r.stdout, 'CREATE TABLE t (x);\nINSERT INTO t VALUES (1);\n', 'stdout is exactly the SQL');
+  assert.match(r.stderr, /read in pages|while the app kept running/i);
+  assert.deepEqual(requests.find((q) => q.path === '/v1/db/exports')?.body, { project_id: 'fixture-project' });
+  route = null;
 
   reply = { status: 403, body: { ok: false, error: 'OWNER_REQUIRED', message: 'Only the project owner can take, list or delete database restore points. Nothing changed.' } };
   r = await command([]);

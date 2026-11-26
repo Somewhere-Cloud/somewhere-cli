@@ -1,5 +1,5 @@
 {
-  "source_commit": "e809b0b8a126c8127305e96d82b35a203aef04e0",
+  "source_commit": "8dde25f585f5a6647e3eee35c79aa71ef6f7553a",
   "esbuild": "0.24.0",
   "source_files": {
     "shared/app-model-catalog.ts": "c9a0119366beabb10157fcc9866f4d32b320b680f1c5717d837a5ca99875fa13",
@@ -9,12 +9,12 @@
     "shared/transient-read.ts": "af93cddbf8fc2f249d951d65d4eda5ac64632e62123e36994b893ff3258b8dab",
     "shared/types/placeholder-identity.ts": "089a46e2474a21193d3611eddd9c94b6bbe62441b3039ed80fc8499bada447ca",
     "worker/containers/compile/checker-contract.cjs": "732cb5a886548f91499031fc1f0727ae05e824ab8d482693f2ad04de4868595b",
-    "worker/containers/compile/consumer-contract.cjs": "9669f407936b8b067cfda40bb4d8b6dc4b5bb1025277710495be197040af676a",
+    "worker/containers/compile/consumer-contract.cjs": "b1c43844328ba67ab4762aac6d57e9105431ed287f166944009ddcf05f33eb43",
     "worker/containers/compile/declared-data-contract.cjs": "ebdc7dbc12283a7218c28e0e912e736ac27a8e9d513b82c097ebff6df3c1dd91",
     "worker/containers/compile/generated-declarations-render.cjs": "7ffdb34645cc9eccac6eba39dc86b646a41c4de8a1a038d2b5b46f42df9f1157",
     "worker/containers/compile/generated-declarations.cjs": "6e9902e054c5c784fd9b3c3fafc1869e79954100a45014e1132247cd82833ec4",
     "worker/containers/compile/groups-types.cjs": "7681d2adf0c7761a4971d7ba8287b238e464fd2768c878477e32794538675b33",
-    "worker/containers/compile/runtime-types.cjs": "a952608ea438a616bd21b444c5f0681abf3c2e3308df287065c72464ca2e7e6f",
+    "worker/containers/compile/runtime-types.cjs": "55d1ca3f8199b7c87bbbb1f777d028090d893e038496da063e90168ff84607d1",
     "worker/containers/compile/schema-types.cjs": "806147ad7224356734020c62441123db16b50ef6456db974c573b226d517e6cc",
     "worker/containers/compile/typed-data.cjs": "1c8bec853fbee4ffd34c651076a4e1f4d8b18c0c2be5e99e31df7c9283207627",
     "worker/containers/compile/typed-files.cjs": "f2568567a53994575ede91f9a0839965e64f94eb92ae11315650189b6de0f79c",
@@ -74,5 +74,5 @@
     "worker/src/utils/telegram.ts": "9aaaa2597c366da1eeee9e2252e9b73e611ea97ed9558f7e07e694d9b393f053",
     "worker/src/utils/workers-ai-comparison.ts": "18b5d5ea96f817387a5ef49733ba611c99cbb14987143c28118b1c90f3b637d4"
   },
-  "sha256": "2e2ace8ac737af46c2c2cf030cc0f9a3c7ee5081dab6d4833fa1ed5555620d79"
+  "sha256": "f7fefd59263e2a3bfaf493fff07972d23fc2e9ced289316acb8d888a3f658847"
 }

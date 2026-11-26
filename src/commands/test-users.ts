@@ -62,7 +62,7 @@ export function registerTestUsers(program: Command): void {
     .description('Create preverified test users and write one Playwright storageState file per actor (e.g. alice bob:admin)')
     .option('-p, --project <project>', 'Project slug or ID; defaults to the linked project')
     .option('--origin <url>', 'Only the project\'s production origin is supported; anything else is refused')
-    .option('--json', 'Print the manifest (no tokens) as JSON')
+    .option('--json', 'Print the manifest and browser data contract digest as JSON')
     .addHelpText('after', [
       '',
       'From the linked project folder, run somewhere test-users prepare alice. It writes .somewhere/test/<actor>.state.json (a standard Playwright storageState) and manifest.json.',
@@ -86,6 +86,19 @@ export function registerTestUsers(program: Command): void {
       if (existing && existing.actors.length) {
         fail(opts, Object.assign(new Error(`${TEST_STATE_DIR}/${MANIFEST_FILE} still records ${existing.actors.length} test user(s) from run ${existing.run_id}. Reuse the saved state if it still signs in, or run \`somewhere browser --auth-user <user-id>\` with the ID in the manifest to start a fresh hosted session. To replace the identities, run \`somewhere test-users cleanup\` and then prepare again.`), { code: 'TEST_USERS_NOT_CLEANED' }));
         return;
+      }
+      let contractDigest: string | null = null;
+      try {
+        const map = await target.client.call<{ browser_data: { contract_digest: string | null } }>(
+          'GET', '/db/access-map', undefined, { project_id: target.projectId },
+        );
+        contractDigest = map.browser_data.contract_digest;
+      } catch (cause) {
+        // An undeployed project has no browser data contract yet.
+        if (!(cause instanceof CliApiError && cause.code === 'NOT_FOUND')) {
+          fail(opts, cause);
+          return;
+        }
       }
       ensurePrivateDir(dir);
       const gitignore = ensureGitignored(target.root);
@@ -128,7 +141,7 @@ export function registerTestUsers(program: Command): void {
 
       if (opts.json) {
         if (failure) fail(opts, failure, { manifest, state_dir: TEST_STATE_DIR, created: manifest.actors.length, requested: specs.length });
-        else printJson({ manifest, state_dir: TEST_STATE_DIR, gitignore });
+        else printJson({ manifest, state_dir: TEST_STATE_DIR, gitignore, contract_digest: contractDigest });
         return;
       }
       for (const actor of manifest.actors) {
@@ -136,6 +149,7 @@ export function registerTestUsers(program: Command): void {
         info(`  ${TEST_STATE_DIR}/${actor.state_file}  access token until ${actor.access_expires_at}, refresh session initially until ${actor.session_expires_at}`);
       }
       if (gitignore !== 'present') info(`${gitignore === 'created' ? 'Created' : 'Updated'} .gitignore to ignore ${TEST_STATE_DIR}/.`);
+      info(contractDigest ? `Data contract digest: ${contractDigest}` : 'No browser data contract is deployed.');
       info(RETAINED_NOTE);
       if (failure) {
         fail(opts, failure);

@@ -32,7 +32,6 @@ export function registerProject(program: Command) {
     .command('create <name>')
     .description('Create a new project')
     .option('--subdomain <subdomain>', 'Custom subdomain')
-    .addOption(new Option('--preview').hideHelp())
     .option('--json', 'Print the raw project response as JSON')
     .action(async (name: string, opts) => {
       const client = new ApiClient(getToken());

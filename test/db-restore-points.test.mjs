@@ -17,6 +17,7 @@ test('db restore-points lists, takes and deletes through the restore point route
     let raw = ''; for await (const chunk of req) raw += chunk;
     requests.push({ path: req.url, method: req.method, body: raw ? JSON.parse(raw) : null });
     const r = route ? route(req) : reply;
+    if (r.raw) return r.raw(res);
     res.writeHead(r.status ?? 200, { 'content-type': r.type ?? 'application/json' });
     res.end(typeof r.body === 'string' ? r.body : JSON.stringify(r.body));
   });
@@ -65,6 +66,15 @@ test('db restore-points lists, takes and deletes through the restore point route
   assert.equal(r.status, 0, r.stderr);
   assert.deepEqual(requests.find((q) => q.method === 'POST' && q.path === '/v1/db/restore-points')?.body, { project_id: 'fixture-project' });
   assert.match(r.stdout + r.stderr, /Restore point rp_fixture taken/);
+  route = (req) => req.method === 'POST'
+    ? { status: 202, body: { ok: true, data: { project_id: 'fixture-project', restore_point: { ...point, state: 'running' } } } }
+    : { body: { ok: true, data: { project_id: 'fixture-project', restore_points: [{ ...point, consistency: 'Each database read in one moment: the SQL tables and the declared tables at different moments.', validation: 'Every table of the database is in the file with every row that was read (2 tables, 40 rows), and every part is stored at its recorded size.' }] } } };
+  r = await command(['--take']);
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout + r.stderr, /at different moments/, 'take shows how the point was read');
+  assert.match(r.stdout + r.stderr, /Every table of the database is in the file/, 'and what was checked');
+  r = await command([]);
+  assert.match(r.stdout + r.stderr, /rp_fixture: Each database read in one moment: the SQL tables and the declared tables at different moments\./, 'the list shows a split point\'s qualification');
   // A point that was not taken says why and fails the command.
   route = (req) => req.method === 'POST'
     ? { status: 202, body: { ok: true, data: { project_id: 'fixture-project', restore_point: { ...point, state: 'running' } } } }
@@ -122,6 +132,23 @@ test('db restore-points lists, takes and deletes through the restore point route
   r = await command([], ['dump', '--project', 'fixture-project', '--json']);
   assert.notEqual(r.status, 0); assert.match(r.stdout + r.stderr, /pass --output <file> with --json/);
   assert.ok(!requests.slice(before).some((q) => q.path === '/v1/db/exports'), 'nothing started');
+  route = null;
+
+  // Background exports not offered for this project (the platform answers 404): the dump's own refusal, as before.
+  route = (req) => req.url === '/v1/db/dump' ? { status: 413, body: { ok: false, error: 'DUMP_SIZE_LIMIT_EXCEEDED', message: 'The SQL tables are larger than one dump holds.' } }
+    : { status: 404, body: { ok: false, error: 'NOT_FOUND', message: 'Endpoint not found.' } };
+  r = await command([], ['dump', '--project', 'fixture-project', '--output', join(home, 'off.sql')]);
+  assert.notEqual(r.status, 0);
+  assert.match(r.stdout + r.stderr, /DUMP_SIZE_LIMIT_EXCEEDED: The SQL tables are larger than one dump holds\./);
+  assert.doesNotMatch(r.stdout + r.stderr, /Endpoint not found/);
+  assert.deepEqual(readdirSync(home).filter((f) => f === 'off.sql' || f.endsWith('.tmp')), []);
+  // Review 3: a download interrupted mid-stream (some bytes written, then the connection drops) leaves no file.
+  route = (req) => req.url === '/v1/db/dump' ? { status: 413, body: { ok: false, error: 'DUMP_SIZE_LIMIT_EXCEEDED', message: 'too large' } }
+    : req.url.startsWith('/v1/db/exports/cp_fixture/sql') ? { raw: (res) => { res.writeHead(200, { 'content-type': 'application/sql', 'content-length': '100000' }); res.write('CREATE TABLE t (x);\n'.repeat(50)); setTimeout(() => res.destroy(), 50); } }
+    : req.url === '/v1/db/exports' ? { status: 202, body: { ok: true, data: { export: ex } } } : { body: { ok: true, data: { export: ex } } };
+  r = await command([], ['dump', '--project', 'fixture-project', '--output', join(home, 'cut.sql')]);
+  assert.notEqual(r.status, 0, 'an interrupted download fails the command');
+  assert.deepEqual(readdirSync(home).filter((f) => f === 'cut.sql' || f.endsWith('.tmp')), [], 'and leaves neither the file nor its temporary');
   route = null;
 
   reply = { status: 403, body: { ok: false, error: 'OWNER_REQUIRED', message: 'Only the project owner can take, list or delete database restore points. Nothing changed.' } };

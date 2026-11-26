@@ -9,19 +9,27 @@ import { resolve } from 'node:path';
 import { registerDbRows } from './db-rows.js';
 import { Command } from 'commander';
 import ora from '../lib/spinner.js';
-import { ApiClient } from '../lib/client.js';
+import { ApiClient, CliApiError } from '../lib/client.js';
 
 /** A background export (POST /v1/db/exports) as the platform reports it. */
 interface DbExport { id: string; state: string; plane?: string; size_bytes: number; tables: number; rows: number; exact: boolean | null; detail: string | null; consistency: string | null }
 const sizeText = (n: number) => n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1000))} KB`;
 
-/** A database too large for one dump response: export it in the background, wait, then stream the file. */
-async function backgroundExport(client: ApiClient, projectId: string, plane: string | undefined, output: string | undefined, json: boolean, spinner: ReturnType<typeof ora> | null): Promise<void> {
+/** A database too large for one dump response: export it in the background, wait, then stream the file.
+ * False when the platform does not offer background exports for this project (404): the caller then
+ * reports the dump's own refusal, as before. */
+async function backgroundExport(client: ApiClient, projectId: string, plane: string | undefined, output: string | undefined, json: boolean, spinner: ReturnType<typeof ora> | null): Promise<boolean> {
   // One machine-readable result: with --json the file goes to --output, never mixed with JSON on stdout.
   if (json && !output) throw new Error('This database is exported in the background as a file: pass --output <file> with --json.');
   const wanted = plane ?? 'raw';
   if (spinner) spinner.text = 'The database is larger than one dump response; exporting it in the background…';
-  let current = (await client.call<{ export: DbExport }>('POST', '/db/exports', { project_id: projectId, ...(plane ? { plane } : {}) })).export;
+  let current: DbExport;
+  try {
+    current = (await client.call<{ export: DbExport }>('POST', '/db/exports', { project_id: projectId, ...(plane ? { plane } : {}) })).export;
+  } catch (err) {
+    if (err instanceof CliApiError && err.statusCode === 404 && err.code === 'NOT_FOUND') return false;
+    throw err;
+  }
   while (current.state === 'running') {
     await new Promise((resolve) => setTimeout(resolve, 3000));
     current = (await client.call<{ export: DbExport }>('GET', `/db/exports/${encodeURIComponent(current.id)}`, undefined, { project_id: projectId })).export;
@@ -51,6 +59,7 @@ async function backgroundExport(client: ApiClient, projectId: string, plane: str
   if (json) printJson({ export: current, output });
   else if (output) spinner?.succeed(`Wrote ${output} (${summary})`);
   else process.stderr.write(dim(summary) + '\n');
+  return true;
 }
 import { getToken, loadProjectConfig } from '../lib/config.js';
 import { dim, error, info, printJson, success, table, teal, yellow } from '../lib/output.js';
@@ -188,8 +197,7 @@ export function registerDb(program: Command) {
           try { refused = JSON.parse(res.body) as { error?: string }; } catch { refused = null; }
           // Too large for one response, in either plane: the background export copies it.
           if (res.status === 413 && ['DUMP_SIZE_LIMIT_EXCEEDED', 'DUMP_ROW_LIMIT_EXCEEDED', 'EXPORT_SIZE_LIMIT_EXCEEDED', 'EXPORT_ROW_LIMIT_EXCEEDED'].includes(refused?.error ?? '') && !opts.manifest) {
-            await backgroundExport(client, projectId!, opts.plane, opts.output, Boolean(opts.json), spinner);
-            return;
+            if (await backgroundExport(client, projectId!, opts.plane, opts.output, Boolean(opts.json), spinner)) return;
           }
           spinner?.fail('Dump failed');
           try {
@@ -283,7 +291,7 @@ export function registerDb(program: Command) {
         }
         projectId = config.project_id;
       }
-      type Point = { id: string; reason: string; state: string; taken_at: string; expires_at: string; size_bytes: number; tables: number; rows: number; exact: boolean | null; detail: string | null };
+      type Point = { id: string; reason: string; state: string; taken_at: string; expires_at: string; size_bytes: number; tables: number; rows: number; exact: boolean | null; detail: string | null; consistency?: string | null; validation?: string | null };
       const size = (n: number) => n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1000))} KB`;
       const client = new ApiClient(getToken());
       try {
@@ -300,7 +308,9 @@ export function registerDb(program: Command) {
           if (opts.json) { printJson({ restore_point: point }); if (point.state !== 'ready') process.exitCode = 1; return; }
           if (point.state === 'running') { spinner?.succeed(`Restore point ${point.id} is still being taken; \`${cliInvocation()} db restore-points\` shows when it is ready.`); return; }
           if (point.state !== 'ready') { spinner?.fail(`No restore point was taken: ${point.detail ?? point.state}`); process.exitCode = 1; return; }
-          spinner?.succeed(`Restore point ${point.id} taken (${size(point.size_bytes)}, ${point.tables} tables, ${point.rows} rows${point.exact === false ? ', read while the app kept running' : ''}); kept until ${point.expires_at}.`);
+          spinner?.succeed(`Restore point ${point.id} taken (${size(point.size_bytes)}, ${point.tables} tables, ${point.rows} rows); kept until ${point.expires_at}.`);
+          // How it was read and what was checked, as the platform states them.
+          for (const line of [point.consistency, point.validation]) if (line) info(dim(line));
           return;
         }
         if (opts.delete) {
@@ -319,6 +329,8 @@ export function registerDb(program: Command) {
           ['Restore point', 'Taken', 'Why', 'State', 'Size', 'Expires'],
           r.restore_points.map((p) => [teal(p.id), p.taken_at, p.reason, p.state === 'ready' ? (p.exact === false ? 'ready (read while running)' : 'ready') : `${p.state}${p.detail ? `: ${p.detail}` : ''}`, p.state === 'ready' ? size(p.size_bytes) : dim('—'), p.expires_at]),
         );
+        // Qualifications beyond a single exact read (for example a project with two databases, read at two moments).
+        for (const p of r.restore_points) if (p.state === 'ready' && p.consistency && p.consistency !== 'Read in one moment: an exact copy.') info(dim(`${p.id}: ${p.consistency}`));
       } catch (err) {
         error(err instanceof Error ? err.message : String(err), err);
         process.exit(1);

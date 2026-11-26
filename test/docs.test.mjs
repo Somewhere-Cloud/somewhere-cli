@@ -687,9 +687,12 @@ test('docs --search calls the public search endpoint and prints section text', a
     requests.push(req.url);
     assert.equal(req.headers.authorization, undefined);
     res.setHeader('content-type', 'application/json');
-    res.end(JSON.stringify({ version: MANIFEST.sourceHash, total: 1, results: [{
+    res.end(JSON.stringify({ version: MANIFEST.sourceHash, total: 2, results: [{
       topic: 'declared-data', title: 'Declared data', section: 'owners', heading: 'Owner-scoped rows',
       content: 'Declare the table with scope: owner().', complete: true,
+    }, {
+      topic: 'recipe-csv-import', title: 'CSV import', section: null, heading: null,
+      example: 'csv-import', content: '', complete: false,
     }] }));
   });
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
@@ -701,11 +704,14 @@ test('docs --search calls the public search endpoint and prints section text', a
     assert.match(result.stdout, /declared-data › owners +Owner-scoped rows/);
     assert.match(result.stdout, /scope: owner\(\)/);
     assert.match(result.stdout, /somewhere docs declared-data --section owners/);
+    assert.match(result.stdout, /Full example: somewhere docs example csv-import/);
+    assert.doesNotMatch(result.stdout, /recipe-csv-import --full/);
     const broad = await run(['docs', '--search', 'owner rows', '--include-api', '--json'], {
       SOMEWHERE_DOCS_BASE: `http://127.0.0.1:${server.address().port}`, CI: '1',
     });
     assert.equal(broad.status, 0, broad.stderr);
     assert.equal(JSON.parse(broad.stdout).results[0].complete, true);
+    assert.equal(JSON.parse(broad.stdout).results[1].open, 'somewhere docs example csv-import');
     assert.deepEqual(requests, ['/docs-search.json?q=owner+rows', '/docs-search.json?q=owner+rows&include_api=true']);
   } finally {
     await new Promise((resolve) => server.close(resolve));

@@ -398,6 +398,7 @@ export function renderDocsIndex(pages: PublicDocsPage[], groups: PublicDocsGroup
 }
 
 interface DocsSearchMatch {
+  example?: string;
   topic: string;
   title: string;
   section: string | null;
@@ -422,7 +423,9 @@ async function fetchDocsSearch(query: string, topic?: string, includeApi?: boole
     results: results.map(({ content, ...match }) => ({
       ...match,
       snippet: content,
-      open: match.section
+      open: match.example
+        ? `${cliInvocation()} docs example ${commandArg(match.example)}`
+        : match.section
         ? `${cliInvocation()} docs ${commandArg(match.topic)} --section ${commandArg(match.section)}`
         : `${cliInvocation()} docs ${commandArg(match.topic)} --full`,
     })),
@@ -625,7 +628,7 @@ export function registerDocs(program: Command) {
           }
           for (const result of results) {
             console.log(`${result.topic}${result.section ? ` › ${result.section}` : ''}  ${dim(result.heading ?? result.title)}`);
-            console.log(dim(result.open));
+            console.log(dim(result.example ? `Full example: ${result.open}` : result.open));
           }
           if (results[0].snippet) console.log(`\n${results[0].snippet}`);
           if (results.length < total) {

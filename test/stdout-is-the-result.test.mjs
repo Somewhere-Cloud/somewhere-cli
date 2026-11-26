@@ -7,10 +7,8 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-// stdout carries only the output a command was asked for; every notice, warning and progress
-// line goes to stderr. Piping `somewhere api …` or any --json command into a JSON parser must
-// work even when the CLI has something to warn about: here, a platform that announces another
-// consumer contract than this CLI's (the drift warning every command can print).
+// Unaffected commands still emit only their requested output on stdout
+// when the server advertises a newer consumer contract.
 const cli = join(dirname(fileURLToPath(import.meta.url)), '../dist/index.js');
 const { cliConsumerContract } = await import('../dist/lib/platform-contract.js');
 const own = cliConsumerContract();
@@ -40,15 +38,15 @@ function run(args) {
   });
 }
 
-// The first call records the drifted contract; from then on every command has a warning to print.
+// Prime the cache with the newer contract before running unaffected commands.
 await run(['api', 'GET', '/v1/me']);
 
 for (const args of [['api', 'GET', '/v1/projects'], ['api', 'GET', '/v1/projects', '--json'], ['project', 'list', '--json']]) {
-  test(`stdout is only the result, warnings on stderr: somewhere ${args.join(' ')}`, async () => {
+  test(`stdout is only the result and no contract warning: somewhere ${args.join(' ')}`, async () => {
     const result = await run(args);
     assert.equal(result.status, 0, result.stdout + result.stderr);
     assert.doesNotThrow(() => JSON.parse(result.stdout), `stdout is not JSON:\n${result.stdout}`);
-    assert.match(result.stderr, /consumer contract/, 'the drift warning is still said, on stderr');
+    assert.doesNotMatch(result.stderr, /consumer contract|behind the platform/i);
     assert.doesNotMatch(result.stdout, /Warning|consumer contract/);
   });
 }

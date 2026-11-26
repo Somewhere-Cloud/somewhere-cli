@@ -1,6 +1,6 @@
 import { cliInvocation } from '../lib/cli-invocation.js';
 import { Command } from 'commander';
-import { loadConfig, temporaryConfigExpired } from '../lib/config.js';
+import { loadConfig, temporaryConfigExpired, temporaryWorkspaceExpiryMessage } from '../lib/config.js';
 import { error, info, printJson, teal } from '../lib/output.js';
 
 /** `somewhere claim`: the claim link of this computer's temporary workspace,
@@ -27,8 +27,8 @@ export function registerClaim(program: Command) {
         if (expired) process.exit(1);
         return;
       }
-      if (expired) {
-        error(`This computer's temporary workspace expired at ${config.temp_expires_at}. Unclaimed apps are gone. Run \`${cliInvocation()} deploy\` to start a new one.`);
+      if (temporaryConfigExpired(config)) {
+        error(temporaryWorkspaceExpiryMessage(config.temp_expires_at));
         process.exit(1);
       }
       info(`Claim link: ${teal(config.claim_url)}`);

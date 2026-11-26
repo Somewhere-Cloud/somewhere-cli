@@ -32,6 +32,8 @@ import {
   loadProjectConfig,
   saveConfig,
   cliConfigPathForDisplay,
+  temporaryConfigExpired,
+  temporaryWorkspaceExpiryMessage,
 } from '../lib/config.js';
 import { getDeviceId, getDeviceKeyName } from '../lib/device.js';
 import { formatNextActions, nextActions } from '../lib/next-actions.js';
@@ -152,7 +154,8 @@ async function loginAction(opts: { browserCallback?: boolean; signup?: boolean }
     return;
   }
   const saved = loadConfig();
-  await runDeviceLogin(saved?.temporary ? saved.token : undefined);
+  if (temporaryConfigExpired(saved)) info(temporaryWorkspaceExpiryMessage(saved.temp_expires_at));
+  await runDeviceLogin(saved?.temporary && !temporaryConfigExpired(saved) ? saved.token : undefined);
 }
 
 /**
@@ -271,7 +274,7 @@ export function registerAuth(program: Command) {
       process.once('SIGTERM', clearOnTermination);
       let revokedOnServer = false;
       try {
-        if (config) {
+        if (config && !temporaryConfigExpired(config)) {
           const client = new ApiClient(config.token);
           await client.call('POST', '/auth/cli-logout', {
             refresh_token: config.refresh_token,
@@ -396,7 +399,9 @@ export function registerAuth(program: Command) {
         const detail = err instanceof Error ? err.message : String(err);
         // Only an authentication refusal says the token is bad. An outage, a
         // non-JSON page or a dropped connection says nothing about it.
-        if (err instanceof CliApiError && err.statusCode === 401) {
+        if (err instanceof CliApiError && err.code === 'TEMPORARY_SESSION_EXPIRED') {
+          error(detail, err);
+        } else if (err instanceof CliApiError && err.statusCode === 401) {
           error(`Token is not valid: ${detail}`, err);
         } else {
           error(`Could not verify the token: ${detail}. Nothing was saved and your current login is unchanged; run the command again once the platform answers.`, err);
@@ -428,6 +433,10 @@ export function registerAuth(program: Command) {
       }
 
       if (config.temporary) {
+        if (temporaryConfigExpired(config)) {
+          error(temporaryWorkspaceExpiryMessage(config.temp_expires_at));
+          process.exit(1);
+        }
         success('Temporary workspace key saved.');
         if (config.temp_expires_at) info(`Expires at ${config.temp_expires_at}`);
       } else {

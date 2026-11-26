@@ -111,7 +111,7 @@ async function post<T>(path: string, body: unknown, token?: string): Promise<{ r
  * the same proof instead of creating an irrecoverable second request. */
 export async function ensureClaimHandoff(projectId: string): Promise<ClaimCliHandoff | null> {
   const config = loadConfig();
-  if (!config?.temporary || !config.token) return null;
+  if (!config?.temporary || !config.token || temporaryConfigExpired(config)) return null;
   let state = config.claim_handoff;
   if (!state || state.project_id !== projectId) {
     state = { project_id: projectId, verifier: newVerifier() };
@@ -218,14 +218,15 @@ export async function recoverClaimHandoff(): Promise<ClaimHandoffRecovery> {
     // temporary session is past its own expiry too: neither can be used again,
     // so an unrelated command (init, a deploy that starts fresh) must not stop
     // on it. Only that exact dead record is dropped.
-    if (envelope.error === 'CLAIM_CLI_HANDOFF_EXPIRED' && temporaryConfigExpired(config)) {
+    const terminal = ['CLAIM_CLI_HANDOFF_DENIED', 'CLAIM_CLI_HANDOFF_EXPIRED', 'CLAIM_CLI_HANDOFF_CONSUMED', 'CLAIM_CLI_HANDOFF_OWNERSHIP_MISMATCH'].includes(envelope.error || '');
+    if (terminal && temporaryConfigExpired(config)) {
       dropExpiredHandoff(config.token, state);
       return {
         kind: 'stale',
         message: `The temporary workspace on this machine expired at ${config.temp_expires_at}. If you claimed it in the browser, \`${cliInvocation()} login\` signs in to it.`,
       };
     }
-    if (['CLAIM_CLI_HANDOFF_DENIED', 'CLAIM_CLI_HANDOFF_EXPIRED', 'CLAIM_CLI_HANDOFF_CONSUMED', 'CLAIM_CLI_HANDOFF_OWNERSHIP_MISMATCH'].includes(envelope.error || '')) {
+    if (terminal) {
       return {
         kind: 'manual',
         message: envelope.message || `Run \`${cliInvocation()} login\` in this directory. Keep the existing project link; do not unlink or redeploy.`,

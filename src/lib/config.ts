@@ -330,6 +330,10 @@ export function hasUsableCredential(config: CliConfig | null = loadConfig()): bo
   return Boolean(config?.token) && !temporaryConfigExpired(config);
 }
 
+export function temporaryWorkspaceExpiryMessage(expiresAt: string): string {
+  return `This temporary workspace expired on ${expiresAt}. Run \`${cliInvocation()} deploy\` in an unlinked folder to start a new one, or \`${cliInvocation()} login\` to sign in.`;
+}
+
 export function getToken(): string {
   const config = loadConfig();
   // A temporary (--temporary, ) credential carries its own
@@ -339,9 +343,7 @@ export function getToken(): string {
   // "Not logged in" message, which would send a dev to `somewhere login`
   // when they never signed up in the first place.
   if (temporaryConfigExpired(config)) {
-    error(
-      `Temporary session expired. Run ${cliInvocation()} deploy --temporary for a new one, or ${cliInvocation()} login to keep your work.`,
-    );
+    error(temporaryWorkspaceExpiryMessage(config.temp_expires_at));
     process.exit(1);
   }
   if (!config?.token) {

@@ -1,5 +1,5 @@
 import { API_BASE_URL, ApiClient } from './client.js';
-import { hasUsableCredential, loadConfig } from './config.js';
+import { loadConfig, temporaryConfigExpired, temporaryWorkspaceExpiryMessage } from './config.js';
 import type { TestTarget } from './test-target.js';
 
 export type TestJobTarget = { schedule: string } | { handler: string; payload?: unknown };
@@ -15,7 +15,8 @@ export interface TestJob {
 
 export function testingDeveloperToken(): string {
   const config = loadConfig();
-  if (!config?.token || !hasUsableCredential(config)) {
+  if (temporaryConfigExpired(config)) throw new Error(temporaryWorkspaceExpiryMessage(config.temp_expires_at));
+  if (!config?.token) {
     throw new Error('Use the linked app’s CLI session to run this test.');
   }
   return config.token;

@@ -1,8 +1,8 @@
 import { cliInvocation } from './cli-invocation.js';
 import { operationLabel } from './repro-packet.js';
-import type { ApiResponse } from '../types.js';
+import type { ApiResponse, CliConfig } from '../types.js';
 import { fetchWithProxy as undiciFetch } from './http.js';
-import { loadConfig, updateTokens } from './config.js';
+import { loadConfig, temporaryConfigExpired, temporaryWorkspaceExpiryMessage, updateTokens } from './config.js';
 import { retryAfterMs } from './poll-delay.js';
 
 /** The /v1 API host. Override for staging/tests via SOMEWHERE_API_URL
@@ -43,12 +43,23 @@ export class ApiClient {
   /** null: an unauthenticated client (no Authorization header, never a
    *  stored-login refresh), for the public anonymous-deploy routes. */
   private token: string | null;
+  private readonly temporaryConfig: CliConfig | null;
 
   constructor(token: string | null) {
     this.token = token;
+    const saved = token === null ? null : loadConfig();
+    this.temporaryConfig = saved?.temporary && saved.token === token ? saved : null;
+  }
+
+  private checkTemporaryExpiry(): void {
+    if (temporaryConfigExpired(this.temporaryConfig)) {
+      throw new CliApiError('TEMPORARY_SESSION_EXPIRED',
+        temporaryWorkspaceExpiryMessage(this.temporaryConfig.temp_expires_at), 401);
+    }
   }
 
   private authHeader(): Record<string, string> {
+    this.checkTemporaryExpiry();
     return this.token === null ? {} : { Authorization: `Bearer ${this.token}` };
   }
 
@@ -99,6 +110,7 @@ export class ApiClient {
         const label = operationLabel(method, path);
         if (label) Object.defineProperty(err, 'operation', { value: label, enumerable: false });
       }
+      if (err instanceof CliApiError && err.statusCode === 401) this.checkTemporaryExpiry();
       if (!(err instanceof CliApiError) || err.code !== 'API_KEY_EXPIRED' || opts?.refresh === false || this.token === null) throw err;
       const refreshed = await this.refreshAccessKey(opts?.timeoutMs);
       // refreshAccessKey now THROWS a clear re-login error when it can't refresh
@@ -129,6 +141,10 @@ export class ApiClient {
   ): Promise<StreamResponse> {
     let response = await this.requestStream(method, path, bodyFactory, opts);
     if (response.status !== 401 || this.token === null) return response;
+    if (temporaryConfigExpired(this.temporaryConfig)) {
+      await response.body?.cancel().catch(() => {});
+      this.checkTemporaryExpiry();
+    }
 
     let code: string | undefined;
     try {
@@ -172,13 +188,11 @@ export class ApiClient {
   ): Promise<StreamResponse> {
     const url = `${API_BASE_URL}${path}`;
     const timeoutMs = opts?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+    const headers = { ...this.authHeader(), ...opts?.headers };
     try {
       return await undiciFetch(url, {
         method,
-        headers: {
-          ...this.authHeader(),
-          ...opts?.headers,
-        },
+        headers,
         body: bodyFactory?.(),
         duplex: bodyFactory ? 'half' : undefined,
         signal: AbortSignal.timeout(timeoutMs),
@@ -211,6 +225,11 @@ export class ApiClient {
    *  API_KEY_EXPIRED. */
   async refreshAccessKey(timeoutMs?: number): Promise<boolean> {
     const config = loadConfig();
+    if (this.temporaryConfig) {
+      this.checkTemporaryExpiry();
+      throw new CliApiError('TEMPORARY_WORKSPACE_REJECTED',
+        `Somewhere could not use this temporary workspace. Run \`${cliInvocation()} claim\` to find its claim link, or \`${cliInvocation()} login\` to sign in.`, 401);
+    }
     if (config?.claim_access && config.token === this.token) {
       throw new CliApiError('SESSION_EXPIRED',
         `This app connection expired. Run \`${cliInvocation()} login\` and ask the account owner to approve it.`, 401);

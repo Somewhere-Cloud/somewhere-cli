@@ -218,7 +218,8 @@ export async function runCli(): Promise<void> {
     if (command === 'file') program.enablePositionalOptions();
     // Help, version and update never wait on, or fail because of, an API call.
     const skipRecovery = ['lint', 'upgrade', 'update', 'login', 'signup', 'logout', 'docs', 'help', '--help', '-h', '--version', '-V'].includes(command);
-    const recovery = skipRecovery ? { kind: 'none' as const } : await recoverClaimHandoff();
+    const replacesCredential = command === 'auth' && ['login', 'set'].includes(process.argv[3] || '');
+    const recovery = skipRecovery || replacesCredential ? { kind: 'none' as const } : await recoverClaimHandoff();
     if (recovery.kind === 'recovered' && recovery.message) {
       if (jsonOutputRequested || command === 'file') console.error(recovery.message);
       else info(recovery.message);

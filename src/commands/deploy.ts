@@ -802,7 +802,7 @@ export function registerDeploy(program: Command) {
       ) {
         const message = opts.project
           ? formatExpiredTemporaryProjectExplanation(storedConfig.temp_expires_at)
-          : formatLinkedProjectAccessRefusal(false, dir);
+          : `This temporary workspace expired on ${storedConfig.temp_expires_at}. ${formatLinkedProjectAccessRefusal(false, dir)}`;
         if (opts.json) {
           printJson({ ok: false, error: 'TEMPORARY_SESSION_EXPIRED', message, temp_expires_at: storedConfig.temp_expires_at });
         } else {

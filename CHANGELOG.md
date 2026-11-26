@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- `somewhere deploy --project <app>` from a folder that never deployed or pulled that app no longer replaces it when it is live. The deploy stops, and the message says to run `somewhere pull <app>`, or `--force --yes` to replace the app on purpose. The first deploy of a new or unpublished app, redeploys from the folder that deployed it, deploys after `somewhere pull`, and clones that include `.somewhere.json` work as before.
+
 ## 0.38.164
 
 - `somewhere docs` opens the overview. Use `--full` for the full manual, `--list` for the topic index, and `somewhere docs <topic> --search "<words>"` to search within one topic.

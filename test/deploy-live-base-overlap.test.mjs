@@ -1,5 +1,6 @@
 // `deploy --project <uuid>` from a folder with no recorded base: the live-base read (GET /deploy/status) starts beside
-// the project resolve (GET /projects/<ref>) instead of after it. Its result is used only when the
+// the project resolve (GET /projects/<ref>) instead of after it. Only a project with no published source gets a
+// declared base from it (null, its first version); a live release is never declared (tsk_2807e024). Its result is used only when the
 // resolve confirms the same canonical id; every refusal, the base selection and the request bodies are unchanged.
 // Held I/O against a local server: the resolve is held until the status read ARRIVES, so a serial client times out
 // of the hold instead.
@@ -43,7 +44,7 @@ function sendJson(res, status, payload) { res.writeHead(status, { 'content-type'
 
 /** resolveAs: the canonical id the resolve answers (null = 404). The resolve is HELD until the status read arrives
  *  (or HOLD_MS passes); `overlapped` records which happened. */
-function server({ resolveAs = UUID, statusFails = false, holdResolve = true, active = 'rel_live_7' } = {}) {
+function server({ resolveAs = UUID, statusFails = false, holdResolve = true, active = 'rel_live_7', unpublished = [] } = {}) {
   const log = []; const bodies = []; const t0 = Date.now();
   let statusArrived; const statusArrival = new Promise((r) => { statusArrived = r; });
   const state = { overlapped: null };
@@ -58,6 +59,7 @@ function server({ resolveAs = UUID, statusFails = false, holdResolve = true, act
         statusArrived();
         if (statusFails) { sendJson(res, 500, { ok: false, error: 'INTERNAL_ERROR', message: 'status unavailable' }); return; }
         const id = new URL(req.url, 'http://x').searchParams.get('project_id');
+        if (unpublished.includes(id)) { sendJson(res, 200, { ok: true, data: { published: false, active_release_id: null, prod_version: null } }); return; }
         sendJson(res, 200, { ok: true, data: { published: true, active_release_id: `${active}:${id}`, prod_version: 7 } });
         return;
       }
@@ -86,8 +88,8 @@ async function withServer(handler, fn) {
 }
 const deploy = (f, apiUrl, extra = []) => run(['deploy', '--project', ...extra, '--json'], { cwd: f.dir, env: { HOME: f.HOME, USERPROFILE: f.HOME, SOMEWHERE_API_URL: apiUrl } });
 
-test('uuid --project, unlinked folder: the live-base read overlaps the resolve; same body and base as before', async () => {
-  const f = fixture(); const srv = server();
+test('uuid --project, unlinked folder, unpublished project: the base read overlaps the resolve and declares the first version', async () => {
+  const f = fixture(); const srv = server({ unpublished: [UUID] });
   await withServer(srv.handler, async (apiUrl) => {
     const r = await deploy(f, apiUrl, [UUID]);
     assert.equal(r.status, 0, r.stderr);
@@ -96,7 +98,7 @@ test('uuid --project, unlinked folder: the live-base read overlaps the resolve; 
     assert.deepEqual([...srv.gets()].sort(), [`GET /v1/deploy/status?project_id=${UUID}`, `GET /v1/projects/${UUID}`], 'still exactly one resolve and one status read');
     assert.equal(srv.bodies.length, 1);
     assert.equal(srv.bodies[0].project_id, UUID);
-    assert.equal(srv.bodies[0].base_release_id, `rel_live_7:${UUID}`, 'the declared base is the live release of the resolved id');
+    assert.equal(srv.bodies[0].base_release_id, null, 'an unpublished project is deployed from genesis');
     assert.equal('force' in srv.bodies[0], false);
     const post = srv.log.find((l) => l.req === 'POST /v1/deploy').at;
     assert.ok(post < HOLD_MS, `upload started before the serial hold would have expired (${post} ms)`);
@@ -105,7 +107,7 @@ test('uuid --project, unlinked folder: the live-base read overlaps the resolve; 
 });
 
 test('the resolve answers a DIFFERENT canonical id: the early read is discarded and the base is read for the resolved id', async () => {
-  const f = fixture(); const srv = server({ resolveAs: OTHER });
+  const f = fixture(); const srv = server({ resolveAs: OTHER, unpublished: [OTHER] });
   await withServer(srv.handler, async (apiUrl) => {
     const r = await deploy(f, apiUrl, [UUID]);
     assert.equal(r.status, 0, r.stderr);
@@ -116,7 +118,7 @@ test('the resolve answers a DIFFERENT canonical id: the early read is discarded 
     assert.ok(at(`GET /v1/deploy/status?project_id=${OTHER}`) >= at(`GET /v1/projects/${UUID}`), 'and only after the resolve');
     assert.equal(gets.length, 3);
     assert.equal(srv.bodies[0].project_id, OTHER);
-    assert.equal(srv.bodies[0].base_release_id, `rel_live_7:${OTHER}`, 'never the early read of the unconfirmed id');
+    assert.equal(srv.bodies[0].base_release_id, null, 'the resolved (unpublished) id decides, never the early read of the unconfirmed id');
   });
 });
 
@@ -175,7 +177,7 @@ test('--force, a slug ref and a linked folder with a recorded base keep their ex
     }); }
 });
 
-test('a temporary key can deploy to its explicit project using the current release as its base', async () => {
+test('a temporary key naming a live project from an unlinked folder does not claim its live release as base', async () => {
   const f = fixture();
   writeFileSync(join(f.HOME, '.somewhere', 'config.json'), JSON.stringify({
     token: 'smt_temporary_fixture', temporary: true, user: { email: '', username: '' },
@@ -183,10 +185,9 @@ test('a temporary key can deploy to its explicit project using the current relea
   const srv = server();
   await withServer(srv.handler, async (apiUrl) => {
     const result = await deploy(f, apiUrl, [UUID]);
-    assert.equal(result.status, 0, result.stderr);
-    assert.equal(srv.bodies.length, 1);
+    assert.equal(srv.bodies.length, 1, result.stderr);
     assert.equal(srv.bodies[0].project_id, UUID);
-    assert.equal(srv.bodies[0].base_release_id, `rel_live_7:${UUID}`);
+    assert.equal('base_release_id' in srv.bodies[0], false, 'the platform decides (BASE_REQUIRED for a live app)');
     assert.equal('force' in srv.bodies[0], false);
   });
 });

@@ -1205,11 +1205,11 @@ test('promote does not advance the folder source base; the next deploy still nam
   });
 });
 
-// ── Explicit --project binds to the verified live release (founder 2026-10-23, ) ──
-// An unlinked folder that names its target deploys without --force: the CLI reads the
-// project's live release first and declares it as base_release_id, so the server's
-// stale-overwrite fence still decides. A linked folder's recorded base wins; a link to a
-// DIFFERENT project refuses; a stale answer is never retried or forced.
+// ── Explicit --project (tsk_2807e024) ──
+// An unlinked folder that names a LIVE target never claims its live release as base: the
+// server refuses with BASE_REQUIRED, and the CLI names pull and --force. A project with no
+// published source is deployed from genesis. A linked folder's recorded base wins; a link to
+// a DIFFERENT project refuses. Full cases: deploy-no-implied-live-base.test.mjs.
 
 function explicitProjectServer({ projectId = 'proj_explicit', active = 'rel_live_7', published = true, deployStatus = 200, deployAnswer, statusFails = false, projectFails = false } = {}) {
   const requests = [];
@@ -1241,36 +1241,14 @@ function explicitProjectServer({ projectId = 'proj_explicit', active = 'rel_live
   return { handler, requests, bodies };
 }
 
-test('explicit --project from an UNLINKED folder binds to the live release and deploys without --force', async () => {
+test('explicit --project from an UNLINKED folder never declares a live release as its base', async () => {
   const HOME = mkdtempSync(join(tmpdir(), 'sw-explicit-unlinked-home-'));
   const fixtureDir = mkdtempSync(join(tmpdir(), 'sw-explicit-unlinked-fixture-'));
   writeLogin(HOME);
   writeFixture(fixtureDir);
-  const server = explicitProjectServer();
-  await withServer(server.handler, async (apiUrl) => {
-    const result = await run(['deploy', '--project', 'explicit-site', '--json'], {
-      cwd: fixtureDir,
-      env: { HOME, USERPROFILE: HOME, SOMEWHERE_API_URL: apiUrl },
-    });
-    assert.equal(result.status, 0, `stdout:\n${result.stdout}\nstderr:\n${result.stderr}`);
-    assert.equal(server.bodies.length, 1, 'exactly one deploy request');
-    assert.equal(server.bodies[0].project_id, 'proj_explicit', 'the ref is resolved to the canonical project id');
-    assert.equal(server.bodies[0].base_release_id, 'rel_live_7', 'the live release read moments before is the declared base');
-    assert.equal('force' in server.bodies[0], false, 'never forced');
-    assert.equal('base_version' in server.bodies[0], false);
-    assert.deepEqual(server.requests.filter((r) => r.startsWith('GET') && !r.includes('/notices')), ['GET /v1/projects/explicit-site', 'GET /v1/deploy/status?project_id=proj_explicit'], 'identity resolved, then the live pointer read');
-    assert.equal(existsSync(join(fixtureDir, '.somewhere.json')), false, 'an unlinked folder stays unlinked');
-  });
-});
-
-test('explicit --project: a release that lands between the bind read and the publish is refused, not retried or forced', async () => {
-  const HOME = mkdtempSync(join(tmpdir(), 'sw-explicit-race-home-'));
-  const fixtureDir = mkdtempSync(join(tmpdir(), 'sw-explicit-race-fixture-'));
-  writeLogin(HOME);
-  writeFixture(fixtureDir);
   const server = explicitProjectServer({
-    deployStatus: 409,
-    deployAnswer: { ok: false, error: 'STALE_RELEASE_BASE', message: 'Another release landed first.', data: { base_release_id: 'rel_live_7', active_release_id: 'rel_live_8', changed_files: ['index.html'] } },
+    deployStatus: 400,
+    deployAnswer: { ok: false, error: 'BASE_REQUIRED', message: 'A live deploy must say which source it was prepared from.', data: {} },
   });
   await withServer(server.handler, async (apiUrl) => {
     const result = await run(['deploy', '--project', 'explicit-site'], {
@@ -1278,11 +1256,12 @@ test('explicit --project: a release that lands between the bind read and the pub
       env: { HOME, USERPROFILE: HOME, SOMEWHERE_API_URL: apiUrl },
     });
     assert.equal(result.status, 1, `stdout:\n${result.stdout}\nstderr:\n${result.stderr}`);
-    assert.match(result.stderr, /live is newer than this folder/);
-    assert.match(result.stderr, /Nothing was changed/);
-    assert.equal(server.bodies.length, 1, 'one deploy request; the refusal is not retried');
-    assert.equal(server.bodies[0].base_release_id, 'rel_live_7');
-    assert.equal(existsSync(join(fixtureDir, '.somewhere.json')), false);
+    assert.equal(server.bodies.length, 1, 'exactly one deploy request; the refusal is not retried');
+    assert.equal(server.bodies[0].project_id, 'proj_explicit', 'the ref is resolved to the canonical project id');
+    assert.equal('base_release_id' in server.bodies[0], false, 'the live release is not claimed as this folder\'s base');
+    assert.equal('force' in server.bodies[0], false, 'never forced');
+    assert.match(result.stderr, /already live, and this folder has no record of deploying or pulling it/);
+    assert.equal(existsSync(join(fixtureDir, '.somewhere.json')), false, 'an unlinked folder stays unlinked');
   });
 });
 

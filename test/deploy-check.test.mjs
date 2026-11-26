@@ -29,7 +29,9 @@ export default schema({
 test('runs the deploy TypeScript, never another version', () => {
   assert.equal(DEPLOY_CHECK_TYPESCRIPT_VERSION, '5.6.3');
   const invocation = deployCheckTsc(project({}), 'linux');
-  assert.deepEqual(invocation, { command: 'npx', args: ['-y', '-p', 'typescript@5.6.3', 'tsc'] });
+  assert.equal(invocation.command, 'npx');
+  assert.deepEqual(invocation.args.slice(0, -1), ['-y', '-p', 'typescript@5.6.3', '--', 'node']);
+  assert.match(invocation.args.at(-1), /deploy-check\.cjs$/);
   const other = project({ 'node_modules/typescript/package.json': JSON.stringify({ version: '5.9.3' }) });
   assert.equal(deployCheckTsc(other, 'linux').command, 'npx');
 });
@@ -153,6 +155,23 @@ test('sw.endpoint is defined only in function modules; other bare sw stays repor
   const result = await runDeployCheck(dir);
   assert.deepEqual(findings(result), ['reference:TS2304@api/bare.ts:1', 'reference:TS2304@src/main.ts:1']);
   assert.deepEqual(readdirSync(dir).filter((name) => name.startsWith('.__somewhere')), [], 'temporary config and declarations are removed');
+});
+
+test('checks contextual handler methods and options in function modules', async () => {
+  const result = await runDeployCheck(project({
+    'db/schema.ts': SCHEMA,
+    'api/typed.ts': `export default sw.endpoint({
+      auth: 'required',
+      handler: async (_input, sw) => {
+        await sw.db.get('notes', '1', { ownerOnly: true });
+        await sw.db.server.tx([{ op: 'insert', table: 'notes', values: { title: 'hi', user_id: 'owner' }, onConflict: 'ignore' }]);
+        await sw.db.server.tx([{ op: 'insert', table: 'notes', values: { title: 'hi', user_id: 'owner' }, options: { onConflict: 'ignore' } }]);
+        return { ok: true };
+      },
+    });`,
+  }));
+  assert.equal(result.error, undefined);
+  assert.deepEqual(findings(result), ['type:TS2339@api/typed.ts:4', 'type:TS2353@api/typed.ts:5']);
 });
 
 test('default typecheck checks uploaded routes outside tsconfig include and preserves empty selects', (t) => {

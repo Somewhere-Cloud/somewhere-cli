@@ -4556,8 +4556,8 @@ var require_consumer_contract = __commonJS({
   "worker/containers/compile/consumer-contract.cjs"(exports2, module2) {
     "use strict";
     var CONSUMER_CONTRACT2 = Object.freeze({
-      version: 44,
-      digest: "07384f39fd3d7d3b4a2f19ec55a6c309476402fc2af096ae0cd47b46780cbd46"
+      version: 45,
+      digest: "9932e80f7050d76c32150a1434c17be8b27e4ac075f18b642a7f0192279177cf"
     });
     var MEMBERSHIPS = "memberships: table({ id: id(), team_id: text(), member_id: text() }, { scope: owner(), client: { read: true } }),";
     var SHARES = "shares: table({ id: id(), grantee_id: text() }, { scope: owner(), client: { read: true, create: ['grantee_id'], delete: true }, unique: [['user_id', 'grantee_id']] }),";
@@ -8284,6 +8284,7 @@ function readTable(r, rawName, nameLine) {
   }
   r.tryPunct(",");
   r.expectPunct(")", `closing table("${rawName}")`);
+  const defaultedScope = scope === null;
   scope ??= { kind: "owner", column: DEFAULT_OWNER_COLUMN };
   const managedOwner = scopeOwner(scope);
   if (columns.some((column) => column.name === SHARED_AUTHOR_COLUMN || column.renamedFrom === SHARED_AUTHOR_COLUMN) || removedColumns.includes(SHARED_AUTHOR_COLUMN) || managedOwner?.column === SHARED_AUTHOR_COLUMN) {
@@ -8440,7 +8441,7 @@ function readTable(r, rawName, nameLine) {
       throw new SchemaTsError(`line ${at}: ${message}`);
     });
   }
-  return { kind: "table", table: { name, scope, relations, columns, indexes, uniques, removedColumns: [...removedColumns].sort(), ...client ? { client } : {}, ...rooms ? { rooms } : {}, ...columnRules ? { columnRules } : {}, ...memberOf ? { memberOf } : {} } };
+  return { kind: "table", table: { name, scope, ...defaultedScope ? { defaultedScope: true } : {}, relations, columns, indexes, uniques, removedColumns: [...removedColumns].sort(), ...client ? { client } : {}, ...rooms ? { rooms } : {}, ...columnRules ? { columnRules } : {}, ...memberOf ? { memberOf } : {} } };
 }
 function extractSchemaTs(source, options = {}) {
   if (typeof source !== "string" || source.trim().length === 0) {

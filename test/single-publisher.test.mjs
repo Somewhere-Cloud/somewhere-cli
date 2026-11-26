@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync } from 'node:fs';
-import { validateCandidate, assertCandidateIdentity, assertProvenanceSource, pollVerification, readPropagatedRelease } from '../scripts/publish-release.mjs';
+import { validateCandidate, assertCandidateIdentity, assertProvenanceSource, pollVerification, readPropagatedRelease, pollPromotion, readPromotionCandidate } from '../scripts/publish-release.mjs';
 import { readPublishedVersion } from '../scripts/version-guard.mjs';
 
 const source = 'a'.repeat(40);
@@ -27,7 +27,7 @@ test('canonical publisher alone publishes, checks the registry, and pins immutab
   assert.match(guard, /contents: read/);
   for (const workflow of [guard, publisher]) {
     assert.match(workflow, /node-version: '22'/);
-    assert.match(workflow, /npm install -g npm@11\.19\.0/);
+    assert.match(workflow, /npm install -g npm@11\.21\.3/);
   }
   assert.doesNotMatch(guard, /npm ci|npm test|npm run build/);
   assert.match(guard, /run: node scripts\/version-guard\.mjs/);
@@ -42,9 +42,13 @@ test('canonical publisher alone publishes, checks the registry, and pins immutab
   const starterGate = publisher.indexOf('run: node scripts/check-live-starters.mjs "$TARBALL"');
   assert.ok(starterGate > publisher.indexOf('node scripts/check-public-package.mjs') && starterGate < publishAt,
     'deploy the exact packed starters before npm receives the release');
-  assert.match(publisher, /npm publish --provenance --access public "\$TARBALL"/);
+  assert.match(publisher, /npm publish --provenance --access public --tag release-candidate "\$TARBALL"/);
+  const promote = 'run: node scripts/publish-release.mjs promote "$PUBLISHED_SOURCE" "$EXPECTED_VERSION"';
+  const promoteAt = publisher.indexOf(promote);
   const verifyAt = publisher.indexOf('  verify:\n');
-  assert.ok(publishAt >= 0 && verifyAt > publishAt, 'verify the registry artifact in a separate job after publish');
+  assert.ok(publishAt >= 0 && promoteAt > publishAt && verifyAt > promoteAt,
+    'publish under the candidate tag, promote after the candidate check, then verify latest in a separate job');
+  assert.match(publisher.slice(publishAt, verifyAt), /PUBLISHED_SOURCE: \$\{\{ steps.final.outputs.published_head \}\}/);
   const registryCheck = publisher.slice(verifyAt);
   assert.match(registryCheck, /needs: publish/);
   assert.match(registryCheck, /permissions:\n      contents: read/);
@@ -130,6 +134,57 @@ test('a visible version with a stale latest tag waits inside the verification re
     manifest,
   );
   assert.equal(elapsed, 60_000);
+});
+
+test('promotion polls the exact release while latest still points at the previous version', async () => {
+  const version = '1.2.3';
+  const manifest = { name: '@somewhere-cloud/cli', version, gitHead: source };
+  let elapsed = 0;
+  let artifactReads = 0;
+  const fetcher = async (url) => {
+    if (url.endsWith('/dist-tags')) {
+      return Response.json(elapsed === 0 ? { latest: '1.2.2' } : { latest: '1.2.2', 'release-candidate': version });
+    }
+    assert.match(url, /\/1\.2\.3$/);
+    return elapsed === 15_000 ? new Response(null, { status: 404 }) : Response.json(manifest);
+  };
+  const verifyArtifact = async (actualManifest, actualSource, actualVersion) => {
+    assert.deepEqual(actualManifest, manifest);
+    assert.equal(actualSource, source);
+    assert.equal(actualVersion, version);
+    if (++artifactReads === 1) throw new Error('tarball GET returned HTTP 404');
+  };
+  assert.equal(await pollPromotion(
+    () => readPromotionCandidate(source, version, fetcher, verifyArtifact),
+    async (ms) => { elapsed += ms; },
+    () => elapsed,
+  ), '1.2.2');
+  assert.equal(elapsed, 45_000);
+  assert.equal(artifactReads, 2);
+});
+
+test('promotion expires with the last read failure', async () => {
+  let elapsed = 0;
+  await assert.rejects(pollPromotion(
+    async () => { throw new Error('tarball GET returned HTTP 404'); },
+    async (ms) => { elapsed += ms; },
+    () => elapsed,
+  ), /Promotion timed out after 15 minutes.*tarball GET returned HTTP 404/);
+  assert.equal(elapsed, 15 * 60_000);
+});
+
+test('promotion skips an already-current version and refuses a candidate from another source', async () => {
+  const version = '1.2.3';
+  const unexpectedArtifact = () => assert.fail('wrong candidate reached artifact verification');
+  assert.equal(await readPromotionCandidate(source, version, async (url) => {
+    assert.match(url, /\/dist-tags$/);
+    return Response.json({ latest: version });
+  }, unexpectedArtifact), null);
+  await assert.rejects(readPromotionCandidate(source, version, async (url) => Response.json(
+    url.endsWith('/dist-tags')
+      ? { latest: '1.2.2', 'release-candidate': version }
+      : { name: '@somewhere-cloud/cli', version, gitHead: 'b'.repeat(40) },
+  ), unexpectedArtifact), /registry source identity mismatch/);
 });
 
 test('additional exact provenance source check rejects another commit', () => {

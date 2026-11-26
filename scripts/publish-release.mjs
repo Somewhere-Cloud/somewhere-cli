@@ -1,8 +1,12 @@
 import { execFileSync } from 'node:child_process';
 import { appendFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { setTimeout as sleep } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 import { RELEASE_INPUTS, inspectVersion, readPublishedVersion } from './version-guard.mjs';
+
+const packageName = '@somewhere-cloud/cli';
+const registry = 'https://registry.npmjs.org';
 
 export function validateCandidate(source, version) {
   if (!/^[0-9a-f]{40}(?![\s\S])/.test(source ?? '')) throw new Error('source must be an exact lowercase 40-hex commit');
@@ -42,7 +46,7 @@ export function assertProvenanceSource(body, source) {
   }
 }
 
-export async function pollVerification(verify, pause = (ms) => new Promise((done) => setTimeout(done, ms))) {
+export async function pollVerification(verify, pause = sleep) {
   const propagationWindowMs = 120 * 60_000;
   let delayMs = 60_000;
   let waitedMs = 0;
@@ -62,31 +66,81 @@ export async function pollVerification(verify, pause = (ms) => new Promise((done
 }
 
 export async function readPropagatedRelease(source, version, fetcher = fetch) {
-  const packageName = '@somewhere-cloud/cli';
-  const manifest = await readPublishedVersion(packageName, version, fetcher);
-  if (!manifest || manifest.gitHead !== source) throw new Error('registry source identity mismatch or pending publication');
-  const latestResponse = await fetcher(`https://registry.npmjs.org/${encodeURIComponent(packageName)}/latest`, { signal: AbortSignal.timeout(15_000) });
+  const manifest = await readExactRelease(source, version, fetcher);
+  const latestResponse = await fetcher(`${registry}/${encodeURIComponent(packageName)}/latest`, { signal: AbortSignal.timeout(15_000) });
   if (!latestResponse.ok) throw new Error(`npm latest lookup failed: HTTP ${latestResponse.status}`);
   const latest = await latestResponse.json();
   if (latest.version !== version) throw new Error(`npm latest is ${latest.version ?? 'missing'}, expected ${version}`);
   return manifest;
 }
 
-async function verifyRegistry(source, version) {
+async function readExactRelease(source, version, fetcher) {
+  const manifest = await readPublishedVersion(packageName, version, fetcher);
+  if (!manifest || manifest.gitHead !== source) throw new Error('registry source identity mismatch or pending publication');
+  return manifest;
+}
+
+async function getRegistry(url, fetcher) {
+  const response = await fetcher(url, { signal: AbortSignal.timeout(15_000), redirect: 'error' });
+  if (response.status !== 200) throw new Error(`GET ${url} returned HTTP ${response.status}`);
+  return response;
+}
+
+async function verifyReleaseArtifact(manifest, source, version, fetcher = fetch) {
   const { parseOfficialRelease, verifyTarballIntegrity, verifyPublishedProvenance } = await import('../dist/lib/update-security.js');
-  const get = async (url) => {
-    const response = await fetch(url, { signal: AbortSignal.timeout(15_000) });
-    if (!response.ok) throw new Error(`verification read failed: HTTP ${response.status}`);
-    return response;
-  };
+  const release = parseOfficialRelease({ 'dist-tags': { latest: version }, versions: { [version]: manifest } });
+  const tarball = await getRegistry(release.tarballUrl, fetcher);
+  verifyTarballIntegrity(new Uint8Array(await tarball.arrayBuffer()), release.integrity);
+  const provenance = await (await getRegistry(release.attestationUrl, fetcher)).json();
+  await verifyPublishedProvenance(provenance, release);
+  assertProvenanceSource(provenance, source);
+  console.log(JSON.stringify({ verified: true, version, publishedHead: source, integrity: release.integrity }));
+}
+
+export async function pollPromotion(check, pause = sleep, now = Date.now) {
+  const deadline = now() + 15 * 60_000;
+  for (;;) {
+    try {
+      return await check();
+    } catch (error) {
+      const remaining = deadline - now();
+      if (remaining <= 0) {
+        throw new Error(`Promotion timed out after 15 minutes. Check the candidate in npm and retry promotion. Last read: ${error.message}`);
+      }
+      await pause(Math.min(15_000, remaining));
+    }
+  }
+}
+
+export async function readPromotionCandidate(source, version, fetcher = fetch, verifyArtifact = verifyReleaseArtifact) {
+  const tags = await (await getRegistry(`${registry}/-/package/${encodeURIComponent(packageName)}/dist-tags`, fetcher)).json();
+  if (tags.latest === version) return null;
+  if (!tags.latest || tags['release-candidate'] !== version) {
+    throw new Error(`npm latest or release-candidate@${version} is not visible yet (latest=${tags.latest}, release-candidate=${tags['release-candidate']})`);
+  }
+  const manifest = await readExactRelease(source, version, fetcher);
+  await verifyArtifact(manifest, source, version, fetcher);
+  return tags.latest;
+}
+
+async function promoteRelease(source, version) {
+  const { default: semver } = await import('semver');
+  const latest = await pollPromotion(() => readPromotionCandidate(source, version));
+  if (latest === null) {
+    console.log(`npm latest already points to ${packageName}@${version}.`);
+    return;
+  }
+  if (semver.prerelease(version) || !semver.gt(version, latest)) {
+    throw new Error(`Expected a stable version newer than npm latest (${latest}), got ${version}.`);
+  }
+  console.log(`Promoting ${packageName} from ${latest} to ${version}.`);
+  execFileSync('npm', ['dist-tag', 'add', `${packageName}@${version}`, 'latest', '--registry', registry], { stdio: 'inherit' });
+}
+
+async function verifyRegistry(source, version) {
   await pollVerification(async () => {
     const manifest = await readPropagatedRelease(source, version);
-    const release = parseOfficialRelease({ 'dist-tags': { latest: version }, versions: { [version]: manifest } });
-    verifyTarballIntegrity(new Uint8Array(await (await get(release.tarballUrl)).arrayBuffer()), release.integrity);
-    const provenance = await (await get(release.attestationUrl)).json();
-    await verifyPublishedProvenance(provenance, release);
-    assertProvenanceSource(provenance, source);
-    console.log(JSON.stringify({ verified: true, version, publishedHead: source, integrity: release.integrity }));
+    await verifyReleaseArtifact(manifest, source, version);
   });
 }
 
@@ -94,6 +148,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   const [phase, source, version] = process.argv.slice(2);
   validateCandidate(source, version);
   if (phase === 'check') await checkCandidate(source, version);
+  else if (phase === 'promote') await promoteRelease(source, version);
   else if (phase === 'verify') await verifyRegistry(source, version);
   else throw new Error('unknown publisher phase');
 }

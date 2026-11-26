@@ -88,6 +88,17 @@ test('401 API_KEY_EXPIRED refreshes the key, persists it, and retries once', asy
   assert.equal(cfg.refresh_token, 'smtr_new');
 });
 
+test('a different bearer never refreshes or retries using the saved login', async () => {
+  mode = 'happy';
+  requests.length = 0;
+  seedConfig('smt_old', 'smtr_old');
+
+  const client = new ApiClient('smt_other');
+  await assert.rejects(() => client.call('GET', '/whoami'), { code: 'API_KEY_EXPIRED' });
+  assert.deepEqual(requests.map((r) => r.url), ['/whoami']);
+  assert.equal(readConfig().refresh_token, 'smtr_old');
+});
+
 test('expired key + no refresh token (old-format config) → clear re-login error, not a bare 401', async () => {
   mode = 'happy';
   requests.length = 0;

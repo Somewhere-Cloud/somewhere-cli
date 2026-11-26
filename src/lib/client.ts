@@ -230,7 +230,10 @@ export class ApiClient {
       throw new CliApiError('TEMPORARY_WORKSPACE_REJECTED',
         `Somewhere could not use this temporary workspace. Run \`${cliInvocation()} claim\` to find its claim link, or \`${cliInvocation()} login\` to sign in.`, 401);
     }
-    if (config?.claim_access && config.token === this.token) {
+    // A temporary deploy beside a regular login uses a different bearer. An
+    // expired request must never be retried under the regular login's identity.
+    if (config && config.token !== this.token) return false;
+    if (config?.claim_access) {
       throw new CliApiError('SESSION_EXPIRED',
         `This app connection expired. Run \`${cliInvocation()} login\` and ask the account owner to approve it.`, 401);
     }

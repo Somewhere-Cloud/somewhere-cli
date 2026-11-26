@@ -363,11 +363,11 @@ test('sw.endpoint declaration types auth, body and rate limit', async () => {
   writeFileSync(join(dir, 'api/probe.ts'), `export const ok = sw.endpoint({
   auth: 'required',
   body: { title: 'string', note: 'string?', nested: { n: 'number' } },
-  rateLimit: '10/minute',
+  rateLimit: '30 / MINUTE',
   handler: async ({ body, user }) => ({ id: user.id, title: body.title.trim(), n: body.nested.n + 1, note: body.note }),
 });
 export const nullableUser = sw.endpoint({ auth: 'optional', handler: async ({ user }) => user.id });
-export const badRate = sw.endpoint({ rateLimit: 'ten per minute', handler: async () => null });
+export const badRate = sw.endpoint({ rateLimit: 10, handler: async () => null });
 export const wrongField = sw.endpoint({ body: { title: 'string' }, handler: async ({ body }) => { const n: number = body.title; return n; } });
 export const staffOnly = sw.endpoint({ roles: ['staff'], body: { note: 'string' }, handler: async ({ user, body }) => user.email.trim() + body.note });
 `);

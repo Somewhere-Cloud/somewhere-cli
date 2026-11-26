@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { spawn } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, readdirSync, readFileSync, statSync, writeFileSync, chmodSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -90,6 +90,38 @@ test('db restore-points lists, takes and deletes through the restore point route
   assert.equal(r.stdout, 'CREATE TABLE t (x);\nINSERT INTO t VALUES (1);\n', 'stdout is exactly the SQL');
   assert.match(r.stderr, /read in pages|while the app kept running/i);
   assert.deepEqual(requests.find((q) => q.path === '/v1/db/exports')?.body, { project_id: 'fixture-project' });
+  route = null;
+
+  // Declared tables too large for one response fall back the same way; the file is private (0600) even when it
+  // replaces an existing private backup; the plane is checked before writing; --json needs --output.
+  const out = join(home, 'backup.sql');
+  writeFileSync(out, 'old'); chmodSync(out, 0o600);
+  route = (req) => req.url === '/v1/db/dump' ? { status: 413, body: { ok: false, error: 'EXPORT_SIZE_LIMIT_EXCEEDED', message: 'too large' } }
+    : req.url === '/v1/db/exports' ? { status: 202, body: { ok: true, data: { export: { ...ex, plane: 'managed', state: 'running' } } } }
+    : req.url.startsWith('/v1/db/exports/cp_fixture/sql') ? { type: 'application/sql', body: 'CREATE TABLE m (x);\n' }
+    : { body: { ok: true, data: { export: { ...ex, plane: 'managed' } } } };
+  r = await command([], ['dump', '--project', 'fixture-project', '--plane', 'managed', '--output', out]);
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(readFileSync(out, 'utf8'), 'CREATE TABLE m (x);\n');
+  assert.equal(statSync(out).mode & 0o777, 0o600, 'the replaced backup stays private');
+  assert.deepEqual(readdirSync(home).filter((f) => f.endsWith('.tmp')), []);
+  route = (req) => req.url === '/v1/db/dump' ? { status: 413, body: { ok: false, error: 'DUMP_SIZE_LIMIT_EXCEEDED', message: 'too large' } }
+    : req.url === '/v1/db/exports' ? { status: 202, body: { ok: true, data: { export: { ...ex, plane: 'managed' } } } }
+    : { body: { ok: true, data: { export: { ...ex, plane: 'managed' } } } };
+  r = await command([], ['dump', '--project', 'fixture-project', '--output', join(home, 'raw.sql')]);
+  assert.notEqual(r.status, 0); assert.match(r.stdout + r.stderr, /export of the managed tables, not the raw ones\. Nothing was written/);
+  assert.deepEqual(readdirSync(home).filter((f) => f === 'raw.sql' || f.endsWith('.tmp')), []);
+  route = (req) => req.url === '/v1/db/dump' ? { status: 413, body: { ok: false, error: 'DUMP_SIZE_LIMIT_EXCEEDED', message: 'too large' } }
+    : req.url.startsWith('/v1/db/exports/cp_fixture/sql') ? { status: 500, body: { ok: false, error: 'INTERNAL_ERROR' } }
+    : req.url === '/v1/db/exports' ? { status: 202, body: { ok: true, data: { export: ex } } } : { body: { ok: true, data: { export: ex } } };
+  r = await command([], ['dump', '--project', 'fixture-project', '--output', join(home, 'failed.sql')]);
+  assert.notEqual(r.status, 0);
+  assert.deepEqual(readdirSync(home).filter((f) => f === 'failed.sql' || f.endsWith('.tmp')), [], 'nothing is left behind');
+  const before = requests.length;
+  route = (req) => req.url === '/v1/db/dump' ? { status: 413, body: { ok: false, error: 'DUMP_SIZE_LIMIT_EXCEEDED', message: 'too large' } } : { body: { ok: true, data: { export: ex } } };
+  r = await command([], ['dump', '--project', 'fixture-project', '--json']);
+  assert.notEqual(r.status, 0); assert.match(r.stdout + r.stderr, /pass --output <file> with --json/);
+  assert.ok(!requests.slice(before).some((q) => q.path === '/v1/db/exports'), 'nothing started');
   route = null;
 
   reply = { status: 403, body: { ok: false, error: 'OWNER_REQUIRED', message: 'Only the project owner can take, list or delete database restore points. Nothing changed.' } };

@@ -32,6 +32,15 @@ on:
         required: true
         type: string
 
+      platform_source_sha:
+        description: Platform candidate commit for a paired release
+        required: false
+        type: string
+      rehearsed_sha512:
+        description: SHA-512 of the rehearsed paired-release tarball
+        required: false
+        type: string
+
 permissions:
   contents: read
 
@@ -70,6 +79,12 @@ jobs:
             if (context.sha !== source) throw new Error('workflow OIDC source differs from candidate');
             const master = await github.rest.repos.getBranch({ ...context.repo, branch: 'master' });
             if (master.data.commit.sha !== source) throw new Error('stale source');
+            const platformSource = context.payload.inputs.platform_source_sha || '';
+            const rehearsedDigest = context.payload.inputs.rehearsed_sha512 || '';
+            if ((platformSource || rehearsedDigest) &&
+                (!/^[0-9a-f]{40}(?![\s\S])/.test(platformSource) || !/^[0-9a-f]{128}(?![\s\S])/.test(rehearsedDigest))) {
+              throw new Error('Paired releases need the platform commit and rehearsed SHA-512.');
+            }
             core.setOutput('source', source);
             core.setOutput('version', version);
       - uses: actions/checkout@v4
@@ -105,6 +120,7 @@ jobs:
         id: artifact
         env:
           SOURCE_SHA: ${{ steps.trigger.outputs.source }}
+          REHEARSED_SHA512: ${{ inputs.rehearsed_sha512 }}
         run: node scripts/check-public-package.mjs "$RUNNER_TEMP" "$SOURCE_SHA"
       - name: Deploy default, minimal and bare fixtures from the tarball to production
         if: steps.before.outputs.mode == 'release'
@@ -130,10 +146,16 @@ jobs:
         if: steps.final.outputs.mode == 'release'
         env:
           TARBALL: ${{ steps.artifact.outputs.tarball }}
+          REHEARSED_SHA512: ${{ inputs.rehearsed_sha512 }}
+          PLATFORM_SOURCE_SHA: ${{ inputs.platform_source_sha }}
           EXPECTED_VERSION: ${{ steps.candidate.outputs.version }}
         run: |
           if [ -n "${NODE_AUTH_TOKEN:-}" ] || [ -n "${NPM_TOKEN:-}" ]; then echo "an npm token is set; this publisher authenticates only through OIDC" >&2; exit 1; fi
           if npm view "@somewhere-cloud/cli@$EXPECTED_VERSION" version >/dev/null 2>&1; then echo "@somewhere-cloud/cli@$EXPECTED_VERSION already exists on npm" >&2; exit 1; fi
+          if [ -n "$REHEARSED_SHA512" ]; then
+            printf '%s  %s\n' "$REHEARSED_SHA512" "$TARBALL" | sha512sum --check --status
+            printf 'Paired platform commit: %s\nRehearsed CLI SHA-512: %s\n' "$PLATFORM_SOURCE_SHA" "$REHEARSED_SHA512" >> "$GITHUB_STEP_SUMMARY"
+          fi
           npm publish --provenance --access public "$TARBALL"
 
   verify:

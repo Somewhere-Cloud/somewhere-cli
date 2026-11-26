@@ -40,6 +40,8 @@ import { formatNextActions, nextActions } from '../lib/next-actions.js';
 import { bold, dim, error, info, printJson, printJsonError, success, teal, warn } from '../lib/output.js';
 import { isRecord, resolveProjectRef } from '../lib/platform-command.js';
 
+const PASSWORD_EXPORT_REQUEST = "The app's owner can request password hashes at migration@somewhere.cloud.";
+
 async function readAuthToken(): Promise<string> {
   const envToken = process.env.SOMEWHERE_TOKEN?.trim();
   if (envToken) return envToken;
@@ -449,7 +451,7 @@ export function registerAuth(program: Command) {
 
   auth
     .command('export [project]')
-    .description('Retired. App owners can request password hashes at migration@somewhere.cloud.')
+    .description(PASSWORD_EXPORT_REQUEST)
     .option('--project <ref>', 'Project ID, name, slug, or subdomain (defaults to the linked project)')
     .requiredOption('--output <path>', 'New local JSON file to create (existing paths are never overwritten)')
     .allowExcessArguments(false)
@@ -535,7 +537,11 @@ export function registerAuth(program: Command) {
         if (outputCreated && !wroteOutput) {
           try { unlinkSync(destination); } catch { /* best effort */ }
         }
-        error(err instanceof Error ? err.message : String(err), err);
+        if (err instanceof CliApiError && err.statusCode === 501 && err.code === 'AUTH_FEATURE_UNAVAILABLE') {
+          error(PASSWORD_EXPORT_REQUEST, undefined, err);
+        } else {
+          error(err instanceof Error ? err.message : String(err), err);
+        }
         process.exitCode = 1;
       }
     });

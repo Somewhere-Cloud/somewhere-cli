@@ -165,11 +165,52 @@ test('an invalid file collection is a schema error, not a silent pass', async t 
   assert.equal(existsSync(join(root, 'src', FILES_DECLARATION_FILE)), false);
 });
 
-test('the data declaration keeps one sw global and the vendored endpoint types', t => {
+test('the data declaration keeps one editor endpoint global and the vendored endpoint types', t => {
   const root = fixture(t, { 'db/schema.ts': tablesOnly });
   prepareDeclaredData(root);
   const data = readFileSync(join(root, 'src', DATA_DECLARATION_FILE), 'utf8');
-  assert.equal(data.match(/declare const sw: \{/g)?.length, 1);
+  assert.deepEqual(data.match(/^declare const sw: [^\n]+/gm), [
+    'declare const sw: SomewhereEndpointGlobal;',
+  ]);
   assert.equal(data.match(/interface SomewhereEndpointUser \{/g)?.length, 1);
   assert.ok(data.includes(generator.ENDPOINT_DECLARATION), 'endpoint input types are the compiler bytes');
+});
+
+
+test('bare job, cron and API handlers keep server types alongside declared file collections', async t => {
+  const routes = ['cron', 'job', 'plain'];
+  const handler = (route, calls) => `export default async function (req: Request, sw: SomewhereRuntimeContext) {
+  ${route !== 'plain' ? 'if (!(await sw.jobs.verifyInvocation(req))) return new Response(null, { status: 403 });' : ''}
+  ${calls}
+  return new Response(null, { status: 204 });
+}`;
+  const root = fixture(t, {
+    'tsconfig.json': JSON.stringify({ compilerOptions, include: ['api', 'src'] }),
+    'src/main.ts': `import { files } from 'somewhere:files';
+export const list = () => files.uploads.list({ limit: 10 });`,
+    ...Object.fromEntries(routes.map(route => [`api/${route}.ts`, handler(route, `
+  await sw.fs.server.read('/uploads/report.pdf');
+  const { data } = await sw.db.server.from('teams', { columns: ['name'] });
+  const name: string | undefined = data[0]?.name;
+  void name;
+`)])),
+  });
+  const accepted = await check(root);
+  assert.equal(accepted.ok, true, accepted.raw);
+
+  for (const route of routes) {
+    writeFileSync(join(root, `api/${route}.ts`), handler(route, `
+  await sw.fs.server.noSuchMethod();
+  await sw.db.server.get('teams', 'id');
+`));
+  }
+  writeFileSync(join(root, 'src/main.ts'), `import { files } from 'somewhere:files';
+export const wrongCollection = () => files.missing.list();
+export const noServerContext = () => sw.fs.list();`);
+  const rejected = await check(root);
+  assert.deepEqual(codes(rejected), [
+    ...routes.flatMap(route => [`api/${route}.ts:4 TS2339`, `api/${route}.ts:5 TS2339`]),
+    'src/main.ts:2 TS2339',
+    'src/main.ts:3 TS2339',
+  ], rejected.raw);
 });

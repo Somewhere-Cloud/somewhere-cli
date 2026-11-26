@@ -1548,6 +1548,7 @@ export function registerDeploy(program: Command) {
             ? `Version ${result.previous.version} is kept; ${cliInvocation()} rollback${target}${confirmation} returns to it.${result.previous.note ? ` Note ${JSON.stringify(result.previous.note)}.` : ''}`
             : result.previous.message);
         }
+        for (const line of result.schema_notes ?? []) console.log(line);
         if (Array.isArray(result.privacy_lines) && (!firstTemporaryRelease || opts.timing)) {
           const lines = result.privacy_lines.filter(line =>
             typeof line === 'string' && (opts.timing || !/^warning:/i.test(line)));
@@ -1789,6 +1790,7 @@ export function registerDeploy(program: Command) {
 
 export interface DeployResult {
   previous?: { version: number; rollback_available: boolean; note?: string; message: string };
+  schema_notes?: string[];
   privacy_lines?: string[];
   unassigned_app_roles?: Array<{ role: string; sign_in_url?: string; command: string }>;
   project_id?: string;

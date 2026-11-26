@@ -205,6 +205,30 @@ test('default typecheck checks uploaded routes outside tsconfig include and pres
   assert.equal(check('--project').status, 0);
 });
 
+test('default typecheck catches a wrong managed-data list result field like deploy does', (t) => {
+  const dir = project({
+    'db/schema.ts': SCHEMA,
+    'tsconfig.json': JSON.stringify({ compilerOptions: {
+      strict: true, skipLibCheck: true, target: 'ES2022', module: 'ESNext', moduleResolution: 'Bundler',
+    }, include: ['src'] }),
+    'src/projects.ts': `import { data } from 'somewhere:data';
+export async function list() {
+  return (await data.notes.list({ limit: 20 })).items;
+}`,
+  });
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const bin = fileURLToPath(new URL('../bin/somewhere.js', import.meta.url));
+  const check = (...args) => spawnSync(process.execPath, [bin, 'typecheck', dir, '--json', ...args], {
+    encoding: 'utf8', env: { ...process.env, SOMEWHERE_CONFIG_DIR: join(dir, '.config') },
+  });
+  assert.equal(check('--deploy').status, 0, 'the platform reference check alone misses the generated client type');
+  const result = check();
+  assert.equal(result.status, 1, result.stdout + result.stderr);
+  const errors = JSON.parse(result.stdout).errors;
+  assert.deepEqual(errors.map(({ file, code }) => [file, code]), [['src/projects.ts', 'TS2339']]);
+  assert.match(errors[0].message, /Property 'items' does not exist/);
+});
+
 test('a config or global error beside located findings means the check did not run', () => {
   const dir = project({ 'src/a.ts': 'export const a = documnt;\n' });
   const parsed = parseDeployOutput([

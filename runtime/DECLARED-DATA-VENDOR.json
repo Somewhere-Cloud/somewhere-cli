@@ -1,12 +1,12 @@
 {
-  "source_commit": "7e8bc7f19b510dc9466992d46d6c6275e24a355d",
+  "source_commit": "c28e5e9391b22cb870687d160eae0e64ff344ffe",
   "esbuild": "0.24.0",
   "source_files": {
     "shared/app-model-catalog.ts": "c9a0119366beabb10157fcc9866f4d32b320b680f1c5717d837a5ca99875fa13",
     "shared/cloud-dev-entitlement.ts": "1993a9e1c781d9daed29b3cfef0e8a370e150ce06d2acc7c408c2a24c50b4960",
     "shared/d1-region.ts": "71cda96cfead241b4f4e35b8cd6b1d8e577f072257e91a8dbe0deaa1b142b378",
     "shared/d1-session.ts": "2ae29b74bba68016c86d25fa2a58f8c2fce4aca8fe57fafc253d380c47a3c0ab",
-    "shared/transient-read.ts": "2f22daebdc74fed6255a29df7deda0db307f9165c1d9988dba3ee872b2584ffd",
+    "shared/transient-read.ts": "7c10de219ee4b910cb2e35d9aeb7a0974ae3eeaeea7c4b5983b89f3c403db1cb",
     "shared/types/placeholder-identity.ts": "089a46e2474a21193d3611eddd9c94b6bbe62441b3039ed80fc8499bada447ca",
     "worker/containers/compile/checker-contract.cjs": "732cb5a886548f91499031fc1f0727ae05e824ab8d482693f2ad04de4868595b",
     "worker/containers/compile/consumer-contract.cjs": "068b92efb226e74af8979557c7dc2b7f06787efb151f74c7593b0525995c8baa",
@@ -33,7 +33,7 @@
     "worker/src/services/jobs/limits.ts": "2d0d73de8752ad4fb84d281bac6c3049bb34a7d0b08c7cda76634c19c303c529",
     "worker/src/utils/alert-audit.ts": "318ce8cd45954f50a77bf0782efa4cc433016e923431e3a4042d2294f31610f8",
     "worker/src/utils/alert-streak.ts": "cc15ff03920821cb4b2c6758fdd29508b24b29f258287e977c23a8ae28c14cbd",
-    "worker/src/utils/authority.ts": "e757b33b6467698d59670b565b57c916a02ad6e21a8463f416f1771702097b36",
+    "worker/src/utils/authority.ts": "71b7605de8bdb32229f24a7cde42d6f253d4e2f7ae7e6d772f1179dfaf1c8c10",
     "worker/src/utils/authority/client-contract-schema.ts": "c1b433d2b09d7c1e98adae70b5754fe704fabb2ecc8e20347518a633e31f99d0",
     "worker/src/utils/authority/intake-bake.ts": "7216e288e40673819295d999b3bdbf5e4319e1e21608e3b81eda9d102ff8d636",
     "worker/src/utils/authority/role-domain-map.ts": "dc1b6abba79278a970cc5a07c4eb7ea73acac262425b489670e90508b95a5ff1",

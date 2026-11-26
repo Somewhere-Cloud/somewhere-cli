@@ -2,7 +2,8 @@
 
 ## 0.38.162
 
-- `somewhere typecheck` checks service methods and options inside `sw.endpoint` handlers.
+- `somewhere typecheck` runs the same project TypeScript check as deploy, then checks deployable files and service calls in `sw.endpoint` handlers.
+- New projects use SDK 0.14.5 or later within the same minor version, depending on the template.
 
 ## 0.38.161
 

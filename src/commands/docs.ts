@@ -327,6 +327,12 @@ export function findPublicDocsPage(
   return byId(requested) ?? (target ? byId(target) : undefined);
 }
 
+function docsConnectionError(cause: unknown): Error {
+  const inner = (cause as { cause?: { code?: string; message?: string } })?.cause;
+  const reason = inner?.code ?? inner?.message ?? (cause instanceof Error ? cause.message : String(cause));
+  return new Error(`Could not reach ${DOCS_BASE} (${reason}) — check your connection. The docs are public and need no login.`, { cause });
+}
+
 async function fetchPublicManifestWithGroups(): Promise<{ pages: PublicDocsPage[]; groups: PublicDocsGroup[]; aliases: Record<string, string>; version?: string }> {
   let res: Awaited<ReturnType<typeof fetch>>;
   try {
@@ -334,10 +340,7 @@ async function fetchPublicManifestWithGroups(): Promise<{ pages: PublicDocsPage[
       headers: { 'User-Agent': 'somewhere-cli' },
     });
   } catch (cause) {
-    // A bare "fetch failed" names neither the host nor the reason.
-    const inner = (cause as { cause?: { code?: string; message?: string } })?.cause;
-    const reason = inner?.code ?? inner?.message ?? (cause instanceof Error ? cause.message : String(cause));
-    throw new Error(`Could not reach ${DOCS_BASE} (${reason}) — check your connection. The docs are public and need no login.`);
+    throw docsConnectionError(cause);
   }
   if (!res.ok) {
     throw new Error(`Could not fetch ${DOCS_BASE}${PUBLIC_MANIFEST_PATH} (HTTP ${res.status}).`);
@@ -681,7 +684,7 @@ export function registerDocs(program: Command) {
         ? requestedTopic
         : ownKey(ALIASES, lowerTopic) ? ALIASES[lowerTopic as keyof typeof ALIASES] : undefined;
       const resolvedTopic = key ?? requestedTopic;
-      const entry = topic === undefined && view.kind === 'full'
+      const entry = key === 'docs' && view.kind === 'full'
         ? { path: '/manual.txt' }
         : key ? TOPICS[key] : undefined;
       if (entry && view.kind === 'section') {
@@ -799,7 +802,7 @@ export function registerDocs(program: Command) {
         }
         await writeResponseBodyToStdout(res);
       } catch (e) {
-        error(`Could not reach ${DOCS_BASE} — check your connection. (${e instanceof Error ? e.message : String(e)})`, e);
+        error(docsConnectionError(e).message, e);
         process.exit(1);
       }
     });

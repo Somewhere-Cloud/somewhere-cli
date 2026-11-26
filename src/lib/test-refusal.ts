@@ -19,7 +19,7 @@ async function bodyOf(response: RefusalResponse): Promise<{ code: string; messag
   const raw = typeof json?.error === 'string' ? json.error : '';
   return { code: /^[A-Z_]+$/.test(raw) ? raw : 'none', message: typeof json?.message === 'string' ? scrub(json.message).slice(0, 300) : '', json };
 }
-const INCONCLUSIVE = 'looks the same as an empty table, a missing row or a missing route, so it proves nothing on its own. Pass { allowed: <someone the same request succeeds for> } as the positive control.';
+const INCONCLUSIVE = 'looks the same as an empty table, a missing row or a missing route, so it proves nothing on its own. Pass { allowed: owner } with a test user that can make the same request.';
 function seen(status: number, code: string, message: string): string {
   const kind = status === 400 ? 'a malformed request' : status === 409 ? 'a stale data contract' : `HTTP ${status}`;
   return `${kind} (${status} ${code}${message ? `: ${message}` : ''})`;

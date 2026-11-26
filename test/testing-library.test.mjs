@@ -62,6 +62,7 @@ test('sessions prove hidden reads and writes with a positive control', async (t)
 
   const withOwner = { allowed: owner };
   await stranger.expectRefused('notes', { operation: 'get', id: 'n1' }, withOwner);
+  await stranger.expectRefused('notes', { operation: 'get', id: 'n1' }, { allowed: { session: owner } });
   await assert.rejects(stranger.expectRefused('notes', { operation: 'get', id: 'missing' }, withOwner), /nothing to refuse/);
   await assert.rejects(stranger.expectRefused('notes', { operation: 'get', id: 'n1' }), /proves nothing/);
   await assert.rejects(stranger.expectRefused('notes', { operation: 'get', id: 'stale' }, withOwner), /stale data contract/);

@@ -1,9 +1,10 @@
 import { resolve } from 'node:path';
 import { ApiClient } from './client.js';
+import { describeCallError } from './form-accounts.js';
 import { loadProjectConfig } from './config.js';
 import { previewToolClient } from './preview-credential.js';
 import { previewControl, previewCredentialFor, productionControl, readPreviewTarget } from './test-control.js';
-import { buildStorageState, createTestIdentities, expiryOf, MAX_PER_CREATE, type InboxMessage, type PlaywrightStorageState } from './test-identities.js';
+import { buildStorageState, createTestIdentities, expiryOf, freshTestAddress, MAX_PER_CREATE, type InboxMessage, type PlaywrightStorageState } from './test-identities.js';
 import { loadTestTarget } from './test-target.js';
 import { privateMarker } from './test-response-capture.js';
 import { runTestJob, testingDeveloperToken, type TestJob, type TestJobOptions, type TestJobTarget } from './testing-jobs.js';
@@ -21,6 +22,7 @@ export interface TestApp {
   origin: string;
   anonymous: UserSession;
   users(count: number): Promise<TestActor[]>;
+  inboxAddress(name?: string): string;
   testInbox(email: string): Promise<TestInboxMessage[]>;
   signInWithLink(url: string): Promise<TestActor>;
   create(user: TestActor, table: string, values: Record<string, unknown>, key?: string): Promise<string | number>;
@@ -46,6 +48,10 @@ export async function openTestApp(options: { preview?: boolean; projectDir?: str
   const control = tool ? previewControl(tool, target) : undefined;
   const inbox = control ?? productionControl(client!, target, { liveInboxOnly: true });
   const origin = target.origin;
+  // Both origins come from the linked project's routes. Preview adds one -dev suffix.
+  const hostLabel = new URL(origin).hostname.split('.')[0];
+  const subdomain = control ? hostLabel.replace(/-dev$/, '') : hostLabel;
+  const inboxDomain = `${subdomain}.test.somewhere.site`;
   const emptyState: PlaywrightStorageState = { cookies: [], origins: [] };
   const cookie = await control?.previewCookie?.();
   if (cookie) {
@@ -56,8 +62,10 @@ export async function openTestApp(options: { preview?: boolean; projectDir?: str
   }
   const ids = new Set<string>();
   const actors = new Set<TestActor>();
-  const recipients = new Map<string, { id: string; email: string; since: number }>();
-  const signInLinks = new Map<string, { id: string; email: string }>();
+  const managedRecipients = new Map<string, { id: string; since: number }>();
+  const freshRecipients = new Map<string, number>();
+  const invitees = new Set<string>();
+  const signInLinks = new Map<string, string>();
   const cleanupSteps: Array<{ label: string; action: () => Promise<void> }> = [];
   let closed = false;
   const open = () => { if (closed) throw new Error('This test app has already been cleaned up.'); };
@@ -117,7 +125,7 @@ export async function openTestApp(options: { preview?: boolean; projectDir?: str
           const session = new UserSession(origin, { target, storageState: emptyState });
           const login = await session.post('/api/auth/login', { email: user.email, password: user.password });
           if (!login.ok) throw new Error(`Could not sign in preview test user ${user.id} (HTTP ${login.status}).`);
-          recipients.set(user.email.toLowerCase(), { id: user.id, email: user.email, since });
+          managedRecipients.set(user.email.toLowerCase(), { id: user.id, since });
           out.push(add(user.id, user.email, session));
         }
         return out;
@@ -129,7 +137,7 @@ export async function openTestApp(options: { preview?: boolean; projectDir?: str
           for (const identity of issued) ids.add(identity.user.id);
           for (const identity of issued) {
             const state = buildStorageState(origin, new URL(origin).hostname, identity, expiryOf(identity, receivedAt));
-            recipients.set(identity.user.email.toLowerCase(), { ...identity.user, since });
+            managedRecipients.set(identity.user.email.toLowerCase(), { id: identity.user.id, since });
             out.push(add(identity.user.id, identity.user.email, new UserSession(origin, { target, storageState: state })));
           }
         }
@@ -141,19 +149,29 @@ export async function openTestApp(options: { preview?: boolean; projectDir?: str
         throw error;
       }
     },
+    inboxAddress(name = 'invite') {
+      open();
+      const email = freshTestAddress(subdomain, name);
+      freshRecipients.set(email, Date.now());
+      return email;
+    },
     async testInbox(email) {
       open();
-      const recipient = recipients.get(email.toLowerCase());
-      if (!recipient) throw new Error('Choose a test email created by this test app.');
-      const messages = await inbox.inbox(recipient.email, { since: recipient.since, ms: 3_000 });
+      const address = email.trim().toLowerCase();
+      const [local, domain, extra] = address.split('@');
+      if (!local || /\s/.test(local) || domain !== inboxDomain || extra !== undefined) {
+        throw new Error(`Use an address at ${inboxDomain} for this app’s test inbox.`);
+      }
+      const since = managedRecipients.get(address)?.since ?? freshRecipients.get(address) ?? 0;
+      const messages = await inbox.inbox(address, { since, ms: 3_000 });
       open();
-      return messages.filter(message => Date.parse(message.created_at) > recipient.since).map(message => {
+      return messages.filter(message => Date.parse(message.created_at) > since).map(message => {
         const links = new Set<string>();
         if (message.magic_link) {
           links.add(message.magic_link);
           const url = URL.parse(message.magic_link);
           if (url?.origin === origin && url.pathname === '/auth/magic' && url.searchParams.get('token')) {
-            signInLinks.set(message.magic_link, recipient);
+            signInLinks.set(message.magic_link, address);
           }
         }
         for (const match of [message.text, message.html].join(' ').matchAll(/https?:\/\/[^\s<>"']+/gi)) {
@@ -164,8 +182,8 @@ export async function openTestApp(options: { preview?: boolean; projectDir?: str
     },
     async signInWithLink(url) {
       open();
-      const recipient = signInLinks.get(url);
-      if (!recipient) throw new Error('Use a sign-in link from this test app’s inbox.');
+      const address = signInLinks.get(url);
+      if (!address) throw new Error('Use a sign-in link from this test app’s inbox.');
       signInLinks.delete(url);
       const token = new URL(url).searchParams.get('token');
       const session = new UserSession(origin, { target, storageState: emptyState });
@@ -173,10 +191,15 @@ export async function openTestApp(options: { preview?: boolean; projectDir?: str
       open();
       if (!response.ok) throw new Error(`Could not sign in with the link (HTTP ${response.status}).`);
       const body = await response.json() as { cookie_session?: boolean; user?: { id?: string; email?: string } };
-      if (!body.cookie_session || body.user?.id !== recipient.id || body.user.email?.toLowerCase() !== recipient.email.toLowerCase()) {
+      const id = body.user?.id;
+      const managed = managedRecipients.get(address);
+      if (!body.cookie_session || typeof id !== 'string' || !id || body.user?.email?.toLowerCase() !== address ||
+          (managed && managed.id !== id)) {
         throw new Error('The link did not sign in the expected test user.');
       }
-      return add(recipient.id, recipient.email, session);
+      // Reading a manually chosen inbox does not claim ownership of its account.
+      if (freshRecipients.has(address)) invitees.add(id);
+      return add(id, address, session);
     },
     create,
     async plantMarker(user, table, field, values = {}) {
@@ -197,16 +220,23 @@ export async function openTestApp(options: { preview?: boolean; projectDir?: str
       for (const { label, action } of cleanupSteps.reverse()) {
         try { await action(); } catch { remains.push(label); }
       }
+      if (invitees.size) {
+        const result = await inbox.deleteSignups([...invitees]);
+        for (const [id, why] of result.kept) remains.push(`invited test user ${id} (${why})`);
+      }
       if (control) {
-        for (const id of ids) if (await control.deleteManagedUser!(id)) remains.push(`test user ${id}`);
+        for (const id of ids) {
+          const reason = await control.deleteManagedUser!(id);
+          if (reason) remains.push(`test user ${id} (${reason})`);
+        }
         await control.close();
       } else if (ids.size) {
         try {
           await client!.call('DELETE', '/auth/test-users', { project_id: projectId, ids: [...ids] });
           const { identities } = await client!.call<{ identities: Array<{ id: string }> }>('GET', '/auth/test-users', undefined, { project_id: projectId });
           for (const user of identities) if (ids.has(user.id)) remains.push(`test user ${user.id}`);
-        } catch {
-          remains.push(...[...ids].map(id => `test user ${id}`));
+        } catch (error) {
+          remains.push(`test users ${[...ids].join(', ')} (${describeCallError(error)})`);
         }
       }
       if (remains.length) throw new Error(`Could not confirm cleanup of ${remains.join(', ')}.`);

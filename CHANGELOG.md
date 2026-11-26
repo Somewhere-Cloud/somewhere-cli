@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.38.164
+
+- `somewhere docs` opens the overview. Use `--full` for the full manual, `--list` for the topic index, and `somewhere docs <topic> --search "<words>"` to search within one topic.
+- `somewhere test-users prepare` reports the deployed data contract for named-user tests. Local declarations cover transaction receipts and configurable read projections.
+- `somewhere auth export --help` directs verified app owners to migration support.
+
 ## 0.38.163
 
 - `somewhere auth set` accepts temporary deployment keys from `SOMEWHERE_TOKEN` or stdin. The CLI keeps the workspace expiry and claim link for deploy. Once the workspace expires, the CLI stops sending its key and shows how to start a new workspace or sign in.

@@ -1273,8 +1273,11 @@ export function registerDeploy(program: Command) {
           // Sending the on-disk static under scope:functions is what bricked
           // compiled SPAs; the worker now ignores it too, but
           // the CLI shouldn't send it in the first place. --scope static is the
-          // inverse: no functions.
-          files: scope === 'functions' ? {} : files,
+          // inverse: no functions. The dependency manifest is the functions'
+          // too: a backend change that adds a package sends package.json (and
+          // its lockfile), or the platform builds against the old one
+          // (tsk_0b362c41).
+          files: scope === 'functions' ? functionDependencyManifest(files) : files,
         };
         if (scope !== 'functions' && Object.keys(binaryFiles).length > 0) {
           body.binary_files = binaryFiles;
@@ -2317,6 +2320,13 @@ export function formatDryRunNeedsProjectExplanation(): string {
     `To check your code without contacting Somewhere: \`${cliInvocation()} typecheck\` and \`${cliInvocation()} lint\`.`,
     `To deploy for real (signed out, this starts a temporary workspace): \`${cliInvocation()} deploy\`.`,
   ].join('\n');
+}
+
+/** What --scope functions sends from the static map: the dependency manifest only. */
+export function functionDependencyManifest(files: Record<string, string>): Record<string, string> {
+  return Object.fromEntries(['package.json', 'package-lock.json']
+    .filter((path) => typeof files[path] === 'string')
+    .map((path) => [path, files[path]]));
 }
 
 function printDryRun(plan: DryRunResult, scope?: 'functions' | 'static') {

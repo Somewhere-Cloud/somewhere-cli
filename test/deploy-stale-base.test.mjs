@@ -117,6 +117,39 @@ test('a full deploy sends its complete function map as the replacement; partial 
   assert.equal(Object.hasOwn(bodies[4], 'replace_functions'), false, 'functions-only keeps omitted functions by default');
 });
 
+test('--scope functions sends the dependency manifest with the functions, and nothing else of the site (tsk_0b362c41)', async () => {
+  const testHome = mkdtempSync(join(tmpdir(), 'sw-scope-manifest-home-'));
+  const fixtureDir = mkdtempSync(join(tmpdir(), 'sw-scope-manifest-fixture-'));
+  writeLogin(testHome);
+  writeProject(fixtureDir);
+  writeFixture(fixtureDir);
+  const pkg = JSON.stringify({ name: 'fixture', dependencies: { 'left-pad': '1.3.0' } }) + '\n';
+  writeFileSync(join(fixtureDir, 'package.json'), pkg);
+  writeFileSync(join(fixtureDir, 'package-lock.json'), JSON.stringify({ name: 'fixture', lockfileVersion: 3, packages: {} }) + '\n');
+  mkdirSync(join(fixtureDir, 'api'), { recursive: true });
+  writeFileSync(join(fixtureDir, 'api', 'pad.ts'), "import pad from 'left-pad';\nexport default async () => Response.json({ v: pad('1', 3) });\n");
+  const bodies = [];
+  await withServer((req, res) => {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', () => {
+      if (req.method === 'POST' && req.url === '/v1/deploy') {
+        bodies.push(JSON.parse(body));
+        sendJson(res, 200, { ok: true, data: { version: bodies.length, files: 0, url: 'https://fixture.somewhere.site', has_functions: true } });
+      } else sendJson(res, 404, { ok: false, error: 'NOT_FOUND', message: req.url });
+    });
+  }, async apiUrl => {
+    const result = await run(['deploy', '--json', '--scope', 'functions'], {
+      cwd: fixtureDir, env: { HOME: testHome, USERPROFILE: testHome, SOMEWHERE_API_URL: apiUrl },
+    });
+    assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+  });
+  assert.equal(bodies.length, 1);
+  assert.deepEqual(Object.keys(bodies[0].files).sort(), ['package-lock.json', 'package.json'], 'only the manifest, never index.html');
+  assert.equal(bodies[0].files['package.json'], pkg);
+  assert.ok(Object.keys(bodies[0].functions ?? {}).some((path) => path.startsWith('api/')), 'the function rides along');
+});
+
 test('deploy output names removed and kept functions, and says nothing when there are none', async () => {
   const testHome = mkdtempSync(join(tmpdir(), 'sw-function-report-home-'));
   const fixtureDir = mkdtempSync(join(tmpdir(), 'sw-function-report-fixture-'));

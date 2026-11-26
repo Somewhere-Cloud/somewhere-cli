@@ -37,11 +37,12 @@ function fixture(t, schema, source = 'export {};') {
 const check = root => runTypecheck(root, { installTypePackages: false });
 
 test('writer accepts group/appRole scopes and writes exact role-aware runtime declarations', async t => {
-  const root = fixture(t, rolesSchema, `export async function useGroups(req: Request, sw: SomewhereRuntimeContext) {
+  const root = fixture(t, rolesSchema, `export async function useGroups(req: Request, sw: SomewhereRuntimeContext, requestedRole: string) {
     for (const role of ['owner', 'admin', 'member', 'editor', 'viewer'] as const) {
       const changed = await sw.groups.setRole(req, 'group1', 'user2', role);
       if (changed.error === null) { const role: SomewhereGroupRole = changed.data.role; void role; }
     }
+    await sw.groups.setRole(req, 'group1', 'user2', requestedRole);
     await sw.groups.create(req, { name: 'Crew' });
     await sw.groups.list(req, { limit: 10 });
     await sw.groups.get(req, 'group1');
@@ -60,25 +61,27 @@ test('writer accepts group/appRole scopes and writes exact role-aware runtime de
   const result = await check(root);
   assert.equal(result.ok, true, result.raw);
   writeFileSync(join(root, 'src/bad.ts'), `export async function wrong(req: Request, sw: SomewhereRuntimeContext) {
-    await sw.groups.setRole(req, 'g', 'u', 'unknown');
-    await sw.groups.setRole(req, 'g', 'u', 'staff');
+    await sw.groups.setRole(req, 'g', 'u', 42);
     await sw.groups.appRoles.grant(req, 'u', 'editor');
     await sw.groups.appRoles.grant(req, 'u', 'owner');
     await sw.groups.appRoles.grant(req, 'u', 'missing');
   }`);
   const bad = await check(root);
   assert.equal(bad.ok, false);
-  assert.equal(bad.errors.length, 5, bad.raw);
+  assert.equal(bad.errors.length, 4, bad.raw);
   assert.ok(bad.errors.every(error => error.file === 'src/bad.ts'), bad.raw);
 });
 
-test('builtin-only schema permits exactly builtin group roles and no app roles', async t => {
+test('builtin-only schema returns builtin group roles and permits no app role grants', async t => {
   const root = fixture(t, builtinSchema, `export async function builtin(req: Request, sw: SomewhereRuntimeContext) {
-    for (const role of ['owner', 'admin', 'member'] as const) await sw.groups.setRole(req, 'g', 'u', role);
+    for (const role of ['owner', 'admin', 'member'] as const) {
+      const changed = await sw.groups.setRole(req, 'g', 'u', role);
+      if (changed.error === null) { const name: 'owner' | 'admin' | 'member' = changed.data.role; void name; }
+    }
   }`);
   assert.equal((await check(root)).ok, true);
   writeFileSync(join(root, 'src/bad.ts'), `export async function wrong(req: Request, sw: SomewhereRuntimeContext) {
-    await sw.groups.setRole(req, 'g', 'u', 'editor');
+    await sw.groups.setRole(req, 'g', 'u', false);
     await sw.groups.appRoles.grant(req, 'u', 'staff');
   }`);
   const bad = await check(root);
@@ -110,9 +113,9 @@ test('role vocabulary changes update written declarations; invalid schema remove
 });
 
 test('invitation options and automatic-completion outcomes follow the CLI writer', async t => {
-  const root = fixture(t, rolesSchema, `export async function invite(req: Request, sw: SomewhereRuntimeContext) {
+  const root = fixture(t, rolesSchema, `export async function invite(req: Request, sw: SomewhereRuntimeContext, requestedRole: string) {
     const sent = await sw.groups.invite(req, 'crew', {
-      email: 'friend@example.invalid', role: 'editor', redirect_uri: '/join', expires_in: 3600,
+      email: 'friend@example.invalid', role: requestedRole, redirect_uri: '/join', expires_in: 3600,
     });
     if (sent.error === null) {
       const role: SomewhereGroupRole = sent.data.group.role;
@@ -139,8 +142,7 @@ test('invitation options and automatic-completion outcomes follow the CLI writer
   const good = await check(root);
   assert.equal(good.ok, true, good.raw);
   writeFileSync(join(root, 'src/bad.ts'), `export async function wrong(req: Request, sw: SomewhereRuntimeContext) {
-    await sw.groups.invite(req, 'g', { email: 'x', role: 'staff', redirect_uri: '/join' });
-    await sw.groups.invite(req, 'g', { email: 'x', role: 'unknown', redirect_uri: '/join' });
+    await sw.groups.invite(req, 'g', { email: 'x', role: 42, redirect_uri: '/join' });
     await sw.groups.invite(req, 'g', { email: 'x', role: 'member' });
     await sw.groups.invite(req, 'g', { email: 'x', role: 'member', redirect_uri: '/join', expires_in: '3600' });
     await sw.groups.invite(req, 'g', { email: 'x', role: 'member', redirect_uri: '/join', actor: 'other' });
@@ -152,6 +154,6 @@ test('invitation options and automatic-completion outcomes follow the CLI writer
   }`);
   const bad = await check(root);
   assert.equal(bad.ok, false);
-  assert.equal(bad.errors.length, 9, bad.raw);
+  assert.equal(bad.errors.length, 8, bad.raw);
   assert.ok(bad.errors.every(error => error.file === 'src/bad.ts'), bad.raw);
 });

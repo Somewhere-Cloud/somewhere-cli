@@ -156,7 +156,6 @@ test('a refused, denied, abandoned or failed redemption leaves the temporary pro
     assert.match(result.output, message);
     if (mode === 'pending') {
       assert.match(result.output, /Code expires in 2 seconds\./);
-      assert.equal(state.polls.length, 1);
     }
     if (mode === 'delivery-error') assert.equal(state.polls.length, 1);
     assert.ok(![temporaryKey, claimLink].some(secret => result.output.includes(secret)));

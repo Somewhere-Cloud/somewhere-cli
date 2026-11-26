@@ -490,19 +490,19 @@ export function formatLinkedProjectMismatchExplanation(linkedProjectId: string, 
     'Next steps:',
     `  Deploy this folder to its linked project: run \`${cliInvocation()} deploy\` (no --project).`,
     `  Work on ${ref}: run \`${cliInvocation()} pull ${shellQuote(ref)} --out <fresh-folder>\`, re-apply your changes there, then run \`${cliInvocation()} deploy\`.`,
-    `  Deploy a copy elsewhere: copy the files into an unlinked folder and run \`${cliInvocation()} deploy --project ${ref}\` there.`,
+    `  Replace ${ref} with these files on purpose: copy them into an unlinked folder and run \`${cliInvocation()} deploy --project ${ref} --force --yes\` there.`,
   ].join('\n');
 }
 
-/** BASE_REQUIRED for an explicit --project target whose live release could not
- *  be read first. Pulling into a fresh folder records the base of the downloaded source. */
+/** BASE_REQUIRED for an explicit --project target: this folder has no record of
+ *  deploying or pulling it. Pulling into a fresh folder records the base of the downloaded source. */
 export function formatExplicitProjectBaseRequiredExplanation(ref: string): string {
   return [
-    `The live version of project ${ref} could not be read before deploying, and this folder has no record of which published version its files came from, so the deploy was NOT applied.`,
+    `Project ${ref} is already live, and this folder has no record of deploying or pulling it, so the deploy was NOT applied. The live app is unchanged.`,
     '',
     'Next steps:',
-    `  Start with \`${cliInvocation()} pull ${shellQuote(ref)} --out <fresh-folder>\`, re-apply your changes there, then run \`${cliInvocation()} deploy\`.`,
-    `  Or replace the live release deliberately: \`${cliInvocation()} deploy --project ${ref} --force --yes\`.`,
+    `  To change the live app, start from its current files: \`${cliInvocation()} pull ${shellQuote(ref)} --out <fresh-folder>\`, re-apply your changes there, then run \`${cliInvocation()} deploy\`.`,
+    `  To replace the live app with this folder's files on purpose: \`${cliInvocation()} deploy --project ${ref} --force --yes\`.`,
   ].join('\n');
 }
 
@@ -541,12 +541,11 @@ export async function resolveExplicitProjectId(client: ApiClient, ref: string): 
   }
 }
 
-/** The live release an explicit `--project` deploy is prepared against, read
- *  moments before the upload (founder architecture 2026-10-23): a release id,
- *  null for a project with no published source (the genesis claim), or
- *  undefined when unknown (the server's own BASE_REQUIRED then stands). The id is
- *  declared as base_release_id, so the server's existing stale-overwrite fence
- *  still refuses a release that lands between this read and the publish. Never
+/** The live release of an explicit `--project` target, read moments before the
+ *  upload: a release id, null for a project with no published source (the genesis
+ *  claim), or undefined when unknown. Only null is declared, as base_release_id: a
+ *  folder with no record of deploying or pulling a live app does not get that app's
+ *  release as its base (tsk_2807e024; founder 2026-11-26), so the server's BASE_REQUIRED stands. Never
  *  used for a folder that did not name its target, never with --force. */
 export async function readExplicitProjectLiveBase(client: ApiClient, projectId: string): Promise<string | null | undefined> {
   try {
@@ -1311,13 +1310,16 @@ export function registerDeploy(program: Command) {
         if (!opts.force && sourceBase) {
           body.base_release_id = sourceBase.releaseId;
         } else if (!opts.force && explicitProjectId) {
-          // The folder has no record of a base but the caller named the target:
-          // read its live release now and declare it; the server refuses the
-          // deploy if another release lands first.
+          // The folder has no record of a base but the caller named the target. Only a
+          // project with no published source yet is deployed from here as its first
+          // version (base null). A live app is never claimed as this folder's base (founder
+          // 2026-11-26, replacing the 2026-10-23 live-release binding for this case): the
+          // platform refuses with BASE_REQUIRED, so a blank or unrelated folder cannot
+          // replace it; the refusal says to pull it, or to replace it with --force.
           const liveBase = earlyLiveBase?.projectId === explicitProjectId
             ? await earlyLiveBase.read
             : await readExplicitProjectLiveBase(client, explicitProjectId);
-          if (liveBase !== undefined) body.base_release_id = liveBase;
+          if (liveBase === null) body.base_release_id = null;
         }
         // Every CLI deploy names its tool, so a later refusal can say "deployed by the somewhere CLI".
         body.source = 'cli';

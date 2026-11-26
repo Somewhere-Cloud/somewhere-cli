@@ -1,10 +1,66 @@
 import { cliInvocation } from '../lib/cli-invocation.js';
-import { writeFileSync } from 'node:fs';
+import { createWriteStream, writeFileSync } from 'node:fs';
+import { rename, unlink } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
+import { basename, dirname, join } from 'node:path';
+import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 import { resolve } from 'node:path';
 import { registerDbRows } from './db-rows.js';
 import { Command } from 'commander';
 import ora from '../lib/spinner.js';
-import { ApiClient } from '../lib/client.js';
+import { ApiClient, CliApiError } from '../lib/client.js';
+
+/** A background export (POST /v1/db/exports) as the platform reports it. */
+interface DbExport { id: string; state: string; plane?: string; size_bytes: number; tables: number; rows: number; exact: boolean | null; detail: string | null; consistency: string | null }
+const sizeText = (n: number) => n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1000))} KB`;
+
+/** A database too large for one dump response: export it in the background, wait, then stream the file.
+ * False when the platform does not offer background exports for this project (404): the caller then
+ * reports the dump's own refusal, as before. */
+async function backgroundExport(client: ApiClient, projectId: string, plane: string | undefined, output: string | undefined, json: boolean, spinner: ReturnType<typeof ora> | null): Promise<boolean> {
+  // One machine-readable result: with --json the file goes to --output, never mixed with JSON on stdout.
+  if (json && !output) throw new Error('This database is exported in the background as a file: pass --output <file> with --json.');
+  const wanted = plane ?? 'raw';
+  if (spinner) spinner.text = 'The database is larger than one dump response; exporting it in the background…';
+  let current: DbExport;
+  try {
+    current = (await client.call<{ export: DbExport }>('POST', '/db/exports', { project_id: projectId, ...(plane ? { plane } : {}) })).export;
+  } catch (err) {
+    if (err instanceof CliApiError && err.statusCode === 404 && err.code === 'NOT_FOUND') return false;
+    throw err;
+  }
+  while (current.state === 'running') {
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+    current = (await client.call<{ export: DbExport }>('GET', `/db/exports/${encodeURIComponent(current.id)}`, undefined, { project_id: projectId })).export;
+    if (spinner) spinner.text = `Exporting in the background: ${current.rows.toLocaleString()} rows, ${sizeText(current.size_bytes)} so far…`;
+  }
+  if (current.state !== 'ready') throw new Error(current.detail ?? `The export ended ${current.state}.`);
+  // Checked before any byte is written: never save one plane's tables as the other's.
+  if ((current.plane ?? 'raw') !== wanted) throw new Error(`The platform returned an export of the ${current.plane} tables, not the ${wanted} ones. Nothing was written.`);
+  const response = await client.callStream('GET', `/db/exports/${encodeURIComponent(current.id)}/sql?project_id=${encodeURIComponent(projectId)}`, undefined, { timeoutMs: 4 * 60 * 60_000 });
+  if (!response.ok || !response.body) throw new Error(`Downloading the export failed (HTTP ${response.status}).`);
+  const body = Readable.fromWeb(response.body as never);
+  if (output) {
+    // Private like the data it holds (0600), written beside the target and renamed over it only when complete.
+    const temp = join(dirname(output), `.${basename(output)}.${randomUUID()}.tmp`);
+    try {
+      await pipeline(body, createWriteStream(temp, { flags: 'wx', mode: 0o600 }));
+      await rename(temp, output);
+    } catch (err) {
+      await unlink(temp).catch(() => undefined);
+      throw err;
+    }
+  } else {
+    spinner?.stop();
+    await pipeline(body, process.stdout, { end: false });
+  }
+  const summary = `${current.tables} tables, ${current.rows} rows, ${sizeText(current.size_bytes)}${current.consistency ? `. ${current.consistency}` : ''}`;
+  if (json) printJson({ export: current, output });
+  else if (output) spinner?.succeed(`Wrote ${output} (${summary})`);
+  else process.stderr.write(dim(summary) + '\n');
+  return true;
+}
 import { getToken, loadProjectConfig } from '../lib/config.js';
 import { dim, error, info, printJson, success, table, teal, yellow } from '../lib/output.js';
 import { unlinkedFolderHint } from '../lib/link-hint.js';
@@ -137,6 +193,15 @@ export function registerDb(program: Command) {
         });
 
         if (!res.ok) {
+          type Refusal = { error?: string; data?: { background_export?: unknown } };
+          let refused: Refusal | null = null;
+          try { refused = JSON.parse(res.body) as Refusal; } catch { refused = null; }
+          // Too large for one response, in either plane: the background export copies it, but only when the
+          // refusal itself says this project and credential can start one. Otherwise it is reported as sent.
+          if (res.status === 413 && refused?.data?.background_export === true && !opts.manifest
+            && ['DUMP_SIZE_LIMIT_EXCEEDED', 'DUMP_ROW_LIMIT_EXCEEDED', 'EXPORT_SIZE_LIMIT_EXCEEDED', 'EXPORT_ROW_LIMIT_EXCEEDED'].includes(refused.error ?? '')) {
+            if (await backgroundExport(client, projectId!, opts.plane, opts.output, Boolean(opts.json), spinner)) return;
+          }
           spinner?.fail('Dump failed');
           try {
             const json = JSON.parse(res.body) as { error?: string; message?: string };
@@ -157,7 +222,7 @@ export function registerDb(program: Command) {
             error('The API did not return an export manifest (it predates managed export). Nothing was written.');
             process.exit(1);
           }
-          if (opts.output) writeFileSync(opts.output, res.body);
+          if (opts.output) writeFileSync(opts.output, res.body, { mode: 0o600 });
           else process.stdout.write(res.body + '\n');
           return;
         }
@@ -179,7 +244,7 @@ export function registerDb(program: Command) {
         };
 
         if (opts.output) {
-          writeFileSync(opts.output, sql);
+          writeFileSync(opts.output, sql, { mode: 0o600 });
           if (opts.json) {
             printJson(dumpResult);
           } else {
@@ -203,6 +268,73 @@ export function registerDb(program: Command) {
         }
       } catch (err) {
         spinner?.fail('Dump failed');
+        error(err instanceof Error ? err.message : String(err), err);
+        process.exit(1);
+      }
+    });
+
+  db
+    .command('restore-points')
+    .description('List the restore points the platform keeps: full copies of the database taken before each deploy that changes its shape, daily when the data changed, and by hand (project owner only)')
+    .option('--project <id>', 'Project ID (defaults to .somewhere.json)')
+    .option('--take', 'Take a restore point now')
+    .option('--delete <id>', 'Delete one restore point now')
+    .option('--json', 'Print the API response as JSON')
+    .action(async (opts) => {
+      if (opts.take && opts.delete) {
+        error('Use --take or --delete, not both.');
+        process.exit(1);
+      }
+      let projectId: string | undefined = opts.project;
+      if (!projectId) {
+        const config = loadProjectConfig();
+        if (!config) {
+          error('No project specified and no .somewhere.json found. Pass --project <id>.' + unlinkedFolderHint());
+          process.exit(1);
+        }
+        projectId = config.project_id;
+      }
+      type Point = { id: string; reason: string; state: string; taken_at: string; expires_at: string; size_bytes: number; tables: number; rows: number; exact: boolean | null; detail: string | null; consistency?: string | null; validation?: string | null };
+      const size = (n: number) => n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1000))} KB`;
+      const client = new ApiClient(getToken());
+      try {
+        if (opts.take) {
+          const spinner = opts.json ? null : ora('Taking a restore point…').start();
+          // Taken in the background: wait for it to finish (or fail) and say which.
+          let point = (await client.call<{ restore_point: Point }>('POST', '/db/restore-points', { project_id: projectId })).restore_point;
+          for (let waited = 0; point.state === 'running' && waited < 30 * 60_000; waited += 3000) {
+            await new Promise((resolve) => setTimeout(resolve, 3000));
+            const listed = await client.call<{ restore_points: Point[] }>('GET', '/db/restore-points', undefined, { project_id: projectId });
+            point = listed.restore_points.find((p) => p.id === point.id) ?? { ...point, state: 'failed', detail: 'It is no longer listed.' };
+            if (spinner) spinner.text = `Taking a restore point… ${point.rows.toLocaleString()} rows so far`;
+          }
+          if (opts.json) { printJson({ restore_point: point }); if (point.state !== 'ready') process.exitCode = 1; return; }
+          if (point.state === 'running') { spinner?.succeed(`Restore point ${point.id} is still being taken; \`${cliInvocation()} db restore-points\` shows when it is ready.`); return; }
+          if (point.state !== 'ready') { spinner?.fail(`No restore point was taken: ${point.detail ?? point.state}`); process.exitCode = 1; return; }
+          spinner?.succeed(`Restore point ${point.id} taken (${size(point.size_bytes)}, ${point.tables} tables, ${point.rows} rows); kept until ${point.expires_at}.`);
+          // How it was read and what was checked, as the platform states them.
+          for (const line of [point.consistency, point.validation]) if (line) info(dim(line));
+          return;
+        }
+        if (opts.delete) {
+          const r = await client.call<{ deleted: string }>('DELETE', `/db/restore-points/${encodeURIComponent(opts.delete)}`, undefined, { project_id: projectId });
+          if (opts.json) { printJson(r); return; }
+          success(`Deleted restore point ${r.deleted}.`);
+          return;
+        }
+        const r = await client.call<{ restore_points: Point[] }>('GET', '/db/restore-points', undefined, { project_id: projectId });
+        if (opts.json) { printJson(r); return; }
+        if (!r.restore_points.length) {
+          info(dim(`No restore points yet. Take one now with \`${cliInvocation()} db restore-points --take\`; the platform also takes them before deploys that change the database (when it can finish within the deploy's wait) and daily when the data changed.`));
+          return;
+        }
+        table(
+          ['Restore point', 'Taken', 'Why', 'State', 'Size', 'Expires'],
+          r.restore_points.map((p) => [teal(p.id), p.taken_at, p.reason, p.state === 'ready' ? (p.exact === false ? 'ready (read while running)' : 'ready') : `${p.state}${p.detail ? `: ${p.detail}` : ''}`, p.state === 'ready' ? size(p.size_bytes) : dim('—'), p.expires_at]),
+        );
+        // Qualifications beyond a single exact read (for example a project with two databases, read at two moments).
+        for (const p of r.restore_points) if (p.state === 'ready' && p.consistency && p.consistency !== 'Read in one moment: an exact copy.') info(dim(`${p.id}: ${p.consistency}`));
+      } catch (err) {
         error(err instanceof Error ? err.message : String(err), err);
         process.exit(1);
       }

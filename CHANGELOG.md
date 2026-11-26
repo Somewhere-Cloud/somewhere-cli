@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.38.162
+
+- `somewhere typecheck` checks service methods and options inside `sw.endpoint` handlers.
+
 ## 0.38.161
 
 - Syncs local runtime declarations with platform consumer contract 43. The declarations document the stop reasons for model refusals in `sw.ai.chat` and `sw.agent.run`.

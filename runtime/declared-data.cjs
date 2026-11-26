@@ -886,6 +886,8 @@ var require_groups_types = __commonJS({
       const appRoles = (roles.appRoles || []).length ? literal(roles.appRoles) : "never";
       return `
 type SomewhereGroupRole = ${groupRoles};
+// These methods validate role strings at runtime. Keep the known names in completions.
+type SomewhereGroupRoleInput = SomewhereGroupRole | (string & {});
 type SomewhereAppRole = ${appRoles};
 
 interface SomewhereGroup {
@@ -1005,7 +1007,7 @@ interface SomewhereGroups {
    *  that verified email (the link, or any sign-in). The answer is the same in
    *  every case; no app call is needed. Inviting an address that already has a
    *  pending invitation sends nothing. */
-  invite(req: Request, groupId: string, input: { email: string; role: SomewhereGroupRole; redirect_uri: string; expires_in?: number }): Promise<SomewhereGroupsResult<SomewhereGroupInvitation>>;
+  invite(req: Request, groupId: string, input: { email: string; role: SomewhereGroupRoleInput; redirect_uri: string; expires_in?: number }): Promise<SomewhereGroupsResult<SomewhereGroupInvitation>>;
   /** Pending invitations of one group (oldest first) that the signed-in member could revoke:
    *  ones they sent, and ones whose role they may grant. A non-member gets GROUP_NOT_FOUND. */
   invitations(req: Request, groupId: string, opts?: SomewhereGroupsPageOptions): Promise<SomewhereGroupsResult<SomewhereGroupsPage<SomewhereGroupPendingInvitation>>>;
@@ -1013,9 +1015,9 @@ interface SomewhereGroups {
   revokeInvitation(req: Request, inviteId: string): Promise<SomewhereGroupsResult<{ revoked: true }>>;
   leave(req: Request, groupId: string): Promise<SomewhereGroupsResult<{ left: true }>>;
   delete(req: Request, groupId: string): Promise<SomewhereGroupsResult<{ deleted: true }>>;
-  add(req: Request, groupId: string, userId: string, role: SomewhereGroupRole): Promise<SomewhereGroupsResult<{ user_id: string; role: SomewhereGroupRole }>>;
+  add(req: Request, groupId: string, userId: string, role: SomewhereGroupRoleInput): Promise<SomewhereGroupsResult<{ user_id: string; role: SomewhereGroupRole }>>;
   remove(req: Request, groupId: string, userId: string): Promise<SomewhereGroupsResult<{ removed: true }>>;
-  setRole(req: Request, groupId: string, userId: string, role: SomewhereGroupRole): Promise<SomewhereGroupsResult<{ user_id: string; role: SomewhereGroupRole }>>;
+  setRole(req: Request, groupId: string, userId: string, role: SomewhereGroupRoleInput): Promise<SomewhereGroupsResult<{ user_id: string; role: SomewhereGroupRole }>>;
   appRoles: {
     list(req: Request, userId?: string, opts?: SomewhereGroupsPageOptions): Promise<SomewhereGroupsResult<SomewhereGroupsPage<SomewhereAppRoleGrant>>>;
     grant(req: Request, userId: string, role: SomewhereAppRole): Promise<SomewhereGroupsResult<SomewhereAppRoleGrant>>;
@@ -3247,6 +3249,7 @@ interface SomewhereEmailSendResult {
   // A new send is 'sent' | 'pending' | 'captured'; a duplicate replays the stored state.
   status: SomewhereEmailStatus;
   duplicate?: true;
+  environment?: 'preview';
   sender?: { from: string; mode: 'platform_managed'; note: string };
   test_inbox?: { address: string; delivered: false };
 }
@@ -4026,12 +4029,23 @@ interface SomewhereEndpointConfig<Auth extends SomewhereEndpointAuth, Schema ext
     annotations?: { readOnlyHint?: boolean; destructiveHint?: boolean; idempotentHint?: boolean; openWorldHint?: boolean };
   } : never;
   body?: Schema;
-  rateLimit?: \`\${number}/\${'second' | 'minute' | 'hour' | 'day'}\${'' | 's'}\`;
+  /** Rate limit such as '30/minute'. The runtime accepts spaces and ignores case. */
+  rateLimit?: string;
   cors?: 'same-origin' | '*' | readonly string[];
   handler(
     input: SomewhereEndpointInput<Auth, Schema extends SomewhereEndpointBodySchema ? __SomewhereEndpointBody<Schema> : null>,
     sw: SomewhereRuntimeContext,
   ): unknown;
+}
+interface SomewhereEndpointGlobal {
+  endpoint<const Schema extends SomewhereEndpointBodySchema | undefined = undefined, Auth extends SomewhereEndpointAuth = 'none',
+    const Roles extends readonly string[] | undefined = undefined>(
+    config: SomewhereEndpointConfig<undefined extends Roles ? Auth : ([Auth] extends ['none'] ? 'required' : Auth), Schema>
+      & { auth?: Auth; roles?: Roles },
+  ): (req: Request, sw: SomewhereRuntimeContext) => Promise<Response>;
+}
+declare module 'somewhere:runtime-endpoint' {
+  export const sw: SomewhereEndpointGlobal;
 }
 `;
     var DECLARED_COLUMN_TYPES = { integer: "number", bigint: "string", number: "number", text: "string", timestamp: "string", boolean: "boolean", json: "__SomewhereJson", blob: "number[]" };
@@ -4364,7 +4378,7 @@ var require_checker_contract = __commonJS({
     var REFERENCE_SOURCE = /\.(?:tsx?|jsx?|mjs|cjs)$/;
     var IGNORED_CODES = Object.freeze([2307, 7016, 2792, 6053]);
     var REFERENCE_CODES = Object.freeze([2304, 2552, 2448, 2454, 18004]);
-    var TYPE_SHAPE_CODES = Object.freeze([2339, 2551, 2345, 2322, 2554]);
+    var TYPE_SHAPE_CODES = Object.freeze([2339, 2551, 2345, 2322, 2554, 2353, 2561, 2741, 2769, 18047]);
     var PROJECT_TYPE_ROOTS = Object.freeze(["./node_modules/@types"]);
     var ignored = new Set(IGNORED_CODES);
     var reference = new Set(REFERENCE_CODES);
@@ -4399,6 +4413,22 @@ var require_checker_contract = __commonJS({
     }
     function localCheckCompilerOptions(projectCompilerOptions) {
       return referenceCheckCompilerOptions(projectTsconfigCompilerOptions(projectCompilerOptions));
+    }
+    function withEndpointBinding(ts, source, options) {
+      if (!source || !ts.isExternalModule(source) || !/\bsw\b/.test(source.text)) return source;
+      function usesEndpoint(node) {
+        if (ts.isPropertyAccessExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === "sw" && node.name.text === "endpoint") return true;
+        return ts.forEachChild(node, usesEndpoint);
+      }
+      if (!usesEndpoint(source)) return source;
+      ts.bindSourceFile(source, options);
+      if (source.locals?.has("sw")) return source;
+      return ts.createSourceFile(
+        source.fileName,
+        source.text + "\nimport { sw } from 'somewhere:runtime-endpoint';\n",
+        options.target ?? ts.ScriptTarget.ES2022,
+        true
+      );
     }
     function diagnosticNumber(code) {
       if (typeof code === "number") return code;
@@ -4437,6 +4467,7 @@ var require_checker_contract = __commonJS({
       referenceCheckCompilerOptions,
       projectTsconfigCompilerOptions,
       localCheckCompilerOptions,
+      withEndpointBinding,
       isIgnoredDiagnostic,
       classifyDiagnostic,
       diagnosticMessage
@@ -4525,8 +4556,8 @@ var require_consumer_contract = __commonJS({
   "worker/containers/compile/consumer-contract.cjs"(exports2, module2) {
     "use strict";
     var CONSUMER_CONTRACT2 = Object.freeze({
-      version: 43,
-      digest: "0d081302e1723dadf797a11876f1aeed00e95e1daf55a4bc647ca1a99b21e1e5"
+      version: 44,
+      digest: "07384f39fd3d7d3b4a2f19ec55a6c309476402fc2af096ae0cd47b46780cbd46"
     });
     var MEMBERSHIPS = "memberships: table({ id: id(), team_id: text(), member_id: text() }, { scope: owner(), client: { read: true } }),";
     var SHARES = "shares: table({ id: id(), grantee_id: text() }, { scope: owner(), client: { read: true, create: ['grantee_id'], delete: true }, unique: [['user_id', 'grantee_id']] }),";
@@ -8673,7 +8704,7 @@ function referenceCheckDeclaredTables(graphFiles, schemaOptions = {}) {
 }
 function referenceCheckDeclarations(graphFiles) {
   return (0, import_generated_declarations_render.renderGeneratedDeclarationFiles)({
-    declaredRoles: void 0,
+    declaredRoles: declaredRolesFromSource(graphFiles),
     declaredTables: referenceCheckDeclaredTables(graphFiles),
     hasSchema: graphFiles["db/schema.ts"] !== void 0
   });

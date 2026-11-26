@@ -48,7 +48,7 @@ export function describeReport(groups: ReportGroup[], options: { verbose?: boole
     const omitted = [skipped.length && `${skipped.length} skipped`, notRun.length && `${notRun.length} not run`].filter(Boolean);
     lines.push(`FAILED: ${failed.length} of ${plural(checks.length, 'check')} in ${scripts}${omitted.length ? ` (${omitted.join(', ')})` : ''}`);
   }
-  // A skipped check is never a pass (tsk_6157909a): the summary names each one and why, and the run does not pass.
+  // A skipped check is never a pass: the summary names each one and why, and the run does not pass.
   else if (skipped.length) lines.push(`NOT ALL CHECKED: ${checks.length - skipped.length} passed, ${skipped.length} skipped in ${scripts}. A skipped check proves nothing: ${skipped.map((check) => `“${check.name}” (${firstLine(check.error).replace(/\.$/, '') || 'skipped'})`).join('; ')}.`);
   else lines.push(`PASSED: ${plural(checks.length, 'check')} in ${scripts}`);
   if (!checks.length) lines.push(`Next: fix the error in the script's output, then run ${TEST_COMMAND} again.`);

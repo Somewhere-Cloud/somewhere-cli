@@ -124,7 +124,7 @@ export default class TestReporter implements Reporter {
           ? 'The preview changed or closed during this run. Save it again with `somewhere preview` (or open a new one if it closed), then run all the tests again: somewhere test --preview'
           : 'The live release changed during this run. Run all the tests again: somewhere test');
       }
-      // A skipped test is never a pass (tsk_6157909a): the run says so and does not pass.
+      // A skipped test is never a pass: the run says so and does not pass.
       if (skipped) console.log(`NOT ALL RAN: ${skipped} skipped (each SKIPPED line above says why). A skipped test proves nothing until it runs.`);
     }
     const status = result.status === 'passed' && failed === 0 && this.errors === 0 && skipped === 0 && passed > 0 ? 'passed' : 'failed';

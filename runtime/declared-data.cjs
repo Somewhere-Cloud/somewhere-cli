@@ -4567,8 +4567,8 @@ var require_consumer_contract = __commonJS({
   "worker/containers/compile/consumer-contract.cjs"(exports2, module2) {
     "use strict";
     var CONSUMER_CONTRACT2 = Object.freeze({
-      version: 46,
-      digest: "6cf4dda4de85ec87337863774e26979bfc961cfb0504e019e4d1d2d7adbf3933"
+      version: 47,
+      digest: "d3c24ddf5edefc4642f181cc665952b0d09fbe43f3fe52c9ee060df6174f34f3"
     });
     var MEMBERSHIPS = "memberships: table({ id: id(), team_id: text(), member_id: text() }, { scope: owner(), client: { read: true } }),";
     var SHARES = "shares: table({ id: id(), grantee_id: text() }, { scope: owner(), client: { read: true, create: ['grantee_id'], delete: true }, unique: [['user_id', 'grantee_id']] }),";
@@ -5272,6 +5272,8 @@ init_console_privacy();
 
 init_console_privacy();
 init_console_privacy();
+var PLATFORM_COMPILE_RETRY_CODES = ["COMPILE_UNAVAILABLE", "PLATFORM_ROLLING_OUT", "COMPILE_ARTIFACT_INVALID", "PAGE_ENTRY_UNCOMPILED", "DEPENDENCY_REGISTRY_UNAVAILABLE"];
+var PLATFORM_COMPILE_CODES = new Set(PLATFORM_COMPILE_RETRY_CODES);
 var COMPILE_UNAVAILABLE_REALERT_MS = 60 * 60 * 1e3;
 
 

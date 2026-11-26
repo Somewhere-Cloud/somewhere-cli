@@ -29,10 +29,10 @@
     "worker/src/utils/db-schema-deploy/schema-constants.ts": "9742bc649f494963af4ae2039a1d6062cc6dbe087285bdf470f6ee71d9f76aac",
     "worker/src/utils/db-schema-deploy/schema-ownership.ts": "e6c811a87bc657707be3518dfe547c6d97718ac073108b126eb7f791c9c08202",
     "worker/src/utils/deploy-classify.ts": "d565b3c1d7628932ba69a1d93a82364319b66cfed1147b8639fff567a1e63b88",
-    "worker/src/utils/function-route.ts": "56cb1f7280043b34a5a8b699479e31a1ad56ede0308b85536a3fbf581dae3da9",
+    "worker/src/utils/function-route.ts": "3e4af1b655f96133e143c2e5a8d56fddc6848dca9730e0c30edc32fa64606097",
     "worker/src/utils/managed-groups/errors.ts": "18d952edd7f46bb7e459d4e6678226f4bd6e040ab40073ee5a8d0802be2f3721",
     "worker/src/utils/managed-groups/policy.ts": "2c5b48479a2925bea9a820022c63ca5fa827e2ff5531fe1ab6c0b058b7212b39"
   },
-  "sha256": "f16db7d2a3d4eccb9bf1b0dfa817b18b042352b2457824065276b398170075c3",
+  "sha256": "3a29e15c2462495f826887c840d614bfbc5d8b621e2e8188c9dd5e314fab092b",
   "fixtures_sha256": "908827d1430f4af5a83cae59ed476abc51dc9648757eac0089fe6e6db95f66c5"
 }

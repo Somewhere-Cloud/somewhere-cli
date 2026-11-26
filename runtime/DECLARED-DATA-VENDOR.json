@@ -1,5 +1,5 @@
 {
-  "source_commit": "8dde25f585f5a6647e3eee35c79aa71ef6f7553a",
+  "source_commit": "851b417387443a6043fd8c0d9cd10703db0b52cd",
   "esbuild": "0.24.0",
   "source_files": {
     "shared/app-model-catalog.ts": "c9a0119366beabb10157fcc9866f4d32b320b680f1c5717d837a5ca99875fa13",
@@ -9,7 +9,7 @@
     "shared/transient-read.ts": "af93cddbf8fc2f249d951d65d4eda5ac64632e62123e36994b893ff3258b8dab",
     "shared/types/placeholder-identity.ts": "089a46e2474a21193d3611eddd9c94b6bbe62441b3039ed80fc8499bada447ca",
     "worker/containers/compile/checker-contract.cjs": "732cb5a886548f91499031fc1f0727ae05e824ab8d482693f2ad04de4868595b",
-    "worker/containers/compile/consumer-contract.cjs": "b1c43844328ba67ab4762aac6d57e9105431ed287f166944009ddcf05f33eb43",
+    "worker/containers/compile/consumer-contract.cjs": "b9674aec52e3c972b9625318a284051aa542fad30fcf3d75c5169a6a7607de5b",
     "worker/containers/compile/declared-data-contract.cjs": "ebdc7dbc12283a7218c28e0e912e736ac27a8e9d513b82c097ebff6df3c1dd91",
     "worker/containers/compile/generated-declarations-render.cjs": "7ffdb34645cc9eccac6eba39dc86b646a41c4de8a1a038d2b5b46f42df9f1157",
     "worker/containers/compile/generated-declarations.cjs": "6e9902e054c5c784fd9b3c3fafc1869e79954100a45014e1132247cd82833ec4",
@@ -60,13 +60,13 @@
     "worker/src/utils/dev-health-class.ts": "fd430f31b9c8469f3d90e118fd8c75d1836ebcf705c1f9e93915ffa53a4cb066",
     "worker/src/utils/errors.ts": "f57505fc7cb515abb2e2e62fc8211f359200df1183689dc621dec10c8c7f03e3",
     "worker/src/utils/event-log.ts": "167a2ac478ff9b8b58c4f22ae39aa20ff25331c22a9e8f21d96e374b04458c78",
-    "worker/src/utils/feed-kinds.ts": "bbefa02184c09846481c55f4db6bc9e78f0e824383120d888f4a523c9b619b40",
+    "worker/src/utils/feed-kinds.ts": "e74b03340c908734ae47df30a9fcde1cd7114a6f0db2c1d1ff9909a8e9608e35",
     "worker/src/utils/journey-segment.ts": "623837dec9b24c211b1f3be4908f6780bb4cdba175f2dfa5f34ccccfe5a1a5fc",
     "worker/src/utils/json-exact-integers.ts": "e2eb8d3b2e17da363eb14fb46d876208579e2e92bfac173fb27527e6c4fb575e",
     "worker/src/utils/log-sanitize.ts": "f4591089c16a34e4cbc271ec22b48566b970a62e30d3e9856b7dcd9c479fb0e8",
     "worker/src/utils/managed-groups/errors.ts": "18d952edd7f46bb7e459d4e6678226f4bd6e040ab40073ee5a8d0802be2f3721",
     "worker/src/utils/managed-groups/policy.ts": "2c5b48479a2925bea9a820022c63ca5fa827e2ff5531fe1ab6c0b058b7212b39",
-    "worker/src/utils/platform-compile-failure.ts": "eb4cea8a54599e2ca852b67f576a4402fb0281da4c7f45a7ed735bc36a684883",
+    "worker/src/utils/platform-compile-failure.ts": "dd0a8edaf9958d6b29f44ece498470ee910a6ec866e9978ff1e6d46c000c872f",
     "worker/src/utils/project-custom-hosts.ts": "ef693b4ea70f93fd66f3b3cda88ce68664540366caa33fa0169bf7bcfce80b2a",
     "worker/src/utils/public-urls.ts": "44e455118f85c111316f6d8346d61e736ffcd1971c4539ea146100084aa6f21e",
     "worker/src/utils/reference-check-inputs.ts": "5ce10ee8feb59a7f31878243a6a4899d41f4e60e7af0687399693aeab7914b9a",
@@ -74,5 +74,5 @@
     "worker/src/utils/telegram.ts": "9aaaa2597c366da1eeee9e2252e9b73e611ea97ed9558f7e07e694d9b393f053",
     "worker/src/utils/workers-ai-comparison.ts": "18b5d5ea96f817387a5ef49733ba611c99cbb14987143c28118b1c90f3b637d4"
   },
-  "sha256": "f7fefd59263e2a3bfaf493fff07972d23fc2e9ced289316acb8d888a3f658847"
+  "sha256": "b2d600c4fc977cad1fb1621d5ccf72f074330d3577290c9c688373b5df320f9b"
 }

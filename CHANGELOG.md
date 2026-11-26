@@ -1,8 +1,10 @@
 # Changelog
 
-## Unreleased
+## 0.38.165
 
 - `somewhere deploy --project <app>` from a folder that never deployed or pulled that app no longer replaces it when it is live. The deploy stops, and the message says to run `somewhere pull <app>`, or `--force --yes` to replace the app on purpose. The first deploy of a new or unpublished app, redeploys from the folder that deployed it, deploys after `somewhere pull`, and clones that include `.somewhere.json` work as before.
+- A functions-only deploy can add dependencies from the project's package manifest and lockfile while keeping the live site in place.
+- `somewhere db restore-points` reports the platform's refusal when restore points are unavailable. `somewhere db dump` uses a background export when the platform offers one.
 
 ## 0.38.164
 

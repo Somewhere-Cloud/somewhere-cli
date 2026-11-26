@@ -70,6 +70,29 @@ function collectRequest(req, callback) {
   req.on('end', () => callback(body ? JSON.parse(body) : null));
 }
 
+test('auth export directs owners to migration support when the platform refuses export', async () => {
+  const home = mkdtempSync(join(tmpdir(), 'sw-auth-export-home-'));
+  const output = join(home, 'auth-export.json');
+  writeConfig(home);
+  const message = "The app's owner can request password hashes at migration@somewhere.cloud.";
+  const requests = [];
+
+  await withServer((req, res) => {
+    requests.push(req.url);
+    res.writeHead(501, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: false, error: 'AUTH_FEATURE_UNAVAILABLE', message: 'This auth feature is not available.' }));
+  }, async (apiUrl) => {
+    const env = { HOME: home, USERPROFILE: home, SOMEWHERE_API_URL: apiUrl };
+    const args = ['auth', 'export', 'project-a', '--output', output];
+    const text = await run(args, { env });
+    assert.equal(text.status, 1);
+    assert.equal(text.stdout, '');
+    assert.equal(text.stderr.trim(), '✗ ' + message);
+    assert.equal(existsSync(output), false);
+  });
+  assert.deepEqual(requests, ['/v1/auth/export/request']);
+});
+
 test('auth export writes credentials only to a new mode-0600 file', async () => {
   const home = mkdtempSync(join(tmpdir(), 'sw-auth-export-home-'));
   const output = join(home, 'auth-export.json');

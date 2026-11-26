@@ -5,7 +5,7 @@ import chokidar from 'chokidar';
 import { existsSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 import ora from '../lib/spinner.js';
-import { DEPLOY_CHECK_TYPESCRIPT_VERSION, announceDeployCheckFetch, deployCheckTsc, runDeployCheck, type DeployCheckResult } from '../lib/deploy-check.js';
+import { announceDeployCheckFetch, deployCheckTsc, runDeployCheck, type DeployCheckResult } from '../lib/deploy-check.js';
 import { IGNORE } from '../lib/files.js';
 import { AGENT_HOSTS, isAgentHost, runAgentHook } from '../lib/agent-hooks.js';
 import { bold, dim, error, info, printJson, red, success, teal, warn } from '../lib/output.js';
@@ -21,14 +21,12 @@ export function registerTypecheck(program: Command) {
   program
     .command('typecheck [dir]')
     .description(
-      `Check the deployable source with the platform's TypeScript ${DEPLOY_CHECK_TYPESCRIPT_VERSION}, generated types and checker settings. ` +
-        'Reports file and line for deploy-check type findings and exits 1 when there are findings. ' +
-        'Install the project dependencies first. The CLI fetches the pinned TypeScript with npx if needed. ' +
-        'Use --project to check the full project with its own tsconfig.json and compiler.',
+      'Run the same project TypeScript check as deploy, then check the files that will be uploaded. '
+        + 'Install the project dependencies first. Use --project or --deploy to run just one check.',
     )
     .option('--json', 'Print typecheck and platform source findings as JSON')
-    .option('--deploy', 'Run the deploy reference check and return its findings')
-    .addOption(new Option('--project', 'Run the full project TypeScript check using tsconfig.json').conflicts('deploy'))
+    .option('--deploy', 'Only run the platform reference check on deployable files')
+    .addOption(new Option('--project', 'Only check the project using its tsconfig.json and compiler').conflicts('deploy'))
     .option('--hook <host>', `With --deploy: run as an agent after-edit hook (${AGENT_HOSTS.join(', ')}), reading the host's event on stdin. Installed by \`${cliInvocation()} hooks install\``)
     .option('--watch', 'Keep running and re-check after each save while this command is open. It is not installed into your editor or agent; start it yourself. Never deploys or touches live data')
     .action(async (dirArg: string | undefined, opts) => {
@@ -91,8 +89,7 @@ export function registerTypecheck(program: Command) {
       // not checked (tsc would report the missing tree as code errors), and the
       // command never installs them itself.
       const deployVia = deployCheckTsc(dir).command === process.execPath ? 'project' : 'npx';
-      const via = opts.project ? typecheckCompilerSource(dir) : deployVia;
-      const notInstalled = (): TypecheckResult | null => {
+      const notInstalled = (via: TypecheckResult['via']): TypecheckResult | null => {
         const missing = missingProjectDependencies(dir);
         return missing.length
           ? { ok: false, errors: [], via, raw: '', spawnError: missingTypecheckDependenciesMessage() }
@@ -101,25 +98,27 @@ export function registerTypecheck(program: Command) {
       // Fetching TypeScript with npx is a network step: say so (on stderr)
       // right before a check that will fetch it.
       let announced = false;
-      const announceFetch = () => {
-        if (announced || via !== 'npx') return;
-        announced = true;
-        announceNpxTypeScriptFetch(TYPECHECK_TYPESCRIPT_VERSION);
-      };
-
       const check = async () => {
-        const refused = notInstalled();
-        if (!refused && opts.project) announceFetch();
-        const spinner = opts.json || refused || opts.watch ? null : ora('Typechecking (tsc --noEmit)...').start();
-        const deployResult = refused || opts.project ? undefined : await runDeployCheck(dir, announceDeployFetch);
-        const result = deployResult ? {
+        const checkProject = opts.project || existsSync(join(dir, 'tsconfig.json'));
+        const projectVia = checkProject ? typecheckCompilerSource(dir) : undefined;
+        const refused = notInstalled(projectVia ?? deployVia);
+        if (!refused && !announced && projectVia === 'npx') {
+          announced = true;
+          announceNpxTypeScriptFetch(TYPECHECK_TYPESCRIPT_VERSION);
+        }
+        const spinner = opts.json || refused || opts.watch ? null
+          : ora(checkProject ? 'Checking project types...' : 'Checking deployable files...').start();
+        const projectResult = !refused && checkProject ? await runTypecheck(dir) : undefined;
+        const deployResult = !refused && !opts.project && (projectResult?.ok ?? true)
+          ? await runDeployCheck(dir, announceDeployFetch) : undefined;
+        const result: TypecheckResult & { typescript?: string } = deployResult ? {
           ok: deployResult.ok,
           errors: deployResult.findings,
-          via,
+          via: deployVia,
           raw: deployResult.error ?? '',
           spawnError: deployResult.error,
           typescript: deployResult.typescript,
-        } : refused ?? await runTypecheck(dir);
+        } : refused ?? projectResult!;
         spinner?.stop();
         const sourceLint = await lintProject(dir).catch((failure: unknown) => ({
           ok: false as const,

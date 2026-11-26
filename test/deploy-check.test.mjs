@@ -29,7 +29,9 @@ export default schema({
 test('runs the deploy TypeScript, never another version', () => {
   assert.equal(DEPLOY_CHECK_TYPESCRIPT_VERSION, '5.6.3');
   const invocation = deployCheckTsc(project({}), 'linux');
-  assert.deepEqual(invocation, { command: 'npx', args: ['-y', '-p', 'typescript@5.6.3', 'tsc'] });
+  assert.equal(invocation.command, 'npx');
+  assert.deepEqual(invocation.args.slice(0, -1), ['-y', '-p', 'typescript@5.6.3', '--', 'node']);
+  assert.match(invocation.args.at(-1), /deploy-check\.cjs$/);
   const other = project({ 'node_modules/typescript/package.json': JSON.stringify({ version: '5.9.3' }) });
   assert.equal(deployCheckTsc(other, 'linux').command, 'npx');
 });
@@ -155,6 +157,23 @@ test('sw.endpoint is defined only in function modules; other bare sw stays repor
   assert.deepEqual(readdirSync(dir).filter((name) => name.startsWith('.__somewhere')), [], 'temporary config and declarations are removed');
 });
 
+test('checks contextual handler methods and options in function modules', async () => {
+  const result = await runDeployCheck(project({
+    'db/schema.ts': SCHEMA,
+    'api/typed.ts': `export default sw.endpoint({
+      auth: 'required',
+      handler: async (_input, sw) => {
+        await sw.db.get('notes', '1', { ownerOnly: true });
+        await sw.db.server.tx([{ op: 'insert', table: 'notes', values: { title: 'hi', user_id: 'owner' }, onConflict: 'ignore' }]);
+        await sw.db.server.tx([{ op: 'insert', table: 'notes', values: { title: 'hi', user_id: 'owner' }, options: { onConflict: 'ignore' } }]);
+        return { ok: true };
+      },
+    });`,
+  }));
+  assert.equal(result.error, undefined);
+  assert.deepEqual(findings(result), ['type:TS2339@api/typed.ts:4', 'type:TS2353@api/typed.ts:5']);
+});
+
 test('default typecheck checks uploaded routes outside tsconfig include and preserves empty selects', (t) => {
   const route = `export default async function (_req: Request, sw: SomewhereRuntimeContext) {
     const { data } = await sw.db.server.from('slots', { columns: [] });
@@ -184,6 +203,30 @@ test('default typecheck checks uploaded routes outside tsconfig include and pres
   assert.equal(failed.status, 1, JSON.stringify(failed.body));
   assert.deepEqual(failed.body.errors.map(({ file, code }) => [file, code]), [['api/slots.ts', 'TS2339']]);
   assert.equal(check('--project').status, 0);
+});
+
+test('default typecheck catches a wrong managed-data list result field like deploy does', (t) => {
+  const dir = project({
+    'db/schema.ts': SCHEMA,
+    'tsconfig.json': JSON.stringify({ compilerOptions: {
+      strict: true, skipLibCheck: true, target: 'ES2022', module: 'ESNext', moduleResolution: 'Bundler',
+    }, include: ['src'] }),
+    'src/projects.ts': `import { data } from 'somewhere:data';
+export async function list() {
+  return (await data.notes.list({ limit: 20 })).items;
+}`,
+  });
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const bin = fileURLToPath(new URL('../bin/somewhere.js', import.meta.url));
+  const check = (...args) => spawnSync(process.execPath, [bin, 'typecheck', dir, '--json', ...args], {
+    encoding: 'utf8', env: { ...process.env, SOMEWHERE_CONFIG_DIR: join(dir, '.config') },
+  });
+  assert.equal(check('--deploy').status, 0, 'the platform reference check alone misses the generated client type');
+  const result = check();
+  assert.equal(result.status, 1, result.stdout + result.stderr);
+  const errors = JSON.parse(result.stdout).errors;
+  assert.deepEqual(errors.map(({ file, code }) => [file, code]), [['src/projects.ts', 'TS2339']]);
+  assert.match(errors[0].message, /Property 'items' does not exist/);
 });
 
 test('a config or global error beside located findings means the check did not run', () => {

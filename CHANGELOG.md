@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.38.162
+
+- `somewhere typecheck` runs the same project TypeScript check as deploy, then checks deployable files and service calls in `sw.endpoint` handlers.
+- New projects use SDK 0.14.5 or later within the same minor version, depending on the template.
+
 ## 0.38.161
 
 - Syncs local runtime declarations with platform consumer contract 43. The declarations document the stop reasons for model refusals in `sw.ai.chat` and `sw.agent.run`.

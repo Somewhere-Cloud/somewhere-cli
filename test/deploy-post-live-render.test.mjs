@@ -174,7 +174,10 @@ test('overlapped typecheck refuses errors before any deploy upload; explicit ove
   await withServer(srv.handler, async (apiUrl) => {
     const refused = await deploy(f, apiUrl);
     assert.equal(refused.status, 1, refused.stderr);
-    assert.match(refused.stdout + refused.stderr, /notDefined/);
+    const output = refused.stdout + refused.stderr;
+    assert.match(output, /notDefined/);
+    assert.match(output, /fail at runtime/);
+    assert.match(output, /deploy --allow-type-errors/);
     assert.equal(srv.uploads.length, 0, 'no source upload before the typecheck verdict');
     const allowed = await deploy(f, apiUrl, ['--allow-type-errors']);
     assert.equal(allowed.status, 0, allowed.stderr);

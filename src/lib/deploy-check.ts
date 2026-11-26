@@ -89,15 +89,13 @@ export function announceDeployCheckFetch(projectDir: string): void {
 }
 
 export function deployCheckTsc(projectDir: string, platform: NodeJS.Platform = process.platform): TscInvocation {
-  try {
-    const manifest = join(projectDir, 'node_modules', 'typescript', 'package.json');
-    if ((JSON.parse(readFileSync(manifest, 'utf8')) as { version?: string }).version === DEPLOY_CHECK_TYPESCRIPT_VERSION) {
-      return { command: process.execPath, args: [join(projectDir, 'node_modules', 'typescript', 'bin', 'tsc')] };
-    }
-  } catch { /* not installed, or another version */ }
+  const runner = join(CLI_PACKAGE_ROOT, 'bin', 'deploy-check.cjs');
+  if (projectTypeScriptVersion(projectDir) === DEPLOY_CHECK_TYPESCRIPT_VERSION) {
+    return { command: process.execPath, args: [runner] };
+  }
   return {
     command: platform === 'win32' ? 'npx.cmd' : 'npx',
-    args: ['-y', '-p', `typescript@${DEPLOY_CHECK_TYPESCRIPT_VERSION}`, 'tsc'],
+    args: ['-y', '-p', `typescript@${DEPLOY_CHECK_TYPESCRIPT_VERSION}`, '--', 'node', runner],
   };
 }
 
@@ -243,6 +241,7 @@ async function startDeployCheck(projectDir: string, onFetch?: () => void): Promi
     writeFileSync(config, JSON.stringify({
       compilerOptions: contract.localCheckCompilerOptions(own),
       files: [...checked, ...declarations],
+      somewhereFunctionFiles: Object.keys(collected.functions),
     }));
     if (command !== process.execPath) onFetch?.();
   } catch (error) {
@@ -252,7 +251,7 @@ async function startDeployCheck(projectDir: string, onFetch?: () => void): Promi
 
   // Bounded, with its process group stopped on timeout or Ctrl-C: an npx
   // fetch of TypeScript never hangs or outlives the command.
-  const run = await runBounded(command, [...args, '--project', config, '--pretty', 'false'], projectDir, { onAbort: cleanup });
+  const run = await runBounded(command, [...args, config], projectDir, { onAbort: cleanup });
   cleanup();
   const out = run.out;
   if (run.timedOut) return { ok: false, findings: [], typescript, checkedFiles: checked.length, error: timedOutMessage('npx', run) };

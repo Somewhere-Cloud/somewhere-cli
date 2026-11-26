@@ -359,8 +359,10 @@ test('a link without a token fails without calling the platform', async () => {
   assert.deepEqual(tab.landing, { status: 'failed', error: 'This sign-in link is incomplete. Request a new one.' });
 });
 
-test('reload during an unanswered redemption cannot offer the sent token again', async () => {
-  const tab = await openTab(inviteSearch(TEAM), answer(() => new Promise(() => {})));
+test('reload during an unanswered redemption cannot offer the sent token again', async t => {
+  const pending = Promise.withResolvers();
+  t.after(() => pending.resolve(signedOut()));
+  const tab = await openTab(inviteSearch(TEAM), answer(() => pending.promise));
   await tab.load();
   await tab.press();
   assert.equal(tab.verifies().length, 1);

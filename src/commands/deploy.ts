@@ -1332,7 +1332,7 @@ export function registerDeploy(program: Command) {
           if (!opts.allowTypeErrors) {
             stopPrestart();
             spinner?.stop();
-            error(`Deploy stopped before upload. To proceed anyway: ${cliInvocation()} deploy --allow-type-errors`);
+            error(`Deploy stopped before upload. Calls to missing platform methods or with invalid options will fail at runtime. To upload anyway, run ${cliInvocation()} deploy --allow-type-errors.`);
             process.exitCode = 1;
             return;
           }

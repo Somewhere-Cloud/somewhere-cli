@@ -1,20 +1,20 @@
 {
-  "source_commit": "c49f40389a7e5789f3fafd2467e0c5e9d55f201b",
+  "source_commit": "c28e5e9391b22cb870687d160eae0e64ff344ffe",
   "esbuild": "0.24.0",
   "source_files": {
     "shared/app-model-catalog.ts": "c9a0119366beabb10157fcc9866f4d32b320b680f1c5717d837a5ca99875fa13",
     "shared/cloud-dev-entitlement.ts": "1993a9e1c781d9daed29b3cfef0e8a370e150ce06d2acc7c408c2a24c50b4960",
     "shared/d1-region.ts": "71cda96cfead241b4f4e35b8cd6b1d8e577f072257e91a8dbe0deaa1b142b378",
     "shared/d1-session.ts": "2ae29b74bba68016c86d25fa2a58f8c2fce4aca8fe57fafc253d380c47a3c0ab",
-    "shared/transient-read.ts": "2f22daebdc74fed6255a29df7deda0db307f9165c1d9988dba3ee872b2584ffd",
+    "shared/transient-read.ts": "7c10de219ee4b910cb2e35d9aeb7a0974ae3eeaeea7c4b5983b89f3c403db1cb",
     "shared/types/placeholder-identity.ts": "089a46e2474a21193d3611eddd9c94b6bbe62441b3039ed80fc8499bada447ca",
-    "worker/containers/compile/checker-contract.cjs": "c6d4ebc9ec058b3562655cc4f18dc1cea7e4492eb35b7f0fd0d87e974c26b492",
-    "worker/containers/compile/consumer-contract.cjs": "d3c526407fa492b41048472fda63343e1e0af14ec9127815af3f58b461f9a96f",
+    "worker/containers/compile/checker-contract.cjs": "732cb5a886548f91499031fc1f0727ae05e824ab8d482693f2ad04de4868595b",
+    "worker/containers/compile/consumer-contract.cjs": "068b92efb226e74af8979557c7dc2b7f06787efb151f74c7593b0525995c8baa",
     "worker/containers/compile/declared-data-contract.cjs": "ebdc7dbc12283a7218c28e0e912e736ac27a8e9d513b82c097ebff6df3c1dd91",
     "worker/containers/compile/generated-declarations-render.cjs": "7ffdb34645cc9eccac6eba39dc86b646a41c4de8a1a038d2b5b46f42df9f1157",
     "worker/containers/compile/generated-declarations.cjs": "6e9902e054c5c784fd9b3c3fafc1869e79954100a45014e1132247cd82833ec4",
-    "worker/containers/compile/groups-types.cjs": "7c22b4bb96c9391005d434852600dc02bc8a6bbb99d78d2b8e3eb152f7b72c58",
-    "worker/containers/compile/runtime-types.cjs": "5866b2cb5e0d95a2f8779f90a9e981ec30070482bf3f595f6ec2f78d8e3ea382",
+    "worker/containers/compile/groups-types.cjs": "7681d2adf0c7761a4971d7ba8287b238e464fd2768c878477e32794538675b33",
+    "worker/containers/compile/runtime-types.cjs": "a952608ea438a616bd21b444c5f0681abf3c2e3308df287065c72464ca2e7e6f",
     "worker/containers/compile/schema-types.cjs": "806147ad7224356734020c62441123db16b50ef6456db974c573b226d517e6cc",
     "worker/containers/compile/typed-data.cjs": "1c8bec853fbee4ffd34c651076a4e1f4d8b18c0c2be5e99e31df7c9283207627",
     "worker/containers/compile/typed-files.cjs": "f2568567a53994575ede91f9a0839965e64f94eb92ae11315650189b6de0f79c",
@@ -33,7 +33,7 @@
     "worker/src/services/jobs/limits.ts": "2d0d73de8752ad4fb84d281bac6c3049bb34a7d0b08c7cda76634c19c303c529",
     "worker/src/utils/alert-audit.ts": "318ce8cd45954f50a77bf0782efa4cc433016e923431e3a4042d2294f31610f8",
     "worker/src/utils/alert-streak.ts": "cc15ff03920821cb4b2c6758fdd29508b24b29f258287e977c23a8ae28c14cbd",
-    "worker/src/utils/authority.ts": "e757b33b6467698d59670b565b57c916a02ad6e21a8463f416f1771702097b36",
+    "worker/src/utils/authority.ts": "71b7605de8bdb32229f24a7cde42d6f253d4e2f7ae7e6d772f1179dfaf1c8c10",
     "worker/src/utils/authority/client-contract-schema.ts": "c1b433d2b09d7c1e98adae70b5754fe704fabb2ecc8e20347518a633e31f99d0",
     "worker/src/utils/authority/intake-bake.ts": "7216e288e40673819295d999b3bdbf5e4319e1e21608e3b81eda9d102ff8d636",
     "worker/src/utils/authority/role-domain-map.ts": "dc1b6abba79278a970cc5a07c4eb7ea73acac262425b489670e90508b95a5ff1",
@@ -69,10 +69,10 @@
     "worker/src/utils/platform-compile-failure.ts": "eb4cea8a54599e2ca852b67f576a4402fb0281da4c7f45a7ed735bc36a684883",
     "worker/src/utils/project-custom-hosts.ts": "ef693b4ea70f93fd66f3b3cda88ce68664540366caa33fa0169bf7bcfce80b2a",
     "worker/src/utils/public-urls.ts": "44e455118f85c111316f6d8346d61e736ffcd1971c4539ea146100084aa6f21e",
-    "worker/src/utils/reference-check-inputs.ts": "32f01f67fd971cf526af13385fbe6ae3d7876d0d15c4e8098069203eefa5e22e",
+    "worker/src/utils/reference-check-inputs.ts": "5ce10ee8feb59a7f31878243a6a4899d41f4e60e7af0687399693aeab7914b9a",
     "worker/src/utils/telegram-attempt-receipts.ts": "a9ba55ae71f63ada44a105f1ceae04b0491bda0d6e77e5762db2dbecdd2981dd",
     "worker/src/utils/telegram.ts": "9aaaa2597c366da1eeee9e2252e9b73e611ea97ed9558f7e07e694d9b393f053",
     "worker/src/utils/workers-ai-comparison.ts": "18b5d5ea96f817387a5ef49733ba611c99cbb14987143c28118b1c90f3b637d4"
   },
-  "sha256": "707f1cbb28d25f458c8d6938d00e6a45c8a8838d6e303dde2d326f842bed3320"
+  "sha256": "bb7edd3ef9072fe1592f11bf8072e6d1fba6b9b8fd860db8e026cdcb7b64cbe8"
 }

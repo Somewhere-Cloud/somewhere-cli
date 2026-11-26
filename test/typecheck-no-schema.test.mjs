@@ -49,7 +49,7 @@ test('without db/schema.ts a bare typed handler and sw.endpoint typecheck', asyn
   const declaration = declarationOf(root);
   assert.ok(declaration.startsWith(GENERATED_DATA_HEADER));
   assert.match(declaration, /interface SomewhereRuntimeContext/);
-  assert.match(declaration, /declare const sw: \{/);
+  assert.match(declaration, /^declare const sw: SomewhereEndpointGlobal;$/m);
 });
 
 test('the runtime types still catch real mistakes without a schema', async (t) => {

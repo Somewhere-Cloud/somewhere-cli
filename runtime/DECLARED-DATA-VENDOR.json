@@ -1,5 +1,5 @@
 {
-  "source_commit": "139eed3c98bc94d9ae5ecd4c69657892b215230a",
+  "source_commit": "8dde25f585f5a6647e3eee35c79aa71ef6f7553a",
   "esbuild": "0.24.0",
   "source_files": {
     "shared/app-model-catalog.ts": "c9a0119366beabb10157fcc9866f4d32b320b680f1c5717d837a5ca99875fa13",

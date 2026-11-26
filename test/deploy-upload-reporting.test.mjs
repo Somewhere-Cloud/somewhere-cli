@@ -17,6 +17,7 @@ import { fileURLToPath } from 'node:url';
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 const distIndex = join(repoRoot, 'dist', 'index.js');
 
+const SCHEMA_NOTE = 'notes: private to each signed-in user by default (owner()). For a table every signed-in user can read, declare shared(); for a team, group(); details: somewhere docs declared-data';
 const SERVER_WARNING = 'Not published (2 test files): e2e/run.mjs, tests/note.txt. Files inside tests/, e2e/ folders stay in your project\'s private source and are never served on your site.';
 
 function run(args, { cwd, env }) {
@@ -62,7 +63,7 @@ function project() {
 /** One fake platform. `warnings` is what this server version says. */
 async function withPlatform(warnings, fn) {
   const requests = [];
-  const deployData = { files: 4, url: 'https://upload-report.somewhere.site', has_functions: false, build_log: [], warnings };
+  const deployData = { files: 4, url: 'https://upload-report.somewhere.site', has_functions: false, build_log: [], warnings, schema_notes: [SCHEMA_NOTE] };
   const dryRunData = {
     current_version: 3,
     static_files: { added: [], modified: ['index.html'], removed: [], added_count: 0, modified_count: 1, removed_count: 0 },
@@ -103,6 +104,7 @@ for (const [label, warnings] of [['a server that names private files', [SERVER_W
       const env = { HOME, USERPROFILE: HOME, SOMEWHERE_API_URL: apiUrl };
       const first = await run(['deploy'], { cwd: dir, env });
       assert.equal(first.status, 0, first.all);
+      assert.equal(first.stdout.split(/\r?\n/).filter(line => line === SCHEMA_NOTE).length, 1);
       const deploy = requests.find((r) => r.url === '/v1/deploy');
       assert.deepEqual(uploaded(deploy), EXPECTED_UPLOAD, 'referenced source uploads and unreferenced test files stay local');
       assert.ok(!('NOTES.md' in deploy.body.files), 'an unreferenced root note is still held back');

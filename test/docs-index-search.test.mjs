@@ -1,6 +1,5 @@
-// : bare `somewhere docs` prints the topic index (not the
-// 18k-line manual), `somewhere docs search <term>` finds sections, and
-// : docs warn when they describe a newer CLI than the one running.
+// Docs entry, topic index and section search.
+
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
@@ -66,6 +65,10 @@ async function withServer(fn) {
   const server = createServer((req, res) => {
     requests.push(req.url);
     const url = new URL(req.url, 'http://localhost');
+    if (url.pathname === '/docs.txt') {
+      res.end('# Somewhere\n\n[Full manual](https://somewhere.cloud/manual.txt)\n');
+      return;
+    }
     if (url.pathname === '/docs-manifest.json') {
       res.setHeader('Content-Type', 'application/json');
       res.end(JSON.stringify(MANIFEST));
@@ -89,9 +92,18 @@ async function withServer(fn) {
   }
 }
 
-test('bare docs prints the grouped topic index and how to open, never the manual', async () => {
+test('bare docs reads the shared platform overview', async () => {
   await withServer(async (base, requests) => {
     const result = await run(['docs'], { SOMEWHERE_DOCS_BASE: base });
+    assert.equal(result.status, 0, result.stderr);
+    assert.deepEqual(requests, ['/docs.txt']);
+    assert.equal(result.stdout, '# Somewhere\n\n[Full manual](https://somewhere.cloud/manual.txt)\n');
+  });
+});
+
+test('docs --list prints the grouped topic index', async () => {
+  await withServer(async (base, requests) => {
+    const result = await run(['docs', '--list'], { SOMEWHERE_DOCS_BASE: base });
     assert.equal(result.status, 0, result.stderr);
     assert.deepEqual(requests, ['/docs-manifest.json'], 'the full manual (/docs.txt) is not fetched');
     assert.match(result.stdout.slice(0, 1100), /Run somewhere init --name my-app.*AGENTS\.md/);

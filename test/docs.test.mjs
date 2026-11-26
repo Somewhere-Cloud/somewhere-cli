@@ -111,7 +111,7 @@ async function withManifest(fn, manifest = MANIFEST) {
   }
 }
 
-test('docs docs streams the full document to stdout', async () => {
+test('docs docs streams the entry document to stdout', async () => {
   const fullDoc = `${'agent-docs\n'.repeat(45_000)}Next.js apps are NOT supported near the end\n`;
 
   const server = createServer((req, res) => {
@@ -146,7 +146,7 @@ test('docs docs streams the full document to stdout', async () => {
 test('docs --full with no topic streams the full platform reference', async () => {
   const fullDoc = 'full platform reference\n';
   const server = createServer((req, res) => {
-    assert.equal(req.url, '/docs.txt');
+    assert.equal(req.url, '/manual.txt');
     res.end(fullDoc);
   });
   await new Promise((resolvePromise) => server.listen(0, '127.0.0.1', resolvePromise));
@@ -653,7 +653,7 @@ test('docs pull writes every topic explicitly and docs warns when the copy ages'
   manifest.pages = [...manifest.pages, { id: 'sw.rateLimit', title: 'Rate limits', section: null, body: 'Rate limit a request.' }];
   await withManifest(async (base) => {
     const config = { ...env, SOMEWHERE_DOCS_BASE: base };
-    const index = await run(['docs'], config, options);
+    const index = await run(['docs', '--list'], config, options);
     assert.equal(index.status, 0, index.stderr);
     assert.throws(() => readFileSync(join(project, '.somewhere/docs/.stamp.json')), { code: 'ENOENT' });
     const pull = await run(['docs', 'pull', '--json'], config, options);

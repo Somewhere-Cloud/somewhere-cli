@@ -150,6 +150,36 @@ test('--scope functions sends the dependency manifest with the functions, and no
   assert.ok(Object.keys(bodies[0].functions ?? {}).some((path) => path.startsWith('api/')), 'the function rides along');
 });
 
+test('--scope functions sends npm-shrinkwrap.json, and a deleted lockfile is simply absent from the set', async () => {
+  const testHome = mkdtempSync(join(tmpdir(), 'sw-scope-shrinkwrap-home-'));
+  const fixtureDir = mkdtempSync(join(tmpdir(), 'sw-scope-shrinkwrap-fixture-'));
+  writeLogin(testHome);
+  writeProject(fixtureDir);
+  writeFixture(fixtureDir);
+  writeFileSync(join(fixtureDir, 'package.json'), JSON.stringify({ name: 'fixture', dependencies: { 'left-pad': '1.3.0' } }) + '\n');
+  writeFileSync(join(fixtureDir, 'npm-shrinkwrap.json'), JSON.stringify({ name: 'fixture', lockfileVersion: 3, packages: {} }) + '\n');
+  mkdirSync(join(fixtureDir, 'api'), { recursive: true });
+  writeFileSync(join(fixtureDir, 'api', 'pad.ts'), "export default async () => new Response('ok');\n");
+  const bodies = [];
+  await withServer((req, res) => {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', () => {
+      if (req.method === 'POST' && req.url === '/v1/deploy') {
+        bodies.push(JSON.parse(body));
+        sendJson(res, 200, { ok: true, data: { version: bodies.length, files: 0, url: 'https://fixture.somewhere.site', has_functions: true } });
+      } else sendJson(res, 404, { ok: false, error: 'NOT_FOUND', message: req.url });
+    });
+  }, async apiUrl => {
+    const result = await run(['deploy', '--json', '--scope', 'functions'], {
+      cwd: fixtureDir, env: { HOME: testHome, USERPROFILE: testHome, SOMEWHERE_API_URL: apiUrl },
+    });
+    assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+  });
+  assert.deepEqual(Object.keys(bodies[0].files).sort(), ['npm-shrinkwrap.json', 'package.json'],
+    'the shrinkwrap is sent and the absent package-lock.json is not, so the platform drops the live release\'s');
+});
+
 test('deploy output names removed and kept functions, and says nothing when there are none', async () => {
   const testHome = mkdtempSync(join(tmpdir(), 'sw-function-report-home-'));
   const fixtureDir = mkdtempSync(join(tmpdir(), 'sw-function-report-fixture-'));

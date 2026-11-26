@@ -2322,9 +2322,11 @@ export function formatDryRunNeedsProjectExplanation(): string {
   ].join('\n');
 }
 
-/** What --scope functions sends from the static map: the dependency manifest only. */
+/** What --scope functions sends from the static map: the folder's whole dependency manifest set, and nothing
+ *  else. The platform takes the set as sent once package.json is in it, so a lockfile deleted or switched
+ *  locally (package-lock.json to npm-shrinkwrap.json) is gone there too, not inherited from the live release. */
 export function functionDependencyManifest(files: Record<string, string>): Record<string, string> {
-  return Object.fromEntries(['package.json', 'package-lock.json']
+  return Object.fromEntries(['package.json', 'package-lock.json', 'npm-shrinkwrap.json']
     .filter((path) => typeof files[path] === 'string')
     .map((path) => [path, files[path]]));
 }

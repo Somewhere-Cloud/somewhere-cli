@@ -2780,6 +2780,7 @@ interface SomewhereAiChatOptions {
 interface SomewhereAiChatResult {
   content: SomewhereAiContentBlock[];
   text: string;
+  // 'refusal' for a model safety stop.
   stop_reason: string | null;
   model: string | null;
   provider: string;
@@ -3140,6 +3141,7 @@ interface SomewhereAgentRunResult extends Omit<SomewhereAiChatResult, 'cost'> {
   tool_calls_made: number;
   total_input_tokens: number;
   total_output_tokens: number;
+  // Includes 'model_refused', alongside the run's other stop conditions.
   completion_reason: string;
   // Non-enumerable: readable directly, dropped by spread / JSON.stringify.
   readonly steps: SomewhereAgentStep[];
@@ -4523,8 +4525,8 @@ var require_consumer_contract = __commonJS({
   "worker/containers/compile/consumer-contract.cjs"(exports2, module2) {
     "use strict";
     var CONSUMER_CONTRACT2 = Object.freeze({
-      version: 42,
-      digest: "a2e64aea9f363bd48107929ab7896d5be267a0e998010222913001f7fe47056c"
+      version: 43,
+      digest: "0d081302e1723dadf797a11876f1aeed00e95e1daf55a4bc647ca1a99b21e1e5"
     });
     var MEMBERSHIPS = "memberships: table({ id: id(), team_id: text(), member_id: text() }, { scope: owner(), client: { read: true } }),";
     var SHARES = "shares: table({ id: id(), grantee_id: text() }, { scope: owner(), client: { read: true, create: ['grantee_id'], delete: true }, unique: [['user_id', 'grantee_id']] }),";

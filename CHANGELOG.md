@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.38.161
+
+- Syncs local runtime declarations with platform consumer contract 43. The declarations document the stop reasons for model refusals in `sw.ai.chat` and `sw.agent.run`.
+
 ## 0.38.160
 
 - Find complete examples with `somewhere docs example`. Search returns an outline and the best matching section in full. Add `--include-api` to include API reference topics.

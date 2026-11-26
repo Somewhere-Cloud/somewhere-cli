@@ -89,6 +89,15 @@ test('db restore-points lists, takes and deletes through the restore point route
   assert.equal(r.status, 0, r.stderr);
   assert.deepEqual(requests.at(-1), { path: '/v1/db/restore-points/rp_fixture?project_id=fixture-project', method: 'DELETE', body: null });
 
+  reply = { status: 404, body: { ok: false, error: 'NOT_FOUND', message: 'Endpoint not found.' } };
+  const beforeRefusals = requests.length;
+  for (const args of [[], ['--take'], ['--delete', 'rp_fixture']]) {
+    r = await command(args);
+    assert.notEqual(r.status, 0);
+    assert.match(r.stdout + r.stderr, /Endpoint not found\./);
+  }
+  assert.deepEqual(requests.slice(beforeRefusals).map(({ method }) => method), ['GET', 'POST', 'DELETE']);
+
   // db dump on a database too large for one response exports in the background and streams the file.
   const ex = { id: 'cp_fixture', state: 'ready', size_bytes: 40, tables: 1, rows: 2, exact: false, detail: null, consistency: 'Read in pages over 3 seconds while the app kept running.' };
   route = (req) => req.url === '/v1/db/dump' ? { status: 413, body: { ok: false, error: 'DUMP_SIZE_LIMIT_EXCEEDED', message: 'too large', data: { background_export: true } } }

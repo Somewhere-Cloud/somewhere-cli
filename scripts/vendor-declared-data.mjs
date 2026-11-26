@@ -29,7 +29,7 @@ import { declaredRoles } from './worker/containers/compile/groups-types.cjs';
 import { describeFilesClient } from './worker/containers/compile/typed-files.cjs';
 export { SCHEMA_DECLARATION } from './worker/containers/compile/schema-types.cjs';
 export { ENDPOINT_DECLARATION, RUNTIME_CONTEXT_DECLARATION } from './worker/containers/compile/runtime-types.cjs';
-export { CLIENT_FILE as FILES_DECLARATION_FILE } from './worker/containers/compile/typed-files.cjs';
+export { CLIENT_FILE as FILES_DECLARATION_FILE, SINGLE_REQUEST_MAX_BYTES } from './worker/containers/compile/typed-files.cjs';
 export * as checkerContract from './worker/containers/compile/checker-contract.cjs';
 export { referenceCheckDeclarations, isPlainPageScript, isRuntimeEndpointGlobal } from './worker/src/utils/reference-check-inputs.ts';
 export { CONSUMER_CONTRACT, consumerContractComponents, consumerContractFingerprint, consumerContractVerdict, parseConsumerContractHeader } from './worker/containers/compile/consumer-contract.cjs';
@@ -46,6 +46,10 @@ export function runtimeDeclarationFromFiles(files) {
 }
 export function declaredTablesFromFiles(files) {
   return declaredTablesDeclaration(schemaAuthorityFromSource(files));
+}
+export function filesContractFromFiles(files) {
+  const canonical = declaredFilesFromSource(files);
+  return canonical ? describeFilesClient(canonical).contract_digest : undefined;
 }
 export function filesDeclarationFromFiles(files) {
   const canonical = declaredFilesFromSource(files);

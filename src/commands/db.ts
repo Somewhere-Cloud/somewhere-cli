@@ -209,6 +209,60 @@ export function registerDb(program: Command) {
     });
 
   db
+    .command('restore-points')
+    .description('List the restore points the platform keeps: full copies of the database taken before each deploy that changes its shape, daily when the data changed, and by hand (project owner only)')
+    .option('--project <id>', 'Project ID (defaults to .somewhere.json)')
+    .option('--take', 'Take a restore point now')
+    .option('--delete <id>', 'Delete one restore point now')
+    .option('--json', 'Print the API response as JSON')
+    .action(async (opts) => {
+      if (opts.take && opts.delete) {
+        error('Use --take or --delete, not both.');
+        process.exit(1);
+      }
+      let projectId: string | undefined = opts.project;
+      if (!projectId) {
+        const config = loadProjectConfig();
+        if (!config) {
+          error('No project specified and no .somewhere.json found. Pass --project <id>.' + unlinkedFolderHint());
+          process.exit(1);
+        }
+        projectId = config.project_id;
+      }
+      type Point = { id: string; reason: string; taken_at: string; expires_at: string; size_bytes: number; tables: number; rows: number };
+      const size = (n: number) => n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1000))} KB`;
+      const client = new ApiClient(getToken());
+      try {
+        if (opts.take) {
+          const spinner = opts.json ? null : ora('Taking a restore point…').start();
+          const r = await client.call<{ restore_point: Point }>('POST', '/db/restore-points', { project_id: projectId });
+          if (opts.json) { printJson(r); return; }
+          spinner?.succeed(`Restore point ${r.restore_point.id} taken (${size(r.restore_point.size_bytes)}, ${r.restore_point.tables} tables, ${r.restore_point.rows} rows); kept until ${r.restore_point.expires_at}.`);
+          return;
+        }
+        if (opts.delete) {
+          const r = await client.call<{ deleted: string }>('DELETE', `/db/restore-points/${encodeURIComponent(opts.delete)}`, undefined, { project_id: projectId });
+          if (opts.json) { printJson(r); return; }
+          success(`Deleted restore point ${r.deleted}.`);
+          return;
+        }
+        const r = await client.call<{ restore_points: Point[] }>('GET', '/db/restore-points', undefined, { project_id: projectId });
+        if (opts.json) { printJson(r); return; }
+        if (!r.restore_points.length) {
+          info(dim(`No restore points yet. One is taken before each deploy that changes the database, daily when the data changed, or now with \`${cliInvocation()} db restore-points --take\`.`));
+          return;
+        }
+        table(
+          ['Restore point', 'Taken', 'Why', 'Size', 'Expires'],
+          r.restore_points.map((p) => [teal(p.id), p.taken_at, p.reason, size(p.size_bytes), p.expires_at]),
+        );
+      } catch (err) {
+        error(err instanceof Error ? err.message : String(err), err);
+        process.exit(1);
+      }
+    });
+
+  db
     .command('tables')
     .description('List tables in the project database')
     .option('--project <id>', 'Project ID (defaults to .somewhere.json)')

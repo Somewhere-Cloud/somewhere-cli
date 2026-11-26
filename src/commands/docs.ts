@@ -24,7 +24,7 @@ const TOPICS: Record<string, { path: string; blurb: string }> = {
   },
   docs: {
     path: '/docs.txt',
-    blurb: 'Full platform reference for agents (large)',
+    blurb: 'Platform overview, plans and topic links',
   },
   guides: {
     path: '/guides.txt',
@@ -327,6 +327,12 @@ export function findPublicDocsPage(
   return byId(requested) ?? (target ? byId(target) : undefined);
 }
 
+function docsConnectionError(cause: unknown): Error {
+  const inner = (cause as { cause?: { code?: string; message?: string } })?.cause;
+  const reason = inner?.code ?? inner?.message ?? (cause instanceof Error ? cause.message : String(cause));
+  return new Error(`Could not reach ${DOCS_BASE} (${reason}) — check your connection. The docs are public and need no login.`, { cause });
+}
+
 async function fetchPublicManifestWithGroups(): Promise<{ pages: PublicDocsPage[]; groups: PublicDocsGroup[]; aliases: Record<string, string>; version?: string }> {
   let res: Awaited<ReturnType<typeof fetch>>;
   try {
@@ -334,10 +340,7 @@ async function fetchPublicManifestWithGroups(): Promise<{ pages: PublicDocsPage[
       headers: { 'User-Agent': 'somewhere-cli' },
     });
   } catch (cause) {
-    // A bare "fetch failed" names neither the host nor the reason.
-    const inner = (cause as { cause?: { code?: string; message?: string } })?.cause;
-    const reason = inner?.code ?? inner?.message ?? (cause instanceof Error ? cause.message : String(cause));
-    throw new Error(`Could not reach ${DOCS_BASE} (${reason}) — check your connection. The docs are public and need no login.`);
+    throw docsConnectionError(cause);
   }
   if (!res.ok) {
     throw new Error(`Could not fetch ${DOCS_BASE}${PUBLIC_MANIFEST_PATH} (HTTP ${res.status}).`);
@@ -415,7 +418,7 @@ async function fetchDocsSearch(query: string, topic?: string, includeApi?: boole
     headers: { 'User-Agent': 'somewhere-cli' },
   });
   if (!res.ok) {
-    if (topic && res.status === 404) throw new Error(`Unknown docs topic "${topic}". Run ${cliInvocation()} docs for the topic index.`);
+    if (topic && res.status === 404) throw new Error(`Unknown docs topic "${topic}". Run ${cliInvocation()} docs --list for the topic index.`);
     throw new Error(`Could not search docs at ${DOCS_BASE} (HTTP ${res.status}).`);
   }
   const { results, total, version } = await res.json() as { results: DocsSearchMatch[]; total: number; version?: string };
@@ -512,19 +515,19 @@ export function registerDocs(program: Command) {
   program
     .command('docs [topic] [terms...]')
     .description(
-      'Read platform docs. No login needed — every topic is public. With no topic, prints the topic index. '
+      'Read platform docs. No login needed — every topic is public. With no topic, opens the platform overview. '
         + `Search with \`${cliInvocation()} docs --search "<words>"\`. Quick topics: `
         + Object.keys(TOPICS).join(', ')
         + `. Example manual topic: \`${cliInvocation()} docs sw.db\`.`,
     )
-    .option('--list', `List available topics (the same index bare \`${cliInvocation()} docs\` prints)`)
+    .option('--list', 'List available topics')
     .option('--full', 'Print the complete topic; with no topic, print the full manual')
     .option('--search <words>', 'Find matching builder docs and read the top section whole')
     .option('--include-api', 'Include the HTTP API catalog and developer tool reference in search')
     .option('--section <id>', 'Print one section of a topic (ids are listed in the summary)')
     .option('--json', 'Print the selected document in a JSON envelope')
     .addHelpText('after', '\nExamples:\n'
-      + `  ${cliInvocation()} docs                         # topic index\n`
+      + `  ${cliInvocation()} docs                         # platform overview\n`
       + `  ${cliInvocation()} docs --search "magic link"   # matching builder docs\n`
       + `  ${cliInvocation()} docs pull                    # download Markdown into .somewhere/docs/\n`
       + `  ${cliInvocation()} docs sw.auth                 # topic summary when the whole topic is long\n`
@@ -643,7 +646,7 @@ export function registerDocs(program: Command) {
       const view: DocsView = opts.section !== undefined
         ? { kind: 'section', id: opts.section }
         : opts.full ? { kind: 'full' } : { kind: 'default' };
-      if (opts.list || (topic === undefined && view.kind === 'default')) {
+      if (opts.list) {
         try {
           const { pages, groups, version } = await fetchPublicManifestWithGroups();
           await warnIfLocalDocsOlder(version);
@@ -681,7 +684,9 @@ export function registerDocs(program: Command) {
         ? requestedTopic
         : ownKey(ALIASES, lowerTopic) ? ALIASES[lowerTopic as keyof typeof ALIASES] : undefined;
       const resolvedTopic = key ?? requestedTopic;
-      const entry = key ? TOPICS[key] : undefined;
+      const entry = key === 'docs' && view.kind === 'full'
+        ? { path: '/manual.txt' }
+        : key ? TOPICS[key] : undefined;
       if (entry && view.kind === 'section') {
         reportDocsFailure({
           error: 'DOCS_SECTION_INDEX_UNAVAILABLE',
@@ -797,7 +802,7 @@ export function registerDocs(program: Command) {
         }
         await writeResponseBodyToStdout(res);
       } catch (e) {
-        error(`Could not reach ${DOCS_BASE} — check your connection. (${e instanceof Error ? e.message : String(e)})`, e);
+        error(docsConnectionError(e).message, e);
         process.exit(1);
       }
     });

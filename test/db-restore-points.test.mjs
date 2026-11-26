@@ -91,7 +91,7 @@ test('db restore-points lists, takes and deletes through the restore point route
 
   // db dump on a database too large for one response exports in the background and streams the file.
   const ex = { id: 'cp_fixture', state: 'ready', size_bytes: 40, tables: 1, rows: 2, exact: false, detail: null, consistency: 'Read in pages over 3 seconds while the app kept running.' };
-  route = (req) => req.url === '/v1/db/dump' ? { status: 413, body: { ok: false, error: 'DUMP_SIZE_LIMIT_EXCEEDED', message: 'too large' } }
+  route = (req) => req.url === '/v1/db/dump' ? { status: 413, body: { ok: false, error: 'DUMP_SIZE_LIMIT_EXCEEDED', message: 'too large', data: { background_export: true } } }
     : req.url === '/v1/db/exports' ? { status: 202, body: { ok: true, data: { export: { ...ex, state: 'running' } } } }
     : req.url.startsWith('/v1/db/exports/cp_fixture/sql') ? { type: 'application/sql', body: 'CREATE TABLE t (x);\nINSERT INTO t VALUES (1);\n' }
     : { body: { ok: true, data: { export: ex } } };
@@ -106,7 +106,7 @@ test('db restore-points lists, takes and deletes through the restore point route
   // replaces an existing private backup; the plane is checked before writing; --json needs --output.
   const out = join(home, 'backup.sql');
   writeFileSync(out, 'old'); chmodSync(out, 0o600);
-  route = (req) => req.url === '/v1/db/dump' ? { status: 413, body: { ok: false, error: 'EXPORT_SIZE_LIMIT_EXCEEDED', message: 'too large' } }
+  route = (req) => req.url === '/v1/db/dump' ? { status: 413, body: { ok: false, error: 'EXPORT_SIZE_LIMIT_EXCEEDED', message: 'too large', data: { background_export: true } } }
     : req.url === '/v1/db/exports' ? { status: 202, body: { ok: true, data: { export: { ...ex, plane: 'managed', state: 'running' } } } }
     : req.url.startsWith('/v1/db/exports/cp_fixture/sql') ? { type: 'application/sql', body: 'CREATE TABLE m (x);\n' }
     : { body: { ok: true, data: { export: { ...ex, plane: 'managed' } } } };
@@ -115,27 +115,45 @@ test('db restore-points lists, takes and deletes through the restore point route
   assert.equal(readFileSync(out, 'utf8'), 'CREATE TABLE m (x);\n');
   assert.equal(statSync(out).mode & 0o777, 0o600, 'the replaced backup stays private');
   assert.deepEqual(readdirSync(home).filter((f) => f.endsWith('.tmp')), []);
-  route = (req) => req.url === '/v1/db/dump' ? { status: 413, body: { ok: false, error: 'DUMP_SIZE_LIMIT_EXCEEDED', message: 'too large' } }
+  route = (req) => req.url === '/v1/db/dump' ? { status: 413, body: { ok: false, error: 'DUMP_SIZE_LIMIT_EXCEEDED', message: 'too large', data: { background_export: true } } }
     : req.url === '/v1/db/exports' ? { status: 202, body: { ok: true, data: { export: { ...ex, plane: 'managed' } } } }
     : { body: { ok: true, data: { export: { ...ex, plane: 'managed' } } } };
   r = await command([], ['dump', '--project', 'fixture-project', '--output', join(home, 'raw.sql')]);
   assert.notEqual(r.status, 0); assert.match(r.stdout + r.stderr, /export of the managed tables, not the raw ones\. Nothing was written/);
   assert.deepEqual(readdirSync(home).filter((f) => f === 'raw.sql' || f.endsWith('.tmp')), []);
-  route = (req) => req.url === '/v1/db/dump' ? { status: 413, body: { ok: false, error: 'DUMP_SIZE_LIMIT_EXCEEDED', message: 'too large' } }
+  route = (req) => req.url === '/v1/db/dump' ? { status: 413, body: { ok: false, error: 'DUMP_SIZE_LIMIT_EXCEEDED', message: 'too large', data: { background_export: true } } }
     : req.url.startsWith('/v1/db/exports/cp_fixture/sql') ? { status: 500, body: { ok: false, error: 'INTERNAL_ERROR' } }
     : req.url === '/v1/db/exports' ? { status: 202, body: { ok: true, data: { export: ex } } } : { body: { ok: true, data: { export: ex } } };
   r = await command([], ['dump', '--project', 'fixture-project', '--output', join(home, 'failed.sql')]);
   assert.notEqual(r.status, 0);
   assert.deepEqual(readdirSync(home).filter((f) => f === 'failed.sql' || f.endsWith('.tmp')), [], 'nothing is left behind');
   const before = requests.length;
-  route = (req) => req.url === '/v1/db/dump' ? { status: 413, body: { ok: false, error: 'DUMP_SIZE_LIMIT_EXCEEDED', message: 'too large' } } : { body: { ok: true, data: { export: ex } } };
+  route = (req) => req.url === '/v1/db/dump' ? { status: 413, body: { ok: false, error: 'DUMP_SIZE_LIMIT_EXCEEDED', message: 'too large', data: { background_export: true } } } : { body: { ok: true, data: { export: ex } } };
   r = await command([], ['dump', '--project', 'fixture-project', '--json']);
   assert.notEqual(r.status, 0); assert.match(r.stdout + r.stderr, /pass --output <file> with --json/);
   assert.ok(!requests.slice(before).some((q) => q.path === '/v1/db/exports'), 'nothing started');
   route = null;
 
+  // Review 4: background export not offered (the refusal carries no background_export), in every flag
+  // combination and plane: the dump's own refusal exactly as sent, no second request, nothing written.
+  for (const [code, plane] of [['DUMP_SIZE_LIMIT_EXCEEDED', undefined], ['DUMP_ROW_LIMIT_EXCEEDED', 'raw'], ['EXPORT_SIZE_LIMIT_EXCEEDED', 'managed'], ['EXPORT_ROW_LIMIT_EXCEEDED', 'managed']]) {
+    const message = `${code}: the platform's own sentence.`;
+    for (const flags of [[], ['--json'], ['--json', '--output', join(home, 'j.sql')], ['--output', join(home, 'o.sql')]]) {
+      const start = requests.length;
+      route = () => ({ status: 413, body: { ok: false, error: code, message } });
+      r = await command([], ['dump', '--project', 'fixture-project', ...(plane ? ['--plane', plane] : []), ...flags]);
+      const label = `${code} ${plane ?? '(default plane)'} ${flags.join(' ') || '(no flags)'}`;
+      assert.notEqual(r.status, 0, label);
+      assert.ok((r.stdout + r.stderr).includes(`${code}: ${message}`), `${label}: ${r.stdout + r.stderr}`);
+      assert.doesNotMatch(r.stdout + r.stderr, /--output|Endpoint not found|FORBIDDEN|background/i, label);
+      assert.deepEqual(requests.slice(start).map((q) => q.path), ['/v1/db/dump'], `${label}: one request`);
+      assert.deepEqual(readdirSync(home).filter((f) => ['j.sql', 'o.sql'].includes(f) || f.endsWith('.tmp')), [], label);
+    }
+  }
+  route = null;
+
   // Background exports not offered for this project (the platform answers 404): the dump's own refusal, as before.
-  route = (req) => req.url === '/v1/db/dump' ? { status: 413, body: { ok: false, error: 'DUMP_SIZE_LIMIT_EXCEEDED', message: 'The SQL tables are larger than one dump holds.' } }
+  route = (req) => req.url === '/v1/db/dump' ? { status: 413, body: { ok: false, error: 'DUMP_SIZE_LIMIT_EXCEEDED', message: 'The SQL tables are larger than one dump holds.', data: { background_export: true } } }
     : { status: 404, body: { ok: false, error: 'NOT_FOUND', message: 'Endpoint not found.' } };
   r = await command([], ['dump', '--project', 'fixture-project', '--output', join(home, 'off.sql')]);
   assert.notEqual(r.status, 0);
@@ -143,7 +161,7 @@ test('db restore-points lists, takes and deletes through the restore point route
   assert.doesNotMatch(r.stdout + r.stderr, /Endpoint not found/);
   assert.deepEqual(readdirSync(home).filter((f) => f === 'off.sql' || f.endsWith('.tmp')), []);
   // Review 3: a download interrupted mid-stream (some bytes written, then the connection drops) leaves no file.
-  route = (req) => req.url === '/v1/db/dump' ? { status: 413, body: { ok: false, error: 'DUMP_SIZE_LIMIT_EXCEEDED', message: 'too large' } }
+  route = (req) => req.url === '/v1/db/dump' ? { status: 413, body: { ok: false, error: 'DUMP_SIZE_LIMIT_EXCEEDED', message: 'too large', data: { background_export: true } } }
     : req.url.startsWith('/v1/db/exports/cp_fixture/sql') ? { raw: (res) => { res.writeHead(200, { 'content-type': 'application/sql', 'content-length': '100000' }); res.write('CREATE TABLE t (x);\n'.repeat(50)); setTimeout(() => res.destroy(), 50); } }
     : req.url === '/v1/db/exports' ? { status: 202, body: { ok: true, data: { export: ex } } } : { body: { ok: true, data: { export: ex } } };
   r = await command([], ['dump', '--project', 'fixture-project', '--output', join(home, 'cut.sql')]);

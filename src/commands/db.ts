@@ -193,10 +193,13 @@ export function registerDb(program: Command) {
         });
 
         if (!res.ok) {
-          let refused: { error?: string } | null = null;
-          try { refused = JSON.parse(res.body) as { error?: string }; } catch { refused = null; }
-          // Too large for one response, in either plane: the background export copies it.
-          if (res.status === 413 && ['DUMP_SIZE_LIMIT_EXCEEDED', 'DUMP_ROW_LIMIT_EXCEEDED', 'EXPORT_SIZE_LIMIT_EXCEEDED', 'EXPORT_ROW_LIMIT_EXCEEDED'].includes(refused?.error ?? '') && !opts.manifest) {
+          type Refusal = { error?: string; data?: { background_export?: unknown } };
+          let refused: Refusal | null = null;
+          try { refused = JSON.parse(res.body) as Refusal; } catch { refused = null; }
+          // Too large for one response, in either plane: the background export copies it, but only when the
+          // refusal itself says this project and credential can start one. Otherwise it is reported as sent.
+          if (res.status === 413 && refused?.data?.background_export === true && !opts.manifest
+            && ['DUMP_SIZE_LIMIT_EXCEEDED', 'DUMP_ROW_LIMIT_EXCEEDED', 'EXPORT_SIZE_LIMIT_EXCEEDED', 'EXPORT_ROW_LIMIT_EXCEEDED'].includes(refused.error ?? '')) {
             if (await backgroundExport(client, projectId!, opts.plane, opts.output, Boolean(opts.json), spinner)) return;
           }
           spinner?.fail('Dump failed');

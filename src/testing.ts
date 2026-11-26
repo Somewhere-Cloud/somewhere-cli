@@ -16,6 +16,7 @@ export function waitForApp(page: BrowserPage, state: 'ready' | 'signed-in' | 'si
 // Lazy project-local Playwright resolution keeps UserSession dependency-free.
 export { test, expect, expectRefused, data, ready, type RefusalOptions, type TestUser, type NewUserOptions, type Person, type SignUpOptions, type SignInOptions, type FormSteps, type CodeSteps } from './lib/playwright-fixtures.js';
 
-export { openTestApp, type TestApp, type TestActor } from './lib/testing-app.js';
+export { openTestApp, type TestApp, type TestActor, type TestInboxMessage } from './lib/testing-app.js';
 export { assertNoLeak, captureResponses } from './lib/test-response-capture.js';
 export type { TestJob, TestJobOptions, TestJobTarget } from './lib/testing-jobs.js';
+export type { FilesRequest } from './lib/test-files.js';

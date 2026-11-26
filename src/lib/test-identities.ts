@@ -258,7 +258,7 @@ export function freshTestAddress(subdomain: string, prefix = 'signup'): string {
   return `${prefix}-${randomBytes(6).toString('hex')}@${subdomain}.test.somewhere.site`;
 }
 
-export interface InboxMessage { id: string; to: string; subject: string; verification_code: string | null; magic_link: string | null; created_at: string }
+export interface InboxMessage { id: string; to: string; subject: string; verification_code: string | null; magic_link: string | null; created_at: string; text: string | null; html: string | null }
 
 /** Messages for exactly `address` created after `since`, newest first. The server's `since` only
  *  drives the long-poll; the list is filtered here so a stale code is never returned. */
@@ -272,6 +272,8 @@ export function messagesAfter(messages: unknown, address: string, since: number)
       verification_code: typeof m.verification_code === 'string' && m.verification_code ? m.verification_code : null,
       magic_link: typeof m.magic_link === 'string' && m.magic_link ? m.magic_link : null,
       created_at: String(m.created_at ?? ''),
+      text: typeof m.text === 'string' ? m.text : null,
+      html: typeof m.html === 'string' ? m.html : null,
     }))
     .filter((m) => m.to.toLowerCase() === want && Date.parse(m.created_at) > since)
     .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));

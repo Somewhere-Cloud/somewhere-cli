@@ -40,6 +40,8 @@ interface DeclaredDataGenerator {
   localDeclarationFromFiles(files: Record<string, string>): string | undefined;
   declaredTablesFromFiles(files: Record<string, string>): string;
   runtimeDeclarationFromFiles(files: Record<string, string>): string;
+  SINGLE_REQUEST_MAX_BYTES: number;
+  filesContractFromFiles(files: Record<string, string>): string | undefined;
   filesDeclarationFromFiles(files: Record<string, string>): string | undefined;
   SCHEMA_DECLARATION: string;
   RUNTIME_CONTEXT_DECLARATION: string;
@@ -57,6 +59,15 @@ export interface LocalDeclaredData {
 
 /** The generated somewhere:files declaration; the compiler's own file name. */
 export const FILES_DECLARATION_FILE = (require('./runtime/declared-data.cjs') as DeclaredDataGenerator).FILES_DECLARATION_FILE;
+
+/** Use the same canonical schema parser and digest as the deployed file door. */
+export function localFilesContract(projectDir: string): { digest: string; singleRequestMaxBytes: number } {
+  const path = join(projectDir, 'db', 'schema.ts');
+  const generator = require('./runtime/declared-data.cjs') as DeclaredDataGenerator;
+  const digest = existsSync(path) && generator.filesContractFromFiles({ 'db/schema.ts': readFileSync(path, 'utf8') });
+  if (!digest) throw new Error('Declare file collections in db/schema.ts and deploy the app before testing files.');
+  return { digest, singleRequestMaxBytes: generator.SINGLE_REQUEST_MAX_BYTES };
+}
 
 function generatedContents(path: string): string | undefined {
   const previous = existsSync(path) ? readFileSync(path, 'utf8') : undefined;

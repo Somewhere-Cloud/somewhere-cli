@@ -1,8 +1,23 @@
 import { assertRefused, type RefusalClient } from './test-refusal.js';
+import { localFilesContract } from './declared-data.js';
+import { transferTestFile, type FilesRequest, type UploadLink } from './test-files.js';
 import { ApiClient } from './client.js';
 import { getToken, loadProjectConfig } from './config.js';
 import { fixtureTestTarget, type TestTarget } from './test-target.js';
 import { ACCESS_COOKIE, REFRESH_COOKIE, testAccessNeedsRefresh, tokenTimes, type PlaywrightStorageState } from './test-identities.js';
+
+const managedFiles = new WeakMap<UserSession, { root: string; userId: string; contract?: ReturnType<typeof localFilesContract> }>();
+
+export function managedFileSession(session: UserSession, root: string, userId: string): void {
+  managedFiles.set(session, { root, userId });
+}
+
+function sessionSubject(token: string | undefined): unknown {
+  const payload = token?.split('.')[1];
+  if (!payload) return undefined;
+  try { return (JSON.parse(Buffer.from(payload, 'base64url').toString()) as { sub?: unknown }).sub; }
+  catch { return undefined; }
+}
 
 // Node 22.19+: native fetch, cookie storage and TypeScript; no test dependencies.
 export class UserSession {
@@ -101,6 +116,45 @@ export class UserSession {
     });
     await assertRefused(adapt(this), target, request, allowed && adapt(allowed));
   }
+  /** Exercise the declared file door as a managed test user. */
+  async files(collection: string, request: FilesRequest): Promise<Response> {
+    const fixture = managedFiles.get(this);
+    if (!fixture) throw new Error('Choose a session created by openTestApp().users() or signInWithLink().');
+    await this.ensureFresh();
+    if (sessionSubject(this.cookies.get(ACCESS_COOKIE)) !== fixture.userId) {
+      throw new Error('This session no longer belongs to its managed test user.');
+    }
+    const url = (id: string) => '/__sw/files/' + encodeURIComponent(collection) + '/' + encodeURIComponent(id);
+    if (request.operation === 'url') return this.request(url(request.id));
+
+    const { digest: contract, singleRequestMaxBytes } = fixture.contract ??= localFilesContract(fixture.root);
+    const post = (operation: string, fields: Record<string, unknown>) =>
+      this.post('/__sw/files', { ...fields, contract, collection, operation });
+    switch (request.operation) {
+      case 'list':
+        return post('list', { ...request.scope, limit: request.limit, cursor: request.cursor });
+      case 'shareLink':
+        return post('link', { id: request.id, expires_in: request.expiresIn });
+      case 'delete':
+        return post('delete', { id: request.id });
+      case 'upload': {
+        const { file } = request;
+        const name = request.name || (file instanceof File ? file.name : 'file');
+        const type = (request.contentType || file.type || 'application/octet-stream').split(';')[0].trim().toLowerCase();
+        const minted = await post('upload', { ...request.scope, name, size: file.size, content_type: type });
+        if (!minted.ok) return minted;
+        const { data: link } = await minted.json() as { data: UploadLink };
+        const uploaded = await transferTestFile(link, file, type, singleRequestMaxBytes);
+        if (!uploaded.ok) return uploaded;
+        const { data } = await uploaded.json() as { data: { size_bytes: number; content_type: string; version: number } };
+        return Response.json({ ok: true, data: {
+          id: link.id, name: link.name ?? name, size: data.size_bytes,
+          content_type: data.content_type, version: data.version, url: url(link.id),
+        } }, { status: uploaded.status });
+      }
+    }
+  }
+
   /** Use this session's cookies and the linked app's declared data contract. */
   data(table: string, request: DataRequest): Promise<Response>;
   data(table: string, contract: string, request: DataRequest): Promise<Response>;

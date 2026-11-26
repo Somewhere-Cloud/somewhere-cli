@@ -4092,7 +4092,7 @@ var require_typed_files = __commonJS({
     var crypto2 = require("node:crypto");
     var MODULE_NAME = "somewhere:files";
     var CLIENT_FILE2 = "__somewhere_files.d.ts";
-    var SINGLE_REQUEST_MAX_BYTES = 90 * 1024 * 1024;
+    var SINGLE_REQUEST_MAX_BYTES2 = 90 * 1024 * 1024;
     function parseDeclaration(canonical) {
       const parsed = JSON.parse(canonical);
       if (!parsed || parsed.v !== 1 || !Array.isArray(parsed.collections)) throw new Error("declared_files is not a file collection declaration");
@@ -4134,7 +4134,7 @@ var require_typed_files = __commonJS({
       }
       return `${JSON.stringify(collection.name)}: { ${ops.join("; ")} }`;
     }
-    function describeFilesClient2(canonical, singleRequestMaxBytes = SINGLE_REQUEST_MAX_BYTES) {
+    function describeFilesClient2(canonical, singleRequestMaxBytes = SINGLE_REQUEST_MAX_BYTES2) {
       const collections = parseDeclaration(canonical);
       const contract = crypto2.createHash("sha256").update(canonical).digest("hex");
       const declaration = `declare module ${JSON.stringify(MODULE_NAME)} {
@@ -4252,7 +4252,7 @@ export{files};
         }
       };
     }
-    module2.exports = { MODULE_NAME, CLIENT_FILE: CLIENT_FILE2, SINGLE_REQUEST_MAX_BYTES, describeFilesClient: describeFilesClient2, generateFilesClient, virtualFilesPlugin };
+    module2.exports = { MODULE_NAME, CLIENT_FILE: CLIENT_FILE2, SINGLE_REQUEST_MAX_BYTES: SINGLE_REQUEST_MAX_BYTES2, describeFilesClient: describeFilesClient2, generateFilesClient, virtualFilesPlugin };
   }
 });
 
@@ -4636,11 +4636,13 @@ __export(declared_data_vendor_entry_exports, {
   FILES_DECLARATION_FILE: () => import_typed_files2.CLIENT_FILE,
   RUNTIME_CONTEXT_DECLARATION: () => import_runtime_types3.RUNTIME_CONTEXT_DECLARATION,
   SCHEMA_DECLARATION: () => import_schema_types.SCHEMA_DECLARATION,
+  SINGLE_REQUEST_MAX_BYTES: () => import_typed_files2.SINGLE_REQUEST_MAX_BYTES,
   checkerContract: () => checkerContract,
   consumerContractComponents: () => import_consumer_contract.consumerContractComponents,
   consumerContractFingerprint: () => import_consumer_contract.consumerContractFingerprint,
   consumerContractVerdict: () => import_consumer_contract.consumerContractVerdict,
   declaredTablesFromFiles: () => declaredTablesFromFiles,
+  filesContractFromFiles: () => filesContractFromFiles,
   filesDeclarationFromFiles: () => filesDeclarationFromFiles,
   generateFromFiles: () => generateFromFiles,
   isPlainPageScript: () => isPlainPageScript,
@@ -8707,6 +8709,10 @@ function runtimeDeclarationFromFiles(files) {
 function declaredTablesFromFiles(files) {
   return (0, import_runtime_types2.declaredTablesDeclaration)(schemaAuthorityFromSource(files));
 }
+function filesContractFromFiles(files) {
+  const canonical = declaredFilesFromSource(files);
+  return canonical ? (0, import_typed_files.describeFilesClient)(canonical).contract_digest : void 0;
+}
 function filesDeclarationFromFiles(files) {
   const canonical = declaredFilesFromSource(files);
   return canonical ? (0, import_typed_files.describeFilesClient)(canonical).declaration : void 0;
@@ -8718,11 +8724,13 @@ function filesDeclarationFromFiles(files) {
   FILES_DECLARATION_FILE,
   RUNTIME_CONTEXT_DECLARATION,
   SCHEMA_DECLARATION,
+  SINGLE_REQUEST_MAX_BYTES,
   checkerContract,
   consumerContractComponents,
   consumerContractFingerprint,
   consumerContractVerdict,
   declaredTablesFromFiles,
+  filesContractFromFiles,
   filesDeclarationFromFiles,
   generateFromFiles,
   isPlainPageScript,

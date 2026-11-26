@@ -48,13 +48,13 @@ export interface TestControl {
 
 // ── production ─────────────────────────────────────────────────────────────────────────────────
 
-export function productionControl(client: ApiClient, target: TestTarget): TestControl {
+export function productionControl(client: ApiClient, target: TestTarget, options: { liveInboxOnly?: boolean } = {}): TestControl {
   const projectId = target.projectId;
   return {
     environment: 'production', projectId, target,
     async inbox(address, wait) {
       const body = await client.call<{ messages?: unknown }>('GET', '/email/test-inbox', undefined,
-        { project_id: projectId, address, limit: 20, ...(wait ? { wait_ms: wait.ms ?? 10_000, since: wait.since } : {}) });
+        { project_id: projectId, address, limit: 20, ...(options.liveInboxOnly ? { environment: 'production' } : {}), ...(wait ? { wait_ms: wait.ms ?? 10_000, since: wait.since } : {}) });
       return messagesAfter(body.messages, address, 0);
     },
     deleteSignups: (ids) => deleteAccounts(client, projectId, ids),

@@ -519,7 +519,7 @@ export function registerDocs(program: Command) {
     )
     .option('--list', `List available topics (the same index bare \`${cliInvocation()} docs\` prints)`)
     .option('--full', 'Print the complete topic; with no topic, print the full manual')
-    .option('--search <words>', 'Find matching builder docs and read the top section whole')
+    .option('--search <words>', 'Find matching builder docs, optionally within the given topic')
     .option('--include-api', 'Include the HTTP API catalog and developer tool reference in search')
     .option('--section <id>', 'Print one section of a topic (ids are listed in the summary)')
     .option('--json', 'Print the selected document in a JSON envelope')
@@ -604,8 +604,8 @@ export function registerDocs(program: Command) {
         return;
       }
       if (searching) {
-        if (opts.full || opts.section !== undefined || opts.list || (opts.search !== undefined && topic !== undefined)) {
-          error('Use docs --search "<words>" with optional --include-api and --json.');
+        if (opts.full || opts.section !== undefined || opts.list) {
+          error('Use docs [topic] --search "<words>" with optional --include-api and --json.');
           process.exitCode = 1;
           return;
         }

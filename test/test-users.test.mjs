@@ -26,6 +26,10 @@ const server = createServer(async (req, res) => {
   res.setHeader('Content-Type', 'application/json');
   const send = (status, value) => { res.statusCode = status; res.end(JSON.stringify(value)); };
   const p = url.pathname;
+  if (req.method === 'GET' && p.endsWith('/db/access-map')) {
+    assert.equal(url.searchParams.get('project_id'), 'proj_tu');
+    return send(200, { ok: true, data: { browser_data: { contract_digest: 'a'.repeat(64) } } });
+  }
   if (req.method === 'GET' && p.endsWith('/projects/proj_tu/urls')) return send(200, { ok: true, data: { prod_fallback: ORIGIN } });
   if (req.method === 'GET' && /\/projects\/(proj_tu|tu-app)$/.test(p)) return send(200, { ok: true, data: { id: 'proj_tu', subdomain: 'tu-app' } });
   if (req.method === 'POST' && p.endsWith('/auth/test-users')) {
@@ -83,6 +87,7 @@ test('prepare writes one private Playwright storageState per actor with the host
   const { app, configDir } = fixture();
   const r = await run(['prepare', 'alice', 'bob:admin'], app, configDir);
   assert.equal(r.status, 0, r.out);
+  assert.match(r.out, /Data contract digest: a{64}/);
   const dir = join(app, '.somewhere', 'test');
   assert.equal(mode(dir), 0o700);
   for (const f of ['alice.state.json', 'bob.state.json', 'manifest.json']) assert.equal(mode(join(dir, f)), 0o600, f);

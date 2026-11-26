@@ -1059,7 +1059,7 @@ type SomewhereDbWhere = Readonly<{
   $or?: readonly SomewhereDbOrBranch[];
 } & Record<string, SomewhereDbCondition | readonly SomewhereDbCondition[] | readonly SomewhereDbOrBranch[] | undefined>>;
 type SomewhereDbOrder = string | readonly [string, ('asc' | 'desc')?]
-  | readonly (readonly [string, ('asc' | 'desc')?])[];
+  | readonly string[] | readonly (readonly string[])[];
 interface SomewhereDbReadOptions {
   where?: SomewhereDbWhere | null;
   order?: SomewhereDbOrder | null;
@@ -1133,14 +1133,17 @@ type SomewhereDbRelationName<T extends string> = Extract<keyof SomewhereDbRelati
 type __SomewhereDbSelectedColumns<T extends string, C> = [C] extends [readonly []]
   ? keyof SomewhereDbRow<T>
   : Extract<C extends readonly (infer K)[] ? K : never, keyof SomewhereDbRow<T>>;
-type SomewhereDbReadRow<T extends string, C, I> = T extends keyof SomewhereDeclaredTables
-  ? Pick<SomewhereDbRow<T>, __SomewhereDbSelectedColumns<T, C>>
+type SomewhereDbReadRow<T extends string, C extends readonly string[], I> = T extends keyof SomewhereDeclaredTables
+  ? (string extends C[number]
+      ? Partial<SomewhereDbRow<T>>
+      : Pick<SomewhereDbRow<T>, __SomewhereDbSelectedColumns<T, C>>)
     & Pick<SomewhereDbRelations<T>, Extract<I extends readonly (infer K)[] ? K : never, keyof SomewhereDbRelations<T>>>
   : Record<string, unknown>;
-type SomewhereDbReadOptionsFor<T extends string, C, I> = Omit<SomewhereDbReadOptions, 'columns' | 'include'> & {
+type SomewhereDbReadOptionsFor<T extends string, C extends readonly string[], I> = Omit<SomewhereDbReadOptions, 'columns' | 'include'> & {
   columns?: C | null;
   include?: I | null;
-};
+} & NoInfer<string extends C[number] ? unknown
+  : Exclude<C[number], SomewhereDbColumn<T>> extends never ? unknown : { columns: never }>;
 type SomewhereDbIncrementFor<T extends string> = T extends keyof SomewhereDeclaredTables
   ? { readonly [K in __SomewhereDeclared<T, 'numeric', never>]?: number }
   : SomewhereDbIncrement;
@@ -1164,6 +1167,14 @@ interface SomewhereDbResult<Row = Record<string, unknown>> {
     | { delivery: 'queued' }
     | { delivery: 'resync_required'; reason: string };
 }
+/**
+ * One receipt per intent in input order. data holds inserted or upserted rows,
+ * updated rows, or removed rows as they were before removal. An ignored insert
+ * or zero-match write has empty data. count and changes both equal data.length.
+ */
+interface SomewhereDbWriteReceipt extends SomewhereDbResult {
+  last_row_id: null;
+}
 // A keyed insert's result (whether an insert is keyed is decided at run time): the receipt
 // bounds, and a non-enumerable request handle. A replay carries the original values.
 interface SomewhereDbInsertResult<Row = Record<string, unknown>> extends SomewhereDbResult<Row> {
@@ -1182,7 +1193,7 @@ interface SomewhereRawBatchResult {
 interface SomewhereServerDb {
   query(sql: string, params?: readonly unknown[]): Promise<SomewhereDbResult>;
   batch(statements: readonly SomewhereRawDbStatement[]): Promise<SomewhereRawBatchResult[]>;
-  from<T extends SomewhereDbTable, const C extends readonly SomewhereDbColumn<T>[] = readonly SomewhereDbColumn<T>[], const I extends readonly SomewhereDbRelationName<T>[] = []>(
+  from<T extends SomewhereDbTable, const C extends readonly string[] = readonly SomewhereDbColumn<T>[], const I extends readonly SomewhereDbRelationName<T>[] = []>(
     table: T, options?: SomewhereDbReadOptionsFor<T, C, I> | null): Promise<SomewhereDbResult<SomewhereDbReadRow<T, C, I>>>;
   count(table: SomewhereDbTable, options?: SomewhereDbCountOptions | null): Promise<{ data: number; error: null }>;
   // Server authority names row identity (owner column or shared authorship) explicitly on insert.
@@ -1192,17 +1203,17 @@ interface SomewhereServerDb {
   // Closed atomic batch, 1-100 intents checked before execution. No callback,
   // reads, SQL, or caller-supplied authority. A lost acknowledgement can have
   // an unknown outcome; a rejection never promises rollback or safe replay.
-  tx(intents: readonly SomewhereDbWriteIntent[]): Promise<SomewhereDbResult[]>;
+  tx(intents: readonly SomewhereDbWriteIntent[]): Promise<SomewhereDbWriteReceipt[]>;
 }
 interface SomewhereCallerDb extends Omit<SomewhereServerDb, 'from' | 'count' | 'insert' | 'update' | 'tx'> {
   // The platform composes row identity from the verified user.
   insert<T extends SomewhereDbTable>(table: T, values: __SomewhereDeclared<T, 'insert', SomewhereDbValues>, options?: SomewhereDbCallerInsertOptions<T> | null): Promise<SomewhereDbInsertResult<SomewhereDbRow<T>>>;
   update<T extends SomewhereDbTable>(table: T, spec: SomewhereDbUpdateFor<T, 'set'>): Promise<SomewhereDbResult<SomewhereDbRow<T>>>;
-  tx(intents: readonly SomewhereDbCallerWriteIntent[]): Promise<SomewhereDbResult[]>;
+  tx(intents: readonly SomewhereDbCallerWriteIntent[]): Promise<SomewhereDbWriteReceipt[]>;
   // can: true (signed-in callers only; never with asServer): each row also carries the row hints.
-  from<T extends SomewhereDbTable, const C extends readonly SomewhereDbColumn<T>[] = readonly SomewhereDbColumn<T>[], const I extends readonly SomewhereDbRelationName<T>[] = []>(
+  from<T extends SomewhereDbTable, const C extends readonly string[] = readonly SomewhereDbColumn<T>[], const I extends readonly SomewhereDbRelationName<T>[] = []>(
     table: T, options: SomewhereDbReadOptionsFor<T, C, I> & { can: true; asServer?: never; ownerOnly?: true }): Promise<SomewhereDbResult<SomewhereDbReadRow<T, C, I> & SomewhereDbRowHints>>;
-  from<T extends SomewhereDbTable, const C extends readonly SomewhereDbColumn<T>[] = readonly SomewhereDbColumn<T>[], const I extends readonly SomewhereDbRelationName<T>[] = []>(
+  from<T extends SomewhereDbTable, const C extends readonly string[] = readonly SomewhereDbColumn<T>[], const I extends readonly SomewhereDbRelationName<T>[] = []>(
     table: T, options?: (SomewhereDbReadOptionsFor<T, C, I> & SomewhereCallerReadScope & { can?: false }) | null): Promise<SomewhereDbResult<SomewhereDbReadRow<T, C, I>>>;
   count(table: SomewhereDbTable, options?: (SomewhereDbCountOptions & SomewhereCallerReadScope) | null): Promise<{ data: number; error: null }>;
   delete<T extends SomewhereDbTable>(table: T, spec?: SomewhereDbRemove | null): Promise<SomewhereDbResult<SomewhereDbRow<T>>>;
@@ -4556,8 +4567,8 @@ var require_consumer_contract = __commonJS({
   "worker/containers/compile/consumer-contract.cjs"(exports2, module2) {
     "use strict";
     var CONSUMER_CONTRACT2 = Object.freeze({
-      version: 45,
-      digest: "9932e80f7050d76c32150a1434c17be8b27e4ac075f18b642a7f0192279177cf"
+      version: 46,
+      digest: "6cf4dda4de85ec87337863774e26979bfc961cfb0504e019e4d1d2d7adbf3933"
     });
     var MEMBERSHIPS = "memberships: table({ id: id(), team_id: text(), member_id: text() }, { scope: owner(), client: { read: true } }),";
     var SHARES = "shares: table({ id: id(), grantee_id: text() }, { scope: owner(), client: { read: true, create: ['grantee_id'], delete: true }, unique: [['user_id', 'grantee_id']] }),";

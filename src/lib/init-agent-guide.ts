@@ -7,7 +7,7 @@ export const AGENT_WORKFLOW = `## Build, deploy, test
 | Does your app verify emails? | Choose the declared access rule |
 | --- | --- |
 | Yes, invited teams | Use \`group()\` and \`sw.groups\` for invitations, membership and owner/admin permissions. See \`somewhere docs sw.groups --section team-example\`. |
-| No, app-managed teams | Use \`member()\` over a server-only roster. Declare author-or-team-owner delete with \`anyOf()\` and a role-filtered branch. See \`somewhere docs declared-data --section teams-without-email-verification\`. |
+| No, app-managed teams | Use \`member()\` over a server-only roster. Add \`deleteWhere: { role: 'owner' }\` to reserve deletion for team owners on a standalone \`member()\` rule. For author-or-team-owner deletion, check either permission in a server endpoint before deleting. See \`somewhere docs declared-data --section teams-without-email-verification\`. |
 | Yes, staff by domain | Use \`appRole()\` and \`appRoles: { staff: { emailDomain: 'staff.example' } }\`. The address must be verified. |
 | No, staff by invitation | Use \`appRole()\` and \`assignedBy: 'server'\`. Redeem an app-issued invitation and call \`sw.auth.server.setRoles\` inside the sign-up route. See \`somewhere docs sw.auth --section server-assigned-app-roles-setroles\`. |
 | Either, personal rows | Use \`owner()\`. The platform stamps the owner from the signed-in user. |
@@ -38,6 +38,15 @@ Use \`client.intake\` for public submissions to a private parent row. See
 - Browser requests use same-origin cookies. For scripted writes with a cookie session, send the app's origin in the \`Origin\` header. Use the CLI test helper to send data endpoint calls with the deployed contract digest.
 
 ### Run and verify
+
+On a test app, run \`somewhere test-users prepare <name>\`. Pass multiple
+names in the same command to prepare several actors. Use
+\`somewhere data list <table> --as <name>\` and
+\`somewhere data create <table> --as <name> --values '<json>'\` to check
+the table's client access. Run \`somewhere cron run <name> --wait\` for a
+schedule, \`somewhere db rows <table>\` to inspect the stored rows, and
+\`somewhere errors\` to see recent failures. Finish with
+\`somewhere test-users cleanup\`.
 
 Run \`somewhere typecheck\` and focused tests. \`somewhere deploy-check\` checks compilation and schema without publishing. \`somewhere deploy\` uploads raw source directly to production. When testing changes with real users or data, use \`somewhere preview\`, test with \`somewhere test --preview\`, then promote. See \`somewhere docs dev-environments\`.
 

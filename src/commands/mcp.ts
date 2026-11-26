@@ -1,3 +1,4 @@
+import { describePlatformContract, platformContractVerdict } from '../lib/platform-contract.js';
 import { cliInvocation } from '../lib/cli-invocation.js';
 import { fetchWithProxy as fetch } from '../lib/http.js';
 import { Command } from 'commander';
@@ -22,7 +23,7 @@ import {
   cliConfigPathForDisplay,
   somewhereStdioEntry,
 } from '../lib/config.js';
-import { ApiClient, CliApiError, typedServerError } from '../lib/client.js';
+import { API_BASE_URL, ApiClient, CliApiError, typedServerError } from '../lib/client.js';
 import { CLI_VERSION } from '../lib/version.js';
 import { dim, error, info, success, teal } from '../lib/output.js';
 import {
@@ -558,6 +559,8 @@ async function runDoctor(version: string): Promise<void> {
   } catch (err) {
     fail(describeMcpFailure(err, UPSTREAM_URL));
   }
+
+  info(describePlatformContract(platformContractVerdict(API_BASE_URL)));
 
   // 4. Host configs — informational, not failures: not everyone uses every host.
   info('');

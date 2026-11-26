@@ -1,3 +1,4 @@
+import { publicContractVerdict } from '../lib/platform-contract.js';
 import { cliInvocation } from '../lib/cli-invocation.js';
 import { roleMethodHints } from '../lib/role-method-hints.js';
 import { Command, Option } from 'commander';
@@ -124,7 +125,10 @@ export function registerTypecheck(program: Command) {
           ok: false as const,
           error: failure instanceof Error ? failure.message : String(failure),
         }));
-        if (opts.json) printJson({ ...result, sourceLint });
+        if (opts.json) {
+          const lintOutput = 'error' in sourceLint ? sourceLint : { ...sourceLint, contract: publicContractVerdict(sourceLint.contract) };
+          printJson({ ...result, contract: publicContractVerdict(result.contract), sourceLint: lintOutput });
+        }
         else {
           if (deployResult) reportDeployCheck(deployResult, 'Typecheck');
           else reportTypecheck(result);

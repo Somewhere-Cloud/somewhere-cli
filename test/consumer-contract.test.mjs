@@ -1,11 +1,13 @@
 // The CLI knows when it is out of date: its vendored platform bundle carries the
 // consumer contract it implements; every platform response announces the platform's; typecheck
-// and lint refuse to claim a clean result when the two are known to differ, and say "unknown"
-// when nothing has been recorded. Offline: a loopback server stands in for the platform.
+// and lint keep checking against the bundled rules. An older CLI offers an upgrade on commands
+// where the contract matters. A loopback server stands in for the platform here.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
+import { spawn } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { mkdirSync, mkdtempSync, writeFileSync, existsSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
@@ -111,4 +113,73 @@ test('another origin and an unreadable record mean unknown, never current', asyn
   writeFileSync(seenFile, '{not json');
   assert.equal(platformContractVerdict('https://api.example.test').status, 'unknown');
   assert.ok(existsSync(seenFile));
+});
+
+const warning = 'Warning: Your Somewhere CLI is behind the platform. Run npx -y @somewhere-cloud/cli@latest upgrade in this project.';
+const cliPath = fileURLToPath(new URL('../dist/index.js', import.meta.url));
+const projectId = 'aaaaaaaa-1111-4222-8333-444444444444';
+
+async function withCli(platformVersion, fn) {
+  const home = mkdtempSync(join(tmpdir(), 'sw-contract-cli-'));
+  const dir = mkdtempSync(join(tmpdir(), 'sw-contract-app-'));
+  writeFileSync(join(dir, 'index.html'), '<!doctype html><html><head><title>Fixture</title></head><body>Fixture</body></html>');
+  writeFileSync(join(home, 'config.json'), JSON.stringify({ token: 'smt_fixture', user: { email: 'dev@example.test', username: 'dev' } }));
+  const server = createServer((req, res) => {
+    res.setHeader('X-SW-Consumer-Contract', `${platformVersion}; digest=${'a'.repeat(64)}`);
+    res.setHeader('Content-Type', 'application/json');
+    req.resume();
+    let data = {};
+    if (req.url === '/v1/auth/whoami') data = { user: { email: 'dev@example.test', effective_tier: 'free' }, stats: { projects: 0, api_keys: 1 } };
+    else if (req.url === '/v1/pricing') data = { tiers: [] };
+    else if (req.url.startsWith('/v1/projects?')) data = { projects: [] };
+    else if (req.url.startsWith('/v1/projects/')) data = { id: projectId, status: 'draft' };
+    else if (req.url.startsWith('/v1/deploy/status')) data = { published: false };
+    else if (req.url === '/v1/deploy') data = { version: 1, active_release_id: 'rel_fixture', release_id: 'rel_fixture', has_functions: false, url: 'https://fixture.example.test' };
+    res.end(JSON.stringify({ ok: true, data }));
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  try {
+    await fn((args, debug) => new Promise((resolve) => {
+      const env = {
+        ...process.env, HOME: home, SOMEWHERE_CONFIG_DIR: home, SOMEWHERE_API_URL: `http://127.0.0.1:${server.address().port}/v1`,
+        SOMEWHERE_NO_NOTIFICATIONS: '1', CI: '1', NO_COLOR: '1', NODE_DEBUG: debug ? 'somewhere-contract' : '',
+      };
+      const child = spawn(process.execPath, [cliPath, ...args], { cwd: dir, env });
+      let stdout = '', stderr = '';
+      child.stdout.on('data', (data) => stdout += data);
+      child.stderr.on('data', (data) => stderr += data);
+      child.on('close', (status) => resolve({ status, stdout, stderr }));
+    }));
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+}
+
+test('CLI ahead: no contract line on deploy, whoami or cached lint; visible with debug', async () => {
+  await withCli(CLI.version - 1, async (run) => {
+    for (const args of [['whoami'], ['deploy', '--project', projectId], ['lint', '--json']]) {
+      const result = await run(args);
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.doesNotMatch(result.stdout + result.stderr, /consumer contract|behind the platform|last observed platform|"contract"/i);
+    }
+    const debug = await run(['whoami'], true);
+    assert.match(debug.stderr, /Consumer contracts: CLI \d+, last observed platform \d+ \(ahead\)\./);
+  });
+});
+
+test('CLI behind: an upgrade instruction once on deploy, none on whoami', async () => {
+  await withCli(CLI.version + 1, async (run) => {
+    const whoami = await run(['whoami']);
+    assert.equal(whoami.status, 0, whoami.stdout + whoami.stderr);
+    assert.doesNotMatch(whoami.stdout + whoami.stderr, /behind the platform|consumer contract/i);
+
+    const deploy = await run(['deploy', '--project', projectId]);
+    assert.equal(deploy.status, 0, deploy.stdout + deploy.stderr);
+    assert.equal(deploy.stderr.split('\n').filter((line) => line === warning).length, 1);
+    assert.doesNotMatch(deploy.stdout, /behind the platform/);
+
+    const lint = await run(['lint']);
+    assert.equal(lint.status, 0, lint.stdout + lint.stderr);
+    assert.equal(lint.stderr.split('\n').filter((line) => line === warning).length, 1);
+  });
 });

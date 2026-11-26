@@ -2,6 +2,7 @@ import { CLI_PACKAGE_ROOT } from './package-root.js';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
+import { debuglog } from 'node:util';
 import { cliConfigDir } from './config.js';
 
 /**
@@ -70,7 +71,7 @@ export function recordPlatformContract(headers: { get(name: string): string | nu
   file.origins[origin] = seen;
   mkdirSync(cliConfigDir(), { recursive: true, mode: 0o700 });
   writeFileSync(seenPath(), JSON.stringify(file, null, 2) + '\n', { mode: 0o600 });
-  warnContract({ ...vendor().consumerContractVerdict(cliConsumerContract(), seen, now), cli: cliConsumerContract(), platform: seen });
+  observeContract(contractVerdict(seen, now));
   return seen;
 }
 
@@ -82,22 +83,40 @@ export function seenPlatformContract(apiBase: string): SeenPlatformContract | nu
   return seen && Number.isInteger(seen.version) && /^[0-9a-f]{64}$/.test(seen.digest) ? seen : null;
 }
 
-/** Whether this CLI may judge code for the platform at `apiBase`. */
-export function platformContractVerdict(apiBase: string, now = Date.now()): ContractVerdict {
+function contractVerdict(platform: SeenPlatformContract | null, now: number): ContractVerdict {
   const cli = cliConsumerContract();
-  const platform = seenPlatformContract(apiBase);
-  const verdict = { ...vendor().consumerContractVerdict(cli, platform, now), cli, platform };
-  warnContract(verdict);
+  return { ...vendor().consumerContractVerdict(cli, platform, now), cli, platform };
+}
+
+/** Record the verdict for local checks that have no network call. */
+export function platformContractVerdict(apiBase: string, now = Date.now()): ContractVerdict {
+  const verdict = contractVerdict(seenPlatformContract(apiBase), now);
+  observeContract(verdict);
   return verdict;
 }
 
-/** Contract drift is advisory; each command prints at most one plain line. */
+export function describePlatformContract(verdict: ContractVerdict): string {
+  const cli = verdict.cli?.version ?? 'unknown';
+  const platform = verdict.platform?.version ?? 'unknown';
+  return `Consumer contracts: CLI ${cli}, last observed platform ${platform} (${verdict.status}).`;
+}
+
+export function publicContractVerdict(verdict: ContractVerdict | undefined): ContractVerdict | undefined {
+  return verdict?.status === 'ahead' || verdict?.status === 'mismatch' ? undefined : verdict;
+}
+
+const debug = debuglog('somewhere-contract');
+let warningOrigin: string | undefined;
 let warned = false;
-function warnContract(verdict: ContractVerdict): void {
-  if (warned || verdict.compatible !== false) return;
+
+export function configureContractWarning(command: string, apiBase: string): void {
+  if (!['deploy', 'typecheck', 'lint', 'init'].includes(command)) return;
+  try { warningOrigin = new URL(apiBase).origin; } catch { /* No API origin to compare. */ }
+}
+
+function observeContract(verdict: ContractVerdict): void {
+  debug('%s', describePlatformContract(verdict));
+  if (warned || !warningOrigin || verdict.platform?.origin !== warningOrigin || verdict.status !== 'outdated') return;
   warned = true;
-  const nextStep = verdict.status === 'outdated'
-    ? 'Run npx -y @somewhere-cloud/cli@latest upgrade in the project, then check again.'
-    : 'Deploy checks against the platform.';
-  console.error(`Warning: CLI consumer contract ${verdict.cli?.version ?? 'unknown'} differs from platform ${verdict.platform?.version ?? 'unknown'}. ${nextStep}`);
+  console.error('Warning: Your Somewhere CLI is behind the platform. Run npx -y @somewhere-cloud/cli@latest upgrade in this project.');
 }

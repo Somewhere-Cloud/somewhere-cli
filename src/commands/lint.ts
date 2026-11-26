@@ -1,3 +1,4 @@
+import { publicContractVerdict } from '../lib/platform-contract.js';
 import { Command } from 'commander';
 import { resolve } from 'node:path';
 import { lintProject, type LocalLintResult } from '../lib/source-lint.js';
@@ -10,7 +11,7 @@ export function registerLint(program: Command): void {
     .option('--json', 'Print structured findings and source/schema fingerprints')
     .action(async (dir: string | undefined, opts: { json?: boolean; generic?: boolean }) => {
       const result = await lintProject(resolve(process.cwd(), dir ?? '.'), opts);
-      if (opts.json) printJson(result);
+      if (opts.json) printJson({ ...result, contract: publicContractVerdict(result.contract) });
       else {
         printLintFindings(result);
         console.log(`${result.findings.length + result.generic.findings.length} warning(s); ${result.checked_files} source files; ${result.duration_ms.toFixed(1)} ms.`);

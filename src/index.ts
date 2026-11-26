@@ -1,3 +1,5 @@
+import { API_BASE_URL } from './lib/client.js';
+import { configureContractWarning } from './lib/platform-contract.js';
 import { CLI_PACKAGE_ROOT } from './lib/package-root.js';
 import { cliInvocation } from './lib/cli-invocation.js';
 import { spawnSync } from 'node:child_process';
@@ -116,6 +118,7 @@ export async function runCli(): Promise<void> {
     const names: string[] = [];
     for (let at: Command | null = action; at && at.parent; at = at.parent) names.unshift(at.name());
     commandNames = names;
+    configureContractWarning(names[0] ?? '', API_BASE_URL);
   });
   setFailureHook((cause) => {
     const command = commandPath(commandNames);

@@ -17,7 +17,7 @@ import { fileURLToPath } from 'node:url';
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 const distIndex = join(repoRoot, 'dist', 'index.js');
 
-const SCHEMA_NOTE = 'notes: private to each signed-in user by default (owner()). For a table every signed-in user can read, declare shared(); for a team, group(); details: somewhere docs declared-data';
+const SCHEMA_NOTE = 'notes: no access rule declared, so it defaults to owner(), which scopes ordinary signed-in access to each user’s own rows; published columns are also readable by anyone (publicRead). For a table every signed-in user can read, declare shared(); for a team, group(); details: somewhere docs declared-data';
 const SERVER_WARNING = 'Not published (2 test files): e2e/run.mjs, tests/note.txt. Files inside tests/, e2e/ folders stay in your project\'s private source and are never served on your site.';
 
 function run(args, { cwd, env }) {

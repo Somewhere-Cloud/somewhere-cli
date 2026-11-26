@@ -449,11 +449,10 @@ export function registerAuth(program: Command) {
 
   auth
     .command('export [project]')
-    .description('Export portable end-user password credentials after verified-owner email approval')
+    .description('Retired. App owners can request password hashes at migration@somewhere.cloud.')
     .option('--project <ref>', 'Project ID, name, slug, or subdomain (defaults to the linked project)')
     .requiredOption('--output <path>', 'New local JSON file to create (existing paths are never overwritten)')
     .allowExcessArguments(false)
-    .showHelpAfterError('The approval code is read from a hidden prompt or stdin; never pass it as an argument.')
     .action(async (
       project: string | undefined,
       opts: { project?: string; output: string },

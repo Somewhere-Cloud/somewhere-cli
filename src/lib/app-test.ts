@@ -210,7 +210,7 @@ export class AppTest {
     if ((options.undeployed ?? 'refuse') === 'refuse') {
       const local = undeployedChanges(root, projectId, preview);
       // Installing test or dev tools rewrites only the package manifests: a note, never a refusal that
-      // forces a redeploy (tsk_128252f1). Any other changed file still refuses.
+      // forces a redeploy. Any other changed file still refuses.
       const { app: changedApp, manifests } = splitManifests(local?.changed ?? []);
       if (local && manifests.length) {
         local.changed = changedApp;
@@ -398,7 +398,7 @@ export class AppTest {
         ? 'The preview changed or closed during this script. Save it again with `somewhere preview` (or open a new one if it closed), then run the whole script again.\n'
         : 'The live release changed during this script. Run the whole script again.\n');
     }
-    // A skipped check is not a pass either: the script exits non-zero (tsk_6157909a).
+    // A skipped check is not a pass either: the script exits non-zero.
     if (failed || !this.checks.length || this.checks.some((check) => check.skipped)) process.exitCode = 1;
     return { passed, failed, file: this.resultsPath };
   }

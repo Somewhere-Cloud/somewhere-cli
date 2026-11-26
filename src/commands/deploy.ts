@@ -545,7 +545,7 @@ export async function resolveExplicitProjectId(client: ApiClient, ref: string): 
  *  upload: a release id, null for a project with no published source (the genesis
  *  claim), or undefined when unknown. Only null is declared, as base_release_id: a
  *  folder with no record of deploying or pulling a live app does not get that app's
- *  release as its base (tsk_2807e024; founder 2026-11-26), so the server's BASE_REQUIRED stands. Never
+ *  release as its base, so the server's BASE_REQUIRED stands. Never
  *  used for a folder that did not name its target, never with --force. */
 export async function readExplicitProjectLiveBase(client: ApiClient, projectId: string): Promise<string | null | undefined> {
   try {
@@ -1274,8 +1274,7 @@ export function registerDeploy(program: Command) {
           // the CLI shouldn't send it in the first place. --scope static is the
           // inverse: no functions. The dependency manifest is the functions'
           // too: a backend change that adds a package sends package.json (and
-          // its lockfile), or the platform builds against the old one
-          // (tsk_0b362c41).
+          // its lockfile), so the platform builds against the new dependencies.
           files: scope === 'functions' ? functionDependencyManifest(files) : files,
         };
         if (scope !== 'functions' && Object.keys(binaryFiles).length > 0) {

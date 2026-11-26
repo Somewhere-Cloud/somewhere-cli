@@ -32,7 +32,10 @@ test('CLI presents preview vocabulary and has no --draft alias', async () => {
   assert.match(dev, /res\.preview_session_id \?\? res\.draft_id/);
   assert.match(dev, /res\.preview_id \?\? res\.candidate_release_id/);
 
-  const program = new Command();
+  let stderr = '';
+  const program = new Command()
+    .exitOverride()
+    .configureOutput({ writeErr: (message) => { stderr += message; } });
   const commands = new URL('../dist/commands/', import.meta.url);
   for (const file of readdirSync(commands).filter(file => file.endsWith('.js'))) {
     const module = await import(new URL(file, commands));
@@ -42,10 +45,12 @@ test('CLI presents preview vocabulary and has no --draft alias', async () => {
     }
   }
   assert.ok(program.commands.some(command => command.name() === 'preview'));
-  const create = program.commands.find(command => command.name() === 'project')
-    ?.commands.find(command => command.name() === 'create');
-  assert.ok(create?.options.some(option => option.long === '--preview' && option.hidden));
   assertNoDraftOption(program);
+  await assert.rejects(
+    program.parseAsync(['project', 'create', 'example', '--preview'], { from: 'user' }),
+    { code: 'commander.unknownOption', exitCode: 1 },
+  );
+  assert.equal(stderr.trim(), "error: unknown option '--preview'");
 });
 
 test('hosted preview remains separate from frontend dev; no local-runtime aliases survive', () => {

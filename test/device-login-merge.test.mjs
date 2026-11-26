@@ -142,7 +142,7 @@ test('a refused, denied, abandoned or failed redemption leaves the temporary pro
   const { folders, run, state, configPath } = await withFixture(t, { count: 1 });
   const [folder] = folders;
   for (const [mode, message] of [
-    ['refused', /temporary session is invalid or expired/],
+    ['refused', /Somewhere could not use this temporary workspace/],
     ['denied', /denied in the browser/],
     ['pending', /Login timed out/],
     ['delivery-error', /delivery could not be confirmed/],

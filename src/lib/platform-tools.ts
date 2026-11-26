@@ -80,7 +80,7 @@ function mcpUrl(allTools: boolean): URL {
 
 export function mcpAccessExpiresSoon(): boolean {
   const config = loadConfig();
-  if (!config?.refresh_token || !config.access_expires_at) return false;
+  if (config?.temporary || !config?.refresh_token || !config.access_expires_at) return false;
   const expiresAt = Date.parse(config.access_expires_at);
   return Number.isFinite(expiresAt) && expiresAt <= Date.now() + 60_000;
 }

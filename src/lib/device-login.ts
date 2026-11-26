@@ -164,7 +164,7 @@ export async function deviceLogin(callbacks: DeviceLoginCallbacks, temporaryToke
     if (temporaryToken) {
       // Keep response bodies from credential-bearing requests out of output and capture.
       const reason = startRes.status === 401
-        ? 'The temporary session is invalid or expired.'
+        ? `Somewhere could not use this temporary workspace. Run \`${cliInvocation()} claim\` to find its claim link.`
         : `The server refused the request (HTTP ${startRes.status}).`;
       throw new Error(`Could not start sign-in to save temporary projects. ${reason}`);
     }

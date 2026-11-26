@@ -174,3 +174,19 @@ test('--force, a slug ref and a linked folder with a recorded base keep their ex
       assert.equal(srv.bodies[0].base_release_id, 'rel_folder');
     }); }
 });
+
+test('a temporary key can deploy to its explicit project using the current release as its base', async () => {
+  const f = fixture();
+  writeFileSync(join(f.HOME, '.somewhere', 'config.json'), JSON.stringify({
+    token: 'smt_temporary_fixture', temporary: true, user: { email: '', username: '' },
+  }));
+  const srv = server();
+  await withServer(srv.handler, async (apiUrl) => {
+    const result = await deploy(f, apiUrl, [UUID]);
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(srv.bodies.length, 1);
+    assert.equal(srv.bodies[0].project_id, UUID);
+    assert.equal(srv.bodies[0].base_release_id, `rel_live_7:${UUID}`);
+    assert.equal('force' in srv.bodies[0], false);
+  });
+});

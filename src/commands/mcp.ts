@@ -14,6 +14,9 @@ import {
   hasCursorMcpConfig,
   hasGlobalMcpConfig,
   loadConfig,
+  hasUsableCredential,
+  temporaryConfigExpired,
+  temporaryWorkspaceExpiryMessage,
   saveCursorMcpConfig,
   saveGlobalMcpConfig,
   cliConfigPathForDisplay,
@@ -146,10 +149,13 @@ async function runStdioBridge(): Promise<void> {
   /** The bridge's own read-only probes; their answers never reach the host. */
   const probes = new Map<RpcId, (message: RpcMessage) => void>();
 
-  const initialToken = loadConfig()?.token ?? null;
-  let recovery: Recovery | null = initialToken
-    ? null
-    : { kind: 'login', code: 'NOT_LOGGED_IN', message: 'This machine has no Somewhere login.', token: null };
+  const initialConfig = loadConfig();
+  const initialToken = initialConfig?.token ?? null;
+  let recovery: Recovery | null = temporaryConfigExpired(initialConfig)
+    ? { kind: 'login', code: 'TEMPORARY_SESSION_EXPIRED', message: temporaryWorkspaceExpiryMessage(initialConfig.temp_expires_at), token: initialToken }
+    : initialToken
+      ? null
+      : { kind: 'login', code: 'NOT_LOGGED_IN', message: 'This machine has no Somewhere login.', token: null };
 
   const shutdown = async () => {
     if (shuttingDown) return;
@@ -213,8 +219,9 @@ async function runStdioBridge(): Promise<void> {
     leaveInFlight = (async () => {
       const current = recovery;
       if (!current) return true;
-      const token = loadConfig()?.token ?? null;
-      if (!token || token === current.token) return false;
+      const config = loadConfig();
+      const token = config?.token;
+      if (!token || token === current.token || temporaryConfigExpired(config)) return false;
       let transport: StreamableHTTPClientTransport | null = null;
       try {
         transport = await createHttpTransport(token);
@@ -302,7 +309,14 @@ async function runStdioBridge(): Promise<void> {
 
   const forwardUpstream = async (message: RpcMessage): Promise<void> => {
     const isRequest = message.id !== undefined && message.id !== null && typeof message.method === 'string';
-    const usedToken = loadConfig()?.token ?? null;
+    const config = loadConfig();
+    const usedToken = config?.token ?? null;
+    if (temporaryConfigExpired(config)) {
+      enterRecovery({ kind: 'login', code: 'TEMPORARY_SESSION_EXPIRED',
+        message: temporaryWorkspaceExpiryMessage(config.temp_expires_at) }, usedToken);
+      if (isRequest) answerLocally(message, recovery!, true);
+      return;
+    }
     if (!usedToken) {
       // Logged out while the session runs: the renewal path would otherwise exit the process.
       enterRecovery({ kind: 'login', code: 'NOT_LOGGED_IN', message: 'This machine has no Somewhere login.' }, null);
@@ -381,7 +395,7 @@ function runInstall(host: string): void {
     error(`Unknown host "${host}". Supported: ${INSTALL_HOSTS.join(', ')}`);
     process.exit(1);
   }
-  const loggedIn = !!loadConfig()?.token;
+  const loggedIn = hasUsableCredential();
   switch (host as InstallHost) {
     case 'codex': installCodex(loggedIn); break;
     case 'claude-code': installClaudeCode(); break;
@@ -431,7 +445,7 @@ function installCodex(loggedIn: boolean): void {
 }
 
 function installClaudeCode(): void {
-  const loggedIn = !!loadConfig()?.token;
+  const loggedIn = hasUsableCredential();
   // Write the stdio bridge, NOT a baked token. The bridge reads
   // ~/.somewhere/config.json at every launch, so a re-login never leaves a
   // stale token behind in Claude Code's config. This matches
@@ -481,8 +495,13 @@ async function runDoctor(version: string): Promise<void> {
 
   // 1. Login config present
   const config = loadConfig();
-  if (config?.token) {
-    success(`Logged in as ${teal(config.user.email || '(unknown)')} (${cliConfigPathForDisplay()})`);
+  const token = hasUsableCredential(config) ? config?.token : undefined;
+  if (temporaryConfigExpired(config)) {
+    fail(temporaryWorkspaceExpiryMessage(config.temp_expires_at));
+  } else if (config?.temporary && token) {
+    success(`Temporary workspace key saved (${cliConfigPathForDisplay()})`);
+  } else if (token) {
+    success(`Logged in as ${teal(config!.user.email || '(unknown)')} (${cliConfigPathForDisplay()})`);
   } else {
     fail(`Not logged in — no token in ${cliConfigPathForDisplay()}.`, `${cliInvocation()} login`);
   }
@@ -490,10 +509,10 @@ async function runDoctor(version: string): Promise<void> {
   // 2. Token actually valid against the API. /auth/whoami is the endpoint
   // that accepts smt_ keys (verified 2026-06-09: /auth/platform-me rejects
   // a key that whoami and the MCP server both accept).
-  if (config?.token) {
+  if (token && config) {
     try {
-      const me = await new ApiClient(config.token).call<{ user?: { email?: string } }>('GET', '/auth/whoami');
-      success(`Token valid (${me.user?.email ?? config.user.email ?? 'unknown account'})`);
+      const me = await new ApiClient(token).call<{ user?: { email?: string } }>('GET', '/auth/whoami');
+      success(config.temporary ? 'Temporary workspace key valid' : `Token valid (${me.user?.email ?? config.user.email ?? 'unknown account'})`);
     } catch (err) {
       // The platform's typed refusal says what is wrong; only an untyped 401 is a guess at the login.
       const typed = typedServerError(err);
@@ -509,7 +528,7 @@ async function runDoctor(version: string): Promise<void> {
       'Content-Type': 'application/json',
       Accept: 'application/json, text/event-stream',
     };
-    if (config?.token) headers.Authorization = `Bearer ${config.token}`;
+    if (token && !temporaryConfigExpired(config)) headers.Authorization = `Bearer ${token}`;
     const res = await fetch(UPSTREAM_URL, {
       method: 'POST',
       headers,
@@ -527,7 +546,7 @@ async function runDoctor(version: string): Promise<void> {
     });
     if (res.ok) {
       success('MCP server reachable — initialize accepted (mcp.somewhere.cloud)');
-    } else if (res.status === 401 && !config?.token) {
+    } else if (res.status === 401 && !headers.Authorization) {
       success('MCP server reachable (responded 401 — expected without a login)');
     } else if (res.status === 401) {
       fail('MCP server reachable but it rejected the token.', `${cliInvocation()} login`);

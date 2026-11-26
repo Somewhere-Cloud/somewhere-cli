@@ -19,6 +19,8 @@ function sessionSubject(token: string | undefined): unknown {
   catch { return undefined; }
 }
 
+type RefusalControl = { allowed?: UserSession | { session: UserSession } };
+
 // Node 22.19+: native fetch, cookie storage and TypeScript; no test dependencies.
 export class UserSession {
   readonly origin: string;
@@ -102,10 +104,13 @@ export class UserSession {
   }
   /** Prove a refusal against a table or a METHOD /path endpoint. Use an allowed session
    *  as the positive control for hidden rows or a 404. */
-  expectRefused(table: string, request: DataRequest, options?: { allowed?: UserSession }): Promise<void>;
-  expectRefused(endpoint: `${string} /${string}`, body?: unknown, options?: { allowed?: UserSession }): Promise<void>;
-  async expectRefused(target: string, request?: unknown, { allowed }: { allowed?: UserSession } = {}): Promise<void> {
-    if (allowed && allowed.origin !== this.origin) throw new Error('Choose a control session from the same app.');
+  expectRefused(table: string, request: DataRequest, options?: RefusalControl): Promise<void>;
+  expectRefused(endpoint: `${string} /${string}`, body?: unknown, options?: RefusalControl): Promise<void>;
+  async expectRefused(target: string, request?: unknown, { allowed }: RefusalControl = {}): Promise<void> {
+    const control = allowed instanceof UserSession ? allowed : allowed?.session;
+    if (allowed !== undefined && (!(control instanceof UserSession) || control.origin !== this.origin)) {
+      throw new Error('Pass { allowed: owner } or { allowed: owner.session } from the same app.');
+    }
     const adapt = (session: UserSession): RefusalClient => ({
       endpoint(method, path, body) {
         return session.request(path, body === undefined ? { method } : {
@@ -114,7 +119,7 @@ export class UserSession {
       },
       data: (table, request) => session.data(table, request),
     });
-    await assertRefused(adapt(this), target, request, allowed && adapt(allowed));
+    await assertRefused(adapt(this), target, request, control && adapt(control));
   }
   /** Exercise the declared file door as a managed test user. */
   async files(collection: string, request: FilesRequest): Promise<Response> {

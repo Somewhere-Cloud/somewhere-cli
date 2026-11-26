@@ -1086,11 +1086,11 @@ export function registerDeploy(program: Command) {
       // records no base for it, the read starts beside the resolve; its result is used only if the resolve confirms
       // that same id, otherwise the serial read below runs exactly as before. The resolve still binds
       // the target and refuses a mismatched link before anything is uploaded. readExplicitProjectLiveBase never rejects.
-      const earlyLiveBase = opts.project && projectId && !tempSession && !opts.force
+      const earlyLiveBase = opts.project && projectId && !besideRealLogin && !opts.force
         && CANONICAL_PROJECT_ID.test(projectId) && !readSourceBase(targetProjectConfig, projectId)
         ? { projectId, read: readExplicitProjectLiveBase(client, projectId) }
         : null;
-      if (opts.project && projectId && !tempSession) {
+      if (opts.project && projectId && !besideRealLogin) {
         explicitProjectId = await resolveExplicitProjectId(client, projectId);
         if (explicitProjectId) {
           if (linkedProjectEntry && linkedProjectEntry.config.project_id !== explicitProjectId) {

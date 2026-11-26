@@ -1,3 +1,4 @@
+import type { CliConfig } from '../types.js';
 import { cliInvocation } from '../lib/cli-invocation.js';
 import { Command } from 'commander';
 import {
@@ -197,6 +198,34 @@ export async function describeProjectCount(client: ApiClient, owned: number): Pr
   }
 }
 
+async function verifyImportedKey(token: string): Promise<CliConfig> {
+  const client = new ApiClient(token);
+  try {
+    const me = await client.call<{ email?: string; username?: string }>(
+      'GET', '/auth/platform-me', undefined, undefined, { refresh: false },
+    );
+    return { token, user: { email: me.email ?? '', username: me.username ?? '' } };
+  } catch (err) {
+    // The full account profile excludes temporary deploy keys. Their account
+    // overview accepts them and gives deploy the expiry and claim information.
+    if (!(err instanceof CliApiError) || err.statusCode !== 401 || err.code !== 'AUTH_INVALID_CREDS') throw err;
+    const overview = await client.call<{
+      account: { temporary_expires_at?: string | null };
+      needs_you?: Array<{ kind: string; action?: { url?: string } }>;
+    }>('GET', '/account/overview', undefined, undefined, { refresh: false });
+    const expiresAt = overview.account.temporary_expires_at;
+    if (!expiresAt) throw err;
+    const claimUrl = overview.needs_you?.find((item) => item.kind === 'keep_apps')?.action?.url;
+    return {
+      token,
+      temporary: true,
+      temp_expires_at: expiresAt,
+      ...(claimUrl ? { claim_url: claimUrl } : {}),
+      user: { email: '', username: '' },
+    };
+  }
+}
+
 export function registerAuth(program: Command) {
   program
     .command('login')
@@ -281,7 +310,7 @@ export function registerAuth(program: Command) {
             username: string | null;
             effective_tier: string;
           };
-          stats: { api_keys: number; projects: number };
+          stats: { api_keys?: number; projects?: number };
           session?: { id: string; label: string; expires_at: string | null; scope: DeviceSessionScope | null } | null;
         }>('GET', '/auth/whoami');
 
@@ -290,11 +319,19 @@ export function registerAuth(program: Command) {
           return;
         }
 
+        if (config.temporary) {
+          console.log(teal('Temporary workspace'));
+          if (config.temp_expires_at) info(dim(`Expires at ${config.temp_expires_at}`));
+          return;
+        }
+
         const tier = await readPlanName(client, r.user.effective_tier);
         console.log(`${teal(r.user.email)}  ${dim(`(${tier})`)}`);
         if (r.user.name) info(dim(r.user.name));
         if (r.user.username) info(dim(`@${r.user.username}`));
-        info(dim(`${await describeProjectCount(client, r.stats.projects)}, ${r.stats.api_keys} active key${r.stats.api_keys === 1 ? '' : 's'}`));
+        if (typeof r.stats.projects === 'number' && typeof r.stats.api_keys === 'number') {
+          info(dim(`${await describeProjectCount(client, r.stats.projects)}, ${r.stats.api_keys} active key${r.stats.api_keys === 1 ? '' : 's'}`));
+        }
         info(dim(`key ${config.token.slice(0, 12)}…`));
         if (r.session) {
           info(dim(`session ${r.session.label} · access: ${describeScope(r.session.scope)}`));
@@ -340,7 +377,7 @@ export function registerAuth(program: Command) {
 
   auth
     .command('set')
-    .description('Save an smt_ token from SOMEWHERE_TOKEN or stdin (no browser flow)')
+    .description('Save a developer or temporary deployment key from SOMEWHERE_TOKEN or stdin')
     .allowExcessArguments(false)
     .showHelpAfterError(
       'Do not pass tokens as arguments: they are visible in the process table. ' +
@@ -352,20 +389,9 @@ export function registerAuth(program: Command) {
         error('Token must be provided via SOMEWHERE_TOKEN or stdin and start with smt_');
         process.exit(1);
       }
-      // Verify the token works before persisting it.
-      const client = new ApiClient(token);
-      let email = '';
-      let username = '';
+      let config: CliConfig;
       try {
-        const me = await client.call<{ email?: string; username?: string }>(
-          'GET',
-          '/auth/platform-me',
-          undefined,
-          undefined,
-          { refresh: false },
-        );
-        email = me.email ?? '';
-        username = me.username ?? '';
+        config = await verifyImportedKey(token);
       } catch (err) {
         const detail = err instanceof Error ? err.message : String(err);
         // Only an authentication refusal says the token is bad. An outage, a
@@ -377,8 +403,11 @@ export function registerAuth(program: Command) {
         }
         process.exit(1);
       }
-      saveConfig({ token, user: { email, username } });
-      success(`Token saved.${email ? ` Logged in as ${teal(email)}.` : ''}`);
+      saveConfig(config);
+      const email = config.user.email;
+      success(config.temporary
+        ? 'Temporary workspace key saved.'
+        : `Token saved.${email ? ` Logged in as ${teal(email)}.` : ''}`);
       info(`Run \`${cliInvocation()} projects\` to verify.`);
     });
 
@@ -398,10 +427,15 @@ export function registerAuth(program: Command) {
         return;
       }
 
-      success(`Logged in as ${teal(config.user.email || '(unknown)')}`);
+      if (config.temporary) {
+        success('Temporary workspace key saved.');
+        if (config.temp_expires_at) info(`Expires at ${config.temp_expires_at}`);
+      } else {
+        success(`Logged in as ${teal(config.user.email || '(unknown)')}`);
+      }
       info(`Device ID:  ${deviceId}`);
       info(`Key name:   ${keyName}`);
-      info(`Token:      ${config.token.slice(0, 8)}…${config.token.slice(-4)}`);
+      if (!config.temporary) info(`Token:      ${config.token.slice(0, 8)}…${config.token.slice(-4)}`);
     });
 
   auth

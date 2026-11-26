@@ -6,7 +6,7 @@ import prompts from 'prompts';
 import { ApiClient } from '../lib/client.js';
 import { getToken, loadProjectConfig } from '../lib/config.js';
 import { buildEnvTemplate } from '../lib/envfile-write.js';
-import { dim, error, info, printJson, success, teal, warn } from '../lib/output.js';
+import { dim, error, info, platformErrorEnvelope, printJson, printJsonError, success, teal, warn } from '../lib/output.js';
 import type { EnvKey, EnvScope, EnvSetResult } from '../types.js';
 import { unlinkedFolderHint } from '../lib/link-hint.js';
 
@@ -18,6 +18,17 @@ function resolveProjectId(explicit?: string): string {
     process.exit(1);
   }
   return config.project_id;
+}
+
+function reportEnvError(err: unknown, json: boolean): void {
+  const platform = platformErrorEnvelope(err);
+  if (platform?.code === 'TEMP_ACCOUNT_RESTRICTED') {
+    const message = `Claim this app to manage environment variables. Run \`${cliInvocation()} claim\` to get the claim link.`;
+    if (json) printJsonError(platform.code, message, platform.extra);
+    else error(message, err);
+    return;
+  }
+  error(err instanceof Error ? err.message : String(err), err);
 }
 
 export function registerEnv(program: Command) {
@@ -55,7 +66,7 @@ export function registerEnv(program: Command) {
           if (v.browser_guidance) info(dim(v.browser_guidance));
         }
       } catch (err) {
-        error(err instanceof Error ? err.message : String(err), err);
+        reportEnvError(err, Boolean(opts.json));
         process.exit(1);
       }
     });
@@ -86,7 +97,7 @@ export function registerEnv(program: Command) {
         }>('GET', '/env', undefined, { project_id: pid });
         keys = result.keys ?? result.vars ?? [];
       } catch (err) {
-        error(err instanceof Error ? err.message : String(err), err);
+        reportEnvError(err, Boolean(opts.json));
         process.exit(1);
       }
 
@@ -209,7 +220,7 @@ export function registerEnv(program: Command) {
         const warnings = Array.isArray(result?.warnings) ? result.warnings : [];
         for (const w of warnings) if (typeof w === 'string') warn(w);
       } catch (err) {
-        error(err instanceof Error ? err.message : String(err), err);
+        reportEnvError(err, Boolean(opts.json));
         process.exit(1);
       }
     });
@@ -234,7 +245,7 @@ export function registerEnv(program: Command) {
         }
         success(`${key} deleted`);
       } catch (err) {
-        error(err instanceof Error ? err.message : String(err), err);
+        reportEnvError(err, Boolean(opts.json));
         process.exit(1);
       }
     });

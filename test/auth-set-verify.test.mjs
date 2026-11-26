@@ -25,16 +25,17 @@ test.after(() => server.close());
 
 const stored = { token: 'smt_stored_access', refresh_token: 'smtr_stored_refresh', user: { email: 'owner@example.test', username: 'owner' } };
 
-function run(apiUrl, { config } = {}) {
+function run(apiUrl, { config, stdin = false } = {}) {
   const base = mkdtempSync(join(tmpdir(), 'sw-auth-set-'));
   const configDir = join(base, 'config');
   mkdirSync(configDir);
   if (config) writeFileSync(join(configDir, 'config.json'), JSON.stringify(config));
   return new Promise((resolve) => {
-    const child = spawn(process.execPath, [cli, 'auth', 'set'], { cwd: base, stdio: ['ignore', 'pipe', 'pipe'], env: {
+    const child = spawn(process.execPath, [cli, 'auth', 'set'], { cwd: base, stdio: [stdin ? 'pipe' : 'ignore', 'pipe', 'pipe'], env: {
       ...process.env, HOME: base, SOMEWHERE_CONFIG_DIR: configDir, SOMEWHERE_API_URL: apiUrl,
-      SOMEWHERE_TOKEN: 'smt_candidate', SOMEWHERE_NO_NOTIFICATIONS: '1', CI: '1', NO_COLOR: '1',
+      SOMEWHERE_TOKEN: stdin ? '' : 'smt_candidate', SOMEWHERE_NO_NOTIFICATIONS: '1', CI: '1', NO_COLOR: '1',
     } });
+    if (stdin) child.stdin.end('smt_candidate\n');
     let stdout = '', stderr = '';
     child.stdout.on('data', (v) => stdout += v); child.stderr.on('data', (v) => stderr += v);
     child.on('close', (status) => resolve({ status, out: stdout + stderr,
@@ -88,4 +89,48 @@ test('an accepted token is saved', async () => {
   assert.equal(result.status, 0, result.out);
   assert.match(result.out, /Token saved\. Logged in as dev@example\.test/);
   assert.equal(result.config.token, 'smt_candidate');
+});
+
+const profileRefusal = {
+  status: 401,
+  body: { ok: false, error: 'AUTH_INVALID_CREDS', message: 'Invalid or expired platform token.' },
+};
+
+for (const stdin of [false, true]) {
+  test(`a temporary deployment key is saved with its expiry and claim link via ${stdin ? 'stdin' : 'SOMEWHERE_TOKEN'}`, async () => {
+    const expiresAt = '2030-01-01T00:00:00.000Z';
+    const claimUrl = 'https://example.test/app/claim';
+    requests.length = 0;
+    reply = (req) => req.url === '/v1/auth/platform-me' ? profileRefusal : {
+      status: 200,
+      body: { ok: true, data: {
+        account: { temporary_expires_at: expiresAt },
+        needs_you: [{ kind: 'keep_apps', action: { url: claimUrl } }],
+      } },
+    };
+    const result = await run(api(), { stdin });
+    assert.equal(result.status, 0, result.out);
+    assert.match(result.out, /Temporary workspace key saved\./);
+    assert.doesNotMatch(result.out, /smt_candidate|example\.test/);
+    assert.deepEqual(result.config, {
+      token: 'smt_candidate', temporary: true, temp_expires_at: expiresAt, claim_url: claimUrl,
+      user: { email: '', username: '' },
+    });
+    assert.deepEqual(requests, [
+      'GET /v1/auth/platform-me Bearer smt_candidate',
+      'GET /v1/account/overview Bearer smt_candidate',
+    ]);
+  });
+}
+
+test('a failed temporary account lookup preserves the stored login and reports the lookup error', async () => {
+  reply = (req) => req.url === '/v1/auth/platform-me' ? profileRefusal : {
+    status: 503,
+    body: { ok: false, error: 'SERVICE_UNAVAILABLE', message: 'Account overview is unavailable.' },
+  };
+  const result = await run(api(), { config: stored });
+  assert.equal(result.status, 1, result.out);
+  assert.match(result.out, /Could not verify the token: Account overview is unavailable/);
+  assert.doesNotMatch(result.out, /Invalid or expired/);
+  assert.deepEqual(result.config, stored);
 });

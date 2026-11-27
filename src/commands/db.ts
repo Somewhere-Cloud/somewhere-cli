@@ -359,7 +359,7 @@ export function registerDb(program: Command) {
       }
 
       try {
-        const r = await client.call<{ tables: Array<string | { name: string; row_count?: number }> }>(
+        const r = await client.call<{ tables: Array<string | { name: string; row_count?: number }>; hint?: string }>(
           'GET',
           '/db/tables',
           undefined,
@@ -374,14 +374,16 @@ export function registerDb(program: Command) {
         // every row count printed "?" — audit #5.) Normalize defensively so a
         // future object shape still works.
         const rows = (r.tables ?? []).map((t) => (typeof t === 'string' ? { name: t } : t));
-        if (!rows.length) {
-          info(dim(`No tables yet. Create one with \`${cliInvocation()} db query "CREATE TABLE …"\`.`));
-          return;
+        if (rows.length) {
+          table(
+            ['Table', 'Rows'],
+            rows.map((t) => [teal(t.name), t.row_count != null ? String(t.row_count) : dim('—')]),
+          );
+        } else {
+          info(dim('No tables yet.'));
         }
-        table(
-          ['Table', 'Rows'],
-          rows.map((t) => [teal(t.name), t.row_count != null ? String(t.row_count) : dim('—')]),
-        );
+        const hint = r.hint ?? (rows.length ? undefined : 'To add declared tables, define them in db/schema.ts and deploy.');
+        if (hint) info(dim(hint));
       } catch (err) {
         error(err instanceof Error ? err.message : String(err), err);
         process.exit(1);

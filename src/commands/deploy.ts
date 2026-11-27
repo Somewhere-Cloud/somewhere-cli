@@ -4,7 +4,7 @@ import { newProjectCommand } from '../lib/link-hint.js';
 import { roleMethodHints } from '../lib/role-method-hints.js';
 import { cliInvocation } from '../lib/cli-invocation.js';
 import { suppressExitNotices } from '../lib/notify/index.js';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { announceNpxTypeScriptFetch, typecheckCompilerSource, missingProjectDependencies, runTypecheck } from '../lib/typecheck.js';
 import { TYPECHECK_TYPESCRIPT_VERSION } from '../lib/typecheck-version.js';
@@ -784,7 +784,7 @@ export function registerDeploy(program: Command) {
         process.stderr.write(`Still checking types before upload after ${formatDeployElapsed(performance.now() - typecheckStartedAt)}...\n`);
       }, deployHeartbeatMs()).unref() : undefined;
       const typecheck = checkingTypes
-        ? runTypecheck(targetDir).then(value => ({ value }), (error: unknown) => ({ error }))
+        ? runTypecheck(targetDir, { deploy: true }).then(value => ({ value }), (error: unknown) => ({ error }))
           .finally(() => {
             clearInterval(typecheckHeartbeat);
             typecheckMs = performance.now() - typecheckStartedAt;
@@ -1413,6 +1413,9 @@ export function registerDeploy(program: Command) {
             saveProjectAppUrl(deployStateEntry.dir, deployStateEntry.config.project_id, httpsOrigin(result.url));
           }
         }
+        result.warnings = result.warnings?.map(warning => withLocalEnvHint(warning, targetDir));
+        result.build_log = result.build_log?.map(line => line.startsWith('warning: ')
+          ? `warning: ${withLocalEnvHint(line.slice('warning: '.length), targetDir)}` : line);
         const formatted = formatDeploySuccess(result, {
           scope,
           functionCount: countFunctionRoutes(functions),
@@ -1583,7 +1586,7 @@ export function registerDeploy(program: Command) {
         }
 
         if (!tempSession) {
-          if (formatted.liveUrl) {
+          if (formatted.liveUrl && !result.warnings?.some(missingSetting)) {
             success(`Live at ${teal(formatted.liveUrl)}`);
           } else {
             success(formatted.liveMessage);
@@ -2003,6 +2006,7 @@ export function formatDeploySuccess(
       ? `https://${subdomain}.${PROJECT_SITE_DOMAIN}`
       : null);
 
+  const missing = result.warnings?.filter(missingSetting).length ?? 0;
   return {
     staticFileCount,
     headline,
@@ -2012,12 +2016,32 @@ export function formatDeploySuccess(
         : null,
     liveUrl,
     // Only an older platform omits the URL; name the command that shows it.
-    liveMessage: liveUrl
+    liveMessage: missing
+      ? `Live, but ${missing} ${missing === 1 ? 'setting is' : 'settings are'} missing${liveUrl ? ` (${liveUrl})` : ''}`
+      : liveUrl
       ? `Live at ${liveUrl}`
       : `Deployed. The platform did not report the live URL; \`${cliInvocation()} project view ${
         typeof result.project_id === 'string' && result.project_id.trim() ? result.project_id.trim() : '<project>'
       }\` shows it.`,
   };
+}
+
+function missingSetting(warning: string): string | undefined {
+  return /^Missing (?:public|server) setting ([A-Za-z_][A-Za-z0-9_]*)\./.exec(warning)?.[1];
+}
+
+export function withLocalEnvHint(warning: string, dir: string): string {
+  const key = missingSetting(warning);
+  if (!key) return warning;
+  try {
+    const source = readFileSync(join(dir, '.env'), 'utf8');
+    if (new RegExp(`^\\s*(?:export\\s+)?${key}\\s*=`, 'm').test(source)) {
+      return `${warning} Copy ${key} from your local .env file.`;
+    }
+  } catch {
+    // The deploy works even when there is no readable local .env file.
+  }
+  return warning;
 }
 
 function normalizeWarning(value: string): string {

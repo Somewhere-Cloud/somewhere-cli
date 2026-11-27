@@ -421,7 +421,7 @@ export function diagnosticHints(message: string): string[] {
  */
 export function runTypecheck(
   projectDir: string,
-  options: { installTypePackages?: TypePackageInstaller | false; apiBase?: string } = {},
+  options: { installTypePackages?: TypePackageInstaller | false; apiBase?: string; deploy?: boolean } = {},
 ): Promise<TypecheckResult> {
   // Contract drift is advisory; code diagnostics determine success.
   const contract = platformContractVerdict(options.apiBase ?? API_BASE_URL);
@@ -440,7 +440,7 @@ export function runTypecheck(
     ensureDeclaredTypePackages(projectDir, options.installTypePackages);
   }
   const { command, args, via } = resolveTsc(projectDir);
-  return runTypecheckWith(projectDir, command, args, via, declaredData).then(withContract);
+  return runTypecheckWith(projectDir, command, args, via, declaredData, options.deploy === true).then(withContract);
 }
 
 /** Announce, on stderr so JSON on stdout is untouched, that TypeScript is
@@ -462,13 +462,19 @@ async function runTypecheckWith(
   args: string[],
   via: TscInvocation['via'],
   declaredData: LocalDeclaredData | undefined,
+  deploy: boolean,
 ): Promise<TypecheckResult> {
   // --pretty false → stable, parseable one-line diagnostics regardless of TTY.
   const fullArgs = typecheckArgs(args);
   let overlay: string | undefined;
-  if (declaredData) {
+  const foreignDirectories = deploy
+    ? ['supabase/functions/', 'netlify/functions/', '.netlify/functions/', '.vercel/'].filter(path => existsSync(join(projectDir, path)))
+    : [];
+  const viteClient = 'node_modules/vite/client.d.ts';
+  const viteTypes = deploy && existsSync(join(projectDir, viteClient)) ? [viteClient] : [];
+  if (declaredData || foreignDirectories.length || viteTypes.length) {
     // TypeScript resolves JSONC, inherited configs and explicit files itself.
-    // Preserve that complete file set, adding only our declaration and schema.
+    // For deploy, check the app and its functions and leave provider folders out.
     const config = await runBounded(command, [...args, '--project', SCAFFOLD_TSCONFIG_FILENAME, '--showConfig'], projectDir);
     if (config.timedOut) return { ok: false, errors: [], via, raw: config.out, spawnError: timedOutMessage(via, config) };
     if (config.error || config.code !== 0) {
@@ -484,10 +490,11 @@ async function runTypecheckWith(
       writeFileSync(overlay, JSON.stringify({
         extends: './' + SCAFFOLD_TSCONFIG_FILENAME,
         files: [...new Set([
-          ...parsed.files,
-          relative(projectDir, declaredData.declarationPath),
-          ...(declaredData.filesDeclarationPath ? [relative(projectDir, declaredData.filesDeclarationPath)] : []),
-          ...(declaredData.schemaPath ? [relative(projectDir, declaredData.schemaPath)] : []),
+          ...parsed.files.filter(file => !foreignDirectories.some(dir => file.replaceAll('\\', '/').replace(/^\.\//, '').startsWith(dir))),
+          ...viteTypes,
+          ...(declaredData ? [relative(projectDir, declaredData.declarationPath)] : []),
+          ...(declaredData?.filesDeclarationPath ? [relative(projectDir, declaredData.filesDeclarationPath)] : []),
+          ...(declaredData?.schemaPath ? [relative(projectDir, declaredData.schemaPath)] : []),
         ])],
         include: [], exclude: [],
       }));

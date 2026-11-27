@@ -1,9 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdtempSync, unlinkSync, rmdirSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 const deployModule = process.env.SOMEWHERE_TEST_SOURCE
   ? '../src/commands/deploy.ts'
   : '../dist/commands/deploy.js';
-const { formatDeploySuccess, formatDeployTiming, POST_DEPLOY_HINT } = await import(deployModule);
+const { formatDeploySuccess, formatDeployTiming, withLocalEnvHint, POST_DEPLOY_HINT } = await import(deployModule);
 
 test('post-deploy copy keeps greenfield live and introduces preview after users or data', () => {
   assert.equal(
@@ -131,4 +134,26 @@ test('deploy timing leaves out server stages that are missing or not numbers', (
     formatDeployTiming({ ...base, stageTimingMs: { release_storage_write: null, postverify_render: '12', activation: 120 } }),
     [...cliRows, '  activation: 0.12s'],
   );
+});
+
+
+test('missing settings qualify the live result and name local .env without revealing its contents', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'deploy-env-warning-'));
+  const file = join(dir, '.env');
+  writeFileSync(file, 'VITE_SUPABASE_URL=synthetic-test-value\n', { mode: 0o600 });
+  try {
+    const publicWarning = 'Missing public setting VITE_SUPABASE_URL. Run the env command.';
+    const serverWarning = 'Missing server setting PRIVATE_KEY. Run the env command.';
+    const augmented = withLocalEnvHint(publicWarning, dir);
+    assert.match(augmented, /Copy VITE_SUPABASE_URL from your local \.env file/);
+    assert.doesNotMatch(augmented, /synthetic-test-value/);
+    assert.equal(withLocalEnvHint(serverWarning, dir), serverWarning);
+    const formatted = formatDeploySuccess({
+      url: 'https://swtest-lovable.somewhere.site', warnings: [augmented, serverWarning],
+    }, { functionCount: 0 });
+    assert.equal(formatted.liveMessage, 'Live, but 2 settings are missing (https://swtest-lovable.somewhere.site)');
+  } finally {
+    unlinkSync(file);
+    rmdirSync(dir);
+  }
 });

@@ -37,4 +37,24 @@ test('managed rows command: actual transport, linked project, refusal and clean 
    assert.equal(r.status,0,r.stderr);
    assert.deepEqual(requests.at(-1),{path:'/v1/db/import',method:'POST',auth:'Bearer smt_offline_fixture',body});
  }
+ const csv='email,password_hash\nfixture@example.test,\n';
+ writeFileSync(join(dir,'users.csv'),csv);
+ reply={ok:true,data:{received:1,created:1,ignored_email_verified:1,source_id_conflict:0,unsupported_cost:0}};
+ r=await command(['--source','users','users.csv'],true,['import']);
+ assert.equal(r.status,0,r.stderr);
+ assert.deepEqual(JSON.parse(r.stdout),reply.data);
+ assert.deepEqual(requests.at(-1),{path:'/v1/auth/import',method:'POST',auth:'Bearer smt_offline_fixture',body:{project_id:'linked-project',csv}});
+ for(const args of [[],['absent.csv'],['users.csv','--all']]){
+   const before=requests.length;
+   r=await command(['--source','users',...args],true,['import']);
+   assert.equal(r.status,1);
+   assert.equal(requests.length,before);
+   assert.ok(!r.stderr.includes('fixture@example.test'));
+ }
+ reply={ok:false,error:'OWNER_REQUIRED',message:'Use the project owner’s full-scope developer key.'};
+ r=await command(['--source','users','users.csv'],true,['import']);
+ assert.equal(r.status,1);
+ assert.match(r.stderr,/full-scope developer key/);
+ assert.ok(!r.stderr.includes('fixture@example.test'));
+
 });

@@ -1,3 +1,4 @@
+import { readFile, stat } from 'node:fs/promises';
 import type { Command } from 'commander';
 import { ApiClient } from '../lib/client.js';
 import { getToken } from '../lib/config.js';
@@ -15,17 +16,42 @@ interface ImportOptions {
 
 export function registerDbImport(db: Command) {
   db.command('import [tables...]')
-    .description('Generate a table declaration or plan and copy rows from Supabase')
-    .option('--source <source>', 'Set to supabase to import from the app’s Supabase Data API')
+    .description('Generate a table declaration or import Supabase tables or app users')
+    .option('--source <source>', 'Import Supabase tables or import user CSV with the project owner’s full-scope developer key')
     .option('--project <id>', 'Project ID (defaults to the linked project)')
     .option('--all', 'Copy all exposed Supabase tables')
     .option('--order-by <column>', 'Stable unique column for a table without a single supported primary key')
     .option('--resume', 'Skip existing destination primary keys')
     .option('--job <id>', 'Read the progress and receipt of a Supabase import job')
     .action(async (tables: string[], options: ImportOptions) => {
-      if (options.source !== undefined && options.source !== 'supabase') {
-        error('--source must be supabase when provided.');
+      if (options.source !== undefined && options.source !== 'supabase' && options.source !== 'users') {
+        error('--source must be supabase or users when provided.');
         process.exitCode = 1;
+        return;
+      }
+      if (options.source === 'users') {
+        if (tables.length !== 1 || tables[0] === '-' || options.all || options.orderBy || options.resume || options.job) {
+          error('Use somewhere db import --source users users.csv with one CSV file.');
+          process.exitCode = 1;
+          return;
+        }
+        let csv: string;
+        try {
+          const file = await stat(tables[0]);
+          if (!file.isFile() || file.size > 5 * 1024 * 1024) {
+            error('Send a user CSV file up to 5 MB.');
+            process.exitCode = 1;
+            return;
+          }
+          csv = await readFile(tables[0], 'utf8');
+        } catch {
+          error('Could not read the user CSV file.');
+          process.exitCode = 1;
+          return;
+        }
+        const project = resolveProjectRef(options.project);
+        const client = new ApiClient(getToken());
+        printJson(await client.call('POST', '/auth/import', { project_id: project, csv }, undefined, { timeoutMs: 90_000 }));
         return;
       }
       const supabase = options.source === 'supabase';

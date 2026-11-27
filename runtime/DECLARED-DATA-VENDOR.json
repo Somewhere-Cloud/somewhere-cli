@@ -1,5 +1,5 @@
 {
-  "source_commit": "ffcd9d643444abfb1520df239acc0ebba5d45f9d",
+  "source_commit": "3bf39bd570c525072d431b5039934f504059970a",
   "esbuild": "0.24.0",
   "source_files": {
     "shared/app-model-catalog.ts": "c9a0119366beabb10157fcc9866f4d32b320b680f1c5717d837a5ca99875fa13",
@@ -9,12 +9,12 @@
     "shared/transient-read.ts": "af93cddbf8fc2f249d951d65d4eda5ac64632e62123e36994b893ff3258b8dab",
     "shared/types/placeholder-identity.ts": "089a46e2474a21193d3611eddd9c94b6bbe62441b3039ed80fc8499bada447ca",
     "worker/containers/compile/checker-contract.cjs": "5ee58cd4e7d00e01fcbd0fc53f6999ed03cb0081ca92e89810946ddb2f13e86f",
-    "worker/containers/compile/consumer-contract.cjs": "673e390352ed7c77ecb5854ddeb5a022d28f6a798f3415052fbcf5e4b6718367",
+    "worker/containers/compile/consumer-contract.cjs": "39c22404bb73d767615b615871f05de161ea2a4c62accace209f0a045a639725",
     "worker/containers/compile/declared-data-contract.cjs": "ebdc7dbc12283a7218c28e0e912e736ac27a8e9d513b82c097ebff6df3c1dd91",
     "worker/containers/compile/generated-declarations-render.cjs": "7ffdb34645cc9eccac6eba39dc86b646a41c4de8a1a038d2b5b46f42df9f1157",
     "worker/containers/compile/generated-declarations.cjs": "6e9902e054c5c784fd9b3c3fafc1869e79954100a45014e1132247cd82833ec4",
     "worker/containers/compile/groups-types.cjs": "7681d2adf0c7761a4971d7ba8287b238e464fd2768c878477e32794538675b33",
-    "worker/containers/compile/runtime-types.cjs": "55d1ca3f8199b7c87bbbb1f777d028090d893e038496da063e90168ff84607d1",
+    "worker/containers/compile/runtime-types.cjs": "b952594f37c47738dbe084d8a71a79568fc7e88ce249e51e96ed4fff41ad24c7",
     "worker/containers/compile/schema-types.cjs": "806147ad7224356734020c62441123db16b50ef6456db974c573b226d517e6cc",
     "worker/containers/compile/typed-data.cjs": "1c8bec853fbee4ffd34c651076a4e1f4d8b18c0c2be5e99e31df7c9283207627",
     "worker/containers/compile/typed-files.cjs": "f2568567a53994575ede91f9a0839965e64f94eb92ae11315650189b6de0f79c",
@@ -59,8 +59,8 @@
     "worker/src/utils/db-schema-deploy/schema-ownership.ts": "e6c811a87bc657707be3518dfe547c6d97718ac073108b126eb7f791c9c08202",
     "worker/src/utils/dev-health-class.ts": "fd430f31b9c8469f3d90e118fd8c75d1836ebcf705c1f9e93915ffa53a4cb066",
     "worker/src/utils/errors.ts": "f57505fc7cb515abb2e2e62fc8211f359200df1183689dc621dec10c8c7f03e3",
-    "worker/src/utils/event-log.ts": "167a2ac478ff9b8b58c4f22ae39aa20ff25331c22a9e8f21d96e374b04458c78",
-    "worker/src/utils/feed-kinds.ts": "e74b03340c908734ae47df30a9fcde1cd7114a6f0db2c1d1ff9909a8e9608e35",
+    "worker/src/utils/event-log.ts": "3eec2dbc072ec78d3837fedd5d84e524ad69645bc3a57985f8c0959928964d43",
+    "worker/src/utils/feed-kinds.ts": "6b57b654bd4470977db53a15cee908b33d544da77c8495acd800593cd81a663b",
     "worker/src/utils/journey-segment.ts": "623837dec9b24c211b1f3be4908f6780bb4cdba175f2dfa5f34ccccfe5a1a5fc",
     "worker/src/utils/json-exact-integers.ts": "e2eb8d3b2e17da363eb14fb46d876208579e2e92bfac173fb27527e6c4fb575e",
     "worker/src/utils/log-sanitize.ts": "f4591089c16a34e4cbc271ec22b48566b970a62e30d3e9856b7dcd9c479fb0e8",
@@ -74,5 +74,5 @@
     "worker/src/utils/telegram.ts": "9aaaa2597c366da1eeee9e2252e9b73e611ea97ed9558f7e07e694d9b393f053",
     "worker/src/utils/workers-ai-comparison.ts": "18b5d5ea96f817387a5ef49733ba611c99cbb14987143c28118b1c90f3b637d4"
   },
-  "sha256": "00d2c0687b23926eb6a7ee91e9c82f05e6164b145c1f4fcdf8265c81be37f2e5"
+  "sha256": "b2ae338074ae0aaae4a15287a76812061a6a2e60d934183b94fb5349bc96e929"
 }

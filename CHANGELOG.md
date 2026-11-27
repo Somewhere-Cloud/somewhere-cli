@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.38.170
+
+- Import app users from a CSV with bcrypt password hashes using `somewhere db import --source users users.csv`.
+
 ## 0.38.169
 
 - Fix the API path used by `somewhere db import --source supabase`.

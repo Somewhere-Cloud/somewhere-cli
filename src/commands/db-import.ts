@@ -17,7 +17,7 @@ interface ImportOptions {
 export function registerDbImport(db: Command) {
   db.command('import [tables...]')
     .description('Generate a table declaration or import Supabase tables or app users')
-    .option('--source <source>', 'Import from supabase or import users from a CSV file')
+    .option('--source <source>', 'Import Supabase tables or import user CSV with the project owner’s full-scope developer key')
     .option('--project <id>', 'Project ID (defaults to the linked project)')
     .option('--all', 'Copy all exposed Supabase tables')
     .option('--order-by <column>', 'Stable unique column for a table without a single supported primary key')

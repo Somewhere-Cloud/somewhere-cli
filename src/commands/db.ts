@@ -6,6 +6,7 @@ import { basename, dirname, join } from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { resolve } from 'node:path';
+import { registerDbImport } from './db-import.js';
 import { registerDbRows } from './db-rows.js';
 import { Command } from 'commander';
 import ora from '../lib/spinner.js';
@@ -76,6 +77,7 @@ interface QueryResult {
 export function registerDb(program: Command) {
   const db = program.command('db').description('Inspect managed production rows or run SQL against your raw database');
   registerDbRows(db);
+  registerDbImport(db);
 
   db
     .command('query <sql>')

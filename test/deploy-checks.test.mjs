@@ -139,7 +139,7 @@ test('somewhere test reads the stored result of the last deploy; waits only whil
   const report = formatChecksReport(pending);
   assert.equal(report[0], 'App smoke check');
   assert.match(report[1], /did not finish within 150 s/);
-  assert.match(report.at(-2), /@somewhere-cloud\/cli\/testing/);
+  assert.match(report.at(-2), /check list in checks\/<name>\.json/);
   assert.equal(checksExitCode(pending), 2);
   assert.equal(checksExitCode({ status: 'checked', sentence: null, passed: false, findings: [] }), 2);
 });

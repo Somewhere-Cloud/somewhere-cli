@@ -239,7 +239,7 @@ export function formatChecksReport(check: AccessCheck | null): string[] {
   } else {
     lines.push('Coverage details are unavailable for this run.');
   }
-  lines.push('For your own app tests, use @somewhere-cloud/cli/testing. See somewhere docs test.');
+  lines.push('Prove the brief with a check list in checks/<name>.json (users and steps). See somewhere docs test.');
   return [...lines, JSON.stringify({
     ...summary, not_checked: coverage,
     ...(check?.scope === 'partial' ? { scope: check.scope, selection: check.selection, checked_parts: check.checked_parts } : {}),

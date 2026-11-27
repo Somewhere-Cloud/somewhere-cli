@@ -39,18 +39,28 @@ Use \`client.intake\` for public submissions to a private parent row. See
 
 ### Run and verify
 
-On a test app, run \`somewhere test-users prepare <name>\`. Pass multiple
-names in the same command to prepare several actors. Use
-\`somewhere data list <table> --as <name>\` and
-\`somewhere data create <table> --as <name> --values '<json>'\` to check
-the table's client access. Run \`somewhere cron run <name> --wait\` for a
-schedule, \`somewhere db rows <table>\` to inspect the stored rows, and
-\`somewhere errors\` to see recent failures. Finish with
-\`somewhere test-users cleanup\`.
+Prove the brief with a check list in \`checks/<name>.json\` and run \`somewhere test\`. The platform makes the named users itself (no sign-up form, browser or contract digest), runs each step on the live app as that user, prints PASS or FAIL per step with the expected and actual answer and the request ID, then deletes those users and their rows. The list reruns after every deploy.
 
-Run \`somewhere typecheck\` and focused tests. \`somewhere deploy-check\` checks compilation and schema without publishing. \`somewhere deploy\` uploads raw source directly to production. When testing changes with real users or data, use \`somewhere preview\`, test with \`somewhere test --preview\`, then promote. See \`somewhere docs dev-environments\`.
+\`\`\`json
+{
+  "users": ["owner", "member", { "name": "carol", "roles": ["staff"] }],
+  "steps": [
+    { "as": "owner", "post": "/api/teams", "body": { "name": "T" }, "expect": 201, "save": { "team": "id" } },
+    { "as": "owner", "post": "/api/teams/{team}/members", "body": { "email": "{member.email}" } },
+    { "as": "member", "data": { "table": "tasks", "operation": "create", "values": { "team_id": "{team}", "title": "x" } }, "save": { "task": "id" } },
+    { "as": "carol", "delete": "/api/tasks/{task}", "expect": [403, 404] },
+    { "as": "signed_out", "get": "/api/teams/{team}/tasks", "expect": 401, "lacks": "{member.email}" },
+    { "run": "daily-summary" }
+  ],
+  "cleanup": [{ "as": "owner", "delete": "/api/teams/{team}" }]
+}
+\`\`\`
 
-Save journeys in \`checks/<name>.json\`, using \`checks/add-a-note.json\` from the notes starter as a model. Keep test IDs when restyling and click the item a person would use. Set \`"signed_in": true\` for a test user and \`"viewports": ["desktop", "mobile"]\` to check both sizes. Saved checks run after deploy. Use \`somewhere test\` to rerun them and \`somewhere verify --flow flow.json\` for a focused journey. For shared access, test the owner, a recipient and an unrelated user separately. The team fixture is in \`somewhere docs sw.groups --section team-example\`. For schedules, trigger \`somewhere cron run <id> --wait\` before asserting its effects. Inspect failures with \`somewhere errors\` and \`somewhere logs\`.
+- A step is \`as\` (a name from \`users\`, or \`signed_out\`) and one of: \`get\`, \`post\`, \`put\`, \`patch\` or \`delete\` with a path (and \`body\`); \`data\` with the data endpoint's request (\`table\`, \`operation\`, \`values\`, \`id\`, \`where\`); or \`run\` with a schedule name, which runs it now and waits for its job.
+- \`expect\` is a status or a list of them (default: any 2xx). \`has\` and \`lacks\` take text; \`has_fields\` and \`lacks_fields\` take JSON field names. \`save\` keeps a field of the answer (of the row, for \`data\`) as \`{name}\` for later steps. \`wait: 10\` retries the step for up to 10 seconds.
+- \`{alice.email}\` and \`{alice.id}\` are each user's address and ID. \`roles\` gives roles your schema declares \`assignedBy: 'server'\`. Up to 6 users and 60 steps per list. \`cleanup\` steps run last, even after a failure.
+
+Run \`somewhere typecheck\` before deploying. \`somewhere deploy-check\` checks compilation and schema without publishing. \`somewhere deploy\` uploads raw source directly to production. When testing changes with real users or data, use \`somewhere preview\`, test with \`somewhere test --preview\`, then promote. See \`somewhere docs dev-environments\`. Inspect failures with \`somewhere errors\` and \`somewhere logs\`. For a check that needs a rendered page, save a browser flow with \`actions\` in \`checks/<name>.json\`, using \`checks/add-a-note.json\` from the notes starter as a model. Keep test IDs when restyling. See \`somewhere docs test\`.
 
 Use \`somewhere docs <topic> --section <id>\` for one section or \`--full\` for all examples. Ask before destructive or paid actions unless the user already authorized them.
 `;

@@ -1,4 +1,4 @@
-import { STARTER_AUTH_TEST, starterChecks } from './init-test-template.js';
+import { STARTER_AUTH_TEST, STARTER_CHECK_LIST, starterChecks } from './init-test-template.js';
 import { buildScaffoldGitignore } from './scaffold.js';
 import { CLI_VERSION } from './version.js';
 import { TYPECHECK_TYPESCRIPT_VERSION } from './typecheck-version.js';
@@ -3442,6 +3442,7 @@ export function createFeatureTemplate(
   const files: InitScaffoldFile[] = [
     ...starterChecks({ privateData }),
     { path: '.gitignore', content: buildScaffoldGitignore() },
+    STARTER_CHECK_LIST,
     STARTER_AUTH_TEST,
     { path: 'AGENTS.md', content: INIT_AGENTS_MD },
     { path: 'CLAUDE.md', content: INIT_CLAUDE_MD },

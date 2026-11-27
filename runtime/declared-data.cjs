@@ -1582,12 +1582,12 @@ interface SomewhereAuthModerationRevoked { revoked_sessions: number; revoked_ref
 // browser user list. ids: exact lookup (max 200, no limit/cursor); otherwise
 // pages ordered by (created_at, id), limit 1-200 (default 50). Banned and
 // agent accounts are not listed; absent ids are omitted.
-interface SomewhereAuthDirectoryUser { id: string; email: string; display_name: string | null; email_verified: boolean; created_at: number | null }
+interface SomewhereAuthDirectoryUser { id: string; email: string; display_name: string | null; email_verified: boolean; created_at: number | null; import_source_id?: string }
 interface SomewhereServerRoleChanges { user_id: string; results: Array<{ user_id: string; role: string; revoked: boolean } | { user_id: string; role: string; granted_by: string; grant_source: 'platform_admin' | 'delegation' | 'email_domain'; created_at: number; created: boolean }> }
 interface SomewhereRuntimeAuthServer {
   /** Deployed production functions only. Validate the caller before assigning roles. */
   setRoles(userId: string, changes: { add?: readonly string[]; remove?: readonly string[] }): Promise<SomewhereServerRoleChanges>;
-  listUsers(options?: { ids: readonly string[]; emails?: never; limit?: never; cursor?: never } | { emails: readonly string[]; ids?: never; limit?: never; cursor?: never } | { ids?: never; emails?: never; limit?: number; cursor?: string }): Promise<{ users: SomewhereAuthDirectoryUser[]; next_cursor: string | null }>;
+  listUsers(options?: { includeImportSourceIds?: boolean } & ({ ids: readonly string[]; emails?: never; limit?: never; cursor?: never } | { emails: readonly string[]; ids?: never; limit?: never; cursor?: never } | { ids?: never; emails?: never; limit?: number; cursor?: string })): Promise<{ users: SomewhereAuthDirectoryUser[]; next_cursor: string | null }>;
 }
 interface SomewhereAuthUserDeletion {
   deleted: true;
@@ -4577,8 +4577,8 @@ var require_consumer_contract = __commonJS({
   "worker/containers/compile/consumer-contract.cjs"(exports2, module2) {
     "use strict";
     var CONSUMER_CONTRACT2 = Object.freeze({
-      version: 50,
-      digest: "32380fd5f1dc01835d4fbb7d82709ace8b24a76383ba951e0db831b0975f3708"
+      version: 51,
+      digest: "29479fae2abafc9e8b276f55c9ac84c46a1be218a2da3f33be5797b8c0a7bfab"
     });
     var MEMBERSHIPS = "memberships: table({ id: id(), team_id: text(), member_id: text() }, { scope: owner(), client: { read: true } }),";
     var SHARES = "shares: table({ id: id(), grantee_id: text() }, { scope: owner(), client: { read: true, create: ['grantee_id'], delete: true }, unique: [['user_id', 'grantee_id']] }),";

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.38.171
+
+- Preview deploys report when a preview contains only part of a large table.
+
 ## 0.38.170
 
 - Import app users from a CSV with bcrypt password hashes using `somewhere db import --source users users.csv`.

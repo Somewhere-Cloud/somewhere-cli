@@ -94,7 +94,7 @@ export function nextActions(ctx: NextActionContext): NextAction[] {
       ];
 
     case 'deploy': {
-      const test = { command: `${cliInvocation()} test`, why: 'journeys, several users and access rules: your tests/*.mjs' };
+      const test = { command: `${cliInvocation()} test`, why: 'runs your checks/*.json check lists as test users, plus the platform checks' };
       if (ctx.temporary) return ctx.liveUrl ? [seeItByUrl(ctx.liveUrl)] : [];
       // Test first, then verify (the AGENTS.md split); the screenshot link last.
       if (ctx.projectLinked) return [test, CHECK_IT_LINKED, SEE_IT_LINKED];

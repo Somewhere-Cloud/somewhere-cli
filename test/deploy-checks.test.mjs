@@ -139,7 +139,7 @@ test('somewhere test reads the stored result of the last deploy; waits only whil
   const report = formatChecksReport(pending);
   assert.equal(report[0], 'App smoke check');
   assert.match(report[1], /did not finish within 150 s/);
-  assert.match(report.at(-2), /@somewhere-cloud\/cli\/testing/);
+  assert.match(report.at(-2), /check list in checks\/<name>\.json/);
   assert.equal(checksExitCode(pending), 2);
   assert.equal(checksExitCode({ status: 'checked', sentence: null, passed: false, findings: [] }), 2);
 });
@@ -328,4 +328,18 @@ test('hosted reads honor Retry-After from admission and status polling', async (
   assert.equal(retryAfterMs('2'), 2000);
   assert.equal(retryAfterMs('Tue, 24 Nov 2026 10:30:03 GMT', Date.parse('2026-11-24T10:30:00Z')), 3000);
   assert.equal(retryAfterMs(null), undefined);
+});
+
+test('somewhere test starts a fresh run when the deploy\'s result skipped check lists with writes', async () => {
+  const skipped = { status: 'checked', sentence: null, passed: true, checks: [{ name: 'POST /__sw/data list', pass: true, outcome: 'passed' }],
+    not_checked: { routes_without_read_check: [], routes_without_write_check: [], schedules_not_run: [], lists_not_rerun: ['checks/board.json'], other: [] } };
+  const calls = [];
+  const fresh = { ...skipped, not_checked: { ...skipped.not_checked, lists_not_rerun: undefined } };
+  const result = await runChecksNow({ call: async (method, path, body, query) => {
+    calls.push(method + ' ' + path);
+    if (method === 'POST') return { status: 'running', version: 6, read: 'GET /v1/deploy/log?project_id=p1&version=6' };
+    return { access_check: query.version ? fresh : skipped };
+  } }, 'p1', clock());
+  assert.deepEqual(calls, ['GET /deploy/log', 'POST /deploy/checks', 'GET /deploy/log']);
+  assert.equal(result.not_checked.lists_not_rerun, undefined);
 });

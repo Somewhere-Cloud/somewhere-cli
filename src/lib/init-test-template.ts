@@ -18,6 +18,20 @@ export function starterChecks(options: { privateData?: boolean } = {}): InitScaf
   return options.privateData ? [{ path: 'checks/add-a-note.json', content: JSON.stringify(ADD_A_NOTE, null, 2) + '\n' }] : [];
 }
 
+// The starter's check list: checks/<plain-name>.json with "users" and "steps". `somewhere test` runs it on the live app
+// as test users the platform makes for the run, and it reruns after every deploy. Agents extend it with their own steps.
+export const STARTER_CHECK_LIST: InitScaffoldFile = {
+  path: 'checks/signed-in.json',
+  content: `{
+  "users": ["ana"],
+  "steps": [
+    { "as": "ana", "get": "/api/auth/me", "has": "{ana.email}" },
+    { "as": "signed_out", "get": "/api/auth/me", "lacks": "{ana.email}" }
+  ]
+}
+`,
+};
+
 export const STARTER_AUTH_TEST: InitScaffoldFile = {
   path: 'tests/starter.mjs',
   content: `import assert from 'node:assert/strict';

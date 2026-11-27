@@ -10,7 +10,7 @@ import { describeScriptResults, hasSpecFiles, isScript, lastFailedScripts, listS
 
 export function registerTest(program: Command): void {
   program.command('test [files...]')
-    .description("Read the deployed app's smoke check. It checks the built-in data path, pages and saved browser flows, and reports function errors with evidence. Use @somewhere-cloud/cli/testing for your own app tests. A named file runs that script.")
+    .description("Run the deployed app's checks: your check lists in checks/*.json (requests as named test users the platform makes), saved browser flows, and the platform's own access and page checks. Prints PASS or FAIL per step with the request ID. A named file runs that script.")
     .option('--preview', 'Test this folder\'s open preview (its own users, data copy and captured mail), pinned to the version saved when the run starts. Production is never touched.')
     .option('--workers <count>', 'Parallel workers', '5')
     .option('--again', 'Start a fresh run of the checks on the live release instead of reading the result of the last deploy\'s run')
@@ -22,7 +22,7 @@ export function registerTest(program: Command): void {
     .option('--phone', 'Run every test again in a 390x844 phone viewport ([phone] in results)')
     .option('--json', 'Print structured results')
     .option('--verbose', 'Also print where the full result file is when everything passed')
-    .addHelpText('after', '\nSave each journey you want re-checked after every deploy as checks/<plain-name>.json; the platform runs them in its browser after each deploy and `somewhere test` reads the latest result. Use --again for a fresh run. The last line of a platform run is JSON with outcome and counts.\n')
+    .addHelpText('after', '\nWrite what to prove as a check list in checks/<name>.json: {"users": ["alice", "bob"], "steps": [{"as": "bob", "delete": "/api/tasks/{task}", "expect": 403}]}. The platform runs every checks/*.json after each deploy and `somewhere test` reads the latest result; --again starts a fresh run and --only checks/<name>.json runs one. See somewhere docs test. The last line of a platform run is JSON with outcome and counts.\n')
     .action(async (files: string[], opts: { workers: string; again?: boolean; only?: string; failed?: boolean; failFast?: boolean; grep?: string; url?: string; json?: boolean; phone?: boolean; preview?: boolean; verbose?: boolean }) => {
       markProcessStart('cli');
       mark('cli:action');

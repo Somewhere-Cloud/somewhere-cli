@@ -1,4 +1,4 @@
-import { STARTER_AUTH_TEST } from './init-test-template.js';
+import { STARTER_AUTH_TEST, STARTER_CHECK_LIST } from './init-test-template.js';
 import { CLI_VERSION } from './version.js';
 import { TYPECHECK_TYPESCRIPT_VERSION } from './typecheck-version.js';
 import { buildScaffoldGitignore } from './scaffold.js';
@@ -186,6 +186,7 @@ Deploy the raw source. The platform compiles it; do not create or deploy a
 export function createGreenTemplate(appName = 'somewhere-starter'): InitScaffoldFile[] {
   return [
     { path: '.gitignore', content: buildScaffoldGitignore() },
+    STARTER_CHECK_LIST,
     STARTER_AUTH_TEST,
     { path: 'AGENTS.md', content: INIT_AGENTS_MD },
     { path: 'CLAUDE.md', content: INIT_CLAUDE_MD },

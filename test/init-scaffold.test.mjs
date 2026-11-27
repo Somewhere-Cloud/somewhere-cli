@@ -123,6 +123,7 @@ test('minimal starter is a small typed frontend, function, and schema', () => {
     'README.md',
     'api/auth/[...path].ts',
     'api/greeting.ts',
+    'checks/signed-in.json',
     'db/schema.ts',
     'index.html',
     'package.json',
@@ -178,10 +179,10 @@ test('minimal starter is a small typed frontend, function, and schema', () => {
   assert.match(agents, /app-managed teams.*member\(\).*teams-without-email-verification/);
   assert.match(agents, /staff by invitation.*setRoles.*sign-up route/);
   assert.match(agents, /public pages from private drafts.*120 seconds/);
-  assert.match(agents, /Saved checks run after deploy/);
-  assert.match(agents, /"signed_in": true/);
-  assert.match(agents, /"viewports": \["desktop", "mobile"\]/);
-  assert.match(agents, /Keep test IDs when restyling/);
+  // The check list leads the testing guidance: one example, run by somewhere test and after every deploy.
+  assert.match(agents, /Prove the brief with a check list in `checks\/<name>\.json`/);
+  assert.match(agents, /The list reruns after every deploy if it only reads/);
+  assert.match(agents, /"as": "signed_out"/);
   assert.match(agents, /preserve edits when a late response arrives/);
   assert.doesNotMatch(agents, /tests\/app-check\.mjs|openAppTest|@playwright\/test/);
   assert.equal(claude, 'Read AGENTS.md for project instructions.\n');
@@ -275,7 +276,7 @@ test('the starter saves one check, add a note, that the platform runs and finds 
       { requested: ['auth', 'private-data'], added: [], modules: ['auth', 'private-data'], ui },
       { appName: 'Starter' },
     ));
-    assert.deepEqual(result.created.filter(path => path.startsWith('tests/') || path.startsWith('checks/')), ['checks/add-a-note.json', 'tests/starter.mjs']);
+    assert.deepEqual(result.created.filter(path => path.startsWith('tests/') || path.startsWith('checks/')), ['checks/add-a-note.json', 'checks/signed-in.json', 'tests/starter.mjs']);
     const check = JSON.parse(readFileSync(join(dir, 'checks/add-a-note.json'), 'utf8'));
     assert.deepEqual(check, {
       actions: [
@@ -304,7 +305,7 @@ test('default starter is the auth module: SDK client, packaged handler, hooks, r
   assert.ok(result.created.includes('src/ui/AuthCard.tsx'));
   assert.ok(!result.created.includes('db/schema.ts'), 'private data is opt-in');
   // No notes form without private data, so no saved check; the platform's probes and crawl still run.
-  assert.deepEqual(result.created.filter(path => path.startsWith('tests/') || path.startsWith('checks/')), ['tests/starter.mjs']);
+  assert.deepEqual(result.created.filter(path => path.startsWith('tests/') || path.startsWith('checks/')), ['checks/signed-in.json', 'tests/starter.mjs']);
   // The hooks signUp/signIn/signOut find, by action: the submit names what it does.
   const authCard = readFileSync(join(dir, 'src/ui/AuthCard.tsx'), 'utf8');
   // Both actions are on the page at once: Sign in and Create account, no mode switch (bench-1115b: every first build
@@ -546,8 +547,7 @@ test('one generated template consumes the SDK auth adapter and server data/files
   assert.doesNotMatch(guide, /You do not need a separate browser script/);
   assert.doesNotMatch(guide, /allow-type-errors/);
   // What the platform checks after every deploy, and where a journey goes.
-  assert.match(guide, /Saved checks run after deploy/);
-  assert.match(guide, /Save journeys in `checks\/<name>\.json`/);
+  assert.match(guide, /Prove the brief with a check list in `checks\/<name>\.json`/);
   assert.match(guide, /uploads raw source directly to production/);
   assert.doesNotMatch(guide, /worker\/src\/runtime\/auth\.ts/);
   assert.equal(

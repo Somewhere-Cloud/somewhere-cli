@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.38.166
+
+- New projects include a signed-in check list. Run it with `somewhere test --only checks/signed-in.json`.
+- `somewhere db tables` shows how to declare tables when an app has no schema.
+- `somewhere deploy` lists missing project settings and points to matching entries in your local `.env` file without printing their values.
+
 ## 0.38.165
 
 - `somewhere deploy --project <app>` from a folder that never deployed or pulled that app no longer replaces it when it is live. The deploy stops, and the message says to run `somewhere pull <app>`, or `--force --yes` to replace the app on purpose. The first deploy of a new or unpublished app, redeploys from the folder that deployed it, deploys after `somewhere pull`, and clones that include `.somewhere.json` work as before.

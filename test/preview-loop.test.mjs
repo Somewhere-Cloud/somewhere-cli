@@ -15,6 +15,7 @@ import { createHash } from 'node:crypto';
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 const distIndex = join(repoRoot, 'dist', 'index.js');
 const PROJECT = 'loop-project';
+const sampleNotice = 'Sample data: orders 50,000 of 60,000 rows. Counts, totals and searches on these tables are incomplete. Links without a declared foreign key may point to rows that were left out.';
 
 function run(args, cwd, env) {
   return new Promise((resolve) => {
@@ -93,7 +94,7 @@ async function fakePlatform() {
           existing.previewId = `rel_prev_${++n}`;
         }
         const p = state.previews.get(session);
-        return json(res, { ok: true, data: { preview_session_id: session, preview_id: p.previewId, preview_url: 'https://loop-dev.example.test/' } });
+        return json(res, { ok: true, data: { preview_session_id: session, preview_id: p.previewId, preview_url: 'https://loop-dev.example.test/', warnings: [sampleNotice] } });
       }
       if (req.method === 'POST' && url.pathname === `/v1/projects/${PROJECT}/preview/mint`) {
         return json(res, { ok: true, data: { preview_url: `https://loop-dev.example.test/__sw_cap?t=tok${++n}` } });
@@ -150,6 +151,8 @@ test('preview continues the folder\'s open preview, --new opens another, list/cl
   try {
     const first = await run(['preview', '--once'], dir, env);
     assert.equal(first.status, 0, first.all);
+    assert.ok(first.stderr.includes(sampleNotice), first.all);
+    assert.match(first.stdout, /Preview capability:/);
     assert.match(first.all, /Opened preview draft_[0-9a-f-]+ for this folder/);
     const session = record(dir).preview_session_id;
     assert.equal(record(dir).files['index.html'], sha('<h1>v1</h1>\n'), 'the record holds the files as sent');

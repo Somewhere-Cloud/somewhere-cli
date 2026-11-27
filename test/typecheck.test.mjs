@@ -391,3 +391,15 @@ test('resolution fails open: an installer that throws never blocks the check', a
   const result = await runTypecheck(dir, { installTypePackages: false });
   assert.equal(result.ok, true, `the check must still run and report: ${result.raw}`);
 });
+
+test('deploy checks Vite env types and Somewhere api without checking foreign functions', async () => {
+  const dir = fixture({
+    'tsconfig.json': JSON.stringify({ compilerOptions: { module: 'esnext', types: [] }, include: ['**/*.ts'] }),
+    'node_modules/vite/client.d.ts': 'interface ImportMeta { readonly env: { readonly VITE_URL: string } }',
+    'src/main.ts': 'export const url: string = import.meta.env.VITE_URL;',
+    'supabase/functions/hello/index.ts': 'Deno.serve(() => new Response());',
+    'api/hello.ts': 'export const GET = () => missingHandler();',
+  });
+  const result = await runTypecheck(dir, { deploy: true });
+  assert.deepEqual(result.errors.map(error => error.file), ['api/hello.ts'], result.raw);
+});

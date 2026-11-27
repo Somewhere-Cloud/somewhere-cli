@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.38.169
+
+- Fix the API path used by `somewhere db import --source supabase`.
+
 ## 0.38.168
 
 - Use `somewhere db import --source supabase` to plan a copy, import rows into declared tables, and read the job receipt.

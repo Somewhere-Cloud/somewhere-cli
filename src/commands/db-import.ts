@@ -48,6 +48,6 @@ export function registerDbImport(db: Command) {
         job_id: options.job,
       } : { table: tables[0] };
       const client = new ApiClient(getToken());
-      printJson(await client.call('POST', '/v1/db/import', { project_id: project, ...body }, undefined, { timeoutMs: 90_000 }));
+      printJson(await client.call('POST', '/db/import', { project_id: project, ...body }, undefined, { timeoutMs: 90_000 }));
     });
 }

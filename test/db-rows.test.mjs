@@ -26,4 +26,15 @@ test('managed rows command: actual transport, linked project, refusal and clean 
  reply={ok:true,data:{tables:['raw_notes'],hint}};r=await command([],true,['tables']);assert.equal(r.status,0,r.stderr);assert.match(r.stdout,/raw_notes/);assert(r.stdout.includes(hint));
  reply={ok:true,data:{tables:[],hint}};r=await command([],true,['tables']);assert.equal(r.status,0,r.stderr);assert.match(r.stdout,/No tables yet/);assert(r.stdout.includes(hint));assert.doesNotMatch(r.stdout,/CREATE TABLE/);
  r=await command(['--json'],true,['tables']);assert.equal(r.status,0,r.stderr);assert.deepEqual(JSON.parse(r.stdout),reply.data);
+ reply={ok:true,data:{tables:[]}};
+ for (const [args,body] of [
+   [['--source','supabase'],{project_id:'linked-project',source:'supabase'}],
+   [['notes','--source','supabase','--resume'],{project_id:'linked-project',source:'supabase',tables:['notes'],resume:true}],
+   [['--source','supabase','--job','job_test'],{project_id:'linked-project',source:'supabase',job_id:'job_test'}],
+   [['notes'],{project_id:'linked-project',table:'notes'}],
+ ]) {
+   r=await command(args,true,['import']);
+   assert.equal(r.status,0,r.stderr);
+   assert.deepEqual(requests.at(-1),{path:'/v1/db/import',method:'POST',auth:'Bearer smt_offline_fixture',body});
+ }
 });

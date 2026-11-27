@@ -4467,7 +4467,17 @@ var require_checker_contract = __commonJS({
       }
       return message;
     }
+    var FOREIGN_RUNTIMES = [
+      ["supabase/functions/", "Somewhere skips supabase/functions/. Keep running these Edge Functions on Supabase or port them to Somewhere. See https://somewhere.cloud/docs/recipe-import-app#keep-supabase."],
+      ["netlify/functions/", "Somewhere skips Netlify Functions. Keep running them on Netlify or port them to Somewhere. See https://somewhere.cloud/docs/recipe-import-app."],
+      [".netlify/functions/", "Somewhere skips Netlify Functions. Keep running them on Netlify or port them to Somewhere. See https://somewhere.cloud/docs/recipe-import-app."],
+      [".vercel/", "Somewhere skips .vercel/ build output and builds your app from source. See https://somewhere.cloud/docs/recipe-import-app."]
+    ];
+    function foreignRuntime(relativePath) {
+      return FOREIGN_RUNTIMES.find(([prefix]) => relativePath.startsWith(prefix))?.[1];
+    }
     module2.exports = {
+      foreignRuntime,
       TYPESCRIPT_VERSION,
       REFERENCE_SOURCE,
       IGNORED_CODES,
@@ -4567,8 +4577,8 @@ var require_consumer_contract = __commonJS({
   "worker/containers/compile/consumer-contract.cjs"(exports2, module2) {
     "use strict";
     var CONSUMER_CONTRACT2 = Object.freeze({
-      version: 49,
-      digest: "4f8bd5c38169cd07e1ae63b641dcaceb663a18baf022a0a37ed9527913501cf5"
+      version: 50,
+      digest: "32380fd5f1dc01835d4fbb7d82709ace8b24a76383ba951e0db831b0975f3708"
     });
     var MEMBERSHIPS = "memberships: table({ id: id(), team_id: text(), member_id: text() }, { scope: owner(), client: { read: true } }),";
     var SHARES = "shares: table({ id: id(), grantee_id: text() }, { scope: owner(), client: { read: true, create: ['grantee_id'], delete: true }, unique: [['user_id', 'grantee_id']] }),";

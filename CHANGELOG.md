@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.38.167
+
+- Updates local checks for public settings to match the platform.
+
 ## 0.38.166
 
 - New projects include a signed-in check list. Run it with `somewhere test --only checks/signed-in.json`.

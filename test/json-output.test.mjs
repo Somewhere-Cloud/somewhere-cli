@@ -749,7 +749,7 @@ test('init creates the green starter, --bare keeps only the workflow guide, and 
     assert.match(readFileSync(join(empty, 'src/config.ts'), 'utf8'), /APP_NAME = "Scaffold App"/);
     assert.match(readFileSync(join(empty, 'db/schema.ts'), 'utf8'), /notes: table\([\s\S]*scope: owner\(\)/);
     const guide = readFileSync(join(empty, 'AGENTS.md'), 'utf8');
-    assert.match(guide, /The list reruns after every deploy\./);
+    assert.match(guide, /The list reruns after every deploy if it only reads/);
     assert.equal(existsSync(join(empty, 'checks/add-a-note.json')), true);
     assert.match(guide, /use `npx @somewhere-cloud\/cli deploy` and `npx @somewhere-cloud\/cli test`/);
     assert.equal(

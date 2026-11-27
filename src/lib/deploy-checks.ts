@@ -40,6 +40,8 @@ export interface AccessCheck {
     routes_without_read_check: string[] | null;
     routes_without_write_check: string[] | null;
     schedules_not_run: string[] | null;
+    /** Check lists with writes the after-deploy run did not repeat; `somewhere test` runs them with a fresh run. */
+    lists_not_rerun?: string[];
     other: string[];
   };
 }
@@ -108,7 +110,8 @@ export async function runChecksNow(
   if (!opts.again && opts.only === undefined) {
     const read = `GET /v1/deploy/log?project_id=${encodeURIComponent(projectId)}`;
     const stored = await awaitDeployChecks(client, { read }, { ...opts, readStored: true });
-    if (stored) return stored;
+    // After a deploy the platform repeats only check lists that are safe to repeat; the rest run now, as a run you start.
+    if (stored && !stored.not_checked?.lists_not_rerun?.length) return stored;
   }
   let firstDelayMs = 0;
   const started = await client.call<{ status?: string; version?: number; read?: string; scope?: string; selection?: string }>(

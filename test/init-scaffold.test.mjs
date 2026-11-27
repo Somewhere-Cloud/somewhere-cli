@@ -181,7 +181,7 @@ test('minimal starter is a small typed frontend, function, and schema', () => {
   assert.match(agents, /public pages from private drafts.*120 seconds/);
   // The check list leads the testing guidance: one example, run by somewhere test and after every deploy.
   assert.match(agents, /Prove the brief with a check list in `checks\/<name>\.json`/);
-  assert.match(agents, /The list reruns after every deploy/);
+  assert.match(agents, /The list reruns after every deploy if it only reads/);
   assert.match(agents, /"as": "signed_out"/);
   assert.match(agents, /preserve edits when a late response arrives/);
   assert.doesNotMatch(agents, /tests\/app-check\.mjs|openAppTest|@playwright\/test/);

@@ -39,7 +39,7 @@ Use \`client.intake\` for public submissions to a private parent row. See
 
 ### Run and verify
 
-Prove the brief with a check list in \`checks/<name>.json\` and run \`somewhere test\`. The platform makes the named users itself (no sign-up form, browser or contract digest), runs each step on the live app as that user, prints PASS or FAIL per step with the expected and actual answer and the request ID, then deletes those users and their rows. The list reruns after every deploy.
+Prove the brief with a check list in \`checks/<name>.json\` and run \`somewhere test\`. The platform makes the named users itself (no sign-up form, browser or contract digest), runs each step on the live app as that user, prints PASS or FAIL per step with the expected and actual answer and the request ID, then deletes the users and the rows it can prove it created, naming anything it leaves. The list reruns after every deploy if it only reads, or if it sets \`"rerun_after_deploy": true\`.
 
 \`\`\`json
 {
@@ -58,7 +58,7 @@ Prove the brief with a check list in \`checks/<name>.json\` and run \`somewhere 
 
 - A step is \`as\` (a name from \`users\`, or \`signed_out\`) and one of: \`get\`, \`post\`, \`put\`, \`patch\` or \`delete\` with a path (and \`body\`); \`data\` with the data endpoint's request (\`table\`, \`operation\`, \`values\`, \`id\`, \`where\`); or \`run\` with a schedule name, which runs it now and waits for its job.
 - \`expect\` is a status or a list of them (default: any 2xx). \`has\` and \`lacks\` take text; \`has_fields\` and \`lacks_fields\` take JSON field names. \`save\` keeps a field of the answer (of the row, for \`data\`) as \`{name}\` for later steps. \`wait: 10\` retries the step for up to 10 seconds.
-- \`{alice.email}\` and \`{alice.id}\` are each user's address and ID. \`roles\` gives roles your schema declares \`assignedBy: 'server'\`. Up to 6 users and 60 steps per list. \`cleanup\` steps run last, even after a failure.
+- \`{alice.email}\` and \`{alice.id}\` are each user's address and ID. \`roles\` gives roles your schema declares \`assignedBy: 'server'\`. Up to 6 users and 60 steps per list. \`cleanup\` steps run last, even after a failure. \`wait\` retries only reads. A failing step's output from a run you start can show data from the app; stored results keep only the step, status, request ID and failed expectation.
 
 Run \`somewhere typecheck\` before deploying. \`somewhere deploy-check\` checks compilation and schema without publishing. \`somewhere deploy\` uploads raw source directly to production. When testing changes with real users or data, use \`somewhere preview\`, test with \`somewhere test --preview\`, then promote. See \`somewhere docs dev-environments\`. Inspect failures with \`somewhere errors\` and \`somewhere logs\`. For a check that needs a rendered page, save a browser flow with \`actions\` in \`checks/<name>.json\`, using \`checks/add-a-note.json\` from the notes starter as a model. Keep test IDs when restyling. See \`somewhere docs test\`.
 

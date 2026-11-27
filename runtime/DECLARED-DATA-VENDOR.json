@@ -1,5 +1,5 @@
 {
-  "source_commit": "851b417387443a6043fd8c0d9cd10703db0b52cd",
+  "source_commit": "5745860dd569ef03bbc582db8a99864e1f33d32a",
   "esbuild": "0.24.0",
   "source_files": {
     "shared/app-model-catalog.ts": "c9a0119366beabb10157fcc9866f4d32b320b680f1c5717d837a5ca99875fa13",
@@ -9,7 +9,7 @@
     "shared/transient-read.ts": "af93cddbf8fc2f249d951d65d4eda5ac64632e62123e36994b893ff3258b8dab",
     "shared/types/placeholder-identity.ts": "089a46e2474a21193d3611eddd9c94b6bbe62441b3039ed80fc8499bada447ca",
     "worker/containers/compile/checker-contract.cjs": "732cb5a886548f91499031fc1f0727ae05e824ab8d482693f2ad04de4868595b",
-    "worker/containers/compile/consumer-contract.cjs": "b9674aec52e3c972b9625318a284051aa542fad30fcf3d75c5169a6a7607de5b",
+    "worker/containers/compile/consumer-contract.cjs": "308bcbaa84797e6299cd2d921271e1e256b80fe3b873b4ea1713772483a62469",
     "worker/containers/compile/declared-data-contract.cjs": "ebdc7dbc12283a7218c28e0e912e736ac27a8e9d513b82c097ebff6df3c1dd91",
     "worker/containers/compile/generated-declarations-render.cjs": "7ffdb34645cc9eccac6eba39dc86b646a41c4de8a1a038d2b5b46f42df9f1157",
     "worker/containers/compile/generated-declarations.cjs": "6e9902e054c5c784fd9b3c3fafc1869e79954100a45014e1132247cd82833ec4",
@@ -74,5 +74,5 @@
     "worker/src/utils/telegram.ts": "9aaaa2597c366da1eeee9e2252e9b73e611ea97ed9558f7e07e694d9b393f053",
     "worker/src/utils/workers-ai-comparison.ts": "18b5d5ea96f817387a5ef49733ba611c99cbb14987143c28118b1c90f3b637d4"
   },
-  "sha256": "b2d600c4fc977cad1fb1621d5ccf72f074330d3577290c9c688373b5df320f9b"
+  "sha256": "619a19422eb2efef18da07c6d49f5d0723ea160b42975d1d7601d8fab63cf42b"
 }

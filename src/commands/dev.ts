@@ -154,8 +154,9 @@ export async function mintPreviewHandoff(
   };
 }
 
-function printPreviewHandoff(handoff: PreviewCandidateHandoff): void {
+function printPreviewHandoff(handoff: PreviewCandidateHandoff, warnings: string[] = []): void {
   console.log(`${teal('🌐')} ${bold('Preview capability:')} ${teal(handoff.capabilityUrl)}`);
+  for (const warning of warnings) warn(warning);
   printPreviewIdentity(handoff.draftId, handoff.candidateReleaseId, handoff.projectRef);
 }
 
@@ -1156,6 +1157,7 @@ async function runHotDeploy(opts: { project?: string; publishFirst?: boolean; js
 
   let candidateReleaseId: string | null = null;
   let initialHandoff: PreviewCandidateHandoff;
+  let initialWarnings: string[] = [];
   let initialAutoOpenUrl: string;
   try {
     // Exact-draft complete-snapshot contract (DRAFT_COMPLETE_SNAPSHOT_REQUIRED):
@@ -1215,7 +1217,7 @@ async function runHotDeploy(opts: { project?: string; publishFirst?: boolean; js
     // reported three different sizes of itself.
     success(`Synced ${formatPublishSurface(countPublishSurface({ files, binaryFiles, functions }))} to preview`);
     if (expectedPreviewId === null) say(`Opened preview ${draftId} for this folder; \`${cliInvocation()} preview\` continues it until it is promoted, closed or expires.`);
-    if (res.warnings?.length) for (const w of res.warnings) warn(w);
+    initialWarnings = res.warnings ?? [];
   } catch (err) {
     spinner?.fail('Initial sync failed');
     if (!(isBuildError(err) && renderBuildError(err, cwd))) {
@@ -1235,7 +1237,7 @@ async function runHotDeploy(opts: { project?: string; publishFirst?: boolean; js
     // command, then exit. The preview stays open on the platform until it is
     // promoted or expires; `somewhere preview link` mints another link.
     console.log('');
-    printPreviewHandoff(initialHandoff);
+    printPreviewHandoff(initialHandoff, initialWarnings);
     console.log(dim('   private to you. The preview stays open until you promote it or it expires.'));
     console.log(dim(`   Each link works once; mint another with: ${cliInvocation()} preview link`));
     process.exit(0);
@@ -1243,7 +1245,7 @@ async function runHotDeploy(opts: { project?: string; publishFirst?: boolean; js
 
   console.log('');
   console.log(`${green('👀')} ${bold('Watching')} ${dim(cwd)} ${dim('for changes')}`);
-  printPreviewHandoff(initialHandoff);
+  printPreviewHandoff(initialHandoff, initialWarnings);
   console.log(dim('   private to you — save a file and the preview updates. Not live to users.'));
   console.log(dim('   Ctrl-C to stop.\n'));
   open(initialAutoOpenUrl).catch(() => {});

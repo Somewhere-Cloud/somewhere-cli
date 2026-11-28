@@ -32,11 +32,11 @@ test.after(() => server.close());
 
 const BIG = 6 * 1024 * 1024;
 function project(extra) {
-  const base = mkdtempSync(join(tmpdir(), 'sw-oversize-'));
+  const base = mkdtempSync(join(tmpdir(), 'swtest-oversize-'));
   const app = join(base, 'app'), config = join(base, 'config');
   mkdirSync(join(app, 'public'), { recursive: true }); mkdirSync(config);
   writeFileSync(join(config, 'config.json'), JSON.stringify({ token: 'smt_fixture', user: { email: 'dev@example.test', username: 'dev' } }));
-  writeFileSync(join(app, '.somewhere.json'), JSON.stringify({ project_id: 'proj_fixture', name: 'Fixture', subdomain: 'fixture' }));
+  writeFileSync(join(app, '.somewhere.json'), JSON.stringify({ project_id: 'proj_fixture', name: 'swtest-oversize', subdomain: 'swtest-oversize' }));
   writeFileSync(join(app, 'index.html'), '<html><body>hi</body></html>\n');
   for (const [path, content] of Object.entries(extra)) {
     mkdirSync(dirname(join(app, path)), { recursive: true });
@@ -63,6 +63,7 @@ for (const args of [['deploy'], ['deploy', '--dry-run'], ['deploy', '--force', '
     assert.equal(result.status, 1, result.out);
     assert.match(result.out, /Nothing was sent\. This file is over the 5\.0 MB per-file limit/);
     assert.match(result.out, /public\/big\.bin \(6\.0 MB\)/);
+    assert.match(result.out, /somewhere fs put public\/big\.bin big\.bin/);
     assert.deepEqual(requests, []);
   });
 }
@@ -125,4 +126,19 @@ test('worker-stripped README selected via --include does not inflate the 20 MiB 
   assert.equal(result.status, 0, result.out);
   const request = requests.find(r => r.method === 'POST' && r.path === '/v1/deploy');
   assert.equal(JSON.parse(request.body).files['README.md'].length, 2 * 1024 * 1024);
+});
+
+test('deploy preserves literal U+FFFD text and sends DOCX and unknown binary files as bytes', async () => {
+  requests.length = 0;
+  const js = 'console.log("�");\n';
+  const docx = Buffer.from([0x50, 0x4b, 0x03, 0x04, 0, 0xff]);
+  const unknown = Buffer.from([0xc3, 0x28]);
+  const result = await run(['deploy', '--dry-run'], project({
+    'public/main.js': js, 'public/guide.docx': docx, 'public/download.dat': unknown,
+  }));
+  assert.equal(result.status, 0, result.out);
+  const body = JSON.parse(requests.find((r) => r.method === 'POST' && r.path === '/v1/deploy').body);
+  assert.equal(body.files['public/main.js'], js);
+  assert.equal(body.binary_files['public/guide.docx'], docx.toString('base64'));
+  assert.equal(body.binary_files['public/download.dat'], unknown.toString('base64'));
 });

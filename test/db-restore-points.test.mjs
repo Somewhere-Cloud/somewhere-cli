@@ -16,7 +16,7 @@ test('db restore-points lists, takes and deletes through the restore point route
   const server = createServer(async (req, res) => {
     let raw = ''; for await (const chunk of req) raw += chunk;
     requests.push({ path: req.url, method: req.method, body: raw ? JSON.parse(raw) : null });
-    const r = route ? route(req) : reply;
+    const r = route ? route(req, requests.at(-1).body) : reply;
     if (r.raw) return r.raw(res);
     res.writeHead(r.status ?? 200, { 'content-type': r.type ?? 'application/json' });
     res.end(typeof r.body === 'string' ? r.body : JSON.stringify(r.body));
@@ -75,6 +75,25 @@ test('db restore-points lists, takes and deletes through the restore point route
   assert.match(r.stdout + r.stderr, /Every table of the database is in the file/, 'and what was checked');
   r = await command([]);
   assert.match(r.stdout + r.stderr, /rp_fixture: Each database read in one moment: the SQL tables and the declared tables at different moments\./, 'the list shows a split point\'s qualification');
+  const plan = { confirmation_required: true, estimated_pause_seconds: 83, warning: 'The database may be unavailable for about 83 seconds.' };
+  const native = { ...point, rows: null, exact: false, native_capture: [{ plane: 'raw', started_at: 1, completed_at: 2 }] };
+  route = (_req, body) => body?.confirm === true
+    ? { status: 202, body: { ok: true, data: { restore_point: native } } }
+    : { body: { ok: true, data: plan } };
+  const beforeNative = requests.length;
+  r = await command(['--take', '--native', '--json']);
+  assert.equal(r.status, 0, r.stderr);
+  assert.deepEqual(JSON.parse(r.stdout), plan);
+  assert.deepEqual(requests.slice(beforeNative).map(q => q.body), [{ project_id: 'fixture-project', native: true }]);
+  r = await command(['--take', '--native', '--confirm']);
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout + r.stderr, /83 seconds/);
+  assert.match(r.stdout + r.stderr, /Restore point rp_fixture taken/);
+  assert.match(r.stdout + r.stderr, /2 tables\)/);
+  assert.deepEqual(requests.slice(-2).map(q => q.body), [
+    { project_id: 'fixture-project', native: true },
+    { project_id: 'fixture-project', native: true, confirm: true },
+  ]);
   // A point that was not taken says why and fails the command.
   route = (req) => req.method === 'POST'
     ? { status: 202, body: { ok: true, data: { project_id: 'fixture-project', restore_point: { ...point, state: 'running' } } } }

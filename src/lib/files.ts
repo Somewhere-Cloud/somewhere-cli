@@ -1,3 +1,4 @@
+import { isUtf8 } from 'node:buffer';
 import { cliInvocation } from './cli-invocation.js';
 import { operationalExclusionReason, operationalReferenceMatcher } from './operational-files.js';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
@@ -29,7 +30,7 @@ export const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB per file
 export const BINARY_EXTS = new Set([
   '.png', '.jpg', '.jpeg', '.gif', '.webp', '.ico', '.bmp', '.avif',
   '.woff', '.woff2', '.ttf', '.otf', '.eot',
-  '.pdf', '.zip', '.gz', '.tar', '.br',
+  '.pdf', '.docx', '.zip', '.gz', '.tar', '.br',
   '.mp3', '.mp4', '.wav', '.ogg', '.webm', '.mov', '.m4a',
   '.wasm',
 ]);
@@ -327,15 +328,22 @@ export function classifyKey(relPath: string): { kind: FileKind; key: string } {
 }
 
 /** Read one file off disk and place it in the right bucket of `out`. */
-export function classifyInto(out: CollectedFiles, baseDir: string, relPath: string, readBinary = true) {
-  const fullPath = join(baseDir, relPath);
+export function classifyInto(
+  out: Pick<CollectedFiles, 'files' | 'functions' | 'binaryFiles'>,
+  baseDir: string,
+  relPath: string,
+  readBinary = true,
+) {
   const { kind, key } = classifyKey(relPath);
-  if (kind === 'function') {
-    out.functions[key] = readFileSync(fullPath, 'utf-8');
-  } else if (kind === 'binary') {
-    out.binaryFiles[key] = readBinary ? readFileSync(fullPath).toString('base64') : '';
+  const bytes = kind === 'binary' && !readBinary ? Buffer.alloc(0) : readFileSync(join(baseDir, relPath));
+  const binary = kind === 'binary' || !isUtf8(bytes);
+  if (binary) {
+    if (kind === 'function') throw new Error(`Function ${relPath} must contain UTF-8 source text.`);
+    out.binaryFiles[key] = readBinary ? bytes.toString('base64') : '';
+  } else if (kind === 'function') {
+    out.functions[key] = bytes.toString('utf8');
   } else {
-    out.files[key] = readFileSync(fullPath, 'utf-8');
+    out.files[key] = bytes.toString('utf8');
   }
 }
 
@@ -490,8 +498,18 @@ export function oversizeRefusal(collected: Pick<CollectedFiles, 'oversize'>): st
   return [
     `Nothing was sent. ${collected.oversize.length === 1 ? 'This file is' : 'These files are'} over the ${formatBytes(MAX_FILE_SIZE)} per-file limit and would be left out, which removes any copy already live:`,
     ...collected.oversize.map((entry) => `  ${entry.path} (${formatBytes(entry.bytes)})`),
-    'Make the file smaller, or keep it out of the deploy on purpose: add it to .somewhereignore (or .gitignore) or move it out of this folder, then run the command again.',
+    ...fileStorageRecovery(collected.oversize),
   ].join('\n');
+}
+
+function fileStorageRecovery(entries: ReadonlyArray<{ path: string }>): string[] {
+  return [
+    'Make the file smaller, or upload it to file storage and add its local path to .somewhereignore before retrying.',
+    ...entries.map(({ path }) => {
+      const remote = path.replace(/^public\//, '');
+      return `  ${cliInvocation()} fs put ${shellQuote(path)} ${shellQuote(remote)}`;
+    }),
+  ];
 }
 
 /** Why an --include entry published nothing, or null when it did. */
@@ -533,7 +551,8 @@ export function previewOversizeRefusal(oversize: Array<{ path: string; bytes: nu
   return [
     `Nothing in this save was sent: ${oversize.length === 1 ? 'this file is' : 'these files are'} over the ${formatBytes(MAX_FILE_SIZE)} per-file limit:`,
     ...oversize.map((entry) => `  ${entry.path} (${formatBytes(entry.bytes)})`),
-    'Your last preview is unchanged. Make the file smaller (or add it to .somewhereignore), then save an app file again: the held changes are sent with the next save the watcher sees. Editing .somewhereignore alone is not a save it sees.',
+    ...fileStorageRecovery(oversize),
+    'Save an app file again to send the held changes.',
   ].join('\n');
 }
 

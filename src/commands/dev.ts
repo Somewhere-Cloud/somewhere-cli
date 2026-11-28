@@ -2,7 +2,7 @@ import { cliInvocation } from '../lib/cli-invocation.js';
 import { Command } from 'commander';
 import { startFrontendDev } from '../lib/frontend-dev.js';
 import { randomUUID } from 'node:crypto';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import chokidar from 'chokidar';
 import prompts from 'prompts';
@@ -11,7 +11,7 @@ import ora from '../lib/spinner.js';
 import { ApiClient, CliApiError, LONG_CALL_TIMEOUT_MS } from '../lib/client.js';
 import { buildErrorSummary, isBuildError, renderBuildError } from '../lib/build-errors.js';
 import { getToken, loadProjectConfig, readSourceBase, saveSourceBase } from '../lib/config.js';
-import { IGNORE, classifyKey, collectFiles, oversizeRefusal, previewBatchCheck, previewOversizeRefusal, sensitiveReferenceRefusal } from '../lib/files.js';
+import { IGNORE, classifyInto, classifyKey, collectFiles, oversizeRefusal, previewBatchCheck, previewOversizeRefusal, sensitiveReferenceRefusal } from '../lib/files.js';
 import { isSensitiveDeployPath } from '../lib/vendor/deploy-paths.js';
 import { bold, dim, error, green, info, printJson, printJsonError, red, success, teal, warn, yellow } from '../lib/output.js';
 import { showProjectNotices } from '../lib/project-notices.js';
@@ -1452,10 +1452,7 @@ async function deployBatch(
   for (const rel of changed) {
     const abs = join(cwd, rel);
     if (!existsSync(abs)) continue; // changed-then-deleted within the window
-    const { kind, key } = classifyKey(rel);
-    if (kind === 'function') updateFunctions[key] = readFileSync(abs, 'utf-8');
-    else if (kind === 'binary') updateBinary[key] = readFileSync(abs).toString('base64');
-    else updateFiles[key] = readFileSync(abs, 'utf-8');
+    classifyInto({ files: updateFiles, functions: updateFunctions, binaryFiles: updateBinary }, cwd, rel);
   }
   for (const rel of deleted) deleteKeys.push(classifyKey(rel).key);
 

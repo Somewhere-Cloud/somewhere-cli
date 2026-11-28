@@ -199,6 +199,7 @@ test('db restore-points lists, takes and deletes through the restore point route
   reply = { body: { ok: true, data: { confirmed: true, undo_point_id: 'rp_undo' } } };
   r = await command(['--restore', 'rp_history', '--confirm-app', 'fixture-app']);
   assert.equal(r.status, 0);
+  assert.match(r.stdout, /People removed since then will have access again/);
   assert.match(r.stdout, /Undo point: rp_undo/);
   assert.deepEqual(requests.at(-1).body.confirm, { app: 'fixture-app', point: 'rp_history' });
   reply = { body: { ok: true, data: { restore_points: [], restore: { point_id: 'rp_history', message: 'Restore outcome unknown.' } } } };

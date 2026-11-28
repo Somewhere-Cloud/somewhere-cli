@@ -282,7 +282,7 @@ export function registerDb(program: Command) {
     .option('--take', 'Take a restore point now')
     .option('--delete <id>', 'Delete one restore point now')
     .option('--restore <id>', 'Inspect or restore a database history point')
-    .option('--confirm-app <name>', 'Confirm the exact app name and restore the point')
+    .option('--confirm-app <name>', 'Confirm the exact app name. Members, groups and roles return to the saved moment.')
     .option('--json', 'Print the API response as JSON')
     .action(async (opts) => {
       if ([opts.take, opts.delete, opts.restore].filter(Boolean).length > 1 || (opts.confirmApp && !opts.restore)) {
@@ -305,6 +305,9 @@ export function registerDb(program: Command) {
         if (opts.restore) {
           type Restore = { confirmed: false; app: string; point_id: string; expires_at: string; moments: Array<{ plane: string; at: string }>; warning: string }
             | { confirmed: true; undo_point_id: string };
+          if (opts.confirmApp && !opts.json) {
+            info('Restoring returns the app’s members, groups and roles to the recorded moment. People removed since then will have access again; remove them again after the restore.');
+          }
           const result = await client.call<Restore>('POST', `/db/restore-points/${encodeURIComponent(opts.restore)}/restore`, {
             project_id: projectId,
             ...(opts.confirmApp ? { confirm: { app: opts.confirmApp, point: opts.restore } } : {}),

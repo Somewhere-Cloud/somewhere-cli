@@ -751,6 +751,22 @@ export function registerDeploy(program: Command) {
         else error(sizeRefusal);
         process.exit(1);
       }
+      // The API measures the decoded deploy tree, not the JSON body.
+      const submittedFiles = opts.scope === 'functions' ? functionDependencyManifest(files) : files;
+      const submittedBinaries = opts.scope === 'functions' ? {} : binaryFiles;
+      const submittedFunctions = opts.scope === 'static' ? {} : functions;
+      const sizes = new Map<string, number>();
+      for (const [path, content] of Object.entries(submittedFiles)) sizes.set(path, Buffer.byteLength(content));
+      for (const [path, content] of Object.entries(submittedBinaries)) sizes.set(path, Buffer.byteLength(content, 'base64'));
+      for (const [path, content] of Object.entries(submittedFunctions)) sizes.set(path, Buffer.byteLength(content));
+      const payloadBytes = [...sizes.values()].reduce((total, bytes) => total + bytes, 0);
+      const limitBytes = 20 * 1024 * 1024; // RELEASE_DEPLOY_PAYLOAD_LIMIT_BYTES on the platform
+      if (payloadBytes > limitBytes) {
+        const message = `This deploy contains ${(payloadBytes / 1024 ** 2).toFixed(1)} MiB of files. The limit is 20 MiB per deploy. Move large assets to file storage before deploying.`;
+        if (opts.json) printJsonError('DEPLOY_TOO_LARGE', message, { payload_bytes: payloadBytes, limit_bytes: limitBytes });
+        else error(message);
+        process.exit(1);
+      }
       if (
         Object.keys(files).length === 0
         && Object.keys(binaryFiles).length === 0
@@ -1275,10 +1291,10 @@ export function registerDeploy(program: Command) {
           // inverse: no functions. The dependency manifest is the functions'
           // too: a backend change that adds a package sends package.json (and
           // its lockfile), so the platform builds against the new dependencies.
-          files: scope === 'functions' ? functionDependencyManifest(files) : files,
+          files: submittedFiles,
         };
-        if (scope !== 'functions' && Object.keys(binaryFiles).length > 0) {
-          body.binary_files = binaryFiles;
+        if (Object.keys(submittedBinaries).length > 0) {
+          body.binary_files = submittedBinaries;
         }
         // A full deploy sends the whole directory, so its functions are the
         // complete set: a deployed function no longer here is removed and named
@@ -1286,7 +1302,7 @@ export function registerDeploy(program: Command) {
         // leaves out unless --replace-functions is passed.
         const replaceFunctions = Boolean(opts.replaceFunctions) || !scope;
         if (scope !== 'static' && (replaceFunctions || Object.keys(functions).length > 0)) {
-          body.functions = functions;
+          body.functions = submittedFunctions;
         }
         if (scope) body.scope = scope;
         if (replaceFunctions) body.replace_functions = true;
@@ -1364,11 +1380,17 @@ export function registerDeploy(program: Command) {
         const requestStartedAt = performance.now();
         deployRequestStartedAt = new Date().toISOString();
         const preparationMs = requestStartedAt - collectionEndedAt;
+        const deployAttemptId = crypto.randomUUID();
+        body.deploy_attempt_id = deployAttemptId;
         const result = await callDeployWithRetry<DeployResult>(client, body, {
           spinner,
           json: Boolean(opts.json),
           dryRun: false,
           baseText: spinner?.text ?? 'Deploying...',
+        }).catch(async (err: unknown) => {
+          if (!projectId || !outcomeUnknown(err)) throw err;
+          if (spinner) spinner.text = 'Checking whether the deploy went live...';
+          return await recoverDeployOutcome(client, projectId, deployAttemptId) ?? Promise.reject(err);
         }).finally(stopPrestart);
         deployAnswered = true;
         answered = result;
@@ -2182,7 +2204,30 @@ async function callDeployWithRetry<T>(
 export function outcomeUnknown(err: unknown): boolean {
   if (!(err instanceof CliApiError)) return false;
   if (err.meta.responseBodyIncomplete === true) return true;
+  if (err.code === 'CONTROL_UNAVAILABLE' || err.code === 'DEPLOY_OUTCOME_UNKNOWN') return true;
   return RETRYABLE_DEPLOY_CODES.has(err.code) && err.meta.notSent !== true;
+}
+
+async function recoverDeployOutcome(client: ApiClient, projectId: string, attemptId: string): Promise<DeployResult | null> {
+  const query = { project_id: projectId, deploy_attempt_id: attemptId };
+  for (const delay of [0, 1_000, 2_000, 4_000, 8_000]) {
+    if (delay) await new Promise<void>(resolve => setTimeout(resolve, delay));
+    const status = await client.call<Partial<DeployResult> & { deployment_outcome?: string }>(
+      'GET', '/deploy/status', undefined, query, { timeoutMs: 2_000, refresh: false },
+    ).catch(() => null);
+    if (status?.deployment_outcome === 'live' && typeof status.release_id === 'string'
+      && status.release_id === status.active_release_id && status.project_id === projectId
+      && typeof status.version === 'number') {
+      return { ...status, has_functions: status.has_functions === true };
+    }
+    if (status?.deployment_outcome === 'not_live') {
+      throw new CliApiError('DEPLOY_NOT_LIVE', 'This deploy is not live. Check the deploy log for details.', 409);
+    }
+    // Older platform versions return their normal status shape or reject the
+    // extra field. Neither can identify this deploy.
+    if (status && status.deployment_outcome !== 'pending') break;
+  }
+  return null;
 }
 
 /** The deploy request may have been applied and no answer was read. Nothing
@@ -2193,6 +2238,7 @@ export function outcomeUnknown(err: unknown): boolean {
  *  deploy again. */
 export function formatUnknownDeployOutcomeExplanation(err: CliApiError, projectId: string, startedAt: string): string {
   const what = err.meta.responseBodyIncomplete ? 'got a response that was cut off before its result could be read'
+    : err.code === 'CONTROL_UNAVAILABLE' || err.code === 'DEPLOY_OUTCOME_UNKNOWN' ? 'did not get a confirmed result'
     : err.code === 'TIMEOUT' ? 'timed out' : err.code === 'SERVER_SLOW' ? 'stalled waiting for the server' : 'lost its connection';
   const ids = [err.meta.requestId ? `request ${err.meta.requestId}` : '', err.meta.traceId ? `trace ${err.meta.traceId}` : ''].filter(Boolean);
   return [

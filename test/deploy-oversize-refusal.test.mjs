@@ -99,3 +99,17 @@ test('a large file kept out on purpose (.somewhereignore) and a large local note
   assert.ok(sent.includes('public/.well-known/security.txt'), sent.join(','));
   assert.ok(!sent.some((p) => p.includes('big.bin') || p.includes('transcript.log')), sent.join(','));
 });
+
+test('a 39 MiB tree of individually allowed files is refused before any request', async () => {
+  requests.length = 0;
+  const files = Object.fromEntries(Array.from({ length: 13 }, (_, i) => [
+    `public/fixture-${i}.${i % 2 ? 'txt' : 'bin'}`, Buffer.alloc(3 * 1024 * 1024, 65),
+  ]));
+  const result = await run(['deploy', '--json'], project(files));
+  assert.equal(result.status, 1, result.out);
+  const output = JSON.parse(result.stdout);
+  assert.equal(output.error, 'DEPLOY_TOO_LARGE');
+  assert.equal(output.limit_bytes, 20 * 1024 * 1024);
+  assert.match(output.message, /39\.0 MiB.*20 MiB/);
+  assert.deepEqual(requests, []);
+});

@@ -30,13 +30,23 @@ async function fixture({ mode = 'failed', json = true, flow, temporary = false }
   writeFileSync(join(dir, 'index.html'), '<html><body>synthetic</body></html>');
   if (flow === 'invalid') writeFileSync(join(dir, 'flow.json'), '{');
   const requests = [];
+  let attemptId;
   const server = createServer((req, res) => {
-    req.resume();
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
     req.on('end', () => {
       requests.push(`${req.method} ${req.url}`);
       const send = (data, status = 200) => { res.writeHead(status, { 'content-type': 'application/json' }); res.end(JSON.stringify(data)); };
+      if (req.url.startsWith('/v1/deploy/status?') && mode.startsWith('control-')) {
+        const query = new URL(req.url, 'http://localhost').searchParams;
+        if (!attemptId || query.get('deploy_attempt_id') !== attemptId) return send({ ok: true, data: { deployment_outcome: 'pending' } });
+        return send({ ok: true, data: mode === 'control-live'
+          ? { ...live, deployment_outcome: 'live' } : { deployment_outcome: 'not_live' } });
+      }
       if (req.method === 'GET') return send({ ok: true, data: { ...live, notices: [] } });
       if (req.url === '/v1/deploy') {
+        attemptId = JSON.parse(body).deploy_attempt_id;
+        if (mode.startsWith('control-')) return send({ ok: false, error: 'CONTROL_UNAVAILABLE', message: 'The control service did not answer.', retry: false }, 502);
         if (mode === 'unknown') { req.socket.destroy(); return; }
         if (mode === 'prelive') return send({ ok: false, error: 'BUILD_FAILED', message: 'Synthetic compile failure.', retry: false }, 400);
         return send({ ok: true, data: live });
@@ -45,7 +55,7 @@ async function fixture({ mode = 'failed', json = true, flow, temporary = false }
         if (mode === 'transport') { req.socket.destroy(); return; }
         if (mode === 'malformed') return send({ ok: true, data: { dialogs: { private: 'PRIVATE_DIAGNOSTIC_SENTINEL' } } });
         return send({ ok: true, data: { steps: [], console: [], errors: [], requests: [], duration_ms: 1,
-          ...(mode === 'passed' ? { screenshots: ['https://example.test/synthetic.png'] } : {}) } });
+          ...(mode === 'passed' || mode === 'control-live' ? { screenshots: ['https://example.test/synthetic.png'] } : {}) } });
       }
       // Old temporary sessions may check claim state; they must never mint.
       return send({ ok: false, error: 'NOT_FOUND', message: 'Synthetic fixture.' }, 404);
@@ -137,4 +147,20 @@ for (const json of [false, true]) test(`passing verification keeps its success e
     assert.equal(output.verification.passed, true); assert.equal(output.deployment_outcome, 'live');
     assert.equal(output.next_steps, undefined); assert.equal(output.verification_error, undefined);
   } else assert.doesNotMatch(result.stdout + result.stderr, /The deploy is live, but verification/);
+});
+
+test('a lost control response is recovered by exact attempt and updates both local anchors', async () => {
+  const result = await fixture({ mode: 'control-live' });
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.equal(result.requests.filter(r => r === 'POST /v1/deploy').length, 1);
+  assert.equal(JSON.parse(result.stdout).active_release_id, live.release_id);
+  assert.equal(result.state.source_base.release_id, live.release_id);
+  assert.equal(result.state.last_deploy.last_deployed_version, live.version);
+});
+test('a settled non-live attempt leaves the local anchor alone', async () => {
+  const result = await fixture({ mode: 'control-not-live' });
+  assert.equal(result.status, 1);
+  assert.deepEqual(result.state, result.initial);
+  assert.equal(result.requests.filter(r => r === 'POST /v1/deploy').length, 1);
+  assert.equal(JSON.parse(result.stdout).error, 'DEPLOY_NOT_LIVE');
 });

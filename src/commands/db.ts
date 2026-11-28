@@ -277,7 +277,7 @@ export function registerDb(program: Command) {
 
   db
     .command('restore-points')
-    .description('List the restore points the platform keeps: full copies of the database taken before each deploy that changes its shape, daily when the data changed, and by hand (project owner only)')
+    .description('List database restore points (project owner only)')
     .option('--project <id>', 'Project ID (defaults to .somewhere.json)')
     .option('--take', 'Take a restore point now')
     .option('--delete <id>', 'Delete one restore point now')
@@ -296,7 +296,7 @@ export function registerDb(program: Command) {
         }
         projectId = config.project_id;
       }
-      type Point = { id: string; reason: string; state: string; taken_at: string; expires_at: string; size_bytes: number; tables: number; rows: number; exact: boolean | null; detail: string | null; consistency?: string | null; validation?: string | null };
+      type Point = { id: string; kind?: 'backup' | 'history'; reason: string; state: string; taken_at: string; expires_at: string; size_bytes: number; tables: number; rows: number; exact: boolean | null; detail: string | null; consistency?: string | null; validation?: string | null };
       const size = (n: number) => n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1000))} KB`;
       const client = new ApiClient(getToken());
       try {
@@ -308,12 +308,13 @@ export function registerDb(program: Command) {
             await new Promise((resolve) => setTimeout(resolve, 3000));
             const listed = await client.call<{ restore_points: Point[] }>('GET', '/db/restore-points', undefined, { project_id: projectId });
             point = listed.restore_points.find((p) => p.id === point.id) ?? { ...point, state: 'failed', detail: 'It is no longer listed.' };
-            if (spinner) spinner.text = `Taking a restore point… ${point.rows.toLocaleString()} rows so far`;
+            if (spinner && point.rows) spinner.text = `Taking a restore point… ${point.rows.toLocaleString()} rows so far`;
           }
           if (opts.json) { printJson({ restore_point: point }); if (point.state !== 'ready') process.exitCode = 1; return; }
           if (point.state === 'running') { spinner?.succeed(`Restore point ${point.id} is still being taken; \`${cliInvocation()} db restore-points\` shows when it is ready.`); return; }
           if (point.state !== 'ready') { spinner?.fail(`No restore point was taken: ${point.detail ?? point.state}`); process.exitCode = 1; return; }
-          spinner?.succeed(`Restore point ${point.id} taken (${size(point.size_bytes)}, ${point.tables} tables, ${point.rows} rows); kept until ${point.expires_at}.`);
+          if (point.kind === 'history') spinner?.succeed(`Database history point ${point.id} recorded. It expires at ${point.expires_at}.`);
+          else spinner?.succeed(`Restore point ${point.id} taken (${size(point.size_bytes)}, ${point.tables} tables, ${point.rows} rows); kept until ${point.expires_at}.`);
           // How it was read and what was checked, as the platform states them.
           for (const line of [point.consistency, point.validation]) if (line) info(dim(line));
           return;
@@ -332,10 +333,10 @@ export function registerDb(program: Command) {
         }
         table(
           ['Restore point', 'Taken', 'Why', 'State', 'Size', 'Expires'],
-          r.restore_points.map((p) => [teal(p.id), p.taken_at, p.reason, p.state === 'ready' ? (p.exact === false ? 'ready (read while running)' : 'ready') : `${p.state}${p.detail ? `: ${p.detail}` : ''}`, p.state === 'ready' ? size(p.size_bytes) : dim('—'), p.expires_at]),
+          r.restore_points.map((p) => [teal(p.id), p.taken_at, p.reason, p.state === 'ready' ? (p.exact === false ? 'ready (read while running)' : 'ready') : `${p.state}${p.detail ? `: ${p.detail}` : ''}`, p.state === 'ready' && p.kind !== 'history' ? size(p.size_bytes) : dim('—'), p.expires_at]),
         );
         // Qualifications beyond a single exact read (for example a project with two databases, read at two moments).
-        for (const p of r.restore_points) if (p.state === 'ready' && p.consistency && p.consistency !== 'Read in one moment: an exact copy.') info(dim(`${p.id}: ${p.consistency}`));
+        for (const p of r.restore_points) if ((p.state === 'ready' || p.kind === 'history') && p.consistency && p.consistency !== 'Read in one moment: an exact copy.') info(dim(`${p.id}: ${p.consistency}`));
       } catch (err) {
         error(err instanceof Error ? err.message : String(err), err);
         process.exit(1);

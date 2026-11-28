@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
+import { collectFiles } from '../dist/lib/files.js';
 
 const cli = fileURLToPath(new URL('../dist/index.js', import.meta.url));
 const projectId = 'fixture-blob-project';
@@ -86,6 +87,8 @@ test('large deploy uploads missing files and small deploy keeps its request shap
     assert.ok(calls.every(path => !path.startsWith('/v1/deploy/blobs/')));
     console.log(`Small CLI deploy: baseline ${baseline.ms} ms, pilot ${small.ms} ms.`);
 
+    mkdirSync(join(app, 'src'));
+    writeFileSync(join(app, 'src/Player.tsx'), 'export default function Player() { return <video src="/hero.mp4" />; }');
     writeFileSync(join(app, 'public/hero.mp4'), Buffer.alloc(24 * 1024 * 1024));
     for (let index = 0; index < 3000; index++) {
       const bytes = Buffer.alloc(index < 2736 ? 12583 : 12582);
@@ -95,7 +98,7 @@ test('large deploy uploads missing files and small deploy keeps its request shap
     const first = await deploy(true);
     assert.equal(calls.filter(path => path === '/v1/deploy/blobs/check').length, 1);
     assert.equal(objects.size, 3001);
-    assert.equal(JSON.parse(first.stdout).uploaded.static_files.length, 3002);
+    assert.equal(JSON.parse(first.stdout).uploaded.static_files.length, 3003);
     assert.match(first.stderr, /Uploading 3001 of 3001/);
     writeFileSync(join(app, 'public/1.dat'), 'replacement');
     const redeploy = await deploy(true);
@@ -110,5 +113,30 @@ test('large deploy uploads missing files and small deploy keeps its request shap
   } finally {
     await new Promise(resolve => server.close(resolve));
     rmSync(fixture, { recursive: true, force: true });
+  }
+});
+
+test('keeps resolved module and CSS assets inline while hashing runtime URLs', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'deploy-blob-imports-'));
+  try {
+    mkdirSync(join(dir, 'src'));
+    mkdirSync(join(dir, 'public'));
+    writeFileSync(join(dir, 'index.html'), '<!doctype html><title>Assets</title>');
+    writeFileSync(join(dir, 'src/Player.tsx'), `
+      import icon from './logo.svg';
+      export const Player = () => <video src="/hero.mp4" poster="/logo.svg" />;
+    `);
+    writeFileSync(join(dir, 'src/site.css'), '.logo { background: url(./pattern.png); }');
+    writeFileSync(join(dir, 'src/logo.svg'), '<svg/>');
+    writeFileSync(join(dir, 'src/pattern.png'), Buffer.from([1]));
+    writeFileSync(join(dir, 'public/logo.svg'), '<svg/>');
+    writeFileSync(join(dir, 'public/hero.mp4'), Buffer.alloc(12 * 1024 * 1024));
+    const files = collectFiles(dir, { deployBlobs: true });
+    assert.deepEqual(files.oversize, []);
+    assert.deepEqual([...files.blobs.keys()].sort(), ['public/hero.mp4', 'public/logo.svg']);
+    assert.ok(files.files['src/logo.svg']);
+    assert.ok(files.binaryFiles['src/pattern.png']);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
   }
 });

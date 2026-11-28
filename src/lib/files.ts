@@ -2,7 +2,7 @@ import { isUtf8 } from 'node:buffer';
 import { cliInvocation } from './cli-invocation.js';
 import { operationalExclusionReason, operationalReferenceMatcher } from './operational-files.js';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
-import { basename, extname, isAbsolute, join, relative } from 'node:path';
+import { extname, isAbsolute, join, posix, relative } from 'node:path';
 import { DATA_DECLARATION_FILE, FILES_DECLARATION_FILE, GENERATED_DATA_HEADER } from './declared-data.js';
 import {
   excludedRootFileReason,
@@ -143,6 +143,34 @@ export interface CollectOptions {
   deployBlobs?: boolean;
 }
 
+/** A browser URL in JSX is served by the site; only module and CSS dependencies
+ * need their bytes during compilation. Resolve local references from the file
+ * containing them, and retain possible alias imports conservatively. */
+function compilerAssetMatcher(sources: ReadonlyArray<readonly [string, string]>): (path: string) => boolean {
+  const resolved = new Set<string>();
+  const aliasedNames = new Set<string>();
+  const scriptImports = /\b(?:import\s*(?:\(\s*|(?=['"])|[^;"'`]*?\bfrom\s*)|export\s+[^;"'`]*?\bfrom\s*|require\s*\(\s*|new\s+URL\s*\(\s*)(['"])([^'"\r\n]+)\1/g;
+  const cssImports = /url\(\s*(?:"([^"]+)"|'([^']+)'|([^\s)]+))|@import\s+["']([^"']+)["']/g;
+  for (const [file, source] of sources) {
+    const stylesheet = /\.(?:css|scss|sass|less)$/i.test(file);
+    const imports = stylesheet
+      ? Array.from(source.matchAll(cssImports), match => match[1] ?? match[2] ?? match[3] ?? match[4])
+      : Array.from(source.matchAll(scriptImports), match => match[2]);
+    for (const specifier of imports) {
+      const path = specifier.split(/[?#]/, 1)[0];
+      if (!path || path.startsWith('//') || /^[a-z][a-z0-9+.-]*:/i.test(path)) continue;
+      if (path.startsWith('/')) resolved.add(posix.normalize(path).slice(1));
+      else if (stylesheet || path.startsWith('.')) resolved.add(posix.normalize(posix.join(posix.dirname(file), path)));
+      else aliasedNames.add(posix.basename(path));
+    }
+  }
+  return path => {
+    const stem = path.slice(0, path.length - posix.extname(path).length);
+    return resolved.has(path) || resolved.has(stem)
+      || aliasedNames.has(posix.basename(path)) || aliasedNames.has(posix.basename(stem));
+  };
+}
+
 /** Walk a directory tree and bucket every file into static / binary / function,
  *  applying the same path remapping the deploy command uses. */
 export function collectFiles(baseDir: string, options: CollectOptions = {}): CollectedFiles {
@@ -237,9 +265,8 @@ export function collectFiles(baseDir: string, options: CollectOptions = {}): Col
     publish.reduce((total, path) => total + (sizes.get(path) ?? 0), 0) > MAX_INLINE_DEPLOY_BYTES
     || publish.some(path => (sizes.get(path) ?? 0) > MAX_FILE_SIZE)
   )) {
-    // Keep assets named in compiler inputs inline, including CSS url() imports.
-    const compilerSources = corpusFiles(publish.filter(path => /\.(?:[cm]?[jt]sx?|css|scss|sass|less)$/i.test(path)))
-      .map(([, content]) => content).join('\n');
+    const compilerSources = corpusFiles(publish.filter(path => /\.(?:[cm]?[jt]sx?|css|scss|sass|less)$/i.test(path)));
+    const isCompilerAsset = compilerAssetMatcher(compilerSources);
     out.blobs = new Map();
     for (const path of publish) {
       const size = sizes.get(path) ?? 0;
@@ -249,7 +276,7 @@ export function collectFiles(baseDir: string, options: CollectOptions = {}): Col
         || /(?:^|\/)(?:package(?:-lock)?\.json|npm-shrinkwrap\.json|tsconfig[^/]*\.json)$/i.test(path)
         || /\.(?:[cm]?[jt]sx?|css|scss|sass|less|html?|wasm)$/i.test(path)
         || !(/^(?:public|static)\//.test(path) || BINARY_EXTS.has(extname(path).toLowerCase()) || /\.(?:svg|json|csv)$/i.test(path))
-        || compilerSources.includes(basename(path))) continue;
+        || isCompilerAsset(path)) continue;
       out.blobs.set(path, size);
     }
   }

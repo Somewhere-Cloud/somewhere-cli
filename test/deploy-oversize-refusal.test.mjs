@@ -32,11 +32,11 @@ test.after(() => server.close());
 
 const BIG = 6 * 1024 * 1024;
 function project(extra) {
-  const base = mkdtempSync(join(tmpdir(), 'sw-oversize-'));
+  const base = mkdtempSync(join(tmpdir(), 'swtest-oversize-'));
   const app = join(base, 'app'), config = join(base, 'config');
   mkdirSync(join(app, 'public'), { recursive: true }); mkdirSync(config);
   writeFileSync(join(config, 'config.json'), JSON.stringify({ token: 'smt_fixture', user: { email: 'dev@example.test', username: 'dev' } }));
-  writeFileSync(join(app, '.somewhere.json'), JSON.stringify({ project_id: 'proj_fixture', name: 'Fixture', subdomain: 'fixture' }));
+  writeFileSync(join(app, '.somewhere.json'), JSON.stringify({ project_id: 'proj_fixture', name: 'swtest-oversize', subdomain: 'swtest-oversize' }));
   writeFileSync(join(app, 'index.html'), '<html><body>hi</body></html>\n');
   for (const [path, content] of Object.entries(extra)) {
     mkdirSync(dirname(join(app, path)), { recursive: true });
@@ -63,6 +63,7 @@ for (const args of [['deploy'], ['deploy', '--dry-run'], ['deploy', '--force', '
     assert.equal(result.status, 1, result.out);
     assert.match(result.out, /Nothing was sent\. This file is over the 5\.0 MB per-file limit/);
     assert.match(result.out, /public\/big\.bin \(6\.0 MB\)/);
+    assert.match(result.out, /somewhere fs put public\/big\.bin big\.bin/);
     assert.deepEqual(requests, []);
   });
 }
@@ -98,4 +99,46 @@ test('a large file kept out on purpose (.somewhereignore) and a large local note
   const sent = [...Object.keys(body.files ?? {}), ...Object.keys(body.binary_files ?? {})];
   assert.ok(sent.includes('public/.well-known/security.txt'), sent.join(','));
   assert.ok(!sent.some((p) => p.includes('big.bin') || p.includes('transcript.log')), sent.join(','));
+});
+
+test('a 39 MiB tree of individually allowed files is refused before any request', async () => {
+  requests.length = 0;
+  const files = Object.fromEntries(Array.from({ length: 13 }, (_, i) => [
+    `public/fixture-${i}.${i % 2 ? 'txt' : 'bin'}`, Buffer.alloc(3 * 1024 * 1024, 65),
+  ]));
+  const result = await run(['deploy', '--json'], project(files));
+  assert.equal(result.status, 1, result.out);
+  const output = JSON.parse(result.stdout);
+  assert.equal(output.error, 'DEPLOY_TOO_LARGE');
+  assert.equal(output.limit_bytes, 20 * 1024 * 1024);
+  assert.match(output.message, /39\.0 MiB.*20 MiB/);
+  assert.deepEqual(requests, []);
+});
+
+test('worker-stripped README selected via --include does not inflate the 20 MiB precheck', async () => {
+  requests.length = 0;
+  const files = Object.fromEntries(Array.from({ length: 19 }, (_, i) => [
+    `public/fixture-${i}.bin`, Buffer.alloc(1024 * 1024, 65),
+  ]));
+  const result = await run(['deploy', '--dry-run', '--include', 'README.md', '--json'], project({
+    ...files, 'README.md': 'x'.repeat(2 * 1024 * 1024),
+  }));
+  assert.equal(result.status, 0, result.out);
+  const request = requests.find(r => r.method === 'POST' && r.path === '/v1/deploy');
+  assert.equal(JSON.parse(request.body).files['README.md'].length, 2 * 1024 * 1024);
+});
+
+test('deploy preserves literal U+FFFD text and sends DOCX and unknown binary files as bytes', async () => {
+  requests.length = 0;
+  const js = 'console.log("�");\n';
+  const docx = Buffer.from([0x50, 0x4b, 0x03, 0x04, 0, 0xff]);
+  const unknown = Buffer.from([0xc3, 0x28]);
+  const result = await run(['deploy', '--dry-run'], project({
+    'public/main.js': js, 'public/guide.docx': docx, 'public/download.dat': unknown,
+  }));
+  assert.equal(result.status, 0, result.out);
+  const body = JSON.parse(requests.find((r) => r.method === 'POST' && r.path === '/v1/deploy').body);
+  assert.equal(body.files['public/main.js'], js);
+  assert.equal(body.binary_files['public/guide.docx'], docx.toString('base64'));
+  assert.equal(body.binary_files['public/download.dat'], unknown.toString('base64'));
 });

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.38.172
+
+- CLI packages use consistent file permissions.
+
 ## 0.38.171
 
 - Preview deploys report when a preview contains only part of a large table.

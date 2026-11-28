@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, cpSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -34,6 +34,15 @@ export function packCli(destination, source) {
       packages: { '': { name, version, license, bin, engines, bundleDependencies: [] } },
     };
     writeFileSync(join(stage, 'npm-shrinkwrap.json'), JSON.stringify(shrinkwrap, null, 2) + '\n');
+
+    // npm includes staged file modes in the tarball. Derive them from the
+    // package manifest so a restrictive build or checkout has the same digest.
+    const executables = new Set(Object.values(bin).map(file => resolve(stage, file)));
+    for (const entry of readdirSync(stage, { recursive: true, withFileTypes: true })) {
+      if (!entry.isFile()) continue;
+      const file = join(entry.parentPath, entry.name);
+      chmodSync(file, executables.has(file) ? 0o755 : 0o644);
+    }
 
     mkdirSync(output, { recursive: true });
     const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';

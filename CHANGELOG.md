@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.38.176
+
+- Upload large static sites faster and show hashing and upload times with `deploy --timing`.
+
 ## 0.38.175
 
 - Enabled apps can deploy larger static sites and upload only files that changed.

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.38.175
+
+- Enabled apps can deploy larger static sites and upload only files that changed.
+
 ## 0.38.174
 
 - Restore a database from a history point with explicit confirmation of the app and point.

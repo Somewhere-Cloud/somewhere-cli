@@ -190,6 +190,23 @@ test('db restore-points lists, takes and deletes through the restore point route
   assert.deepEqual(readdirSync(home).filter((f) => f === 'cut.sql' || f.endsWith('.tmp')), [], 'and leaves neither the file nor its temporary');
   route = null;
 
+  reply = { body: { ok: true, data: { confirmed: false, app: 'fixture-app', point_id: 'rp_history',
+    expires_at: '2026-12-01', moments: [{ plane: 'raw', at: '2026-11-27' }], warning: 'Database requests may fail.' } } };
+  r = await command(['--restore', 'rp_history']);
+  assert.equal(r.status, 0);
+  assert.match(r.stdout, /Database requests may fail/);
+  assert.deepEqual(requests.at(-1), { path: '/v1/db/restore-points/rp_history/restore', method: 'POST', body: { project_id: 'fixture-project' } });
+  reply = { body: { ok: true, data: { confirmed: true, undo_point_id: 'rp_undo' } } };
+  r = await command(['--restore', 'rp_history', '--confirm-app', 'fixture-app']);
+  assert.equal(r.status, 0);
+  assert.match(r.stdout, /People removed since then will have access again/);
+  assert.match(r.stdout, /Undo point: rp_undo/);
+  assert.deepEqual(requests.at(-1).body.confirm, { app: 'fixture-app', point: 'rp_history' });
+  reply = { body: { ok: true, data: { restore_points: [], restore: { point_id: 'rp_history', message: 'Restore outcome unknown.' } } } };
+  r = await command([]);
+  assert.equal(r.status, 0);
+  assert.match(r.stdout, /rp_history: Restore outcome unknown/);
+
   reply = { status: 403, body: { ok: false, error: 'OWNER_REQUIRED', message: 'Only the project owner can take, list or delete database restore points. Nothing changed.' } };
   r = await command([]);
   assert.notEqual(r.status, 0);

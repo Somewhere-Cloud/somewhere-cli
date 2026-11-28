@@ -281,10 +281,12 @@ export function registerDb(program: Command) {
     .option('--project <id>', 'Project ID (defaults to .somewhere.json)')
     .option('--take', 'Take a restore point now')
     .option('--delete <id>', 'Delete one restore point now')
+    .option('--restore <id>', 'Inspect or restore a database history point')
+    .option('--confirm-app <name>', 'Confirm the exact app name. Members, groups and roles return to the saved moment.')
     .option('--json', 'Print the API response as JSON')
     .action(async (opts) => {
-      if (opts.take && opts.delete) {
-        error('Use --take or --delete, not both.');
+      if ([opts.take, opts.delete, opts.restore].filter(Boolean).length > 1 || (opts.confirmApp && !opts.restore)) {
+        error('Choose one action. --confirm-app requires --restore.');
         process.exit(1);
       }
       let projectId: string | undefined = opts.project;
@@ -300,6 +302,23 @@ export function registerDb(program: Command) {
       const size = (n: number) => n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1000))} KB`;
       const client = new ApiClient(getToken());
       try {
+        if (opts.restore) {
+          type Restore = { confirmed: false; app: string; point_id: string; expires_at: string; moments: Array<{ plane: string; at: string }>; warning: string }
+            | { confirmed: true; undo_point_id: string };
+          if (opts.confirmApp && !opts.json) {
+            info('Restoring returns the app’s members, groups and roles to the recorded moment. People removed since then will have access again; remove them again after the restore. Completion can take a minute while cached sign-ins expire.');
+          }
+          const result = await client.call<Restore>('POST', `/db/restore-points/${encodeURIComponent(opts.restore)}/restore`, {
+            project_id: projectId,
+            ...(opts.confirmApp ? { confirm: { app: opts.confirmApp, point: opts.restore } } : {}),
+          }, undefined, opts.confirmApp ? { timeoutMs: 240_000 } : undefined);
+          if (opts.json) { printJson(result); return; }
+          if (result.confirmed) { success(`Database restored. Undo point: ${result.undo_point_id}.`); return; }
+          info(result.warning);
+          for (const moment of result.moments) info(`${moment.plane}: ${moment.at}`);
+          info(`Confirm app "${result.app}" and point ${result.point_id} before ${result.expires_at}. Repeat with --confirm-app and the exact app name to restore.`);
+          return;
+        }
         if (opts.take) {
           const spinner = opts.json ? null : ora('Taking a restore point…').start();
           // Taken in the background: wait for it to finish (or fail) and say which.
@@ -325,8 +344,9 @@ export function registerDb(program: Command) {
           success(`Deleted restore point ${r.deleted}.`);
           return;
         }
-        const r = await client.call<{ restore_points: Point[] }>('GET', '/db/restore-points', undefined, { project_id: projectId });
+        const r = await client.call<{ restore_points: Point[]; restore?: { point_id: string; message: string } | null }>('GET', '/db/restore-points', undefined, { project_id: projectId });
         if (opts.json) { printJson(r); return; }
+        if (r.restore) info(`${r.restore.point_id}: ${r.restore.message}`);
         if (!r.restore_points.length) {
           info(dim(`No restore points yet. Take one now with \`${cliInvocation()} db restore-points --take\`; the platform also takes them before deploys that change the database (when it can finish within the deploy's wait) and daily when the data changed.`));
           return;

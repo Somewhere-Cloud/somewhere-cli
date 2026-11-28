@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.38.174
+
+- Restore a database from a history point with explicit confirmation of the app and point.
+
 ## 0.38.173
 
 - Deploy preserves text and binary file bytes and explains when to use file storage.

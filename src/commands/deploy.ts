@@ -44,7 +44,8 @@ import {
   type StoredTempSession,
 } from '../lib/config.js';
 import { httpsOrigin } from '../lib/project-urls.js';
-import { collectFiles, oversizeRefusal, sensitiveReferenceRefusal, type CollectedFiles } from '../lib/files.js';
+import { uploadDeployBlobs } from '../lib/deploy-blobs.js';
+import { collectFiles, MAX_DEPLOY_BLOB_BYTES, MAX_INLINE_DEPLOY_BYTES, oversizeRefusal, sensitiveReferenceRefusal, type CollectedFiles } from '../lib/files.js';
 import { CLI_VERSION } from '../lib/version.js';
 import { mintTempAccount } from '../lib/temp-auth.js';
 import { recordPinIfMissing } from '../lib/project-pin.js';
@@ -729,6 +730,7 @@ export function registerDeploy(program: Command) {
       const collectionStartedAt = performance.now();
       const collected = collectFiles(targetDir, {
         include: (opts.include as string[] | undefined) ?? [],
+        deployBlobs: process.env.SOMEWHERE_DEPLOY_BLOBS === '1' && !opts.dryRun && opts.scope !== 'functions',
       });
       // The folder's published files as uploaded: recorded as its base on success.
       const publishedHashes = hashFiles(targetDir, collected.published);
@@ -746,7 +748,10 @@ export function registerDeploy(program: Command) {
       }
       // A published file over the per-file limit would be left out, deleting
       // its live copy: refuse before any request (dry runs included).
-      const sizeRefusal = oversizeRefusal(collected);
+      const tooLargeBlob = [...(collected.blobs ?? [])].find(([, size]) => size > MAX_DEPLOY_BLOB_BYTES);
+      const sizeRefusal = tooLargeBlob
+        ? `"${tooLargeBlob[0]}" exceeds the 25 MiB static file limit. Reduce its size or serve it from file storage.`
+        : oversizeRefusal(collected);
       if (sizeRefusal) {
         if (opts.json) printJsonError('FILE_TOO_LARGE', sizeRefusal);
         else error(sizeRefusal);
@@ -762,15 +767,21 @@ export function registerDeploy(program: Command) {
       for (const [path, content] of Object.entries(measured.binaryFiles ?? {})) sizes.set(path, Buffer.byteLength(content, 'base64'));
       for (const [path, content] of Object.entries(submittedFunctions)) sizes.set(path, Buffer.byteLength(content));
       const payloadBytes = [...sizes.values()].reduce((total, bytes) => total + bytes, 0);
-      const limitBytes = 20 * 1024 * 1024; // RELEASE_DEPLOY_PAYLOAD_LIMIT_BYTES on the platform
+      const limitBytes = MAX_INLINE_DEPLOY_BYTES;
       if (payloadBytes > limitBytes) {
-        const message = `This deploy contains ${(payloadBytes / 1024 ** 2).toFixed(1)} MiB of files. The limit is 20 MiB per deploy. Move large assets to file storage before deploying.`;
+        const message = `This deploy contains ${(payloadBytes / 1024 ** 2).toFixed(1)} MiB of files. The inline limit is 20 MiB per deploy. Move large assets to file storage before deploying.`;
         if (opts.json) printJsonError('DEPLOY_TOO_LARGE', message, { payload_bytes: payloadBytes, limit_bytes: limitBytes });
         else error(message);
         process.exit(1);
       }
+      if (collected.blobs?.size && collected.published.length > 20_000) {
+        const message = 'A site can contain up to 20,000 files.';
+        if (opts.json) printJsonError('DEPLOY_TOO_MANY_FILES', message);
+        else error(message);
+        process.exit(1);
+      }
       if (
-        Object.keys(files).length === 0
+        !collected.blobs?.size && Object.keys(files).length === 0
         && Object.keys(binaryFiles).length === 0
         && Object.keys(functions).length === 0
       ) {
@@ -1234,10 +1245,15 @@ export function registerDeploy(program: Command) {
       const totalFiles =
         Object.keys(files).length +
         Object.keys(binaryFiles).length +
+        (collected.blobs?.size ?? 0) +
         Object.keys(functions).length;
       // The exact paths this request carries: one source for the headline count,
       // the terminal list and the JSON `uploaded` field.
       const inventory = uploadInventory(files, binaryFiles, functions, scope);
+      if (collected.blobs?.size) {
+        inventory.static_files.push(...collected.blobs.keys());
+        inventory.static_files.sort((a, b) => a.localeCompare(b));
+      }
 
       if (opts.dryRun && !opts.json) {
         spinner?.stop();
@@ -1379,6 +1395,11 @@ export function registerDeploy(program: Command) {
           return;
         }
 
+        if (collected.blobs?.size) {
+          spinner?.stop();
+          body.blob_files = await uploadDeployBlobs(client, targetDir, projectId!, collected.blobs, publishedHashes);
+          if (process.stderr.isTTY) spinner?.start();
+        }
         const requestStartedAt = performance.now();
         deployRequestStartedAt = new Date().toISOString();
         const preparationMs = requestStartedAt - collectionEndedAt;

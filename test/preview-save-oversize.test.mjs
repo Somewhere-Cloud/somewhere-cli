@@ -33,7 +33,8 @@ test('valid save is sent; the same file grown past the limit refuses and is held
   assert.equal(plan.action, 'refuse');
   assert.match(plan.message, /Nothing in this save was sent: this file is over the 5\.0 MB per-file limit/);
   assert.match(plan.message, /public\/hero\.png \(6\.0 MB\)/);
-  assert.match(plan.message, /Your last preview is unchanged/);
+  assert.match(plan.message, /The last successful preview is still served/);
+  assert.match(plan.message, /somewhere fs put public\/hero\.png hero\.png/);
   assert.deepEqual([...q.heldChanged].sort(), ['index.html', 'public/hero.png'], 'the refused save is held, not dropped');
   assert.equal(q.pendingChanged.size, 0, 'nothing pending, so the loop does not re-fire on its own');
 

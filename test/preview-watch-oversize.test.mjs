@@ -97,7 +97,8 @@ test('preview watch loop: oversize save refused with no patch and the last previ
     await new Promise((r) => setTimeout(r, 1200));
     assert.equal(patches.length, 0, 'no patch for a refused save');
     assert.match(out, /public\/hero\.png \(6\.0 MB\)/);
-    assert.match(out, /Your last preview is unchanged/);
+    assert.match(out, /The last successful preview is still served/);
+    assert.match(out, /somewhere fs put public\/hero\.png hero\.png/);
 
     // Save 2: the image shrinks; an ignored large file changes too.
     writeFileSync(join(app, 'public', 'data', 'huge.json'), 'x'.repeat(6 * 1024 * 1024));

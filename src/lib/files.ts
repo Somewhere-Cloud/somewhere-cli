@@ -552,7 +552,7 @@ export function previewOversizeRefusal(oversize: Array<{ path: string; bytes: nu
     `Nothing in this save was sent: ${oversize.length === 1 ? 'this file is' : 'these files are'} over the ${formatBytes(MAX_FILE_SIZE)} per-file limit:`,
     ...oversize.map((entry) => `  ${entry.path} (${formatBytes(entry.bytes)})`),
     ...fileStorageRecovery(oversize),
-    'Save an app file again to send the held changes.',
+    'The last successful preview is still served. Save an app file again to send the held changes.',
   ].join('\n');
 }
 

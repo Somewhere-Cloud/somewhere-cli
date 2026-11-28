@@ -75,6 +75,18 @@ test('db restore-points lists, takes and deletes through the restore point route
   assert.match(r.stdout + r.stderr, /Every table of the database is in the file/, 'and what was checked');
   r = await command([]);
   assert.match(r.stdout + r.stderr, /rp_fixture: Each database read in one moment: the SQL tables and the declared tables at different moments\./, 'the list shows a split point\'s qualification');
+  const history = { ...point, kind: 'history', rows: 0, tables: 0, size_bytes: 0, consistency: 'History points cannot be downloaded or opened as a preview.' };
+  route = (req) => req.method === 'POST'
+    ? { status: 202, body: { ok: true, data: { restore_point: history } } }
+    : { body: { ok: true, data: { restore_points: [{ ...history, state: 'expired' }] } } };
+  r = await command(['--take']);
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout + r.stderr, /Database history point rp_fixture recorded/);
+  assert.doesNotMatch(r.stdout + r.stderr, /1 KB|0 rows/);
+  r = await command([]);
+  assert.match(r.stdout, /expired/);
+  assert.match(r.stdout, /cannot be downloaded or opened as a preview/);
+  assert.doesNotMatch(r.stdout, /1 KB/);
   // A point that was not taken says why and fails the command.
   route = (req) => req.method === 'POST'
     ? { status: 202, body: { ok: true, data: { project_id: 'fixture-project', restore_point: { ...point, state: 'running' } } } }

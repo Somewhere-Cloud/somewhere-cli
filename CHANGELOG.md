@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.38.173
+
+- Deploy preserves text and binary file bytes and explains when to use file storage.
+- Deploy checks its result after a lost response and refuses source over 20 MiB before upload.
+- Restore-point lists show history points and their expiry.
+
 ## 0.38.172
 
 - CLI packages use consistent file permissions.

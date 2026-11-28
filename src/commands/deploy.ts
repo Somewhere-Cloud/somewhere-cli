@@ -733,6 +733,7 @@ export function registerDeploy(program: Command) {
         deployBlobs: process.env.SOMEWHERE_DEPLOY_BLOBS === '1' && !opts.dryRun && opts.scope !== 'functions',
       });
       // The folder's published files as uploaded: recorded as its base on success.
+      const hashStartedAt = collected.blobs?.size && opts.timing ? performance.now() : undefined;
       const publishedHashes = hashFiles(targetDir, collected.published);
       const collectionEndedAt = performance.now();
       const collectionMs = collectionEndedAt - collectionStartedAt;
@@ -1397,7 +1398,11 @@ export function registerDeploy(program: Command) {
 
         if (collected.blobs?.size) {
           spinner?.stop();
-          body.blob_files = await uploadDeployBlobs(client, targetDir, projectId!, collected.blobs, publishedHashes);
+          const { blobFiles, checkMs, uploadMs } = await uploadDeployBlobs(client, targetDir, projectId!, collected.blobs, publishedHashes);
+          body.blob_files = blobFiles;
+          if (hashStartedAt !== undefined) {
+            process.stderr.write(`Static file timings (ms) — hash ${Math.round(collectionEndedAt - hashStartedAt)}, check ${Math.round(checkMs)}, upload ${Math.round(uploadMs)}\n`);
+          }
           if (process.stderr.isTTY) spinner?.start();
         }
         const requestStartedAt = performance.now();

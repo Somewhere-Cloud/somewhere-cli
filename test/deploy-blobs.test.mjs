@@ -60,7 +60,7 @@ test('large deploy uploads missing files and small deploy keeps its request shap
     calls.length = 0;
     const started = performance.now();
     const result = await new Promise((resolve, reject) => {
-      const child = spawn(process.execPath, [cli, 'deploy', '--json'], {
+      const child = spawn(process.execPath, [cli, 'deploy', '--json', '--timing'], {
         cwd: app,
         env: {
           ...process.env, CI: '1', SOMEWHERE_CONFIG_DIR: config, SOMEWHERE_NO_NOTIFICATIONS: '1',
@@ -85,6 +85,7 @@ test('large deploy uploads missing files and small deploy keeps its request shap
     assert.deepEqual(calls.sort(), inlineCalls.sort());
     assert.equal(calls.filter(path => path === '/v1/deploy').length, 1);
     assert.ok(calls.every(path => !path.startsWith('/v1/deploy/blobs/')));
+    assert.doesNotMatch(small.stderr, /Static file timings/);
     console.log(`Small CLI deploy: baseline ${baseline.ms} ms, pilot ${small.ms} ms.`);
 
     mkdirSync(join(app, 'src'));
@@ -100,6 +101,7 @@ test('large deploy uploads missing files and small deploy keeps its request shap
     assert.equal(objects.size, 3001);
     assert.equal(JSON.parse(first.stdout).uploaded.static_files.length, 3003);
     assert.match(first.stderr, /Uploading 3001 of 3001/);
+    assert.match(first.stderr, /Static file timings .* hash \d+, check \d+, upload \d+/);
     writeFileSync(join(app, 'public/1.dat'), 'replacement');
     const redeploy = await deploy(true);
     assert.match(redeploy.stderr, /Uploading 1 of 3001/);

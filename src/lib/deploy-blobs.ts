@@ -2,7 +2,7 @@ import { createReadStream } from 'node:fs';
 import { join } from 'node:path';
 import { ApiClient, CliApiError, LONG_CALL_TIMEOUT_MS } from './client.js';
 
-const PARALLEL_UPLOADS = 8;
+const PARALLEL_UPLOADS = 32;
 
 export async function uploadDeployBlobs(
   client: ApiClient,
@@ -10,19 +10,22 @@ export async function uploadDeployBlobs(
   projectId: string,
   paths: Map<string, number>,
   hashes: Record<string, string>,
-): Promise<Record<string, string>> {
+): Promise<{ blobFiles: Record<string, string>; checkMs: number; uploadMs: number }> {
   const files = new Map<string, { sha256: string; size: number; path: string }>();
   for (const [path, size] of paths) {
     const sha256 = hashes[path];
     files.set(sha256, { sha256, size, path });
   }
   process.stderr.write(`Checking ${paths.size} static files...\n`);
+  const checkStarted = performance.now();
   const { missing } = await client.call<{ missing: string[] }>('POST', '/deploy/blobs/check', {
     project_id: projectId,
     files: [...files.values()].map(({ sha256, size }) => ({ sha256, size })),
   }, undefined, { timeoutMs: LONG_CALL_TIMEOUT_MS });
+  const checkMs = performance.now() - checkStarted;
   process.stderr.write(`Uploading ${missing.length} of ${files.size} distinct static files.\n`);
 
+  const uploadStarted = performance.now();
   let next = 0;
   let failure: unknown;
   const query = new URLSearchParams({ project_id: projectId });
@@ -51,5 +54,7 @@ export async function uploadDeployBlobs(
     }
   }));
   if (failure) throw failure;
-  return Object.fromEntries([...paths.keys()].map(path => [path, `sha256:${hashes[path]}`]));
+  const uploadMs = performance.now() - uploadStarted;
+  const blobFiles = Object.fromEntries([...paths.keys()].map(path => [path, `sha256:${hashes[path]}`]));
+  return { blobFiles, checkMs, uploadMs };
 }

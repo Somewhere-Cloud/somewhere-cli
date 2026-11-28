@@ -306,12 +306,12 @@ export function registerDb(program: Command) {
           type Restore = { confirmed: false; app: string; point_id: string; expires_at: string; moments: Array<{ plane: string; at: string }>; warning: string }
             | { confirmed: true; undo_point_id: string };
           if (opts.confirmApp && !opts.json) {
-            info('Restoring returns the app’s members, groups and roles to the recorded moment. People removed since then will have access again; remove them again after the restore.');
+            info('Restoring returns the app’s members, groups and roles to the recorded moment. People removed since then will have access again; remove them again after the restore. Completion can take a minute while cached sign-ins expire.');
           }
           const result = await client.call<Restore>('POST', `/db/restore-points/${encodeURIComponent(opts.restore)}/restore`, {
             project_id: projectId,
             ...(opts.confirmApp ? { confirm: { app: opts.confirmApp, point: opts.restore } } : {}),
-          });
+          }, undefined, opts.confirmApp ? { timeoutMs: 240_000 } : undefined);
           if (opts.json) { printJson(result); return; }
           if (result.confirmed) { success(`Database restored. Undo point: ${result.undo_point_id}.`); return; }
           info(result.warning);

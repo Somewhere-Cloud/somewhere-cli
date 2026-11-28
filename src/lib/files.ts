@@ -2,7 +2,7 @@ import { isUtf8 } from 'node:buffer';
 import { cliInvocation } from './cli-invocation.js';
 import { operationalExclusionReason, operationalReferenceMatcher } from './operational-files.js';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
-import { extname, isAbsolute, join, relative } from 'node:path';
+import { basename, extname, isAbsolute, join, relative } from 'node:path';
 import { DATA_DECLARATION_FILE, FILES_DECLARATION_FILE, GENERATED_DATA_HEADER } from './declared-data.js';
 import {
   excludedRootFileReason,
@@ -26,6 +26,8 @@ export const IGNORE = new Set([
 ]);
 
 export const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB per file
+export const MAX_DEPLOY_BLOB_BYTES = 25 * 1024 * 1024;
+export const MAX_INLINE_DEPLOY_BYTES = 20 * 1024 * 1024;
 
 export const BINARY_EXTS = new Set([
   '.png', '.jpg', '.jpeg', '.gif', '.webp', '.ico', '.bmp', '.avif',
@@ -127,6 +129,7 @@ export interface CollectedFiles {
    *  verdict, oversize files excluded). `somewhere pull` only ever removes
    *  files in this set. */
   published: string[];
+  blobs?: Map<string, number>;
 }
 
 export const SENSITIVE_FILE_REASON = 'blocked by the sensitive-path policy — never uploaded';
@@ -137,6 +140,7 @@ export interface CollectOptions {
   /** Read binary assets into base64 (deploy needs them). Lint only reads
    * text, so it passes false and binaries are recorded with empty content. */
   readBinary?: boolean;
+  deployBlobs?: boolean;
 }
 
 /** Walk a directory tree and bucket every file into static / binary / function,
@@ -229,10 +233,35 @@ export function collectFiles(baseDir: string, options: CollectOptions = {}): Col
     out.sensitive.sort((a, b) => a.path.localeCompare(b.path));
   }
 
+  if (options.deployBlobs && (
+    publish.reduce((total, path) => total + (sizes.get(path) ?? 0), 0) > MAX_INLINE_DEPLOY_BYTES
+    || publish.some(path => (sizes.get(path) ?? 0) > MAX_FILE_SIZE)
+  )) {
+    // Keep assets named in compiler inputs inline, including CSS url() imports.
+    const compilerSources = corpusFiles(publish.filter(path => /\.(?:[cm]?[jt]sx?|css|scss|sass|less)$/i.test(path)))
+      .map(([, content]) => content).join('\n');
+    out.blobs = new Map();
+    for (const path of publish) {
+      const size = sizes.get(path) ?? 0;
+      const served = path.replace(/^public\//, '');
+      if (classifyKey(path).kind === 'function'
+        || /^(?:api|db|_lib|_compiled|_internal|_source)\//i.test(served)
+        || /(?:^|\/)(?:package(?:-lock)?\.json|npm-shrinkwrap\.json|tsconfig[^/]*\.json)$/i.test(path)
+        || /\.(?:[cm]?[jt]sx?|css|scss|sass|less|html?|wasm)$/i.test(path)
+        || !(/^(?:public|static)\//.test(path) || BINARY_EXTS.has(extname(path).toLowerCase()) || /\.(?:svg|json|csv)$/i.test(path))
+        || compilerSources.includes(basename(path))) continue;
+      out.blobs.set(path, size);
+    }
+  }
+
   // Size is judged only for files that would be published, after the ignore,
   // privacy and test rules: a large note or log that stays local is not refused.
   for (const relPath of publish) {
     const bytes = sizes.get(relPath) ?? 0;
+    if (out.blobs?.has(relPath) && bytes <= MAX_DEPLOY_BLOB_BYTES) {
+      out.published.push(relPath);
+      continue;
+    }
     if (bytes > MAX_FILE_SIZE) {
       out.oversize.push({ path: relPath, bytes });
       out.skipped.push({ path: relPath, reason: `${formatBytes(bytes)} exceeds the ${formatBytes(MAX_FILE_SIZE)} per-file limit` });

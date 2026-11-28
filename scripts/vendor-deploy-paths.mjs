@@ -30,5 +30,16 @@ if (check) {
   writeFileSync(join(dest, 'deploy-paths.ts'), text);
   writeFileSync(join(dest, 'DEPLOY-PATHS-VENDOR.json'), JSON.stringify({ sha256 }, null, 2) + '\n');
 }
+const protectedSource = 'worker/src/utils/deploy-protected-files.ts';
+const protectedRaw = execFileSync('git', ['-C', root, 'show', `${commit}:${protectedSource}`], { encoding: 'utf8' });
+const protectedText = '// Vendored from the platform worker deploy-protected-files.ts.\n'
+  + publicProjection(protectedRaw).replace(/\n{3,}/g, '\n\n').trimStart();
+assertBehaviorParity(protectedRaw, protectedText, 'deploy-protected-files.ts');
+const protectedDest = join(dest, 'deploy-protected-files.ts');
+if (check) {
+  if (readFileSync(protectedDest, 'utf8') !== protectedText) throw new Error(`${protectedDest} differs from ${protectedSource} at ${commit}; re-vendor it.`);
+} else {
+  writeFileSync(protectedDest, protectedText);
+}
 console.log(`Deploy path policy ${check ? 'parity verified' : 'vendored'}: ${sha256}`);
 if (check) assertPublicPackage(join(import.meta.dirname, '..'));

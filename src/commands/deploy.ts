@@ -1,3 +1,4 @@
+import { protectDeployFiles } from '../lib/vendor/deploy-protected-files.js';
 import { FIRST_CLI_PERMISSION } from '../lib/first-cli-permission.js';
 import { readStarterProjectName, starterNameSlug } from '../lib/init-scaffold.js';
 import { newProjectCommand } from '../lib/link-hint.js';
@@ -755,9 +756,10 @@ export function registerDeploy(program: Command) {
       const submittedFiles = opts.scope === 'functions' ? functionDependencyManifest(files) : files;
       const submittedBinaries = opts.scope === 'functions' ? {} : binaryFiles;
       const submittedFunctions = opts.scope === 'static' ? {} : functions;
+      const measured = protectDeployFiles(submittedFiles, submittedBinaries);
       const sizes = new Map<string, number>();
-      for (const [path, content] of Object.entries(submittedFiles)) sizes.set(path, Buffer.byteLength(content));
-      for (const [path, content] of Object.entries(submittedBinaries)) sizes.set(path, Buffer.byteLength(content, 'base64'));
+      for (const [path, content] of Object.entries(measured.files)) sizes.set(path, Buffer.byteLength(content));
+      for (const [path, content] of Object.entries(measured.binaryFiles ?? {})) sizes.set(path, Buffer.byteLength(content, 'base64'));
       for (const [path, content] of Object.entries(submittedFunctions)) sizes.set(path, Buffer.byteLength(content));
       const payloadBytes = [...sizes.values()].reduce((total, bytes) => total + bytes, 0);
       const limitBytes = 20 * 1024 * 1024; // RELEASE_DEPLOY_PAYLOAD_LIMIT_BYTES on the platform
@@ -1380,17 +1382,17 @@ export function registerDeploy(program: Command) {
         const requestStartedAt = performance.now();
         deployRequestStartedAt = new Date().toISOString();
         const preparationMs = requestStartedAt - collectionEndedAt;
-        const deployAttemptId = crypto.randomUUID();
-        body.deploy_attempt_id = deployAttemptId;
+        body.deploy_attempt_id = crypto.randomUUID();
         const result = await callDeployWithRetry<DeployResult>(client, body, {
           spinner,
           json: Boolean(opts.json),
           dryRun: false,
           baseText: spinner?.text ?? 'Deploying...',
         }).catch(async (err: unknown) => {
-          if (!projectId || !outcomeUnknown(err)) throw err;
+          const attemptId = body.deploy_attempt_id;
+          if (!projectId || typeof attemptId !== 'string' || !outcomeUnknown(err)) throw err;
           if (spinner) spinner.text = 'Checking whether the deploy went live...';
-          return await recoverDeployOutcome(client, projectId, deployAttemptId) ?? Promise.reject(err);
+          return await recoverDeployOutcome(client, projectId, attemptId) ?? Promise.reject(err);
         }).finally(stopPrestart);
         deployAnswered = true;
         answered = result;
@@ -1734,6 +1736,11 @@ export function registerDeploy(program: Command) {
             const reference = formatErrorReference(unknown.meta);
             if (reference) info(dim(reference));
           }
+          process.exit(1);
+        }
+        if (err instanceof CliApiError && err.code === 'DEPLOY_UNVERIFIED') {
+          if (opts.json) printJsonError(err.code, err.message, err.data);
+          else error(err.message);
           process.exit(1);
         }
         // The platform switched production to this version and then could not switch it back: the
@@ -2193,6 +2200,7 @@ async function callDeployWithRetry<T>(
         opts.spinner?.start(`${opts.baseText} (retry 2/2)`);
       }
       if (waitMs) await new Promise((r) => setTimeout(r, waitMs));
+      if (!opts.dryRun) body.deploy_attempt_id = crypto.randomUUID();
       attempt++;
     }
   }
@@ -2212,13 +2220,24 @@ async function recoverDeployOutcome(client: ApiClient, projectId: string, attemp
   const query = { project_id: projectId, deploy_attempt_id: attemptId };
   for (const delay of [0, 1_000, 2_000, 4_000, 8_000]) {
     if (delay) await new Promise<void>(resolve => setTimeout(resolve, delay));
-    const status = await client.call<Partial<DeployResult> & { deployment_outcome?: string }>(
+    const status = await client.call<Partial<DeployResult> & { deployment_outcome?: string; verified?: boolean }>(
       'GET', '/deploy/status', undefined, query, { timeoutMs: 2_000, refresh: false },
     ).catch(() => null);
-    if (status?.deployment_outcome === 'live' && typeof status.release_id === 'string'
+    if (status?.deployment_outcome === 'live' && status.verified === true && typeof status.release_id === 'string'
       && status.release_id === status.active_release_id && status.project_id === projectId
       && typeof status.version === 'number') {
       return { ...status, has_functions: status.has_functions === true };
+    }
+    if (status?.deployment_outcome === 'unverified' && status.project_id === projectId
+      && typeof status.release_id === 'string' && status.release_id === status.active_release_id) {
+      const next = `${cliInvocation()} status --project ${shellQuote(projectId)}`;
+      throw new CliApiError('DEPLOY_UNVERIFIED',
+        `The deploy failed verification. The release is still selected for production. Run \`${next}\` to inspect the current release.`, 409, {
+          deployment_outcome: 'unverified', base_recorded: false,
+          release_id: status.release_id, active_release_id: status.active_release_id,
+          ...(typeof status.version === 'number' ? { version: status.version } : {}),
+          next_steps: [next],
+        });
     }
     if (status?.deployment_outcome === 'not_live') {
       throw new CliApiError('DEPLOY_NOT_LIVE', 'This deploy is not live. Check the deploy log for details.', 409);

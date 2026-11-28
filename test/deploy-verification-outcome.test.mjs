@@ -31,22 +31,28 @@ async function fixture({ mode = 'failed', json = true, flow, temporary = false }
   if (flow === 'invalid') writeFileSync(join(dir, 'flow.json'), '{');
   const requests = [];
   let attemptId;
+  const attemptIds = [];
   const server = createServer((req, res) => {
     let body = '';
     req.on('data', chunk => { body += chunk; });
     req.on('end', () => {
       requests.push(`${req.method} ${req.url}`);
       const send = (data, status = 200) => { res.writeHead(status, { 'content-type': 'application/json' }); res.end(JSON.stringify(data)); };
-      if (req.url.startsWith('/v1/deploy/status?') && mode.startsWith('control-')) {
+      if (req.url.startsWith('/v1/deploy/status?') && (mode.startsWith('control-') || mode === 'retry-then-control')) {
         const query = new URL(req.url, 'http://localhost').searchParams;
         if (!attemptId || query.get('deploy_attempt_id') !== attemptId) return send({ ok: true, data: { deployment_outcome: 'pending' } });
-        return send({ ok: true, data: mode === 'control-live'
-          ? { ...live, deployment_outcome: 'live' } : { deployment_outcome: 'not_live' } });
+        if (mode === 'control-unverified') return send({ ok: true, data: { ...live, deployment_outcome: 'unverified' } });
+        return send({ ok: true, data: mode === 'control-live' || mode === 'retry-then-control'
+          ? { ...live, deployment_outcome: 'live', verified: true } : { deployment_outcome: 'not_live' } });
       }
       if (req.method === 'GET') return send({ ok: true, data: { ...live, notices: [] } });
       if (req.url === '/v1/deploy') {
         attemptId = JSON.parse(body).deploy_attempt_id;
-        if (mode.startsWith('control-')) return send({ ok: false, error: 'CONTROL_UNAVAILABLE', message: 'The control service did not answer.', retry: false }, 502);
+        attemptIds.push(attemptId);
+        if (mode === 'retry-then-control' && attemptIds.length === 1) {
+          return send({ ok: false, error: 'RELEASE_PREVERIFY_UNAVAILABLE', message: 'Retryable fixture.', retry: true, retry_after_ms: 0 }, 503);
+        }
+        if (mode.startsWith('control-') || mode === 'retry-then-control') return send({ ok: false, error: 'CONTROL_UNAVAILABLE', message: 'The control service did not answer.', retry: false }, 502);
         if (mode === 'unknown') { req.socket.destroy(); return; }
         if (mode === 'prelive') return send({ ok: false, error: 'BUILD_FAILED', message: 'Synthetic compile failure.', retry: false }, 400);
         return send({ ok: true, data: live });
@@ -55,7 +61,7 @@ async function fixture({ mode = 'failed', json = true, flow, temporary = false }
         if (mode === 'transport') { req.socket.destroy(); return; }
         if (mode === 'malformed') return send({ ok: true, data: { dialogs: { private: 'PRIVATE_DIAGNOSTIC_SENTINEL' } } });
         return send({ ok: true, data: { steps: [], console: [], errors: [], requests: [], duration_ms: 1,
-          ...(mode === 'passed' || mode === 'control-live' ? { screenshots: ['https://example.test/synthetic.png'] } : {}) } });
+          ...(mode === 'passed' || mode === 'control-live' || mode === 'retry-then-control' ? { screenshots: ['https://example.test/synthetic.png'] } : {}) } });
       }
       // Old temporary sessions may check claim state; they must never mint.
       return send({ ok: false, error: 'NOT_FOUND', message: 'Synthetic fixture.' }, 404);
@@ -75,7 +81,7 @@ async function fixture({ mode = 'failed', json = true, flow, temporary = false }
       child.on('close', status => resolve({ status, stdout, stderr }));
     });
   } finally { await new Promise(resolve => server.close(resolve)); }
-  return { ...result, requests, initial, state: JSON.parse(readFileSync(join(dir, '.somewhere.json'), 'utf8')),
+  return { ...result, requests, attemptIds, initial, state: JSON.parse(readFileSync(join(dir, '.somewhere.json'), 'utf8')),
     account: JSON.parse(readFileSync(join(configDir, 'config.json'), 'utf8')) };
 }
 for (const flow of ['missing', 'invalid']) test(`invalid local ${flow} flow is rejected before any HTTP mutation`, async () => {
@@ -163,4 +169,27 @@ test('a settled non-live attempt leaves the local anchor alone', async () => {
   assert.deepEqual(result.state, result.initial);
   assert.equal(result.requests.filter(r => r === 'POST /v1/deploy').length, 1);
   assert.equal(JSON.parse(result.stdout).error, 'DEPLOY_NOT_LIVE');
+});
+
+test('a recovered unverified release exits nonzero and preserves the original base', async () => {
+  const result = await fixture({ mode: 'control-unverified' });
+  assert.equal(result.status, 1);
+  assert.deepEqual(result.state, result.initial);
+  assert.equal(result.attemptIds.length, 1);
+  const output = JSON.parse(result.stdout);
+  assert.equal(output.error, 'DEPLOY_UNVERIFIED');
+  assert.equal(output.deployment_outcome, 'unverified');
+  assert.equal(output.base_recorded, false);
+  assert.equal(output.active_release_id, live.release_id);
+  assert.match(output.next_steps[0], /status --project proj_verify_outcome/);
+});
+
+test('a confirmed refusal creates a new publish identity and a lost retry polls that new identity', async () => {
+  const result = await fixture({ mode: 'retry-then-control' });
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.equal(result.attemptIds.length, 2);
+  assert.notEqual(result.attemptIds[0], result.attemptIds[1]);
+  assert.equal(result.requests.filter(r => r.includes('deploy_attempt_id=')).length, 1);
+  assert.ok(result.requests.some(r => r.includes(`deploy_attempt_id=${result.attemptIds[1]}`)));
+  assert.equal(result.state.source_base.release_id, live.release_id);
 });

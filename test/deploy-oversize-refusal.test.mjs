@@ -113,3 +113,16 @@ test('a 39 MiB tree of individually allowed files is refused before any request'
   assert.match(output.message, /39\.0 MiB.*20 MiB/);
   assert.deepEqual(requests, []);
 });
+
+test('worker-stripped README selected via --include does not inflate the 20 MiB precheck', async () => {
+  requests.length = 0;
+  const files = Object.fromEntries(Array.from({ length: 19 }, (_, i) => [
+    `public/fixture-${i}.bin`, Buffer.alloc(1024 * 1024, 65),
+  ]));
+  const result = await run(['deploy', '--dry-run', '--include', 'README.md', '--json'], project({
+    ...files, 'README.md': 'x'.repeat(2 * 1024 * 1024),
+  }));
+  assert.equal(result.status, 0, result.out);
+  const request = requests.find(r => r.method === 'POST' && r.path === '/v1/deploy');
+  assert.equal(JSON.parse(request.body).files['README.md'].length, 2 * 1024 * 1024);
+});
